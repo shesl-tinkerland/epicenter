@@ -556,10 +556,9 @@ export function createWorkspace<
 
 			withEncryption(config?: EncryptionConfig) {
 				// ── State ────────────────────────────────────────────────────
-				// Two core variables instead of five. `encryptionState` collapses
-				// activeUserKey + activeWorkspaceKeyring + workspaceKey into one
-				// atomic object. `storesActive` tracks the construction-time key
-				// path where stores are activated before withEncryption() runs.
+				// encryptionState: the core locked/unlocked state (undefined = locked)
+				// persisted: whether the active key has been written to the cache
+				// cacheQueue: serializes async cache operations to prevent write races
 				let encryptionState: {
 					userKey: Uint8Array;
 					keyring: ReadonlyMap<number, Uint8Array>;
@@ -659,7 +658,7 @@ export function createWorkspace<
 					});
 				};
 
-				const bootFromCache = async (store: { get(): Promise<string | null> }) => {
+				const bootFromCache = async (store: { get(): Promise<EncryptionKeysJson | null> }) => {
 					const cached = await store.get();
 					if (!cached) return;
 					try {

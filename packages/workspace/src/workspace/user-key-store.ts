@@ -1,3 +1,15 @@
+import type { Brand } from 'wellcrafted/brand';
+
+/**
+ * Branded string representing `JSON.stringify(EncryptionKeys)`.
+ *
+ * Prevents accidentally passing an arbitrary string to `UserKeyStore.set()`
+ * or treating a raw `UserKeyStore.get()` result as plain text. The only
+ * way to produce this type is through the branded cast in `create-workspace.ts`
+ * after `JSON.stringify(keys)` — store implementations treat it as an opaque string.
+ */
+export type EncryptionKeysJson = string & Brand<'EncryptionKeysJson'>;
+
 /**
  * Platform-agnostic interface for persisting encryption keys across sessions.
  *
@@ -46,7 +58,7 @@ export type UserKeyStore = {
 	 * auth session. Implementations store one value and overwrite any
 	 * older cached entry.
 	 */
-	set(keysJson: string): Promise<void>;
+	set(keysJson: EncryptionKeysJson): Promise<void>;
 	/**
 	 * Retrieve the cached encryption keys during startup.
 	 *
@@ -54,7 +66,7 @@ export type UserKeyStore = {
 	 * to `.withEncryption()`. Return `null` to skip auto-unlock and wait for
 	 * the server session to provide keys.
 	 */
-	get(): Promise<string | null>;
+	get(): Promise<EncryptionKeysJson | null>;
 	/**
 	 * Remove the cached key on sign-out or account switch.
 	 *

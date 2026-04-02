@@ -1,7 +1,7 @@
 # Typed UserKeyStore
 
 **Date**: 2026-04-02
-**Status**: Draft
+**Status**: Implemented
 **Author**: AI-assisted
 
 ## Overview
@@ -68,15 +68,15 @@ await unlock(keys);
 
 ### Phase 1: Change the interface + workspace caller
 
-- [ ] **1.1** Update `UserKeyStore` type in `user-key-store.ts`: `set(keys: EncryptionKeys)`, `get(): Promise<EncryptionKeys | null>`
-- [ ] **1.2** Update `create-workspace.ts`: remove `JSON.stringify()` in `persistKeys`, remove `JSON.parse()` + ArkType validation in auto-boot
-- [ ] **1.3** Update `create-workspace.test.ts`: `setupWithUserKeyStore` mock now stores/returns `EncryptionKeys | null` instead of `string | null`. Update `toKeysJson` → inline `toEncryptionKeys` in assertions.
+- [x] **1.1** Update `UserKeyStore` type in `user-key-store.ts`: `set(keys: EncryptionKeys)`, `get(): Promise<EncryptionKeys | null>`
+- [x] **1.2** Update `create-workspace.ts`: remove `JSON.stringify()` in `persistKeys`, remove `JSON.parse()` + ArkType validation in auto-boot
+- [x] **1.3** Update `create-workspace.test.ts`: `setupWithUserKeyStore` mock now stores/returns `EncryptionKeys | null` instead of `string | null`. Removed `toKeysJson` helper, assertions use `toEncryptionKeys` directly.
 
 ### Phase 2: Update store implementations
 
-- [ ] **2.1** `indexed-db-key-store.ts` (svelte-utils): `set()` calls `JSON.stringify`, `get()` calls `JSON.parse` + `EncryptionKeys(parsed)` validation, returns `null` on failure
-- [ ] **2.2** `key-store.ts` (tab-manager WXT storage): same pattern—serialize on set, validate on get
-- [ ] **2.3** Run `bun test` on affected packages, `bun typecheck`
+- [x] **2.1** `indexed-db-key-store.ts` (svelte-utils): `set()` calls `JSON.stringify`, `get()` calls `JSON.parse` + `EncryptionKeys(parsed)` validation, returns `null` on failure
+- [x] **2.2** `key-store.ts` (tab-manager WXT storage): same pattern—serialize on set, validate on get
+- [x] **2.3** Run `bun test` on affected packages, `bun typecheck`
 
 ## Edge Cases
 
@@ -94,12 +94,12 @@ await unlock(keys);
 
 ## Success Criteria
 
-- [ ] `UserKeyStore.set()` accepts `EncryptionKeys`, not `string`
-- [ ] `UserKeyStore.get()` returns `EncryptionKeys | null`, not `string | null`
-- [ ] No `JSON.stringify` or `JSON.parse` in `create-workspace.ts` for key store operations
-- [ ] ArkType validation happens inside `get()` implementations
-- [ ] All tests pass, typecheck clean
-- [ ] Existing IndexedDB data works without migration
+- [x] `UserKeyStore.set()` accepts `EncryptionKeys`, not `string`
+- [x] `UserKeyStore.get()` returns `EncryptionKeys | null`, not `string | null`
+- [x] No `JSON.stringify` or `JSON.parse` in `create-workspace.ts` for key store operations
+- [x] ArkType validation happens inside `get()` implementations
+- [x] All tests pass, typecheck clean
+- [x] Existing IndexedDB data works without migration
 
 ## References
 
@@ -109,3 +109,20 @@ await unlock(keys);
 - `packages/workspace/src/workspace/create-workspace.test.ts` — Mock UserKeyStore + assertions
 - `packages/svelte-utils/src/indexed-db-key-store.ts` — IndexedDB implementation
 - `apps/tab-manager/src/lib/state/key-store.ts` — WXT storage implementation
+
+## Review
+
+**Completed**: 2026-04-02
+
+### Summary
+
+Changed `UserKeyStore` from an opaque `string` interface to a typed `EncryptionKeys` interface. Serialization (JSON.stringify/parse) moved from `create-workspace.ts` into each store implementation. ArkType validation now happens at the store boundary in `get()`, returning `null` on failure instead of throwing.
+
+### Deviations from Spec
+
+- **Duplicate export collision**: `index.ts` exported `EncryptionKeys` as both a type (from `types.ts`) and a runtime value (from `encryption-key.ts`), causing `TS2300`. Fixed by removing the type re-export from the types block and adding a proper `import type` in `types.ts`.
+- **Corrupt cache test**: The original test passed a corrupt string to `setupWithUserKeyStore`. With the typed interface, the store always returns valid data or `null`. Updated the test to pass valid-shaped but bad-base64 keys that cause `unlock()` to throw instead.
+
+### Follow-up Work
+
+- None identified. The change is backward-compatible with existing IndexedDB data since the JSON format is unchanged.

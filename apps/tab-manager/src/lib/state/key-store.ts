@@ -21,7 +21,7 @@
  * @see {@link @epicenter/workspace!UserKeyStore} — The interface this implements
  */
 
-import type { UserKeyStore } from '@epicenter/workspace';
+import type { UserKeyStore, EncryptionKeysJson } from '@epicenter/workspace';
 import { storage } from '@wxt-dev/storage';
 
 /**
@@ -55,7 +55,7 @@ export const userKeyStore: UserKeyStore = {
 	},
 
 	async get() {
-		return await encryptionKeyItem.getValue();
+		return await encryptionKeyItem.getValue() as EncryptionKeysJson | null;
 	},
 
 	async delete() {

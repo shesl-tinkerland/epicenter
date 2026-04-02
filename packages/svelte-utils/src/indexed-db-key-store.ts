@@ -1,4 +1,4 @@
-import type { UserKeyStore } from '@epicenter/workspace';
+import type { UserKeyStore, EncryptionKeysJson } from '@epicenter/workspace';
 import { openDB, type DBSchema } from 'idb';
 
 const DB_NAME = 'epicenter-key-store';
@@ -66,7 +66,7 @@ export function createIndexedDbKeyStore(storageKey: string): UserKeyStore {
 		},
 		async get() {
 			const db = await dbPromise;
-			return (await db.get(STORE_NAME, storageKey)) ?? null;
+			return ((await db.get(STORE_NAME, storageKey)) ?? null) as EncryptionKeysJson | null;
 		},
 		async delete() {
 			const db = await dbPromise;

@@ -108,7 +108,7 @@ export { defineWorkspace } from './workspace/define-workspace';
 
 export { createWorkspace } from './workspace/create-workspace';
 export { DOCUMENTS_ORIGIN } from './workspace/create-document';
-export type { UserKeyStore } from './workspace/user-key-store';
+export type { UserKeyStore, EncryptionKeysJson } from './workspace/user-key-store';
 
 // ════════════════════════════════════════════════════════════════════════════
 // INTROSPECTION
