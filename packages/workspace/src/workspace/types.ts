@@ -1146,7 +1146,6 @@ export type WorkspaceClientBuilder<
 		 *
 		 * @example
 		 * ```typescript
-		 * // One call covers both workspace and document persistence:
 		 * const client = createWorkspace(definition)
 		 *   .withExtension('persistence', indexeddbPersistence)
 		 *   .withExtension('sync', createSyncExtension({ ... }));
@@ -1188,20 +1187,16 @@ export type WorkspaceClientBuilder<
 		 *
 		 * The factory fires once at build time for the workspace doc. It does NOT
 		 * fire for content documents opened via `documents.open()`. Use this when
-		 * an extension is genuinely workspace-scoped (analytics, telemetry) and
-		 * should not run per-document.
+		 * an extension needs workspace-specific context (tables, kv, awareness) or
+		 * is genuinely workspace-scoped (SQLite index, analytics).
 		 *
 		 * Most consumers want {@link withExtension} (both scopes) instead.
-		 *
-		 * @param key - Unique name for this extension
-		 * @param factory - Factory receiving the client-so-far context, returns flat exports
-		 * @returns A new builder with the extension's exports added to the workspace type only
 		 *
 		 * @example
 		 * ```typescript
 		 * createWorkspace(definition)
-		 *   .withExtension('persistence', indexeddbPersistence)        // both scopes
-		 *   .withWorkspaceExtension('analytics', analyticsExtension);  // workspace only
+		 *   .withExtension('persistence', indexeddbPersistence)
+		 *   .withWorkspaceExtension('sqliteIndex', createSqliteIndex());
 		 * ```
 		 */
 		withWorkspaceExtension<
@@ -1240,27 +1235,23 @@ export type WorkspaceClientBuilder<
 		>;
 
 		/**
-		 * Register a document extension that fires when content Y.Docs are opened
-		 * via a table's documents manager.
+		 * Register a document extension that fires when content Y.Docs are opened.
 		 *
-		 * Document extensions are separate from workspace extensions — they operate on
-		 * content Y.Docs (not the workspace Y.Doc). Use optional `{ tags }` to target
-		 * specific document types declared via `withDocument(..., { tags })`.
+		 * Document extensions operate on content Y.Docs (not the workspace Y.Doc).
+		 * Use optional `{ tags }` to target specific document types declared via
+		 * `withDocument(..., { tags })`.
 		 *
 		 * If no `tags` option is provided, the extension is universal (fires for all content documents).
-		 * If `tags` is provided, the extension fires only for documents whose tags share at
-		 * least one value with the extension's tags (set intersection).
 		 *
-		 * @param key - Unique name for this document extension (independent namespace from workspace extensions)
-		 * @param factory - Factory function receiving DocumentContext, returns Extension or void
+		 * @param key - Unique name for this document extension
+		 * @param factory - Factory receiving DocumentContext, returns Extension or void
 		 * @param options - Optional tag filter for targeting specific document types
-		 * @returns A new builder with the document extension key accumulated
 		 *
 		 * @example
 		 * ```typescript
 		 * createWorkspace({ id: 'app', tables: { notes } })
 		 *   .withExtension('persistence', workspacePersistence)
-		 *   .withDocumentExtension('persistence', indexeddbPersistence, { tags: ['persistent'] })
+		 *   .withDocumentExtension('persistence', indexeddbPersistence, { tags: ['persistent'] });
 		 * ```
 		 */
 		withDocumentExtension<

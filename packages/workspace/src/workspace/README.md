@@ -72,7 +72,7 @@ Each factory returns a flat object with custom exports alongside optional `whenR
 ```typescript
 // What each scope receives:
 //
-// withExtension        → { ydoc, whenReady }  (SharedExtensionContext)
+// withExtension          → { ydoc, whenReady }  (SharedExtensionContext)
 // withWorkspaceExtension → { id, ydoc, tables, kv, awareness, documents,
 //                          definitions, extensions, whenReady, batch,
 //                          loadSnapshot }  (ExtensionContext)
