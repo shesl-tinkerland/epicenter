@@ -956,33 +956,6 @@ export type WorkspaceDefinition<
 };
 
 /**
- * A workspace client with actions attached via `.withActions()`.
- *
- * Now a type alias for `WorkspaceClientBuilder` with `TActions` set—retained
- * for backward compatibility. The builder is non-terminal, so this type includes
- * builder methods (`.withExtension()`, etc.) alongside `actions`.
- */
-	export type WorkspaceClientWithActions<
-	TId extends string,
-	TTableDefs extends TableDefinitions,
-	TKvDefs extends KvDefinitions,
-	TAwarenessDefinitions extends AwarenessDefinitions,
-	TExtensions extends Record<string, unknown>,
-	TActions extends Actions,
-	TDocExtensions extends Record<string, unknown> = Record<string, unknown>,
-	TEncryption = Record<string, never>,
-	> = WorkspaceClientBuilder<
-	TId,
-	TTableDefs,
-	TKvDefs,
-	TAwarenessDefinitions,
-	TExtensions,
-	TDocExtensions,
-	TEncryption,
-	TActions
-	>;
-
-/**
  * Builder returned by `createWorkspace()` and by each `.withExtension()` call.
  *
  * IS a usable client AND has `.withExtension()` + `.withActions()`.
@@ -1581,10 +1554,6 @@ export type WorkspaceClient<
 
 /**
  * Type alias for any workspace client (used for duck-typing in CLI/server).
- *
- * Uses `WorkspaceClient & { actions?: Actions }` rather than `WorkspaceClientWithActions`
- * because `WorkspaceClientWithActions` requires `actions: TActions` (non-optional) —
- * it can't express "might or might not have actions."
  */
 // biome-ignore lint/suspicious/noExplicitAny: intentional variance-friendly type
 export type AnyWorkspaceClient = WorkspaceClient<

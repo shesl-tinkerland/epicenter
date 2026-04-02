@@ -76,10 +76,6 @@
 
 import * as Y from 'yjs';
 import type { Actions } from '../shared/actions.js';
-import {
-	base64ToBytes,
-	deriveWorkspaceKey,
-} from '../shared/crypto/index.js';
 import type { YKeyValueLwwEntry } from '../shared/y-keyvalue/y-keyvalue-lww.js';
 import {
 	createEncryptedYkvLww,
@@ -89,6 +85,7 @@ import { createAwareness } from './create-awareness.js';
 import { createDocuments } from './create-document.js';
 import { createKv } from './create-kv.js';
 import { createTable } from './create-table.js';
+import { createEncryptionRuntime } from './encryption-runtime.js';
 import {
 	defineExtension,
 	disposeLifo,
@@ -104,11 +101,9 @@ import type {
 	Documents,
 	DocumentsHelper,
 	EncryptionConfig,
-	EncryptionKey,
 	EncryptionKeys,
 	ExtensionContext,
 	KvDefinitions,
-	TableHelper,
 	TablesHelper,
 	TableDefinitions,
 	WorkspaceClient,
@@ -117,43 +112,6 @@ import type {
 	WorkspaceEncryption,
 } from './types.js';
 import { KV_KEY, TableKey } from './ydoc-keys.js';
-import type { EncryptionKeysJson } from './user-key-store.js';
-import { EncryptionKeys as EncryptionKeysSchema } from './encryption-key.js';
-import { type as arktype } from 'arktype';
-
-/** Byte-level comparison for Uint8Array dedup. */
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-	return true;
-}
-
-/**
- * Apply an operation to every encrypted store with automatic rollback on partial failure.
- *
- * If any store throws during `apply`, all previously applied stores are reverted
- * via `rollback` (best-effort). The original error is re-thrown so the caller
- * can handle it (log, return early, etc.).
- */
-function transactStores(
-	stores: readonly YKeyValueLwwEncrypted<unknown>[],
-	apply: (store: YKeyValueLwwEncrypted<unknown>) => void,
-	rollback: (store: YKeyValueLwwEncrypted<unknown>) => void,
-): void {
-	const applied: YKeyValueLwwEncrypted<unknown>[] = [];
-	try {
-		for (const store of stores) {
-			apply(store);
-			applied.push(store);
-		}
-	} catch (error) {
-		for (const store of applied) {
-			try { rollback(store); } catch { /* best-effort */ }
-		}
-		throw error;
-	}
-}
-
 
 /**
  * Create a workspace client with chainable extension support.
@@ -251,12 +209,6 @@ export function createWorkspace<
 		whenReadyPromises: Promise<unknown>[];
 	};
 
-	type EncryptionRuntime = {
-		encryption: WorkspaceEncryption;
-		lock: () => void;
-		clearCache: () => Promise<void>;
-	};
-
 
 	// Accumulated document extension registrations (in chain order).
 	// Mutable array — grows as .withDocumentExtension() is called. Document
@@ -323,7 +275,11 @@ export function createWorkspace<
 	}: {
 		extensions: TExtensions;
 		state: BuilderState;
-		encryptionRuntime?: EncryptionRuntime;
+		encryptionRuntime?: {
+ 			encryption: WorkspaceEncryption;
+			lock: () => void;
+			clearCache: () => Promise<void>;
+		};
 		actions: Actions;
 	}): WorkspaceClientBuilder<
 		TId,
@@ -405,6 +361,9 @@ export function createWorkspace<
 			...(encryptionRuntime && {
 				encryption: encryptionRuntime.encryption,
 				async unlockWithKeys(keys: EncryptionKeys) {
+					if (!Array.isArray(keys) || keys.length === 0) {
+						throw new Error('unlockWithKeys requires a non-empty EncryptionKeys array');
+					}
 					await whenReady;
 					await encryptionRuntime.encryption.unlock(keys);
 				},
@@ -553,153 +512,26 @@ export function createWorkspace<
 			},
 
 			withEncryption(config?: EncryptionConfig) {
-				// ── State ────────────────────────────────────────────────────
-				// encryptionState: the core locked/unlocked state (undefined = locked)
-				// persisted: whether the active key has been written to the cache
-				// cacheQueue: serializes async cache operations to prevent write races
-				let encryptionState: {
-					userKey: Uint8Array;
-					keyring: ReadonlyMap<number, Uint8Array>;
-				} | undefined;
-				let persisted = !config?.userKeyStore;
-				let cacheQueue = Promise.resolve();
+				const runtime = createEncryptionRuntime({
+					workspaceId: id,
+					stores: encryptedStores,
+					userKeyStore: config?.userKeyStore,
+				});
 
-				const runSerializedCacheTask = async (
-					task: () => Promise<void>,
-				): Promise<void> => {
-					const next = cacheQueue.catch(() => {}).then(task);
-					cacheQueue = next.catch(() => {});
-					return await next;
-				};
-
-				// ── Operations ──────────────────────────────────────────────
-
-				const lock = () => {
-					const previous = encryptionState;
-					try {
-						transactStores(
-							encryptedStores,
-							(s) => s.deactivateEncryption(),
-							(s) => { if (previous) s.activateEncryption(previous.keyring); },
-						);
-					} catch (error) {
-						console.error('[workspace] Workspace lock failed:', error);
-						throw error;
-					}
-					encryptionState = undefined;
-					persisted = !config?.userKeyStore;
-				};
-
-				const persistKeys = async (keys: EncryptionKeys, currentUserKey: Uint8Array) => {
-					if (!config?.userKeyStore) return;
-					try {
-						await runSerializedCacheTask(async () => {
-							// Guard: skip stale writes from earlier unlock() calls
-							if (
-								!encryptionState ||
-								!bytesEqual(encryptionState.userKey, currentUserKey)
-							)
-								return;
-							await config.userKeyStore.set(JSON.stringify(keys) as EncryptionKeysJson);
-							persisted = true;
-						});
-					} catch (error) {
-						console.error('[workspace] Encryption key cache save failed:', error);
-					}
-				};
-
-				const unlock = async (keys: EncryptionKeys) => {
-					const decoded = keys.map((k) => ({
-						version: k.version,
-						userKey: base64ToBytes(k.userKeyBase64),
-					}));
-					const current = decoded.reduce((a, b) =>
-						a.version > b.version ? a : b,
-					);
-
-					// De-dup: same user key → skip re-derivation, just persist if needed
-					if (encryptionState && bytesEqual(encryptionState.userKey, current.userKey)) {
-						if (!persisted) await persistKeys(keys, current.userKey);
-						return;
-					}
-
-					// Derive workspace keyring from all key versions
-					const keyring = new Map<number, Uint8Array>();
-					for (const { version, userKey } of decoded) {
-						keyring.set(version, deriveWorkspaceKey(userKey, id));
-					}
-
-					// Activate all stores (automatic rollback on partial failure)
-					const previous = encryptionState;
-					try {
-						transactStores(
-							encryptedStores,
-							(s) => s.activateEncryption(keyring),
-							(s) => previous ? s.activateEncryption(previous.keyring) : s.deactivateEncryption(),
-						);
-					} catch (error) {
-						console.error('[workspace] Workspace unlock failed:', error);
-						throw error;
-					}
-
-					// Atomic state transition — one assignment, not three
-					encryptionState = { userKey: current.userKey, keyring };
-					persisted = !config?.userKeyStore;
-
-					if (!persisted) await persistKeys(keys, current.userKey);
-				};
-
-				const clearCache = async () => {
-					if (!config?.userKeyStore) return;
-					await runSerializedCacheTask(async () => {
-						await config.userKeyStore.delete();
-					});
-				};
-
-				const bootFromCache = async (store: { get(): Promise<EncryptionKeysJson | null> }) => {
-					const cached = await store.get();
-					if (!cached) return;
-					try {
-						const parsed = EncryptionKeysSchema(JSON.parse(cached));
-						if (parsed instanceof arktype.errors) {
-							console.error('[workspace] Cached encryption keys invalid:', parsed.summary);
-							await clearCache();
-							return;
-						}
-						await unlock(parsed);
-					} catch (error) {
-						console.error('[workspace] Cached key unlock failed:', error);
-						await clearCache();
-					}
-				};
-
-				// ── Wire up ──────────────────────────────────────────────────
-
-				const baseEncryption: WorkspaceEncryption = {
-					get isUnlocked() {
-						return encryptionState !== undefined;
-					},
-					unlock,
-					lock,
-				};
-
-				if (config?.userKeyStore) {
-					const store = config.userKeyStore;
-					state.whenReadyPromises.push(
-						Promise.all(state.whenReadyPromises).then(() => bootFromCache(store)),
-					);
-				}
-
-				const encryptionRuntime: EncryptionRuntime = {
-					encryption: baseEncryption,
-					lock,
-					clearCache,
+				const newState = {
+					...state,
+					whenReadyPromises: runtime.bootPromise
+						? [
+								...state.whenReadyPromises,
+								Promise.all(state.whenReadyPromises).then(() => runtime.bootPromise),
+							]
+						: state.whenReadyPromises,
 				};
 
 				return buildClient({
 					extensions,
-					state,
-					encryptionRuntime,
+					state: newState,
+					encryptionRuntime: runtime,
 					actions,
 				}) as unknown as WorkspaceClientBuilder<
 					TId,
@@ -709,7 +541,7 @@ export function createWorkspace<
 					TExtensions,
 					Record<string, never>,
 					{
-						encryption: typeof encryptionRuntime.encryption;
+						encryption: typeof runtime.encryption;
 					}
 				>;
 			},

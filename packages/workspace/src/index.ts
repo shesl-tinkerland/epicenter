@@ -166,7 +166,6 @@ export type {
 	WorkspaceClient,
 	WorkspaceClientBuilder,
 	WorkspaceEncryption,
-	WorkspaceClientWithActions,
 	WorkspaceDefinition,
 } from './workspace/types';
 
