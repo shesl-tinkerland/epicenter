@@ -538,6 +538,8 @@ export function createWorkspace<
 				let isActiveUserKeyCached = config?.userKeyStore === undefined;
 				let workspaceKey: Uint8Array | undefined = options?.key;
 				let cacheQueue = Promise.resolve();
+				/** The last keyring passed to activateEncryption, for rollback. */
+				let activeWorkspaceKeyring: ReadonlyMap<number, Uint8Array> | undefined;
 
 				const runSerializedCacheTask = async (
 					task: () => Promise<void>,
@@ -548,7 +550,7 @@ export function createWorkspace<
 				};
 
 				const lock = () => {
-					const previousKey = workspaceKey;
+					const previousKeyring = activeWorkspaceKeyring;
 					const deactivated: YKeyValueLwwEncrypted<unknown>[] = [];
 					try {
 						for (const store of encryptedStores) {
@@ -558,12 +560,13 @@ export function createWorkspace<
 						activeUserKey = undefined;
 						isActiveUserKeyCached = config?.userKeyStore === undefined;
 						workspaceKey = undefined;
+						activeWorkspaceKeyring = undefined;
 					} catch (error) {
 						// Rollback: revert stores deactivated before the failure
-						if (previousKey) {
+						if (previousKeyring) {
 							for (const store of deactivated) {
 								try {
-							store.activateEncryption(new Map([[1, previousKey]]));
+									store.activateEncryption(previousKeyring);
 								} catch { /* best-effort rollback */ }
 							}
 						}
@@ -608,7 +611,7 @@ export function createWorkspace<
 								deriveWorkspaceKey(base64ToBytes(userKeyBase64), id),
 							);
 						}
-						const previousWorkspaceKey = workspaceKey;
+						const previousKeyring = activeWorkspaceKeyring;
 						const nextWorkspaceKey = workspaceKeyring.get(
 							Math.max(...workspaceKeyring.keys()),
 						)!;
@@ -619,14 +622,15 @@ export function createWorkspace<
 								activated.push(store);
 							}
 							workspaceKey = nextWorkspaceKey;
+							activeWorkspaceKeyring = workspaceKeyring;
 							activeUserKey = currentUserKey;
 							isActiveUserKeyCached = config?.userKeyStore === undefined;
 						} catch (error) {
 							// Rollback: revert stores activated before the failure
 							for (const store of activated) {
 								try {
-									if (previousWorkspaceKey) {
-										store.activateEncryption(new Map([[1, previousWorkspaceKey]]));
+									if (previousKeyring) {
+										store.activateEncryption(previousKeyring);
 									} else {
 										store.deactivateEncryption();
 									}

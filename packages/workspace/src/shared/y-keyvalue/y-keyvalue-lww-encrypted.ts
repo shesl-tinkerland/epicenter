@@ -50,7 +50,7 @@
  *
  * ## Key Management
  *
- * The encryption keyring is managed through `activateEncryption(keyring)`. The optional `keyring`
+ * The encryption keyring is managed through `activateEncryption(keyring)`. The optional
  * `initialKeyring` parameter seeds the initial keyring at construction time. After creation,
  * all key transitions go through `activateEncryption()`.
  *
@@ -282,17 +282,37 @@ export function createEncryptedYkvLww<T>(
 	 * Silent decrypt — returns plaintext value or undefined.
 	 *
 	 * Used by get(), has(), and entries() for on-the-fly decryption during the
-	 * transaction gap (after set() but before the observer fires). Failures are
-	 * expected and silent — the observer will handle them with proper logging.
+	 * transaction gap (after set() but before the observer fires). Tries the
+	 * current key first, then falls back to version-directed keyring lookup
+	 * (same strategy as tryDecryptEntry).
+	 *
+	 * Defense-in-depth: in practice, the transaction gap only surfaces values
+	 * from inner.pending (always encrypted with currentKey, so the fast path
+	 * suffices) or inner.map (already processed by the observer with keyring
+	 * fallback). The keyring fallback here guards against unforeseen edge
+	 * cases where inner.map holds an old-version blob the observer missed.
 	 */
 	const tryDecryptValue = (raw: EncryptedBlob | T, aad: Uint8Array): T | undefined => {
 		if (!isEncryptedBlob(raw)) return raw as T;
 		if (!currentKey) return undefined;
+
+		// Fast path: try current key
 		try {
 			return JSON.parse(decryptValue(raw, currentKey, aad)) as T;
-		} catch {
-			return undefined;
+		} catch { /* fall through to keyring lookup */ }
+
+		// Version-directed fallback from keyring
+		if (activeKeyring) {
+			const blobVersion = getKeyVersion(raw as EncryptedBlob);
+			const versionKey = activeKeyring.get(blobVersion);
+			if (versionKey && versionKey !== currentKey) {
+				try {
+					return JSON.parse(decryptValue(raw, versionKey, aad)) as T;
+				} catch { /* undecryptable */ }
+			}
 		}
+
+		return undefined;
 	};
 
 	/** Clear and rebuild the decrypted cache from inner.map. */
