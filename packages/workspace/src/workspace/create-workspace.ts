@@ -179,7 +179,6 @@ export function createWorkspace<
 		TKvDefinitions,
 		TAwarenessDefinitions
 	>,
-	options?: { key?: Uint8Array },
 ): WorkspaceClientBuilder<
 	TId,
 	TTableDefinitions,
@@ -219,14 +218,6 @@ export function createWorkspace<
 		kvStore,
 	];
 
-	// Seed encryption from construction-time key (if provided).
-	// Equivalent to calling activateEncryption() immediately after creation.
-	if (options?.key) {
-		const keyring = new Map([[1, options.key]]);
-		for (const store of encryptedStores) {
-			store.activateEncryption(keyring);
-		}
-	}
 
 	const awareness = createAwareness(ydoc, awarenessDefs);
 	const definitions = {
@@ -570,7 +561,6 @@ export function createWorkspace<
 					userKey: Uint8Array;
 					keyring: ReadonlyMap<number, Uint8Array>;
 				} | undefined;
-				let storesActive = options?.key !== undefined;
 				let persisted = !config?.userKeyStore;
 				let cacheQueue = Promise.resolve();
 
@@ -597,7 +587,6 @@ export function createWorkspace<
 						return;
 					}
 					encryptionState = undefined;
-					storesActive = false;
 					persisted = !config?.userKeyStore;
 				};
 
@@ -655,7 +644,6 @@ export function createWorkspace<
 
 					// Atomic state transition — one assignment, not three
 					encryptionState = { userKey: current.userKey, keyring };
-					storesActive = true;
 					persisted = !config?.userKeyStore;
 
 					if (!persisted) await persistKeys(keys, current.userKey);
@@ -683,7 +671,7 @@ export function createWorkspace<
 
 				const baseEncryption: WorkspaceEncryption = {
 					get isUnlocked() {
-						return encryptionState !== undefined || storesActive;
+						return encryptionState !== undefined;
 					},
 					unlock,
 					lock,

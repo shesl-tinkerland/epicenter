@@ -995,14 +995,15 @@ describe('workspace unlock', () => {
 		}
 	});
 
-	test('construction-time key starts stores unlocked', () => {
+	test('unlock transitions runtime to unlocked (replaces construction-time key)', async () => {
 		const key = generateEncryptionKey();
 		const posts = defineTable(type({ id: 'string', title: 'string', _v: '1' }));
 		const client = createWorkspace(
 			defineWorkspace({ id: 'key-test', tables: { posts } }),
-			{ key },
 		).withEncryption();
 
+		expect(client.encryption.isUnlocked).toBe(false);
+		await client.encryption.unlock(toEncryptionKeys(key));
 		expect(client.encryption.isUnlocked).toBe(true);
 	});
 });
