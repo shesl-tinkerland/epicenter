@@ -60,14 +60,13 @@ import { TableKey } from './ydoc-keys.js';
 export function createTables<TTableDefinitions extends TableDefinitions>(
 	ydoc: Y.Doc,
 	definitions: TTableDefinitions,
-	options?: { key?: Uint8Array },
 ): TablesHelper<TTableDefinitions> {
 	const helpers: Record<string, TableHelper<BaseRow>> = {};
 
 	for (const [name, definition] of Object.entries(definitions)) {
 		// Each table gets its own encrypted KV store (passthrough when no key)
 		const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(TableKey(name));
-		const ykv = createEncryptedYkvLww(yarray, { key: options?.key });
+		const ykv = createEncryptedYkvLww(yarray);
 
 		helpers[name] = createTable(ykv, definition);
 	}

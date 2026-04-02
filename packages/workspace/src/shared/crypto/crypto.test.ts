@@ -329,36 +329,36 @@ describe('deriveKeyFromPassword', () => {
 });
 
 describe('deriveSalt', () => {
-	test('deterministic: same userId + workspaceId = same salt', async () => {
+	test('deterministic: same userId + workspaceId = same salt', () => {
 		const userId = 'user123';
 		const workspaceId = 'workspace456';
 
-		const salt1 = await deriveSalt(userId, workspaceId);
-		const salt2 = await deriveSalt(userId, workspaceId);
+		const salt1 = deriveSalt(userId, workspaceId);
+		const salt2 = deriveSalt(userId, workspaceId);
 
 		expect(salt1).toEqual(salt2);
 	});
 
-	test('different userId = different salt', async () => {
+	test('different userId = different salt', () => {
 		const workspaceId = 'workspace456';
 
-		const salt1 = await deriveSalt('user1', workspaceId);
-		const salt2 = await deriveSalt('user2', workspaceId);
+		const salt1 = deriveSalt('user1', workspaceId);
+		const salt2 = deriveSalt('user2', workspaceId);
 
 		expect(salt1).not.toEqual(salt2);
 	});
 
-	test('different workspaceId = different salt', async () => {
+	test('different workspaceId = different salt', () => {
 		const userId = 'user123';
 
-		const salt1 = await deriveSalt(userId, 'workspace1');
-		const salt2 = await deriveSalt(userId, 'workspace2');
+		const salt1 = deriveSalt(userId, 'workspace1');
+		const salt2 = deriveSalt(userId, 'workspace2');
 
 		expect(salt1).not.toEqual(salt2);
 	});
 
-	test('returns 16-byte Uint8Array', async () => {
-		const salt = await deriveSalt('user123', 'workspace456');
+	test('returns 16-byte Uint8Array', () => {
+		const salt = deriveSalt('user123', 'workspace456');
 
 		expect(salt).toBeInstanceOf(Uint8Array);
 		expect(salt.length).toBe(16);
@@ -442,7 +442,7 @@ describe('binary storage overhead', () => {
 		const binaryDoc = new Y.Doc({ guid: 'bench-binary' });
 		const binaryArray =
 			binaryDoc.getArray<YKeyValueLwwEntry<EncryptedBlob | string>>('data');
-		const binaryKv = createEncryptedYkvLww<string>(binaryArray, { key });
+		const binaryKv = createEncryptedYkvLww<string>(binaryArray, new Map([[1, key]]));
 
 		for (const [i, val] of testValues.entries()) {
 			binaryKv.set(`key-${i}`, val);

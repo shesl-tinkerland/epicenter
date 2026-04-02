@@ -22,7 +22,7 @@ import { KV_KEY } from './ydoc-keys.js';
 test('set stores a value that get returns', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -34,7 +34,7 @@ test('set stores a value that get returns', () => {
 test('get returns defaultValue for unset key', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -45,7 +45,7 @@ test('get returns defaultValue for unset key', () => {
 test('delete causes get to return defaultValue', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -60,7 +60,7 @@ test('delete causes get to return defaultValue', () => {
 test('get returns defaultValue for invalid stored data', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		count: defineKv(type('number'), 0),
 	});
@@ -74,7 +74,7 @@ test('get returns defaultValue for invalid stored data', () => {
 test('observeAll fires for set changes with correct key and value', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -100,7 +100,7 @@ test('observeAll fires for set changes with correct key and value', () => {
 test('observeAll fires for delete changes', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -127,7 +127,7 @@ test('observeAll fires for delete changes', () => {
 test('observeAll batches multiple changes in a single callback', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 		fontSize: defineKv(type('number'), 14),
@@ -166,7 +166,7 @@ test('observeAll batches multiple changes in a single callback', () => {
 test('observeAll skips invalid values', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		count: defineKv(type('number'), 0),
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
@@ -197,7 +197,7 @@ test('observeAll skips invalid values', () => {
 test('observeAll skips unknown keys', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});
@@ -227,7 +227,7 @@ test('observeAll skips unknown keys', () => {
 test('observeAll returns an unsubscribe function that works', () => {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	const kv = createKv(ykv, {
 		theme: defineKv(type({ mode: "'light' | 'dark'" }), { mode: 'light' }),
 	});

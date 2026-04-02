@@ -23,7 +23,7 @@ import { createTable } from './create-table.js';
 function setup() {
 	const ydoc = new Y.Doc();
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>('test-table');
-	const ykv = createEncryptedYkvLww(yarray, {});
+	const ykv = createEncryptedYkvLww(yarray);
 	return { ydoc, yarray, ykv };
 }
 

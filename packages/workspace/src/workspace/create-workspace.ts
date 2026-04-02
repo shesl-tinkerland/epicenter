@@ -167,12 +167,10 @@ export function createWorkspace<
 	const kvDefs = (kvDef ?? {}) as TKvDefinitions;
 	const awarenessDefs = (awarenessDef ?? {}) as TAwarenessDefinitions;
 
-	// ── Tables ───────────────────────────────────────────────────────────
-	const keyring = options?.key ? new Map([[1, options.key]]) : undefined;
-
+	// ── Tables ───────────────────────────────────────────────────────────────
 	const tableEntries = Object.entries(tableDefs).map(([name, definition]) => {
 		const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(TableKey(name));
-		const store = createEncryptedYkvLww(yarray, { keyring });
+		const store = createEncryptedYkvLww(yarray);
 		const helper = createTable(store, definition);
 		return { name, store, helper };
 	});
@@ -181,9 +179,9 @@ export function createWorkspace<
 		tableEntries.map(({ name, helper }) => [name, helper]),
 	) as TablesHelper<TTableDefinitions>;
 
-	// ── KV ──────────────────────────────────────────────────────────────
+	// ── KV ──────────────────────────────────────────────────────────────────
 	const kvYarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>(KV_KEY);
-	const kvStore = createEncryptedYkvLww(kvYarray, { keyring });
+	const kvStore = createEncryptedYkvLww(kvYarray);
 	const kvHelper = createKv(kvStore, kvDefs);
 
 	// ── Encrypted stores (all table stores + KV store) ─────────────────────
@@ -193,6 +191,15 @@ export function createWorkspace<
 		...tableEntries.map(({ store }) => store),
 		kvStore,
 	];
+
+	// Seed encryption from construction-time key (if provided).
+	// Equivalent to calling activateEncryption() immediately after creation.
+	if (options?.key) {
+		const keyring = new Map([[1, options.key]]);
+		for (const store of encryptedStores) {
+			store.activateEncryption(keyring);
+		}
+	}
 
 	const awareness = createAwareness(ydoc, awarenessDefs);
 	const definitions = {
@@ -558,7 +565,7 @@ export function createWorkspace<
 						if (previousKey) {
 							for (const store of deactivated) {
 								try {
-							store.activateEncryption(previousKey);
+							store.activateEncryption(new Map([[1, previousKey]]));
 								} catch { /* best-effort rollback */ }
 							}
 						}
@@ -599,7 +606,7 @@ export function createWorkspace<
 						const activated: YKeyValueLwwEncrypted<unknown>[] = [];
 						try {
 						for (const store of encryptedStores) {
-							store.activateEncryption(nextWorkspaceKey);
+							store.activateEncryption(new Map([[1, nextWorkspaceKey]]));
 							activated.push(store);
 						}
 							workspaceKey = nextWorkspaceKey;
@@ -610,7 +617,7 @@ export function createWorkspace<
 							for (const store of activated) {
 								try {
 								if (previousWorkspaceKey) {
-									store.activateEncryption(previousWorkspaceKey);
+									store.activateEncryption(new Map([[1, previousWorkspaceKey]]));
 								} else {
 									store.deactivateEncryption();
 								}

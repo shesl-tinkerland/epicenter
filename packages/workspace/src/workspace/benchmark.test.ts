@@ -374,7 +374,7 @@ describe('KV benchmarks', () => {
 	test('repeated set on same key (10,000 times)', () => {
 		const ydoc = new Y.Doc();
 		const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>('kv');
-		const ykv = createEncryptedYkvLww(yarray, {});
+		const ykv = createEncryptedYkvLww(yarray);
 		const kv = createKv(ykv, {
 			counter: defineKv(type({ value: 'number' }), { value: 0 }),
 		});
@@ -395,7 +395,7 @@ describe('KV benchmarks', () => {
 	test('set + get alternating (10,000 cycles)', () => {
 		const ydoc = new Y.Doc();
 		const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>('kv');
-		const ykv = createEncryptedYkvLww(yarray, {});
+		const ykv = createEncryptedYkvLww(yarray);
 		const kv = createKv(ykv, {
 			counter: defineKv(type({ value: 'number' }), { value: 0 }),
 		});
@@ -414,7 +414,7 @@ describe('KV benchmarks', () => {
 	test('set + delete cycle (1,000 times)', () => {
 		const ydoc = new Y.Doc();
 		const yarray = ydoc.getArray<YKeyValueLwwEntry<unknown>>('kv');
-		const ykv = createEncryptedYkvLww(yarray, {});
+		const ykv = createEncryptedYkvLww(yarray);
 		const kv = createKv(ykv, {
 			counter: defineKv(type({ value: 'number' }), { value: 0 }),
 		});

@@ -34,24 +34,24 @@
  *
  * ## Encryption Lifecycle
  *
- * Encryption is governed by key presence (`currentKey`). There is no separate
+ * Encryption is governed by keyring presence (`activeKeyring`). There is no separate
  * state variable—encryption state is derived internally from `currentKey !== undefined`.
  *
  * ```
- *   Key provided (activateEncryption)
+ *   Keyring provided (activateEncryption)
  *   ┌──────────────────┐       ┌──────────────────┐
- *   │  key: present       │◄── activateEncryption(newKey)
+ *   │  keyring: present    │◄── activateEncryption(keyring)
  *   │  rw plaintext      │       │  rw encrypted      │
  *   └──────────────────┘       └──────────────────┘
  * ```
  *
- * - **No key**: Reads and writes pass through unencrypted.
- * - **Key present**: `set()` encrypts, observer decrypts.
+ * - **No keyring**: Reads and writes pass through unencrypted.
+ * - **Keyring present**: `set()` encrypts with current (highest-version) key, observer decrypts.
  *
  * ## Key Management
  *
- * The encryption key is managed through `activateEncryption(key)`. The optional `key`
- * in options seeds the initial key at construction time. After creation,
+ * The encryption keyring is managed through `activateEncryption(keyring)`. The optional `keyring`
+ * `initialKeyring` parameter seeds the initial keyring at construction time. After creation,
  * all key transitions go through `activateEncryption()`.
  *
  * ## Pending State
@@ -82,6 +82,7 @@ import {
 	decryptValue,
 	type EncryptedBlob,
 	encryptValue,
+	getKeyVersion,
 	isEncryptedBlob,
 } from '../crypto';
 import {
@@ -107,16 +108,6 @@ export type EncryptedKvChangeHandler<T> = (
 	origin: unknown,
 ) => void;
 
-/**
- * Options for `createEncryptedYkvLww`.
- *
- * `key` seeds the initial encryption key. If provided, all writes are encrypted
- * immediately. If omitted, the store starts unencrypted. After creation, all key
- * transitions go through `activateEncryption()`.
- */
-type EncryptedKvLwwOptions = {
-	key?: Uint8Array;
-};
 
 /**
  * Return type of `createEncryptedYkvLww`. Same API surface as `YKeyValueLww<T>`
@@ -134,13 +125,13 @@ export type YKeyValueLwwEncrypted<T> = {
 	unobserve(handler: EncryptedKvChangeHandler<T>): void;
 
 	/**
-	 * Unlock the workspace with an encryption key. Rebuilds the decrypted map
-	 * from `inner.map`, transitions to encrypted state, and fires synthetic
-	 * change events for any values that changed.
+	 * Activate encryption with a keyring. The highest-version key becomes
+	 * the current key for all new encryptions. Decryption reads `getKeyVersion(blob)`
+	 * to select the correct key from the keyring.
 	 *
-	 * @param key - A 32-byte encryption key (required)
+	 * @param keyring - Map from version number to 32-byte encryption key
 	 */
-	activateEncryption(key: Uint8Array): void;
+	activateEncryption(keyring: ReadonlyMap<number, Uint8Array>): void;
 
 	/**
 	 * Deactivate encryption. Clears the key, emits delete events for entries
@@ -190,13 +181,13 @@ export type YKeyValueLwwEncrypted<T> = {
  * const kv = createEncryptedYkvLww<TabData>(yarray);
  * kv.set('tab-1', { url: '...' }); // stored as plaintext
  *
- * kv.activateEncryption(encryptionKey);
+ * kv.activateEncryption(new Map([[1, encryptionKey]]));
  * kv.set('tab-2', { url: '...' }); // stored as EncryptedBlob
  * ```
  */
 export function createEncryptedYkvLww<T>(
 	yarray: Y.Array<YKeyValueLwwEntry<EncryptedBlob | T>>,
-	options?: EncryptedKvLwwOptions,
+	initialKeyring?: ReadonlyMap<number, Uint8Array>,
 ): YKeyValueLwwEncrypted<T> {
 	/**
 	 * The inner LWW store that handles all CRDT logic. It sees `EncryptedBlob | T`
@@ -220,10 +211,20 @@ export function createEncryptedYkvLww<T>(
 	const changeHandlers = new Set<EncryptedKvChangeHandler<T>>();
 
 	/**
-	 * The active encryption key. Seeded from `options.key` at creation,
-	 * then updated exclusively via `activateEncryption()`.
+	 * The active encryption key (highest version from the keyring).
+	 * Set exclusively via `activateEncryption()` / `deactivateEncryption()`.
 	 */
-	let currentKey: Uint8Array | undefined = options?.key;
+	let currentKey: Uint8Array | undefined;
+
+	/**
+	 * The version number of the current encryption key.
+	 * Used as the keyVersion byte in every `encryptValue()` call.
+	 * Only meaningful when `currentKey` is defined.
+	 */
+	let currentVersion = 0;
+
+	/** The full keyring for version-directed decryption. */
+	let activeKeyring: ReadonlyMap<number, Uint8Array> | undefined;
 
 	/**
 	 * Attempt to decrypt an encrypted blob with a specific key.
@@ -245,10 +246,12 @@ export function createEncryptedYkvLww<T>(
 	};
 
 	/**
-	 * Attempt to decrypt an entry with warning on failure.
+	 * Attempt to decrypt an entry with version-directed keyring fallback.
 	 *
-	 * Delegates to tryDecryptEntryWithKey using currentKey.
-	 * Logs a warning on failure for diagnostics.
+	 * Tries currentKey first (fast path for latest-version blobs).
+	 * Falls back to version-directed lookup from activeKeyring when
+	 * currentKey fails (handles blobs encrypted with older key versions).
+	 * Logs a warning on total failure for diagnostics.
 	 */
 	const tryDecryptEntry = (
 		key: string,
@@ -256,9 +259,23 @@ export function createEncryptedYkvLww<T>(
 	): YKeyValueLwwEntry<T> | undefined => {
 		if (!isEncryptedBlob(entry.val)) return { ...entry, val: entry.val as T };
 		if (!currentKey) return undefined;
+
+		// Fast path: try current key (most blobs are on latest version)
 		const result = tryDecryptEntryWithKey(key, entry, currentKey);
-		if (!result) console.warn(`[encrypted-kv] Failed to decrypt entry "${key}"`);
-		return result;
+		if (result) return result;
+
+		// Version-directed fallback from keyring
+		if (activeKeyring) {
+			const blobVersion = getKeyVersion(entry.val as EncryptedBlob);
+			const versionKey = activeKeyring.get(blobVersion);
+			if (versionKey && versionKey !== currentKey) {
+				const fallback = tryDecryptEntryWithKey(key, entry, versionKey);
+				if (fallback) return fallback;
+			}
+		}
+
+		console.warn(`[encrypted-kv] Failed to decrypt entry "${key}"`);
+		return undefined;
 	};
 
 	/**
@@ -326,6 +343,16 @@ export function createEncryptedYkvLww<T>(
 		for (const handler of changeHandlers) handler(changes, undefined);
 	};
 
+	// Seed encryption state before initial map build (if provided).
+	// No observers exist yet, so no events fire — just sets the state
+	// so rebuildMap() can decrypt pre-existing entries.
+	if (initialKeyring) {
+		currentVersion = Math.max(...initialKeyring.keys());
+		currentKey = initialKeyring.get(currentVersion);
+		activeKeyring = initialKeyring;
+	}
+
+
 	// Initialize wrapper.map from inner.map (decrypt any pre-existing entries)
 	rebuildMap();
 
@@ -377,7 +404,7 @@ export function createEncryptedYkvLww<T>(
 				inner.set(key, val);
 				return;
 			}
-			inner.set(key, encryptValue(JSON.stringify(val), currentKey, textEncoder.encode(key)));
+			inner.set(key, encryptValue(JSON.stringify(val), currentKey, textEncoder.encode(key), currentVersion));
 		},
 
 		/**
@@ -443,30 +470,21 @@ export function createEncryptedYkvLww<T>(
 		},
 
 		/**
-		 * Activate encryption with a new key. Saves the previous key and uses
-		 * it as a fallback when decrypting entries encrypted with the old key.
-		 * Only re-encrypts entries that needed the fallback key or were plaintext,
-		 * avoiding unnecessary CRDT mutations for entries already on the current key.
+		 * Activate encryption with a keyring. The highest version key becomes
+		 * the current key for all new encryptions. Decryption uses
+		 * `getKeyVersion(blob)` to select the correct key from the keyring.
 		 *
-		 * ## Key rotation limitation
+		 * Entries encrypted with non-current keys are re-encrypted with the
+		 * current key. Plaintext entries are encrypted.
 		 *
-		 * Each blob stores a `keyVersion` byte (readable via `getKeyVersion()`),
-		 * but this method does NOT use it — it brute-forces by trying the current
-		 * key then the previous key. This two-key fallback covers a single key
-		 * rotation (v1 → v2) as long as the client was previously unlocked with
-		 * the old key.
-		 *
-		 * For full multi-key rotation (fresh client after N rotations), this
-		 * method would need to accept a keyring (`Map<number, Uint8Array>`) and
-		 * use `getKeyVersion(blob)` to select the correct decryption key per
-		 * entry. The API already has a keyring (`ENCRYPTION_SECRETS`); the
-		 * missing piece is transporting multiple derived keys to the client.
-		 *
-		 * @param nextKey - A 32-byte encryption key
+		 * @param keyring - Map from version number to 32-byte encryption key
 		 */
-		activateEncryption(nextKey) {
-			const previousKey = currentKey;
+		activateEncryption(keyring) {
+			const nextVersion = Math.max(...keyring.keys());
+			const nextKey = keyring.get(nextVersion)!;
+			currentVersion = nextVersion;
 			currentKey = nextKey;
+			activeKeyring = keyring;
 
 			const oldMap = new Map(map);
 			map.clear();
@@ -480,16 +498,18 @@ export function createEncryptedYkvLww<T>(
 					continue;
 				}
 
-				// Try new key first
+				// Fast path: try current key (most blobs are on latest version)
 				let decrypted = tryDecryptEntryWithKey(key, entry, nextKey);
 				if (decrypted) {
 					map.set(key, decrypted);
-					continue; // already encrypted with current key
+					continue;
 				}
 
-				// Fall back to previous key
-				if (previousKey) {
-					decrypted = tryDecryptEntryWithKey(key, entry, previousKey);
+				// Version-directed lookup
+				const blobVersion = getKeyVersion(entry.val as EncryptedBlob);
+				const versionKey = keyring.get(blobVersion);
+				if (versionKey && versionKey !== nextKey) {
+					decrypted = tryDecryptEntryWithKey(key, entry, versionKey);
 					if (decrypted) {
 						map.set(key, decrypted);
 						needsReEncrypt.push({ key, val: decrypted.val });
@@ -497,13 +517,13 @@ export function createEncryptedYkvLww<T>(
 					}
 				}
 
-				console.warn(`[encrypted-kv] Entry "${key}" undecryptable with current or previous key`);
+				console.warn(`[encrypted-kv] Entry "${key}" undecryptable (blob v${blobVersion})`);
 			}
 
 			// Re-encrypt only entries that need it (plaintext or old-key)
 			inner.doc.transact(() => {
 				for (const { key: entryKey, val } of needsReEncrypt) {
-					inner.set(entryKey, encryptValue(JSON.stringify(val), nextKey, textEncoder.encode(entryKey)));
+					inner.set(entryKey, encryptValue(JSON.stringify(val), nextKey, textEncoder.encode(entryKey), nextVersion));
 				}
 			}, RE_ENCRYPT);
 
@@ -517,6 +537,7 @@ export function createEncryptedYkvLww<T>(
 		 */
 		deactivateEncryption() {
 			currentKey = undefined;
+			activeKeyring = undefined;
 			const oldMap = new Map(map);
 			map.clear();
 
