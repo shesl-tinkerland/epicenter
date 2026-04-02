@@ -25,6 +25,17 @@ import { defineKv } from './define-kv.js';
 import { defineTable } from './define-table.js';
 import { defineWorkspace } from './define-workspace.js';
 import type { UserKeyStore } from './user-key-store.js';
+import type { EncryptionKey } from './types.js';
+
+/** Wrap a raw Uint8Array key into a single-entry EncryptionKey[] for tests. */
+function toEncryptionKeys(key: Uint8Array): EncryptionKey[] {
+	return [{ version: 1, userKeyBase64: bytesToBase64(key) }];
+}
+
+/** Serialize a raw key to the JSON format the UserKeyStore now expects. */
+function toKeysJson(key: Uint8Array): string {
+	return JSON.stringify(toEncryptionKeys(key));
+}
 
 /** Creates a workspace client with two tables and one KV for testing. */
 function setup() {
@@ -970,16 +981,16 @@ describe('workspace unlock', () => {
 
 	test('encryption.unlock transitions runtime to unlocked', async () => {
 		const { client, key } = setupUnlockedWorkspace();
-		await client.encryption.unlock(key);
+		await client.encryption.unlock(toEncryptionKeys(key));
 		expect(client.encryption.isUnlocked).toBe(true);
 	});
 
 	test('encryption.unlock preserves encrypted writes when the same key is reused', async () => {
 		const { client, key } = setupUnlockedWorkspace();
-		await client.encryption.unlock(key);
+		await client.encryption.unlock(toEncryptionKeys(key));
 		client.tables.posts.set({ id: '1', title: 'Secret', _v: 1 });
 
-		await client.encryption.unlock(key);
+		await client.encryption.unlock(toEncryptionKeys(key));
 
 		const result = client.tables.posts.get('1');
 		expect(result.status).toBe('valid');
@@ -1049,20 +1060,20 @@ describe('.withEncryption() lifecycle', () => {
 			const { client } = setupLifecycle();
 			const key = generateEncryptionKey();
 
-			await client.encryption.unlock(key);
+			await client.encryption.unlock(toEncryptionKeys(key));
 			expect(client.encryption.isUnlocked).toBe(true);
 
-			await client.encryption.unlock(key);
+			await client.encryption.unlock(toEncryptionKeys(key));
 			expect(client.encryption.isUnlocked).toBe(true);
 		});
 
 		test('different keys each keep the runtime unlocked', async () => {
 			const { client } = setupLifecycle();
 
-			await client.encryption.unlock(generateEncryptionKey());
+			await client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
 			expect(client.encryption.isUnlocked).toBe(true);
 
-			await client.encryption.unlock(generateEncryptionKey());
+			await client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
 			expect(client.encryption.isUnlocked).toBe(true);
 		});
 	});
@@ -1071,9 +1082,9 @@ describe('.withEncryption() lifecycle', () => {
 		test('rapid unlocks leave the runtime unlocked with the latest key', async () => {
 			const { client } = setupLifecycle();
 
-			const p1 = client.encryption.unlock(generateEncryptionKey());
-			const p2 = client.encryption.unlock(generateEncryptionKey());
-			const p3 = client.encryption.unlock(generateEncryptionKey());
+			const p1 = client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
+			const p2 = client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
+			const p3 = client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
 
 			await Promise.all([p1, p2, p3]);
 
@@ -1087,7 +1098,7 @@ describe('.withEncryption() lifecycle', () => {
 
 			expect(client.encryption.isUnlocked).toBe(false);
 
-			await client.encryption.unlock(generateEncryptionKey());
+			await client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
 			expect(client.encryption.isUnlocked).toBe(true);
 
 			client.encryption.lock();
@@ -1101,11 +1112,11 @@ describe('.withEncryption() lifecycle', () => {
 			await client.whenReady;
 			const userKey = generateEncryptionKey();
 
-			await client.encryption.unlock(userKey);
+			await client.encryption.unlock(toEncryptionKeys(userKey));
 
 			expect(userKeyStore.set).toHaveBeenCalledTimes(1);
-			expect(userKeyStore.set).toHaveBeenCalledWith(bytesToBase64(userKey));
-			expect(readCachedValue()).toBe(bytesToBase64(userKey));
+			expect(userKeyStore.set).toHaveBeenCalledWith(toKeysJson(userKey));
+			expect(readCachedValue()).toBe(toKeysJson(userKey));
 		});
 
 		test('encryption.unlock retries the same key after userKeyStore.set fails', async () => {
@@ -1115,12 +1126,12 @@ describe('.withEncryption() lifecycle', () => {
 			const userKey = generateEncryptionKey();
 
 			failNextSet();
-			await client.encryption.unlock(userKey);
-			await client.encryption.unlock(userKey);
+			await client.encryption.unlock(toEncryptionKeys(userKey));
+			await client.encryption.unlock(toEncryptionKeys(userKey));
 
 			expect(client.encryption.isUnlocked).toBe(true);
 			expect(userKeyStore.set).toHaveBeenCalledTimes(2);
-			expect(readCachedValue()).toBe(bytesToBase64(userKey));
+			expect(readCachedValue()).toBe(toKeysJson(userKey));
 		});
 
 		test('encryption.unlock updates runtime state before userKeyStore.set settles', async () => {
@@ -1145,7 +1156,7 @@ describe('.withEncryption() lifecycle', () => {
 			await client.whenReady;
 			const userKey = generateEncryptionKey();
 
-			const unlockPromise = client.encryption.unlock(userKey);
+			const unlockPromise = client.encryption.unlock(toEncryptionKeys(userKey));
 
 			expect(client.encryption.isUnlocked).toBe(true);
 			expect(cachedValue).toBe(null);
@@ -1153,7 +1164,7 @@ describe('.withEncryption() lifecycle', () => {
 			saveDeferred.resolve();
 			await unlockPromise;
 
-			expect(cachedValue ?? '').toBe(bytesToBase64(userKey));
+			expect(cachedValue ?? '').toBe(toKeysJson(userKey));
 		});
 
 		test('auto-boot stays locked when userKeyStore is empty', async () => {
@@ -1168,14 +1179,14 @@ describe('.withEncryption() lifecycle', () => {
 		test('auto-boot unlocks from cached key', async () => {
 			const userKey = generateEncryptionKey();
 			const { client, userKeyStore } = setupWithUserKeyStore(
-				bytesToBase64(userKey),
+				toKeysJson(userKey),
 			);
 			await client.whenReady;
 
 			expect(client.encryption.isUnlocked).toBe(true);
 			expect(userKeyStore.get).toHaveBeenCalledTimes(1);
 			expect(userKeyStore.set).toHaveBeenCalledTimes(1);
-			expect(userKeyStore.set).toHaveBeenCalledWith(bytesToBase64(userKey));
+			expect(userKeyStore.set).toHaveBeenCalledWith(toKeysJson(userKey));
 		});
 
 		test('auto-boot clears corrupt cache entries and stays locked', async () => {
@@ -1215,8 +1226,8 @@ describe('.withEncryption() lifecycle', () => {
 			const firstKey = generateEncryptionKey();
 			const secondKey = generateEncryptionKey();
 
-			const firstUnlock = client.encryption.unlock(firstKey);
-			const secondUnlock = client.encryption.unlock(secondKey);
+			const firstUnlock = client.encryption.unlock(toEncryptionKeys(firstKey));
+			const secondUnlock = client.encryption.unlock(toEncryptionKeys(secondKey));
 
 			expect(client.encryption.isUnlocked).toBe(true);
 
@@ -1227,7 +1238,7 @@ describe('.withEncryption() lifecycle', () => {
 			// persist task skips the write because activeUserKey has already
 			// changed to secondKey by the time the queued task runs.
 			expect(userKeyStore.set).toHaveBeenCalledTimes(1);
-			expect(cachedValue ?? '').toBe(bytesToBase64(secondKey));
+			expect(cachedValue ?? '').toBe(toKeysJson(secondKey));
 		});
 
 		test('clearLocalData clears userKeyStore after an in-flight set finishes', async () => {
@@ -1259,7 +1270,7 @@ describe('.withEncryption() lifecycle', () => {
 			await client.whenReady;
 			const userKey = generateEncryptionKey();
 
-			const unlockPromise = client.encryption.unlock(userKey);
+			const unlockPromise = client.encryption.unlock(toEncryptionKeys(userKey));
 			expect(client.encryption.isUnlocked).toBe(true);
 
 			const clearPromise = client.clearLocalData();
@@ -1293,7 +1304,7 @@ describe('.withEncryption() lifecycle', () => {
 					},
 				}));
 
-			await client.encryption.unlock(generateEncryptionKey());
+			await client.encryption.unlock(toEncryptionKeys(generateEncryptionKey()));
 			await client.clearLocalData();
 
 			expect(events).toEqual(['locked']);

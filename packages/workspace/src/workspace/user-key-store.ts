@@ -1,14 +1,13 @@
 /**
- * Platform-agnostic interface for persisting user encryption keys.
+ * Platform-agnostic interface for persisting encryption keys across sessions.
  *
- * Stores the user key as a base64 string—the same format the auth session
- * provides and the workspace unlock boundary restores. This keeps the
- * cache representation simple: the key enters as a string, caches as a
- * string, and only decodes to bytes once the workspace calls `unlock()`.
+ * Stores the encryption keys as a JSON string—`JSON.stringify(EncryptionKey[])`
+ * where each entry is `{ version: number, userKeyBase64: string }`. The store
+ * interface deals only in opaque strings; callers handle serialization.
  *
  * Passing a `UserKeyStore` to `.withEncryption({ userKeyStore })` implies
- * auto-boot: the workspace loads the cached key on startup and unlocks
- * immediately if one is available. No explicit boot call is needed.
+ * auto-boot: the workspace loads the cached keys on startup and unlocks
+ * immediately if available. No explicit boot call is needed.
  *
  * | Platform         | Implementation                                            |
  * |------------------|-----------------------------------------------------------|
@@ -21,39 +20,39 @@
  *
  * ```
  * Server (auth session)
- *   │  userKeyBase64: base64 string
+ *   │  encryptionKeys: [{ version, userKeyBase64 }, ...]
  *   ▼
- * UserKeyStore.set(userKeyBase64)
- *   │  stored locally as-is (no conversion needed)
+ * UserKeyStore.set(JSON.stringify(encryptionKeys))
+ *   │  stored locally as opaque string
  *   ▼
  * App startup (before auth roundtrip completes)
- *   │  UserKeyStore.get() → base64 string | null
+ *   │  UserKeyStore.get() → JSON string | null
  *   │  consumed by auto-boot in whenReady
  *   ▼
- * auto-boot → base64ToBytes → unlock() → HKDF
- *   │  base64 decoding happens once, at the crypto boundary
+ * auto-boot → JSON.parse → unlock(keys) → deriveWorkspaceKey per version
+ *   │  base64 decoding + HKDF happens inside unlock()
  * ```
  *
  * Without a `UserKeyStore`, every page refresh requires a full auth roundtrip
  * before encrypted data can be read. With a store, the workspace unlocks
- * immediately on launch using the cached key, then refreshes it silently when
+ * immediately on launch using the cached keys, then refreshes them silently when
  * the session loads.
  */
 export type UserKeyStore = {
 	/**
-	 * Persist the latest base64-encoded user key.
+	 * Persist the latest encryption keys as a JSON string.
 	 *
-	 * Called after the workspace receives or refreshes a valid user key from the
-	 * auth session. Implementations usually store one value and overwrite any
-	 * older cached key.
+	 * Called after the workspace receives or refreshes valid keys from the
+	 * auth session. Implementations store one value and overwrite any
+	 * older cached entry.
 	 */
-	set(userKeyBase64: string): Promise<void>;
+	set(keysJson: string): Promise<void>;
 	/**
-	 * Retrieve the cached base64-encoded user key during startup.
+	 * Retrieve the cached encryption keys during startup.
 	 *
 	 * Called automatically during `whenReady` when a `UserKeyStore` is provided
 	 * to `.withEncryption()`. Return `null` to skip auto-unlock and wait for
-	 * the server session to provide a key.
+	 * the server session to provide keys.
 	 */
 	get(): Promise<string | null>;
 	/**

@@ -1068,18 +1068,29 @@ export type EncryptionConfig = {
  * await workspace.clearLocalData();
  * ```
  */
+/**
+ * A single versioned encryption key for transport.
+ *
+ * Pairs a key version (from the server's `ENCRYPTION_SECRETS`) with the
+ * HKDF-derived per-user key encoded as base64 for JSON transport.
+ */
+export type EncryptionKey = {
+	version: number;
+	userKeyBase64: string;
+};
+
 export type WorkspaceEncryption = {
 	/** Whether the runtime is currently unlocked. */
 	isUnlocked: boolean;
 	/**
-	 * Unlock the workspace with a root user key.
+	 * Unlock the workspace with encryption keys.
 	 *
-	 * This accepts a root user key, not a final workspace content key. The
-	 * workspace derives a per-workspace key via HKDF-SHA256, applies it to
-	 * encrypted stores synchronously, then persists the user key if a cache is
-	 * configured.
+	 * Accepts an array of versioned user keys (from the auth session).
+	 * Derives a per-workspace key for each version via HKDF-SHA256,
+	 * builds a keyring Map, and activates encrypted stores. Persists
+	 * the keys if a cache is configured.
 	 */
-	unlock(userKey: Uint8Array): Promise<void>;
+	unlock(keys: EncryptionKey[]): Promise<void>;
 	/**
 	 * Lock the runtime.
 	 *
@@ -1095,21 +1106,14 @@ export type WorkspaceEncryption = {
  */
 export type WorkspaceKeyAccess = {
 	/**
-	 * Unlock the workspace from a base64-encoded user key.
+	 * Unlock the workspace from an array of encryption keys.
 	 *
-	 * This is a convenience wrapper for app-layer auth flows that fetch the
-	 * user key as a string payload.
+	 * Convenience wrapper for app-layer auth flows. Waits for whenReady,
+	 * then delegates to `encryption.unlock()`.
 	 */
-	unlockWithKey(userKeyBase64: string): Promise<void>;
+	unlockWithKeys(keys: EncryptionKey[]): Promise<void>;
 };
 
-export type WorkspaceKeyAccessFor<
-	TConfig extends EncryptionConfig | undefined,
-> = TConfig extends EncryptionConfig ? WorkspaceKeyAccess : WorkspaceKeyAccess;
-
-export type WorkspaceEncryptionFor<
-	TConfig extends EncryptionConfig | undefined,
-> = TConfig extends EncryptionConfig ? WorkspaceEncryption : WorkspaceEncryption;
 export type WorkspaceClientBuilder<
 	TId extends string,
 	TTableDefinitions extends TableDefinitions,
@@ -1302,11 +1306,11 @@ export type WorkspaceClientBuilder<
 		 *   .withExtension('persistence', indexeddbPersistence)
 		 *   .withExtension('sync', createSyncExtension({ ... }));
 		 *
-		 * await workspace.encryption.unlock(userKeyBytes);  // explicit unlock from auth
+		 * await workspace.encryption.unlock([{ version: 1, userKeyBase64 }]);  // explicit unlock from auth
 		 * ```
 		 */
-		withEncryption<TConfig extends EncryptionConfig | undefined = undefined>(
-			config?: TConfig,
+		withEncryption(
+			config?: EncryptionConfig,
 		): WorkspaceClientBuilder<
 			TId,
 			TTableDefinitions,
@@ -1315,8 +1319,8 @@ export type WorkspaceClientBuilder<
 			TExtensions,
 			TDocExtensions,
 		{
-			encryption: WorkspaceEncryptionFor<TConfig>;
-		} & WorkspaceKeyAccessFor<TConfig>,
+			encryption: WorkspaceEncryption;
+		} & WorkspaceKeyAccess,
 			TActions
 		>;
 
