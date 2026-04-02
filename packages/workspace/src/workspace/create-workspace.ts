@@ -226,14 +226,14 @@ export function createWorkspace<
 
 
 	// Accumulated document extension registrations (in chain order).
-	// Mutable array — grows as .withExtension({ document }) is called. Document
+	// Mutable array — grows as .withDocumentExtension() is called. Document
 	// bindings reference this array by closure, so by the time user code
 	// calls .open(), all extensions are registered.
 	const documentExtensionRegistrations: DocumentExtensionRegistration[] = [];
 
 	// Create documents for tables that have .withDocument() declarations.
 	// Documents are created eagerly but reference documentExtensionRegistrations by closure,
-	// so they pick up extensions added later via .withExtension({ document }).
+	// so they pick up extensions added later via .withDocumentExtension().
 	const documentCleanups: (() => Promise<void>)[] = [];
 	// Runtime type is Record<string, Record<string, Documents<BaseRow>>> —
 	// cast to DocumentsHelper at the end so it satisfies WorkspaceClient/ExtensionContext.
