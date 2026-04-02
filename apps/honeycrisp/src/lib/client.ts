@@ -32,7 +32,7 @@ export const auth = createAuth({
 	baseURL: APP_URLS.API,
 	session,
 	onLogin(session) {
-		workspace.unlockWithKey(session.userKeyBase64);
+		workspace.unlockWithKeys(session.encryptionKeys);
 		workspace.extensions.sync.reconnect();
 	},
 	onLogout() {

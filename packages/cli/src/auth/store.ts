@@ -27,8 +27,8 @@ export type AuthSession = {
 	accessToken: string;
 	/** Unix ms when the session expires. */
 	expiresAt: number;
-	/** Base64-encoded user encryption key for workspace decryption. */
-	userKeyBase64: string;
+	/** Versioned encryption keys for workspace decryption. */
+	encryptionKeys: SessionResponse['encryptionKeys'];
 	/** User info snapshot from the auth flow. */
 	user?: { id: string; email: string; name?: string };
 };
@@ -110,7 +110,7 @@ export function createSessionStore(home: string) {
 			store[normalizeUrl(server)] = {
 				accessToken: token.access_token,
 				expiresAt: Date.now() + token.expires_in * 1000,
-				userKeyBase64: sessionData.userKeyBase64,
+				encryptionKeys: sessionData.encryptionKeys,
 				user: sessionData.user,
 			};
 			await write(store);

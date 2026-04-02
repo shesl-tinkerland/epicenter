@@ -74,7 +74,6 @@ import * as Y from 'yjs';
 import type { Actions } from '../shared/actions.js';
 import {
 	base64ToBytes,
-	bytesToBase64,
 	deriveWorkspaceKey,
 } from '../shared/crypto/index.js';
 import type { YKeyValueLwwEntry } from '../shared/y-keyvalue/y-keyvalue-lww.js';

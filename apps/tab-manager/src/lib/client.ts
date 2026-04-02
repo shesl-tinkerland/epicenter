@@ -44,7 +44,7 @@ export const auth = createAuth({
 		return { provider: 'google', idToken, nonce };
 	},
 	onLogin(session) {
-		workspace.unlockWithKey(session.userKeyBase64);
+		workspace.unlockWithKeys(session.encryptionKeys);
 		workspace.extensions.sync.reconnect();
 	},
 	onLogout() {

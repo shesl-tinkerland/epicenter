@@ -38,7 +38,7 @@ export type AuthError = InferErrors<typeof AuthError>;
 /**
  * Authenticated session data passed to the `onLogin` hook.
  *
- * Includes `userKeyBase64` so apps can call `workspace.unlockWithKey()`
+ * Includes `encryptionKeys` so apps can call `workspace.unlockWithKeys()`
  * directly—no separate fetch or version tracking needed. The persisted
  * session box stores the simpler `AuthSession` without key material.
  *
@@ -46,7 +46,7 @@ export type AuthError = InferErrors<typeof AuthError>;
  * ```typescript
  * createAuth({
  *   onLogin(session) {
- *     workspace.unlockWithKey(session.userKeyBase64);
+ *     workspace.unlockWithKeys(session.encryptionKeys);
  *   },
  * });
  * ```
@@ -54,8 +54,7 @@ export type AuthError = InferErrors<typeof AuthError>;
 export type AuthenticatedSession = {
 	token: string;
 	user: StoredUser;
-	keyVersion: number;
-	userKeyBase64: string;
+	encryptionKeys: SessionResponse['encryptionKeys'];
 };
 
 export type AuthClient = {
@@ -186,13 +185,13 @@ export type CreateAuthOptions = {
 	 * from storage, or token refresh.
 	 *
 	 * Fires on every authenticated session update, not just login transitions.
-	 * Consumers should use idempotent operations (e.g. `unlockWithKey` is safe
-	 * to call repeatedly with the same key).
+	 * Consumers should use idempotent operations (e.g. `unlockWithKeys` is safe
+	 * to call repeatedly with the same keys).
 	 *
 	 * @example
 	 * ```typescript
 	 * onLogin(session) {
-	 *   workspace.unlockWithKey(session.userKeyBase64);
+	 *   workspace.unlockWithKeys(session.encryptionKeys);
 	 *   workspace.extensions.sync.reconnect();
 	 * }
 	 * ```
@@ -316,8 +315,7 @@ export function createAuth({
 			onLogin?.({
 				token,
 				user,
-				keyVersion: state.data.keyVersion,
-				userKeyBase64: state.data.userKeyBase64,
+				encryptionKeys: state.data.encryptionKeys,
 			});
 		} else {
 			session.current = null;
