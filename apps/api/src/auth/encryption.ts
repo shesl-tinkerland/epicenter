@@ -61,9 +61,6 @@ const EncryptionKeyring = type('string')
  * Uses the call operator (not `.assert()`) so validation errors are returned
  * as `ArkErrors` instead of thrown as `TraversalError`. This lets us wrap
  * them in a human-readable message with the expected format.
- *
- * Destructured so `currentKeySecret` stays private and `currentKeyVersion`
- * can be exported without exposing key material.
  */
 const keyring = EncryptionKeyring(env.ENCRYPTION_SECRETS);
 if (keyring instanceof type.errors) {
@@ -74,7 +71,6 @@ if (keyring instanceof type.errors) {
 			`Validation errors:\n${keyring.summary}`,
 	);
 }
-const [{ version: currentKeyVersion, secret: currentKeySecret }] = keyring;
 
 /**
  * Derive a per-user 32-byte encryption key via two-step HKDF-SHA256.
@@ -120,17 +116,20 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Derive and return the per-user encryption key.
+ * Derive per-user encryption keys for every version in the keyring.
  *
  * Called by `customSession()` on every `/auth/get-session` response.
- * HKDF derivation adds <0.1ms—negligible next to the network round-trip.
+ * Returns one `{ version, userKeyBase64 }` per keyring entry, sorted
+ * highest-version-first (matching keyring order). HKDF derivation adds
+ * <0.1ms per key—negligible next to the network round-trip.
  */
-export async function deriveUserEncryptionKey(
+export async function deriveUserEncryptionKeys(
 	userId: string,
 ) {
-	const userKey = await deriveUserKey(currentKeySecret, userId);
-	return {
-		userKeyBase64: bytesToBase64(userKey),
-		keyVersion: currentKeyVersion,
-	};
+	return Promise.all(
+		keyring.map(async ({ version, secret }) => ({
+			version,
+			userKeyBase64: bytesToBase64(await deriveUserKey(secret, userId)),
+		})),
+	);
 }

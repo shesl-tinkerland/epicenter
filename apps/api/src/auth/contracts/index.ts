@@ -5,4 +5,4 @@
  * Client-only Better Auth inference helpers belong in the consuming package,
  * and server runtime wiring belongs next to the auth factory.
  */
-export type { SessionResponse } from './get-session';
+export type { EncryptionKey, SessionResponse } from './get-session';

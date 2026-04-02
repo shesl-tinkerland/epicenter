@@ -11,7 +11,7 @@ import { createAutumn } from '../autumn';
 import type * as schema from '../db/schema';
 import { BASE_AUTH_CONFIG } from './base-config';
 import type { SessionResponse } from './contracts';
-import { deriveUserEncryptionKey } from './encryption';
+import { deriveUserEncryptionKeys } from './encryption';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -26,8 +26,8 @@ type Db = NodePgDatabase<typeof schema>;
  * - Drizzle adapter (Postgres via Hyperdrive)
  * - Google OAuth + email/password (from {@link BASE_AUTH_CONFIG})
  * - Plugins: bearer tokens, JWT, device authorization, OAuth provider (PKCE)
- * - `customSession()` enrichment that appends the current encryption key version
-	   to `/auth/get-session` responses (see {@link SessionResponse})
+ * - `customSession()` enrichment that appends the full encryption keyring
+ *   to `/auth/get-session` responses (see {@link SessionResponse})
  * - Autumn billing customer creation on user signup
  * - Cloudflare KV secondary storage for session caching
  */
@@ -141,20 +141,20 @@ export function createAuth({
 		}),
 	];
 	/**
-	 * Enrich `/auth/get-session` responses with key version and derived key.
+	 * Enrich `/auth/get-session` responses with the full encryption keyring.
 	 *
-	 * HKDF derivation adds <0.1ms—negligible next to the network round-trip.
-	 * Embedding the key here eliminates the separate `/workspace-key` endpoint
-	 * and all client-side version tracking.
+	 * Derives a per-user key for every version in `ENCRYPTION_SECRETS`.
+	 * HKDF derivation adds <0.1ms per key—negligible next to the network round-trip.
+	 * Embedding all keys here eliminates separate key-fetch endpoints and
+	 * enables fresh clients to decrypt blobs from any key version.
 	 */
 	const customSessionPlugin = customSession(
 		async ({ user, session }) => {
-			const { userKeyBase64, keyVersion } = await deriveUserEncryptionKey(user.id);
+			const encryptionKeys = await deriveUserEncryptionKeys(user.id);
 			return {
 				user,
 				session,
-				keyVersion,
-				userKeyBase64,
+				encryptionKeys,
 			} satisfies SessionResponse;
 		},
 		{
