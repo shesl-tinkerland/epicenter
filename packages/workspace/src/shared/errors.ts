@@ -42,3 +42,16 @@ export const ExtensionError = defineErrors({
 	}),
 });
 export type ExtensionError = InferErrors<typeof ExtensionError>;
+
+export const EncryptionError = defineErrors({
+	/**
+	 * Thrown when `set()` or `delete()` is called after encryption has been
+	 * activated but no keyring is present. Once encryption has been active,
+	 * plaintext writes are permanently forbidden. The only reset path is
+	 * `clearLocalData()` which destroys the wrapper entirely.
+	 */
+	Locked: () => ({
+		message: 'Cannot write plaintext after encryption has been activated',
+	}),
+});
+export type EncryptionError = InferErrors<typeof EncryptionError>;
