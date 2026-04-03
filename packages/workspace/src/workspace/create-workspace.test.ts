@@ -15,8 +15,8 @@ import { type } from 'arktype';
 import * as Y from 'yjs';
 import {
 	bytesToBase64,
-	generateEncryptionKey,
-} from '../shared/crypto/index.js';
+	} from '../shared/crypto/index.js';
+import { randomBytes } from '@noble/ciphers/utils.js';
 import { defineMutation, defineQuery } from '../shared/actions.js';
 import { createDocuments } from './create-document.js';
 import { createTables } from './create-tables.js';
@@ -955,7 +955,7 @@ describe('applyEncryptionKeys', () => {
 		const client = createWorkspace(
 			defineWorkspace({ id: 'enc-test', tables: { posts } }),
 		);
-		return { client, key: generateEncryptionKey() };
+		return { client, key: randomBytes(32) };
 	}
 
 	test('applyEncryptionKeys enables encrypted writes', () => {
@@ -991,8 +991,8 @@ describe('applyEncryptionKeys', () => {
 			defineWorkspace({ id: 'rotation-test', tables: { posts } }),
 		);
 
-		const keyV1 = generateEncryptionKey();
-		const keyV2 = generateEncryptionKey();
+		const keyV1 = randomBytes(32);
+		const keyV2 = randomBytes(32);
 
 		// Write with key v1
 		client.applyEncryptionKeys([{ version: 1, userKeyBase64: bytesToBase64(keyV1) }]);

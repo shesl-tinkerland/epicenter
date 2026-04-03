@@ -15,7 +15,7 @@
  * ┌─────────────────────────────────────────────────────────────────────┐
  * │  Auth Flow                                                         │
  * │  Server derives key from secret → sends base64 in session response │
- * │  Client decodes → stores in memory via UserKeyStore                │
+ * │  Client decodes → applyEncryptionKeys() derives per-workspace keys │
  * └────────────────────────┬────────────────────────────────────────────┘
  * │  key: Uint8Array | undefined
  *                          ▼
@@ -30,9 +30,8 @@
  * │                                                                     │
  * │  observer fires (inner CRDT change)                                │
  * │    → isEncryptedBlob(val)? decryptValue → JSON.parse → plaintext   │
- * │    → wrapper.map updated with plaintext                            │
  * │                                                                     │
- * │  get(key) → reads from plaintext map (cached, no re-decrypt)       │
+ * │  get(key) → decrypt on the fly from inner store                    │
  * └─────────────────────────────────────────────────────────────────────┘
  * ```
  *
@@ -48,7 +47,6 @@
  * ## Related Modules
  *
  * - {@link ../y-keyvalue/y-keyvalue-lww-encrypted.ts} — Composition wrapper that wires these primitives into the CRDT
- * - {@link ../../workspace/user-key-store.ts} — Platform-agnostic cached user-key interface
  * - {@link ../y-keyvalue/y-keyvalue-lww.ts} — Underlying CRDT (unaware of encryption)
  *
  * @module
@@ -107,24 +105,6 @@ const textDecoder = new TextDecoder();
  * ```
  */
 type EncryptedBlob = Uint8Array & Brand<'EncryptedBlob'>;
-
-/**
- * Generate a random 256-bit encryption key.
- *
- * Returns a cryptographically secure random key suitable for XChaCha20-Poly1305 encryption.
- * Use this to create new encryption keys for users or workspaces.
- *
- * @returns A 32-byte Uint8Array containing the encryption key
- *
- * @example
- * ```typescript
- * const key = generateEncryptionKey();
- * console.log(key.length); // 32
- * ```
- */
-export function generateEncryptionKey(): Uint8Array {
-	return randomBytes(32);
-}
 
 /**
  * Encrypt a plaintext string using XChaCha20-Poly1305.
@@ -276,93 +256,6 @@ export function getKeyVersion(blob: EncryptedBlob): number {
  */
 export function isEncryptedBlob(value: unknown): value is EncryptedBlob {
 	return value instanceof Uint8Array && value.length >= MINIMUM_BLOB_SIZE;
-}
-
-/**
- * Derive a 256-bit encryption key from a password using PBKDF2.
- *
- * Uses 600,000 iterations of PBKDF2-SHA256 to derive a key from a password
- * and salt. This is the first stage of the self-hosted encryption flow:
- *
- * ```
- * Password (user input, low entropy)
- *   → PBKDF2(password, salt, 600k iterations) → userKey (32 bytes, high entropy)
- *   → workspace.encryption.unlock(userKey)
- *     → HKDF(userKey, "workspace:{id}") → workspaceKey (per-workspace isolation)
- *       → XChaCha20-Poly1305(plaintext, workspaceKey) → ciphertext
- * ```
- *
- * **Why two stages?** PBKDF2 and HKDF serve different roles:
- * - **PBKDF2** strengthens weak human input (slow, 600k iterations, brute-force resistant)
- * - **HKDF** splits one strong key into independent per-workspace keys (fast, <1ms, deterministic)
- *
- * PBKDF2 runs once per session (~500ms). HKDF runs once per workspace (<1ms each).
- * Without HKDF, all workspaces would share the same key—compromising one would
- * compromise all. Without PBKDF2, the password would be trivially brute-forceable.
- *
- * @param password - The user's password
- * @param salt - A 16-byte Uint8Array salt (typically from `deriveSalt(userId, workspaceId)`)
- * @returns A promise that resolves to a 32-byte Uint8Array user key
- *
- * @example
- * ```typescript
- * // Self-hosted password flow:
- * const salt = deriveSalt(userId, workspaceId);
- * const userKey = await deriveKeyFromPassword(password, salt);
- * await workspace.encryption.unlock(userKey); // internally derives per-workspace key via HKDF
- * ```
- */
-export async function deriveKeyFromPassword(
-	password: string,
-	salt: Uint8Array,
-): Promise<Uint8Array> {
-	const passwordKey = await crypto.subtle.importKey(
-		'raw',
-		textEncoder.encode(password),
-		'PBKDF2',
-		false,
-		['deriveBits'],
-	);
-
-	const derivedBits = await crypto.subtle.deriveBits(
-		{
-			name: 'PBKDF2',
-			hash: 'SHA-256',
-			salt: salt.buffer as ArrayBuffer,
-			iterations: 600_000,
-		},
-		passwordKey,
-		256,
-	);
-
-	return new Uint8Array(derivedBits);
-}
-
-/**
- * Derive a 16-byte salt from a userId and workspaceId using SHA-256.
- *
- * Combines the userId and workspaceId with a null-byte separator, hashes
- * with SHA-256, and returns the first 16 bytes. Synchronous because
- * SHA-256 of a short string is microseconds—no reason to force async.
- *
- * Uses `@noble/hashes` (already imported for HKDF) instead of
- * `crypto.subtle.digest` to avoid an unnecessary `await` at every call site.
- *
- * @param userId - The user's unique identifier
- * @param workspaceId - The workspace's unique identifier
- * @returns A 16-byte Uint8Array salt
- *
- * @example
- * ```typescript
- * const salt = deriveSalt('user123', 'workspace456');
- * console.log(salt.length); // 16
- * ```
- */
-export function deriveSalt(
-	userId: string,
-	workspaceId: string,
-): Uint8Array {
-	return sha256(textEncoder.encode(userId + '\0' + workspaceId)).slice(0, 16);
 }
 
 /**

@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
+import { randomBytes } from '@noble/ciphers/utils.js';
 import * as Y from 'yjs';
 import type { YKeyValueLwwEntry } from '../y-keyvalue/y-keyvalue-lww';
 import { createEncryptedYkvLww } from '../y-keyvalue/y-keyvalue-lww-encrypted';
@@ -20,12 +21,9 @@ import {
 	base64ToBytes,
 	bytesToBase64,
 	decryptValue,
-	deriveKeyFromPassword,
-	deriveSalt,
 	deriveWorkspaceKey,
 	type EncryptedBlob,
 	encryptValue,
-	generateEncryptionKey,
 	getKeyVersion,
 	isEncryptedBlob,
 } from './index';
@@ -54,23 +52,9 @@ async function deriveWorkspaceKeyWithWebCrypto(
 	return new Uint8Array(derivedBits);
 }
 
-describe('generateEncryptionKey', () => {
-	test('returns 32-byte Uint8Array', () => {
-		const key = generateEncryptionKey();
-		expect(key).toBeInstanceOf(Uint8Array);
-		expect(key.length).toBe(32);
-	});
-
-	test('two generated keys are different', () => {
-		const key1 = generateEncryptionKey();
-		const key2 = generateEncryptionKey();
-		expect(key1).not.toEqual(key2);
-	});
-});
-
 describe('encryptValue / decryptValue', () => {
 	test('round-trip: encrypt then decrypt returns original string', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Hello, World!';
 		const encrypted = encryptValue(plaintext, key);
 		const decrypted = decryptValue(encrypted, key);
@@ -78,7 +62,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('round-trip with empty string', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = '';
 		const encrypted = encryptValue(plaintext, key);
 		const decrypted = decryptValue(encrypted, key);
@@ -86,7 +70,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('round-trip with unicode characters', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = '你好世界 🌍 مرحبا بالعالم';
 		const encrypted = encryptValue(plaintext, key);
 		const decrypted = decryptValue(encrypted, key);
@@ -94,7 +78,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('round-trip with JSON string', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = JSON.stringify({ id: '123', name: 'Test', active: true });
 		const encrypted = encryptValue(plaintext, key);
 		const decrypted = decryptValue(encrypted, key);
@@ -102,7 +86,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('round-trip with long string', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'a'.repeat(10000);
 		const encrypted = encryptValue(plaintext, key);
 		const decrypted = decryptValue(encrypted, key);
@@ -110,7 +94,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('each encrypt produces different ciphertext (unique nonce per call)', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Same plaintext';
 		const encrypted1 = encryptValue(plaintext, key);
 		const encrypted2 = encryptValue(plaintext, key);
@@ -124,7 +108,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('encrypted blob is a bare Uint8Array with correct header', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const encrypted = encryptValue('test', key);
 
 		expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -136,7 +120,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('custom keyVersion is embedded at byte 1', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const encrypted = encryptValue('test', key, undefined, 7);
 
 		expect(encrypted[1]).toBe(7);
@@ -153,7 +137,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('tampered ciphertext throws', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const encrypted = encryptValue('test', key);
 
 		// Copy and reverse the ciphertext portion
@@ -168,7 +152,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('tampered nonce throws', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const encrypted = encryptValue('test', key);
 
 		// Copy and flip the first nonce byte (byte 2)
@@ -181,7 +165,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('round-trip with AAD: encrypt and decrypt with same AAD succeeds', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Hello, World!';
 		const aad = new TextEncoder().encode('workspace:123|user:456');
 
@@ -192,7 +176,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('mismatched AAD throws', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Hello, World!';
 		const encryptionAad = new TextEncoder().encode('workspace:123|user:456');
 		const decryptionAad = new TextEncoder().encode('workspace:123|user:789');
@@ -205,7 +189,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('encrypt with AAD, decrypt without AAD throws', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Hello, World!';
 		const aad = new TextEncoder().encode('workspace:123|user:456');
 
@@ -217,7 +201,7 @@ describe('encryptValue / decryptValue', () => {
 	});
 
 	test('encrypt without AAD, decrypt with AAD throws', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const plaintext = 'Hello, World!';
 		const aad = new TextEncoder().encode('workspace:123|user:456');
 
@@ -231,7 +215,7 @@ describe('encryptValue / decryptValue', () => {
 
 describe('isEncryptedBlob', () => {
 	test('returns true for valid EncryptedBlob', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const blob = encryptValue('test', key);
 		expect(isEncryptedBlob(blob)).toBe(true);
 	});
@@ -280,88 +264,6 @@ describe('isEncryptedBlob', () => {
 	test('returns false for regular arrays and objects with extra keys', () => {
 		expect(isEncryptedBlob([1, 2, 3])).toBe(false);
 		expect(isEncryptedBlob({ id: '1', _v: 1, data: 'test' })).toBe(false);
-	});
-});
-
-describe('deriveKeyFromPassword', () => {
-	test('same password + salt produces same key', async () => {
-		const password = 'myPassword123';
-		const salt = new Uint8Array(16);
-		salt.fill(42);
-
-		const key1 = await deriveKeyFromPassword(password, salt);
-		const key2 = await deriveKeyFromPassword(password, salt);
-
-		expect(key1).toEqual(key2);
-	});
-
-	test('different passwords produce different keys', async () => {
-		const salt = new Uint8Array(16);
-		salt.fill(42);
-
-		const key1 = await deriveKeyFromPassword('password1', salt);
-		const key2 = await deriveKeyFromPassword('password2', salt);
-
-		expect(key1).not.toEqual(key2);
-	});
-
-	test('different salts produce different keys', async () => {
-		const password = 'myPassword123';
-		const salt1 = new Uint8Array(16);
-		salt1.fill(42);
-		const salt2 = new Uint8Array(16);
-		salt2.fill(99);
-
-		const key1 = await deriveKeyFromPassword(password, salt1);
-		const key2 = await deriveKeyFromPassword(password, salt2);
-
-		expect(key1).not.toEqual(key2);
-	});
-
-	test('returns 32-byte Uint8Array', async () => {
-		const password = 'test';
-		const salt = new Uint8Array(16);
-		const key = await deriveKeyFromPassword(password, salt);
-
-		expect(key).toBeInstanceOf(Uint8Array);
-		expect(key.length).toBe(32);
-	});
-});
-
-describe('deriveSalt', () => {
-	test('deterministic: same userId + workspaceId = same salt', () => {
-		const userId = 'user123';
-		const workspaceId = 'workspace456';
-
-		const salt1 = deriveSalt(userId, workspaceId);
-		const salt2 = deriveSalt(userId, workspaceId);
-
-		expect(salt1).toEqual(salt2);
-	});
-
-	test('different userId = different salt', () => {
-		const workspaceId = 'workspace456';
-
-		const salt1 = deriveSalt('user1', workspaceId);
-		const salt2 = deriveSalt('user2', workspaceId);
-
-		expect(salt1).not.toEqual(salt2);
-	});
-
-	test('different workspaceId = different salt', () => {
-		const userId = 'user123';
-
-		const salt1 = deriveSalt(userId, 'workspace1');
-		const salt2 = deriveSalt(userId, 'workspace2');
-
-		expect(salt1).not.toEqual(salt2);
-	});
-
-	test('returns 16-byte Uint8Array', () => {
-		const salt = deriveSalt('user123', 'workspace456');
-
-		expect(salt).toBeInstanceOf(Uint8Array);
-		expect(salt.length).toBe(16);
 	});
 });
 
@@ -430,7 +332,7 @@ describe('base64 helpers', () => {
 
 describe('binary storage overhead', () => {
 	test('binary ct produces smaller Y.Doc than base64 string ct', () => {
-		const key = generateEncryptionKey();
+		const key = randomBytes(32);
 		const testValues = [
 			'short',
 			'a'.repeat(100),
@@ -442,7 +344,10 @@ describe('binary storage overhead', () => {
 		const binaryDoc = new Y.Doc({ guid: 'bench-binary' });
 		const binaryArray =
 			binaryDoc.getArray<YKeyValueLwwEntry<EncryptedBlob | string>>('data');
-		const binaryKv = createEncryptedYkvLww<string>(binaryArray, new Map([[1, key]]));
+		const binaryKv = createEncryptedYkvLww<string>(
+			binaryArray,
+			new Map([[1, key]]),
+		);
 
 		for (const [i, val] of testValues.entries()) {
 			binaryKv.set(`key-${i}`, val);
@@ -450,13 +355,12 @@ describe('binary storage overhead', () => {
 
 		// Create Y.Doc with base64 string blobs (simulated old format)
 		const base64Doc = new Y.Doc({ guid: 'bench-base64' });
-		const base64Array =
-			base64Doc.getArray<YKeyValueLwwEntry<string>>('data');
+		const base64Array = base64Doc.getArray<YKeyValueLwwEntry<string>>('data');
 
 		// Extract binary entries and convert to base64 string representation
 		const binaryEntries = binaryArray.toArray();
-		const base64Entries: YKeyValueLwwEntry<string>[] =
-			binaryEntries.map((entry) => {
+		const base64Entries: YKeyValueLwwEntry<string>[] = binaryEntries.map(
+			(entry) => {
 				const val = entry.val;
 				if (isEncryptedBlob(val)) {
 					return {
@@ -465,7 +369,8 @@ describe('binary storage overhead', () => {
 					};
 				}
 				return entry as YKeyValueLwwEntry<string>;
-			});
+			},
+		);
 		base64Array.push(base64Entries);
 		base64Array.push(base64Entries);
 
@@ -484,7 +389,7 @@ describe('binary storage overhead', () => {
 
 describe('deriveWorkspaceKey', () => {
 	test('same inputs produce same key (deterministic)', () => {
-		const userKey = generateEncryptionKey();
+		const userKey = randomBytes(32);
 		const workspaceId = 'tab-manager';
 
 		const key1 = deriveWorkspaceKey(userKey, workspaceId);
@@ -494,8 +399,8 @@ describe('deriveWorkspaceKey', () => {
 	});
 
 	test('different userKeys produce different workspace keys', () => {
-		const userKey1 = generateEncryptionKey();
-		const userKey2 = generateEncryptionKey();
+		const userKey1 = randomBytes(32);
+		const userKey2 = randomBytes(32);
 		const workspaceId = 'tab-manager';
 
 		const key1 = deriveWorkspaceKey(userKey1, workspaceId);
@@ -505,7 +410,7 @@ describe('deriveWorkspaceKey', () => {
 	});
 
 	test('different workspaceIds produce different keys', () => {
-		const userKey = generateEncryptionKey();
+		const userKey = randomBytes(32);
 
 		const key1 = deriveWorkspaceKey(userKey, 'tab-manager');
 		const key2 = deriveWorkspaceKey(userKey, 'whispering');
@@ -514,7 +419,7 @@ describe('deriveWorkspaceKey', () => {
 	});
 
 	test('output is 32 bytes', () => {
-		const userKey = generateEncryptionKey();
+		const userKey = randomBytes(32);
 		const key = deriveWorkspaceKey(userKey, 'tab-manager');
 
 		expect(key).toBeInstanceOf(Uint8Array);
@@ -524,24 +429,17 @@ describe('deriveWorkspaceKey', () => {
 	test('matches the previous Web Crypto HKDF output for fixed fixtures', async () => {
 		const fixtures = [
 			{
-				userKey: base64ToBytes(
-					'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
-				),
+				userKey: base64ToBytes('AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='),
 				workspaceId: 'tab-manager',
 			},
 			{
-				userKey: base64ToBytes(
-					'8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8=',
-				),
+				userKey: base64ToBytes('8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8='),
 				workspaceId: 'workspace:with:colons',
 			},
 		];
 
 		for (const fixture of fixtures) {
-			const syncKey = deriveWorkspaceKey(
-				fixture.userKey,
-				fixture.workspaceId,
-			);
+			const syncKey = deriveWorkspaceKey(fixture.userKey, fixture.workspaceId);
 			const webCryptoKey = await deriveWorkspaceKeyWithWebCrypto(
 				fixture.userKey,
 				fixture.workspaceId,

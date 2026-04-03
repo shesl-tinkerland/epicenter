@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import {
 	type EncryptedBlob,
-	generateEncryptionKey,
 	getKeyVersion,
 	isEncryptedBlob,
-} from '../crypto';
+	} from '../crypto';
+import { randomBytes } from '@noble/ciphers/utils.js';
 import type { YKeyValueLwwEntry } from './y-keyvalue-lww';
 import {
 	createEncryptedYkvLww,
@@ -60,7 +60,7 @@ function createEncryptedBlob<T>(
 describe('createEncryptedYkvLww', () => {
 	describe('Basic encrypted operations', () => {
 		test('set() encrypts, get() decrypts round-trip', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('secret', 'hello-world');
@@ -69,7 +69,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('values in Y.Array are encrypted', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key]]));
 
 			kv.set('secret', 'cipher-me');
@@ -81,7 +81,7 @@ describe('createEncryptedYkvLww', () => {
 
 		test('complex object round-trip', () => {
 			type Bookmark = { url: string; title: string };
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup<Bookmark>(new Map([[1, key]]));
 
 			const value: Bookmark = { url: 'https://bank.com', title: 'My Bank' };
@@ -91,7 +91,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('delete works', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('k', 'v');
@@ -101,7 +101,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('has works', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('k', 'v');
@@ -112,7 +112,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('entries returns decrypted values', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('a', '1');
@@ -162,7 +162,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Observer decryption', () => {
 		test('observer receives decrypted values on add', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			const events: Array<{ key: string; change: PlainChange<string> }> = [];
@@ -179,7 +179,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('observer receives decrypted values on update', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('foo', 'first');
@@ -204,7 +204,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('observer receives correct action on delete', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			kv.set('foo', 'value');
@@ -221,7 +221,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('unobserve stops notifications', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
 			let count = 0;
@@ -240,7 +240,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Mixed plaintext/encrypted (migration)', () => {
 		test('reads plaintext entries as-is when key exists', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { yarray } = setup();
 
 			yarray.push([{ key: 'plaintext', val: 'plaintext-value', ts: 1000 }]);
@@ -250,7 +250,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('reads encrypted entries correctly', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { yarray } = setup();
 
 			const encrypted = createEncryptedBlob('encrypted-value', key, 'enc');
@@ -261,7 +261,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('mixed entries: some plaintext, some encrypted', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { yarray } = setup();
 
 			const encrypted = createEncryptedBlob('new-secret', key, 'new');
@@ -279,7 +279,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('reads always return plaintext', () => {
 		test('get returns decrypted value while yarray holds ciphertext', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key]]));
 
 			kv.set('k', 'plain-view');
@@ -289,7 +289,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('remote sync delivers decrypted values via observer', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 
 			const doc1 = new Y.Doc({ guid: 'shared' });
 			const doc2 = new Y.Doc({ guid: 'shared' });
@@ -312,7 +312,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Two-device sync with same key', () => {
 		test('encrypted value syncs and decrypts correctly', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 
 			const doc1 = new Y.Doc({ guid: 'shared' });
 			const doc2 = new Y.Doc({ guid: 'shared' });
@@ -333,7 +333,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('LWW conflict resolution works through encryption', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 
 			const doc1 = new Y.Doc({ guid: 'shared' });
 			const doc2 = new Y.Doc({ guid: 'shared' });
@@ -368,7 +368,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('both docs converge to same decrypted value', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 
 			const doc1 = new Y.Doc({ guid: 'shared' });
 			const doc2 = new Y.Doc({ guid: 'shared' });
@@ -397,7 +397,7 @@ describe('createEncryptedYkvLww', () => {
 			kv.set('old-1', 'alpha');
 			kv.set('old-2', 'beta');
 
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			kv.activateEncryption(new Map([[1, key]]));
 			kv.set('new-1', 'encrypted-c');
 
@@ -424,7 +424,7 @@ describe('createEncryptedYkvLww', () => {
 			expect(isEncryptedBlob(yarray.toArray()[0]?.val)).toBe(false);
 			expect(isEncryptedBlob(yarray.toArray()[1]?.val)).toBe(false);
 
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			kv.activateEncryption(new Map([[1, key]]));
 
 			const entries = yarray.toArray();
@@ -440,7 +440,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Batch operations', () => {
 		test('set in batch is readable via get in same batch', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, ydoc } = setup(new Map([[1, key]]));
 
 			let valueInBatch: string | undefined;
@@ -454,7 +454,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('multiple sets in batch all visible via entries', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, ydoc } = setup(new Map([[1, key]]));
 
 			const keysInBatch: string[] = [];
@@ -480,7 +480,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('starts encrypted when key provided', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key]]));
 
 			kv.set('a', 'hello');
@@ -489,7 +489,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('plaintext → encrypted via activateEncryption(key)', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup();
 
 			kv.set('before', 'plaintext');
@@ -506,7 +506,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Error containment', () => {
 		test('corrupted blob does not crash observation', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key]]));
 
 			kv.set('good-1', 'value-1');
@@ -532,7 +532,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('observation continues after decrypt failure', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key]]));
 
 			kv.set('good', 'still-works');
@@ -560,7 +560,7 @@ describe('createEncryptedYkvLww', () => {
 
 	describe('Key transition (activateEncryption)', () => {
 		test('plaintext entries remain accessible after activateEncryption', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv } = setup();
 
 			kv.set('pt-1', 'plain-a');
@@ -572,7 +572,7 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('new writes after activateEncryption encrypt', () => {
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			const { kv, yarray } = setup();
 
 			kv.set('before', 'plaintext-before-key');
@@ -587,8 +587,8 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('activateEncryption with key rotation preserves entries via fallback', () => {
-			const key1 = generateEncryptionKey();
-			const key2 = generateEncryptionKey();
+			const key1 = randomBytes(32);
+			const key2 = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key1]]));
 
 			kv.set('a', 'alpha');
@@ -655,7 +655,7 @@ describe('createEncryptedYkvLww', () => {
 
 			// Activate encryption — plaintext entries get encrypted under the hood
 			// but their decrypted values don't change. Should fire zero events.
-			const key = generateEncryptionKey();
+			const key = randomBytes(32);
 			kv.activateEncryption(new Map([[1, key]]));
 
 			expect(events).toEqual([]);
@@ -664,8 +664,8 @@ describe('createEncryptedYkvLww', () => {
 		});
 
 		test('multi-version keyring decrypts entries with different keyVersions without re-encrypting old ciphertext', () => {
-			const key1 = generateEncryptionKey();
-			const key2 = generateEncryptionKey();
+			const key1 = randomBytes(32);
+			const key2 = randomBytes(32);
 			const { kv, yarray } = setup(new Map([[1, key1]]));
 			kv.set('a', 'alpha');
 			kv.set('b', 'beta');
