@@ -25,8 +25,10 @@
  */
 
 import {
+	decodeRpcMessage,
 	encodeAwareness,
 	encodeAwarenessStates,
+	encodeRpcResponse,
 	encodeSyncStep1,
 	encodeSyncUpdate,
 	handleSyncPayload,
@@ -272,6 +274,39 @@ export function applyMessage({
 					// Echo the raw message back unchanged — zero parsing cost.
 					// Client uses this for version tracking ("Saving…" → "Saved").
 					return { action: 'reply', data };
+				}
+
+				case MESSAGE_TYPE.RPC: {
+					const rpc = decodeRpcMessage(data);
+					switch (rpc.type) {
+						case 'request': {
+							// Prepare PeerOffline response in case target is not connected.
+							// The DO will send this back to the requester if the target
+							// clientId is not found in any connection's controlledClientIds.
+							const onMissReply = encodeRpcResponse({
+								requestId: rpc.requestId,
+								requesterClientId: rpc.requesterClientId,
+								result: {
+									data: null,
+									error: { tag: 'PeerOffline', message: 'Target peer is not connected' },
+								},
+							});
+							return {
+								action: 'forward',
+								targetClientId: rpc.targetClientId,
+								data,
+								onMissReply,
+							};
+						}
+						case 'response':
+							// Route back to the original requester. No onMissReply —
+							// if requester disconnected, silently drop.
+							return {
+								action: 'forward',
+								targetClientId: rpc.requesterClientId,
+								data,
+							};
+					}
 				}
 
 				case MESSAGE_TYPE.AUTH: {
