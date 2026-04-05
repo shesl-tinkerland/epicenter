@@ -13,6 +13,7 @@ import { actionsToClientTools, toToolDefinitions } from '@epicenter/ai';
 import { createAuth } from '@epicenter/svelte/auth';
 import {
 	defineMutation,
+	defineQuery,
 	iterateActions,
 } from '@epicenter/workspace';
 import { createSyncExtension, toWsUrl } from '@epicenter/workspace/extensions/sync/websocket';
@@ -109,6 +110,22 @@ function buildWorkspaceClient() {
 		)
 		.withActions(({ tables, batch }) => ({
 			tabs: {
+				list: defineQuery({
+					title: 'List Open Tabs',
+					description:
+						'List all currently open browser tabs on this device. Returns live tab state from Chrome—not stored in the workspace.',
+					handler: async () => {
+						const tabs = await browser.tabs.query({});
+						return tabs.map((t) => ({
+							id: t.id ?? -1,
+							url: t.url ?? '',
+							title: t.title ?? '',
+							active: t.active,
+							pinned: t.pinned,
+							windowId: t.windowId,
+						}));
+					},
+				}),
 				close: defineMutation({
 					title: 'Close Tabs',
 					description: 'Close one or more tabs by their IDs.',

@@ -16,6 +16,7 @@ import { initCommand, installCommand, uninstallCommand } from './commands/projec
 import { runActionCommand } from './commands/run';
 import { sizeCommand } from './commands/size';
 import { startCommand } from './commands/start';
+import { rpcCommand } from './commands/rpc';
 
 /** Resolution order: EPICENTER_HOME env > ~/.epicenter/ */
 export function resolveEpicenterHome(flagValue?: string): string {
@@ -51,6 +52,7 @@ export function createCLI() {
 				.command(runActionCommand)
 				.command(describeCommand)
 				.command(sizeCommand)
+				.command(rpcCommand)
 				.command(createAuthCommand(home))
 				.demandCommand(1)
 				.strict()

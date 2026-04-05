@@ -126,10 +126,15 @@ export function resolveTable(client: AnyWorkspaceClient, name: string) {
 	return table;
 }
 
-// ─── Private helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Find the right workspace from loaded clients, or throw. */
-function resolveWorkspace(
+/**
+ * Find the right workspace from loaded clients, or throw.
+ *
+ * Exported for commands that need manual lifecycle control (e.g. `rpc`).
+ * Most commands should use `runCommand` instead.
+ */
+export function resolveWorkspace(
 	clients: AnyWorkspaceClient[],
 	workspaceId?: string,
 ): AnyWorkspaceClient {
