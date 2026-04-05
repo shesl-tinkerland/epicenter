@@ -5,6 +5,7 @@ import {
 	encodeAwareness,
 	encodeAwarenessStates,
 	encodeRpcRequest,
+	encodeRpcResponse,
 	encodeSyncStatus,
 	encodeSyncStep1,
 	encodeSyncUpdate,
@@ -16,6 +17,7 @@ import {
 	type SyncMessageType,
 } from '@epicenter/sync';
 import * as decoding from 'lib0/decoding';
+import { tryAsync } from 'wellcrafted/result';
 import type { Result } from 'wellcrafted/result';
 import {
 	applyAwarenessUpdate,
@@ -24,6 +26,7 @@ import {
 } from 'y-protocols/awareness';
 import type { DefaultRpcMap, RpcActionMap } from '../../rpc/types.js';
 import type { SharedExtensionContext } from '../../workspace/types.js';
+import { isAction, type Actions } from '../../shared/actions.js';
 
 // ============================================================================
 // Types
@@ -156,6 +159,15 @@ export type SyncExtensionExports = {
 		input?: TMap[TAction]['input'],
 		options?: { timeout?: number },
 	): Promise<Result<TMap[TAction]['output'], RpcError>>;
+
+	/**
+	 * Register workspace actions so this peer can handle inbound RPC requests.
+	 *
+	 * Called automatically by `withActions()` during workspace construction.
+	 * Without this, the peer can send RPCs but will silently drop incoming
+	 * requests (the caller sees a timeout).
+	 */
+	registerActions(actions: Actions): void;
 };
 
 // ============================================================================
@@ -252,6 +264,9 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 		>();
 		let nextRequestId = 0;
 
+		/** Registered actions for inbound RPC dispatch. Set via `registerActions()`. */
+		let registeredActions: Actions | undefined;
+
 		// ── Zone 3: Private helpers ──
 
 		/** Send a binary message if the WebSocket is open; silently no-ops otherwise. */
@@ -270,6 +285,65 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 			}
 			pendingRequests.clear();
 			nextRequestId = 0;
+		}
+
+		/**
+		 * Handle an inbound RPC request: find the action by dot-path, call it,
+		 * and send the response back to the requester.
+		 */
+		async function handleRpcRequest(rpc: {
+			requestId: number;
+			requesterClientId: number;
+			action: string;
+			input: unknown;
+		}) {
+			const sendResponse = (result: { data: unknown; error: unknown }) =>
+				send(
+					encodeRpcResponse({
+						requestId: rpc.requestId,
+						requesterClientId: rpc.requesterClientId,
+						result,
+					}),
+				);
+
+			if (!registeredActions) {
+				sendResponse({
+					data: null,
+					error: RpcError.ActionNotFound({ action: rpc.action }).error,
+				});
+				return;
+			}
+
+			// Walk the action tree by dot-path
+			const segments = rpc.action.split('.');
+			let target: unknown = registeredActions;
+			for (const segment of segments) {
+				if (target == null || typeof target !== 'object') {
+					target = undefined;
+					break;
+				}
+				target = (target as Record<string, unknown>)[segment];
+			}
+
+			if (!isAction(target)) {
+				sendResponse({
+					data: null,
+					error: RpcError.ActionNotFound({ action: rpc.action }).error,
+				});
+				return;
+			}
+
+			const { data, error } = await tryAsync({
+				try: () => target(rpc.input),
+				catch: (err) =>
+					RpcError.ActionFailed({ action: rpc.action, cause: err }),
+			});
+
+			if (error) {
+				sendResponse({ data: null, error });
+				return;
+			}
+			sendResponse({ data, error: null });
 		}
 
 		/** Shared teardown: set offline, bump runId, close socket, remove window listeners. */
@@ -593,6 +667,8 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 								pendingRequests.delete(rpc.requestId);
 								pending.resolve(rpc.result);
 							}
+						} else if (rpc.type === 'request') {
+							void handleRpcRequest(rpc);
 						}
 						break;
 					}
@@ -649,6 +725,10 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 				backoff.reset();
 				backoff.wake();
 				websocket?.close();
+			},
+
+			registerActions(actions: Actions) {
+				registeredActions = actions;
 			},
 
 			async rpc<
@@ -718,6 +798,10 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 
 			dispose() {
 				clearPendingRequests();
+				if (syncStatusTimer) {
+					clearTimeout(syncStatusTimer);
+					syncStatusTimer = null;
+				}
 				goOffline();
 				doc.off('updateV2', handleDocUpdate);
 				awareness.off('update', handleAwarenessUpdate);
