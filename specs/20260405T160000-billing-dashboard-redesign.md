@@ -883,7 +883,7 @@ export type AppType = typeof app; // hc<AppType> gets all routes typed
 
 ### Phase 2: API Routes for Dashboard
 
-- [ ] **2.1** Create `apps/api/src/billing-routes.ts` with typed Hono routes:
+- [x] **2.1** Create `apps/api/src/billing-routes.ts` with typed Hono routes:
   - `GET /billing/balance` — customer balance + subscription + breakdown via `autumn.customers.getOrCreate()`
   - `POST /billing/usage` — usage aggregation via `autumn.events.aggregate()`
   - `POST /billing/events` — event list via `autumn.events.list()`
@@ -891,8 +891,9 @@ export type AppType = typeof app; // hc<AppType> gets all routes typed
   - `GET /billing/models` — static MODEL_CREDITS map as JSON
   - `POST /billing/preview` — preview upgrade cost via `autumn.billing.previewAttach()`
   - `POST /billing/controls` — update per-user billing controls (spend limits, alerts, auto top-ups) via `autumn.customers.update()`
-- [ ] **2.2** Wire into `app.ts`, ensure `authGuard` covers new routes
-- [ ] **2.3** Export `AppType` from `apps/api/src/app.ts` for `hc` consumption
+- [x] **2.2** Wire into `app.ts`, ensure `authGuard` covers new routes
+- [x] **2.3** Export `AppType` from `apps/api/src/app.ts` for `hc` consumption
+  > **Note**: Routes mounted at `/api/billing/*` so the dashboard can use `hc<AppType>` with relative paths. Added upgrade, cancel, uncancel, top-up, portal, and controls routes beyond original spec.
 - [ ] **2.4** Verify routes with manual curl/httpie against local dev server
 
 ### Phase 3: Dashboard SPA Scaffold

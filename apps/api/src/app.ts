@@ -20,6 +20,7 @@ import {
 	renderSignInPage,
 } from './auth-pages';
 import { createAutumn } from './autumn';
+import { billingRoutes } from './billing-routes';
 import { billing } from './billing';
 import { MAX_PAYLOAD_BYTES } from './constants';
 import * as schema from './db/schema';
@@ -302,8 +303,11 @@ app.use('/ai/*', async (c, next) => {
 	await next();
 });
 
-// Billing — server-rendered Hono JSX billing page
+// Billing — server-rendered page (legacy, will be replaced by dashboard)
 app.route('/billing', billing);
+
+// Billing API routes — typed JSON routes consumed by the dashboard SPA via hc<AppType>
+app.route('/api/billing', billingRoutes);
 
 // AI chat
 app.post(
@@ -613,5 +617,8 @@ app.delete(
 		return c.body(null, 204);
 	},
 );
+
+/** App type for hc<AppType> in the dashboard. */
+export type AppType = typeof app;
 
 export default app;
