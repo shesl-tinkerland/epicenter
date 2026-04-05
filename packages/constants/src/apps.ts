@@ -16,6 +16,7 @@ export const APPS = {
 	HONEYCRISP: { port: 5175, url: 'https://honeycrisp.epicenter.so' },
 	OPENSIDIAN: { port: 5176, url: 'https://opensidian.epicenter.so' },
 	ZHONGWEN: { port: 8888, url: 'https://zhongwen.epicenter.so' },
+	DASHBOARD: { port: 5178, url: 'https://api.epicenter.so' },
 } as const;
 
 export type AppId = keyof typeof APPS;

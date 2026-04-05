@@ -898,11 +898,12 @@ export type AppType = typeof app; // hc<AppType> gets all routes typed
 
 ### Phase 3: Dashboard SPA Scaffold
 
-- [ ] **3.1** Create `apps/dashboard/` SvelteKit project with `adapter-static` (builds to static assets)
-- [ ] **3.2** Configure: `@epicenter/ui` dependency, `@epicenter/api` type import, TanStack Query, tailwindcss
-- [ ] **3.3** Set up Hono `hc` client with relative paths (same origin, no CORS needed)
+- [x] **3.1** Create `apps/dashboard/` SvelteKit project with `adapter-static` (builds to static assets)
+- [x] **3.2** Configure: `@epicenter/ui` dependency, `@epicenter/api` type import, TanStack Query, tailwindcss
+- [x] **3.3** Set up Hono `hc` client with relative paths (same origin, no CORS needed)
 - [ ] **3.4** Add Chart component to `packages/ui/` via `bunx shadcn-svelte@latest add chart`
-- [ ] **3.5** Create billing page layout with Tabs (Overview / Models / Activity)
+  > **Note**: Deferred to Wave 5 when implementing the usage chart. Scaffold doesn't need charts yet.
+- [x] **3.5** Create billing page layout with Tabs (Overview / Models / Activity)
 
 ### Phase 4: Dashboard UI Implementation
 
