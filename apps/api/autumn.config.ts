@@ -1,5 +1,10 @@
 import { feature, item, plan } from 'atmn';
-import { FEATURE_IDS, PLAN_IDS, PLANS } from './src/billing-plans';
+import {
+	ANNUAL_PLANS,
+	FEATURE_IDS,
+	PLAN_IDS,
+	PLANS,
+} from './src/billing-plans';
 
 // ---------------------------------------------------------------------------
 // Features
@@ -20,7 +25,7 @@ export const aiCredits = feature({
 });
 
 // ---------------------------------------------------------------------------
-// Plans
+// Plans — Monthly
 // ---------------------------------------------------------------------------
 
 const f = PLANS[PLAN_IDS.free];
@@ -58,6 +63,29 @@ export const pro = plan({
 	],
 });
 
+const u = PLANS[PLAN_IDS.ultra];
+export const ultra = plan({
+	id: PLAN_IDS.ultra,
+	name: u.name,
+	group: u.group,
+	price: u.price!,
+	freeTrial: { durationLength: 14, durationType: 'day', cardRequired: false },
+	autoEnable: true,
+	items: [
+		item({
+			featureId: aiCredits.id,
+			included: u.credits.included,
+			price: {
+				amount: u.credits.overage.amount,
+				billingUnits: u.credits.overage.billingUnits,
+				billingMethod: u.credits.overage.billingMethod,
+				interval: u.credits.reset,
+			},
+			rollover: { max: null, expiryDurationType: 'forever' },
+		}),
+	],
+});
+
 const m = PLANS[PLAN_IDS.max];
 export const max = plan({
 	id: PLAN_IDS.max,
@@ -74,6 +102,7 @@ export const max = plan({
 				billingMethod: m.credits.overage.billingMethod,
 				interval: m.credits.reset,
 			},
+			rollover: { max: null, expiryDurationType: 'forever' },
 		}),
 	],
 });
@@ -92,6 +121,72 @@ export const creditTopUp = plan({
 				billingMethod: t.credits.overage!.billingMethod,
 				interval: 'month',
 			},
+		}),
+	],
+});
+
+// ---------------------------------------------------------------------------
+// Plans — Annual (~17% discount, credits still reset monthly)
+// ---------------------------------------------------------------------------
+
+const pa = ANNUAL_PLANS[PLAN_IDS.proAnnual];
+export const proAnnual = plan({
+	id: PLAN_IDS.proAnnual,
+	name: pa.name,
+	group: pa.group,
+	price: pa.price!,
+	items: [
+		item({
+			featureId: aiCredits.id,
+			included: pa.credits.included,
+			reset: { interval: 'month' },
+			price: {
+				amount: pa.credits.overage.amount,
+				billingUnits: pa.credits.overage.billingUnits,
+				billingMethod: pa.credits.overage.billingMethod,
+			},
+		}),
+	],
+});
+
+const ua = ANNUAL_PLANS[PLAN_IDS.ultraAnnual];
+export const ultraAnnual = plan({
+	id: PLAN_IDS.ultraAnnual,
+	name: ua.name,
+	group: ua.group,
+	price: ua.price!,
+	items: [
+		item({
+			featureId: aiCredits.id,
+			included: ua.credits.included,
+			reset: { interval: 'month' },
+			price: {
+				amount: ua.credits.overage.amount,
+				billingUnits: ua.credits.overage.billingUnits,
+				billingMethod: ua.credits.overage.billingMethod,
+			},
+			rollover: { max: null, expiryDurationType: 'forever' },
+		}),
+	],
+});
+
+const ma = ANNUAL_PLANS[PLAN_IDS.maxAnnual];
+export const maxAnnual = plan({
+	id: PLAN_IDS.maxAnnual,
+	name: ma.name,
+	group: ma.group,
+	price: ma.price!,
+	items: [
+		item({
+			featureId: aiCredits.id,
+			included: ma.credits.included,
+			reset: { interval: 'month' },
+			price: {
+				amount: ma.credits.overage.amount,
+				billingUnits: ma.credits.overage.billingUnits,
+				billingMethod: ma.credits.overage.billingMethod,
+			},
+			rollover: { max: null, expiryDurationType: 'forever' },
 		}),
 	],
 });
