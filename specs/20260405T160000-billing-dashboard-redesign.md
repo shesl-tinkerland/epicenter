@@ -913,8 +913,8 @@ export type AppType = typeof app; // hc<AppType> gets all routes typed
 - [x] **4.3** Top Models table — model name, total credits used (from aggregate totals)
 - [x] **4.4** Model Cost Guide — static table from `/billing/models`, sorted by credit cost
 - [x] **4.5** Activity Feed — paginated event list from `/billing/events`, timestamp + model + credits
-- [ ] **4.6** Plan Comparison — 3 plan cards (Pro/Ultra/Max), current plan highlighted, monthly/annual toggle. Upgrade button calls `previewAttach()` to show prorated cost before confirming with `billing.attach()`
-- [ ] **4.7** Actions — top-up button, manage billing (portal) link
+- [x] **4.6** Plan Comparison — 3 plan cards (Pro/Ultra/Max), current plan highlighted, monthly/annual toggle. Upgrade button calls `previewAttach()` to show prorated cost before confirming with `billing.attach()`
+- [x] **4.7** Actions — top-up button, manage billing (portal) link
 
 ### Phase 5: Deploy + Cutover
 

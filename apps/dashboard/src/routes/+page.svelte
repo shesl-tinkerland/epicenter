@@ -5,6 +5,8 @@
 	import TopModels from '$lib/components/TopModels.svelte';
 	import ModelCostGuide from '$lib/components/ModelCostGuide.svelte';
 	import ActivityFeed from '$lib/components/ActivityFeed.svelte';
+	import PlanComparison from '$lib/components/PlanComparison.svelte';
+	import BillingActions from '$lib/components/BillingActions.svelte';
 </script>
 
 <CreditBalance />
@@ -29,3 +31,6 @@
 		<ActivityFeed />
 	</Tabs.Content>
 </Tabs.Root>
+
+<PlanComparison />
+<BillingActions />
