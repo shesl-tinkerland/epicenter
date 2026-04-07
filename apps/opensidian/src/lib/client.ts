@@ -1,4 +1,4 @@
-import { actionsToClientTools, toToolDefinitions } from '@epicenter/ai';
+import { actionsToAiTools } from '@epicenter/ai';
 import { APP_URLS } from '@epicenter/constants/vite';
 import { createSqliteIndex, createYjsFileSystem } from '@epicenter/filesystem';
 import { createSkillsWorkspace } from '@epicenter/skills';
@@ -214,27 +214,13 @@ export const auth = createAuth({
 });
 
 /**
- * Workspace actions converted to TanStack AI client tools.
+ * Workspace actions converted to AI tool representations.
  *
- * Each action becomes a client-side tool with `__toolSide: 'client'` and
- * its handler wired as the `execute` function. Queries auto-execute;
- * mutations trigger the approval UI.
- *
- * Passed to `createChat({ tools: workspaceTools })` for local execution.
+ * `clientTools` — passed to `createChat({ tools })` for local auto-execution.
+ * `definitions` — sent to the server as wire-safe JSON in the request body.
  */
-export const workspaceTools = actionsToClientTools(workspace.actions);
-
-/**
- * Wire-safe tool definitions stripped for the HTTP request body.
- *
- * Removes `execute` functions (not JSON-serializable) and normalizes
- * input schemas for provider compatibility (Anthropic requires
- * `properties` + `required` on every schema).
- *
- * Sent to the server in `body.data.tools` so `chat()` knows what
- * tools exist without needing them hardcoded.
- */
-export const workspaceDefinitions = toToolDefinitions(workspaceTools);
+export const { clientTools: workspaceTools, definitions: workspaceDefinitions } =
+	actionsToAiTools(workspace.actions);
 
 /** All workspace tool names as a type union. */
 export type WorkspaceTools = typeof workspaceTools;

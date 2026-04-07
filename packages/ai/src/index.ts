@@ -1,6 +1,5 @@
 export {
 	type ActionNames,
-	actionsToClientTools,
+	actionsToAiTools,
 	type ToolDefinitionPayload,
-	toToolDefinitions,
 } from './tool-bridge';

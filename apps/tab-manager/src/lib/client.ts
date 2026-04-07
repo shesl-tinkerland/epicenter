@@ -9,7 +9,7 @@
  * the sole authority for ephemeral browser state. See `browser-state.svelte.ts`.
  */
 
-import { actionsToClientTools, toToolDefinitions } from '@epicenter/ai';
+import { actionsToAiTools } from '@epicenter/ai';
 import { createAuth } from '@epicenter/svelte/auth';
 import {
 	defineMutation,
@@ -53,8 +53,8 @@ export const auth = createAuth({
 	},
 });
 
-export const workspaceTools = actionsToClientTools(workspace.actions);
-export const workspaceDefinitions = toToolDefinitions(workspaceTools);
+export const { clientTools: workspaceTools, definitions: workspaceDefinitions } =
+	actionsToAiTools(workspace.actions);
 
 export type WorkspaceTools = typeof workspaceTools;
 export type WorkspaceActionName = WorkspaceTools[number]['name'];
