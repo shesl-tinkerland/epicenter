@@ -12,12 +12,16 @@
 	"exports": {
 		"./apps": "./src/apps.ts",
 		"./vite": "./src/vite.ts",
-		"./versions": "./src/versions.ts"
+		"./versions": "./src/versions.ts",
+		"./ai-chat-errors": "./src/ai-chat-errors.ts"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
+	},
+	"dependencies": {
+		"wellcrafted": "catalog:"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit"

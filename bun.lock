@@ -461,7 +461,7 @@
     },
     "packages/ai": {
       "name": "@epicenter/ai",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@epicenter/workspace": "workspace:*",
         "@tanstack/ai": "catalog:",
@@ -472,7 +472,7 @@
     },
     "packages/cli": {
       "name": "@epicenter/cli",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "bin": {
         "epicenter": "./src/bin.ts",
       },
@@ -494,7 +494,10 @@
     },
     "packages/constants": {
       "name": "@epicenter/constants",
-      "version": "0.0.1",
+      "version": "0.1.0",
+      "dependencies": {
+        "wellcrafted": "catalog:",
+      },
       "devDependencies": {
         "@types/node": "catalog:",
         "typescript": "catalog:",
@@ -503,7 +506,7 @@
     },
     "packages/filesystem": {
       "name": "@epicenter/filesystem",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@epicenter/workspace": "workspace:*",
         "@libsql/client": "^0.14.0",
@@ -526,11 +529,10 @@
     },
     "packages/skills": {
       "name": "@epicenter/skills",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
-        "typebox": "catalog:",
         "wellcrafted": "catalog:",
         "yaml": "^2.8.0",
       },
@@ -545,9 +547,10 @@
     },
     "packages/svelte-utils": {
       "name": "@epicenter/svelte",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@epicenter/api": "workspace:*",
+        "@epicenter/constants": "workspace:*",
         "@epicenter/ui": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "@lucide/svelte": "catalog:",
@@ -566,7 +569,7 @@
     },
     "packages/sync": {
       "name": "@epicenter/sync",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "lib0": "catalog:",
         "wellcrafted": "catalog:",
@@ -583,7 +586,7 @@
     },
     "packages/ui": {
       "name": "@epicenter/ui",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@fontsource-variable/manrope": "^5.2.6",
         "@lucide/svelte": "catalog:",
@@ -619,7 +622,7 @@
     },
     "packages/workspace": {
       "name": "@epicenter/workspace",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@ark/json-schema": "^0.0.4",
         "@epicenter/sync": "workspace:*",

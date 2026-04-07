@@ -19,6 +19,7 @@
 		"./workspace-gate": "./src/workspace-gate/index.ts"
 	},
 	"dependencies": {
+		"@epicenter/constants": "workspace:*",
 		"@epicenter/api": "workspace:*",
 		"@epicenter/ui": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
