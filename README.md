@@ -4,7 +4,7 @@
   </a>
   <h1 align="center">Epicenter</h1>
   <p align="center">Local-first, open-source apps</p>
-  <p align="center">Own your data. Use any model you want. Free and open source ❤️</p>
+  <p align="center">One folder of plain text and SQLite on your machine, synced across all your devices.<br>Grep it, query it, host it wherever you want.</p>
 </p>
 
 <p align="center">
@@ -46,9 +46,11 @@
 
 ## What is Epicenter?
 
-Epicenter is an ecosystem of open-source, local-first apps. Our goal is to store all of your data—notes, transcripts, chat histories—in a single folder of plain text and SQLite. Every tool we build shares this memory. It's open, tweakable, and yours. Grep it, open it in Obsidian, host it wherever you'd like.
+Epicenter is an ecosystem of open-source, local-first apps. All your data—notes, transcripts, chat histories—lives in a single folder of plain text and SQLite on your machine. Every tool we build reads and writes to the same place. It's open, tweakable, and yours. Grep it, open it in Obsidian, version it with Git, host it wherever you want.
 
-The library that powers this, [`@epicenter/workspace`](packages/workspace), is something other developers can build on too. Define a schema, get CRDT-powered tables that materialize down to SQLite files and markdown, with multi-device sync handled for you.
+Under the hood, Yjs CRDTs are the single source of truth. They materialize *down* to SQLite (for fast queries) and markdown (for human-readable files). Sync happens over the Yjs protocol; the server is a relay, not an authority—it never sees your content.
+
+The library that powers this, [`@epicenter/workspace`](packages/workspace), is something other developers can build on too. Define a typed schema, get CRDT-backed tables with multi-device sync handled for you.
 
 ## Apps
 
@@ -72,8 +74,8 @@ The library that powers this, [`@epicenter/workspace`](packages/workspace), is s
       <p><strong><a href="apps/api">Source</a></strong></p>
     </td>
     <td align="center" width="50%">
-      <h3>More coming</h3>
-      <p>The workspace library makes it straightforward to add new apps that share the same data. Notes, assistants, and other tools are in various stages of development.</p>
+      <h3>Build your own</h3>
+      <p>The <a href="packages/workspace"><code>@epicenter/workspace</code></a> library makes it straightforward to build apps that share the same CRDT-backed data. Define a schema, get tables, add sync.</p>
     </td>
   </tr>
 </table>
@@ -115,9 +117,9 @@ Each user gets their own database. Schema definitions are plain JSON, so they wo
 
 ## Where We're Headed
 
-The goal is a personal workspace where every app you use shares the same memory, your data stays on your machine, and you choose your own models. Epicenter Cloud will provide hosted sync infrastructure for people who don't want to run their own server—the same model as Supabase selling hosted Postgres or Liveblocks selling hosted collaboration. Enterprise features (team management, SSO, admin dashboards) will live in a separate proprietary layer.
+More apps are coming—notes, an AI assistant, and others—all sharing the same workspace. The architecture already supports it; the [`@epicenter/workspace`](packages/workspace) library handles the hard parts (schemas, CRDT sync, materialization), so each new app is mostly UI.
 
-Self-hosting is and will remain a first-class option. The sync server is open source under AGPL, and when you run it on your own infrastructure, you control the encryption keys and trust boundary.
+Epicenter Cloud will provide hosted sync for people who don't want to run their own server. Same model as Supabase selling hosted Postgres or Liveblocks selling hosted collaboration. Self-hosting is and will remain first-class—the sync server is open source under AGPL, and when you run it yourself, you control the encryption keys and trust boundary.
 
 ## Quick Start
 
@@ -193,5 +195,5 @@ See [FINANCIAL_SUSTAINABILITY.md](FINANCIAL_SUSTAINABILITY.md) for the full reas
 </p>
 
 <p align="center">
-  <sub>Own your data · Local-first · Open source</sub>
+  <sub>Local-first · CRDT · Own your data · Open source</sub>
 </p>
