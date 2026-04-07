@@ -1,6 +1,21 @@
 {
 	"name": "@epicenter/filesystem",
-	"version": "0.0.1",
+	"version": "0.1.0",
+	"description": "Filesystem utilities for Epicenter. Markdown parsing, frontmatter handling, and file operations.",
+	"keywords": [
+		"local-first",
+		"filesystem",
+		"epicenter",
+		"markdown",
+		"plain-text",
+		"workspace"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/EpicenterHQ/epicenter.git",
+		"directory": "packages/filesystem"
+	},
+	"homepage": "https://epicenter.so",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"exports": {

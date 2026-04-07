@@ -1,10 +1,11 @@
 {
 	"name": "@epicenter/skills",
-	"version": "0.0.1",
-	"description": "Skill definitions and loaders for Epicenter workspace actions.",
+	"version": "0.1.0",
+	"description": "Agent skills for Epicenter. Installable via jsrepo.",
 	"keywords": [
 		"local-first",
 		"skills",
+		"epicenter",
 		"workspace",
 		"actions",
 		"AI"

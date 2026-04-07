@@ -1,7 +1,23 @@
 {
 	"name": "@epicenter/vault",
-	"version": "0.0.0",
-	"description": "Core package for adapter & MCP functionality",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Adapter and MCP layer for Epicenter. Schema migrations, codec pipelines, and data access patterns.",
+	"keywords": [
+		"local-first",
+		"schema",
+		"migrations",
+		"MCP",
+		"adapter",
+		"CRDT",
+		"markdown"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/EpicenterHQ/epicenter.git",
+		"directory": "packages/vault"
+	},
+	"homepage": "https://epicenter.so",
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",

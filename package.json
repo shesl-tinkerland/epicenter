@@ -3,8 +3,26 @@
 	"type": "module",
 	"private": true,
 	"version": "7.11.0",
-	"description": "",
-	"keywords": [],
+	"description": "Local-first PKM substrate. CRDT-powered tables that materialize to SQLite and markdown.",
+	"keywords": [
+		"local-first",
+		"CRDT",
+		"Yjs",
+		"offline-first",
+		"personal knowledge base",
+		"PKM",
+		"second brain",
+		"SQLite",
+		"markdown",
+		"open-source",
+		"self-hosted",
+		"workspace"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/EpicenterHQ/epicenter.git"
+	},
+	"homepage": "https://epicenter.so",
 	"license": "SEE LICENSE IN LICENSE",
 	"author": "",
 	"workspaces": {
@@ -87,6 +105,7 @@
 		"format:check": "biome ci --linter-enabled=false",
 		"lint": "biome lint --write",
 		"lint:check": "biome lint",
+		"release": "changeset version && changeset publish",
 		"typecheck": "turbo run typecheck",
 		"bump-version": "bun run scripts/bump-version.ts",
 		"clean": "bun run scripts/clean.ts",

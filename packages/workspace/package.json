@@ -1,6 +1,28 @@
 {
 	"name": "@epicenter/workspace",
-	"version": "0.0.1",
+	"version": "0.1.0",
+	"description": "Local-first workspace library. CRDT-backed tables, key-value stores, and sync — built on Yjs.",
+	"keywords": [
+		"local-first",
+		"CRDT",
+		"epicenter",
+		"Yjs",
+		"offline-first",
+		"SQLite",
+		"markdown",
+		"personal knowledge base",
+		"PKM",
+		"second brain",
+		"sync",
+		"workspace",
+		"typed schema"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/EpicenterHQ/epicenter.git",
+		"directory": "packages/workspace"
+	},
+	"homepage": "https://epicenter.so",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"exports": {

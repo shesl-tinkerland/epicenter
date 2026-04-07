@@ -1,9 +1,17 @@
 {
 	"name": "@epicenter/svelte",
-	"version": "0.0.1",
-	"private": true,
+	"version": "0.1.0",
 	"type": "module",
-	"description": "Svelte utilities for synchronizing state with external systems",
+	"description": "Svelte 5 utilities for Epicenter workspaces. Reactive state bindings, persisted state, and TanStack Query integration.",
+	"keywords": [
+		"svelte",
+		"local-first",
+		"CRDT",
+		"epicenter",
+		"workspace",
+		"TanStack Query",
+		"reactive state"
+	],
 	"exports": {
 		".": "./src/index.ts",
 		"./auth": "./src/auth/index.ts",

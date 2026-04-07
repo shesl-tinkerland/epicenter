@@ -1,7 +1,23 @@
 {
 	"name": "@epicenter/ui",
-	"private": true,
-	"version": "0.0.1",
+	"version": "0.1.0",
+	"description": "Svelte 5 UI components for Epicenter apps. Built with shadcn-svelte and Tailwind CSS.",
+	"keywords": [
+		"svelte",
+		"UI",
+		"epicenter",
+		"components",
+		"local-first",
+		"CRDT",
+		"shadcn",
+		"tailwind"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/EpicenterHQ/epicenter.git",
+		"directory": "packages/ui"
+	},
+	"homepage": "https://epicenter.so",
 	"type": "module",
 	"imports": {
 		"#*": [
