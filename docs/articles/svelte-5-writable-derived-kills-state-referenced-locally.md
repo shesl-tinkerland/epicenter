@@ -67,14 +67,22 @@ The frustration is real. If you have a working app and a point release floods yo
 
 The fix isn't to suppress the warning or to panic-replace everything. It's to understand what `$derived` does now and apply it where it fits.
 
-## The one-line migration
+## Find and fix every instance in your codebase
 
-For every `$state(prop)` that captures a destructured prop value:
+If you've been suppressing this warning with `svelte-ignore`, you probably have more than one. Find them all:
+
+```bash
+grep -rn 'svelte-ignore state_referenced_locally' --include='*.svelte' src/
+```
+
+Each result is a candidate. For every `$state(prop)` that captures a destructured prop value:
 
 ```diff
 - // svelte-ignore state_referenced_locally
 - let open = $state(defaultOpen);
 + let open = $derived(defaultOpen);
 ```
+
+Not every `$state` that follows an ignore comment is a prop capture—some initialize from array indexing (`teams[0]`), object spreads, or function calls. Those work the same way with `$derived` as long as the expression is reactive. The one exception is when you need deep reactivity on an object; `$derived` is shallow like `$state.raw`, so reach for `$derived.by(() => { const s = $state(prop); return s; })` in that case.
 
 Keep your destructured `$props()`. Keep your clean templates. Drop the ignore comment.
