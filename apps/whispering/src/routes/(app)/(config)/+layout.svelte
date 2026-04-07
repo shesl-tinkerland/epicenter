@@ -16,8 +16,8 @@
 		VAD_STATE_TO_ICON,
 	} from '$lib/constants/audio';
 	import { rpc } from '$lib/query';
-	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
 	import { settings } from '$lib/state/settings.svelte';
+	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 
 	const getRecorderStateQuery = createQuery(
@@ -124,22 +124,7 @@
 				<CompressionSelector />
 				<TranscriptionSelector />
 				<TransformationSelector />
-				<div class="flex">
-					<Button
-						tooltip="Toggle live recording"
-						onclick={() => {
-							// TODO: Implement live recording toggle
-							alert('Live recording not yet implemented');
-						}}
-						variant="ghost"
-						size="icon"
-						style="view-transition-name: {viewTransition.global.microphone}"
-						class="rounded-r-none border-r-0"
-					>
-						🎬
-					</Button>
-					<RecordingModeSelector class="rounded-l-none" />
-				</div>
+				<RecordingModeSelector />
 			{/if}
 		</div>
 	</div>
