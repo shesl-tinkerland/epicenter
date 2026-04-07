@@ -1,6 +1,6 @@
 # Honeycrisp
 
-A local-first notes app styled after Apple Notes. Folders, a note list, and a collaborative rich-text editor—all backed by an Epicenter workspace with Yjs CRDTs, persisted to IndexedDB, and synced over WebSocket.
+Honeycrisp is a notes app that works offline first and syncs when it can. Notes, folders, and rich text are all Yjs CRDTs—two devices can edit the same note simultaneously and converge without conflicts. Open two browser tabs and try it.
 
 Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT licensed.
 
@@ -10,7 +10,7 @@ Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT 
 
 ### Layout
 
-Single-route SvelteKit app (`+page.svelte`) with a three-pane layout: sidebar (folders) → note list → editor. SSR is disabled; the app runs entirely in the browser as a static site.
+Single-route SvelteKit app with a three-pane layout: sidebar (folders) → note list → editor. SSR is disabled; the app runs entirely in the browser as a static site.
 
 ### Data layer
 
@@ -19,6 +19,10 @@ All state lives in an Epicenter workspace (`id: "epicenter.honeycrisp"`). The wo
 ### Rich-text editing
 
 Each note's body is a `Y.XmlFragment` stored as an attached document on the `notes` table. ProseMirror binds to it via `y-prosemirror`, giving collaborative editing for free. The editor schema covers paragraphs, headings, lists, task lists, underline, and strikethrough. Every ProseMirror transaction extracts a title, preview snippet, and word count, which are written back to the note's table row.
+
+### Soft deletion
+
+Notes are never removed from the CRDT—they're soft-deleted with a `deletedAt` timestamp. This matters when two devices diverge: one deletes a note while the other keeps editing it. Without soft deletion, the CRDT has no way to represent "deleted but also modified." With it, you can restore the note and keep the edits. Soft-deleted notes appear in "Recently Deleted" where you can restore or permanently remove them.
 
 ### Auth
 
@@ -68,35 +72,47 @@ The v1→v2 migration adds `deletedAt` and `wordCount`.
 
 ---
 
-## Features
+## Other features
 
-- **Soft delete** — notes get a `deletedAt` timestamp and appear in "Recently Deleted". Restore or permanently delete from there.
-- **Pin/unpin** — pinned notes sort to the top of the list.
-- **Folder deletion** — re-parents all notes in the folder to unfiled and clears the KV selection, keeping the data intact.
-- **Sorting** — note list sorts by date edited, date created, or title.
-- **Search** — filters the note list by title and preview content.
-- **Keyboard shortcuts** — `Cmd+N` creates a new note, `Cmd+Shift+N` creates a new folder.
-- **Context menus** — per-note actions: pin, move to folder, delete, restore.
+- **Pin/unpin**—pinned notes sort to the top of the list.
+- **Folder deletion**—re-parents all notes in the folder to unfiled, keeping data intact.
+- **Sorting**—by date edited, date created, or title.
+- **Search**—filters by title and preview content.
+- **Keyboard shortcuts**—`Cmd+N` (new note), `Cmd+Shift+N` (new folder).
+- **Context menus**—per-note actions: pin, move to folder, delete, restore.
 
 ---
 
 ## Development
 
+Prerequisites: [Bun](https://bun.sh).
+
 ```bash
-# Start dev server (local API)
-bun run dev:local
-
-# Start dev server (production API)
-bun run dev:remote
-
-# Production build
-bun run build
-
-# Type checking
-bun run typecheck
+git clone https://github.com/EpicenterHQ/epicenter.git
+cd epicenter
+bun install
+cd apps/honeycrisp
+bun dev
 ```
 
-The dev server runs on port **5175**.
+By default this runs against a local dev server on port 5175. To run against the production sync server:
+
+```bash
+bun run dev:remote
+```
+
+---
+
+## Tech stack
+
+- [SvelteKit](https://kit.svelte.dev)—UI framework (static adapter, SSR disabled)
+- [ProseMirror](https://prosemirror.net) + [y-prosemirror](https://github.com/yjs/y-prosemirror)—collaborative rich-text editing
+- [Yjs](https://yjs.dev)—CRDT engine (Y.Doc, Y.XmlFragment)
+- [Tailwind CSS](https://tailwindcss.com)—styling
+- [Better Auth](https://better-auth.com)—authentication
+- `@epicenter/workspace`—CRDT-backed tables, versioning, E2E encryption
+- `@epicenter/svelte`—auth, workspace gate, reactive table/KV bindings
+- `@epicenter/ui`—shadcn-svelte component library
 
 ---
 

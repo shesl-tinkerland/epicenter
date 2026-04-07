@@ -1,6 +1,6 @@
 # Skills Editor
 
-Browser-based editor for creating and managing Epicenter agent skills. Backed by Yjs CRDTs for collaborative editing, with full offline support via IndexedDB.
+A local editor for writing the prompt files and configuration that power Epicenter agents. It uses Yjs CRDTs under the hood—so undo/redo works across sessions and the format is ready for collaboration—but it doesn't sync anywhere. Your skills stay on your machine.
 
 Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT licensed.
 
@@ -8,18 +8,27 @@ Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT 
 
 ## How it works
 
-**Workspace connection.** The app imports `createSkillsWorkspace` from `@epicenter/skills`, which provides two tables: `skills` (metadata + attached instructions document) and `references` (per-skill reference files, each with its own content document). The workspace ID is `epicenter.skills`.
+### What's a skill?
 
-**Collaborative editing.** Each skill's instructions and each reference's content are `Y.Doc`-backed documents. CodeMirror 6 with `y-codemirror.next` binds directly to those documents, so edits are conflict-free and survive concurrent sessions.
+A skill is a set of instructions (markdown) plus reference files that tell an Epicenter agent how to perform a specific task. Each skill has metadata (name, description, license, compatibility) and one or more reference documents. The Skills Editor is where you author and organize these.
 
-**Local-first only.** Persistence is IndexedDB. No remote sync provider is wired in this app—it's a standalone local editor.
+### Workspace connection
 
-**UI shell.** A single route renders an `AppShell` with a resizable split view: a sidebar on the left and an editor panel on the right.
+The app imports `createSkillsWorkspace` from `@epicenter/skills`, which provides two tables: `skills` (metadata + attached instructions document) and `references` (per-skill reference files, each with its own content document). The workspace ID is `epicenter.skills`. Persistence is IndexedDB—no remote sync is wired in, so the editor works entirely offline.
 
-- **Sidebar** — skill list with search, keyboard navigation (arrow keys), inline rename (F2), and delete with confirmation.
-- **Editor panel** — `SkillMetadataForm` (name, description, license, compatibility), `InstructionsEditor` (CodeMirror + Yjs), and `ReferencesPanel` (expandable list of reference files, each with its own CodeMirror editor).
-- **Command palette** — search across skills from anywhere.
-- **NewSkillDialog** — creates a new skill and focuses it immediately.
+### Collaborative editing
+
+Each skill's instructions and each reference's content are `Y.Doc`-backed documents. CodeMirror 6 with `y-codemirror.next` binds directly to those documents, so edits are conflict-free and survive concurrent sessions.
+
+### UI
+
+A single route renders a resizable split view: sidebar on the left, editor panel on the right.
+
+- **Sidebar**—skill list with search, keyboard navigation (arrow keys), inline rename (F2), and delete with confirmation.
+- **Editor panel**—metadata form (name, description, license, compatibility), instructions editor (CodeMirror + Yjs), and a references panel with expandable entries, each with its own CodeMirror editor.
+- **Command palette**—search across skills from anywhere.
+
+---
 
 ## Workspace schema
 
@@ -30,21 +39,34 @@ Workspace ID: `epicenter.skills`
 | `skills` | `id`, `name`, `description`, `license`, `compatibility` | `instructions` (Y.Doc) |
 | `references` | `id`, `skillId`, `name` | `content` (Y.Doc) |
 
-## Stack
-
-- SvelteKit (SSR disabled), Svelte 5 runes
-- Tailwind CSS
-- CodeMirror 6 + `y-codemirror.next`
-- `@epicenter/skills`, `@epicenter/workspace`, `@epicenter/svelte`, `@epicenter/ui`
+---
 
 ## Development
 
-```sh
-bun run dev:local    # local dev server (bun --bun vite dev)
-bun run dev:remote   # dev server against production mode
-bun run build        # production build
-bun run check        # svelte-kit sync && svelte-check
+Prerequisites: [Bun](https://bun.sh).
+
+```bash
+git clone https://github.com/EpicenterHQ/epicenter.git
+cd epicenter
+bun install
+cd apps/skills
+bun dev
 ```
+
+---
+
+## Tech stack
+
+- [SvelteKit](https://kit.svelte.dev)—UI framework (SSR disabled)
+- [CodeMirror 6](https://codemirror.net) + [y-codemirror.next](https://github.com/yjs/y-codemirror.next)—collaborative markdown editing
+- [Yjs](https://yjs.dev)—CRDT engine
+- [Tailwind CSS](https://tailwindcss.com)—styling
+- `@epicenter/skills`—workspace definition for skills and references
+- `@epicenter/workspace`—CRDT-backed tables, persistence
+- `@epicenter/svelte`—reactive table bindings
+- `@epicenter/ui`—shadcn-svelte component library
+
+---
 
 ## License
 

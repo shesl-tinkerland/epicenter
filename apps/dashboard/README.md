@@ -1,60 +1,61 @@
 # Dashboard
 
-A billing and credits dashboard for Epicenter customers. It fetches billing data from the hub API, renders usage charts and activity feeds, and drives Stripe flows for top-ups and plan changes.
+Billing data has one source of truth: the server. Dashboard doesn't pretend otherwise—it's a pure API consumer with no CRDTs, no local state, no sync layer. Just a clean read of what Stripe and the hub already know.
 
 Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. AGPL-3.0 licensed.
 
 ---
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│  SvelteKit SPA (tabs, charts, plan picker)  │
+├─────────────────────────────────────────────┤
+│  TanStack Query (billing data + mutations)  │
+├─────────────────────────────────────────────┤
+│  Epicenter Hub API (/api, /auth, Stripe)    │
+└─────────────────────────────────────────────┘
+```
+
+Unlike every other Epicenter app, there's no workspace here. Billing needs a single authority, so the dashboard fetches everything from the hub API and writes back through Stripe. The diagram is intentionally simple—that's the point.
+
+---
+
 ## How it works
 
-The dashboard is a SvelteKit SPA with SSR disabled and a static adapter. All data comes from the hub API at `/api`—there's no Yjs, no CRDTs, no local workspace. It's a pure API consumer.
+Auth gates the entire app via Google sign-in (`@epicenter/svelte/auth-form`). Once signed in, a tabbed UI shows three views: an overview with credit balance, usage-by-model charts (D3 + layerchart), and a top-10 models table; a model cost guide; and a billing activity feed.
 
-**Auth** uses Google sign-in via `@epicenter/svelte/auth-form`. The session is persisted in localStorage and gates the entire app.
+Plan management sits below the tabs—monthly/annual toggle, prorated charge preview, confirm to upgrade. "Buy 500 credits" opens a Stripe checkout session. "Manage billing" opens the Stripe billing portal.
 
-**Overview tab** shows a credit balance progress bar with trial info, a stacked area chart of usage by model over time (D3 + layerchart), and a top-10 models table for the last 30 days.
-
-**Models tab** has a cost guide listing credits-per-call for each model.
-
-**Activity tab** shows a feed of recent billing events.
-
-**Plan management** lives below the tabs: a monthly/annual toggle, a prorated charge preview, and a confirm button to upgrade. Clicking "Buy 500 credits" triggers a mutation that opens a Stripe checkout session. "Manage billing" opens the Stripe billing portal directly.
-
-All UI components come from `@epicenter/ui` (shadcn-svelte). Types for billing contracts and plans come from `@epicenter/api`.
+---
 
 ## Development
 
-**Prerequisites**
-
-- Bun
-- The hub API running locally (see `apps/api`)
-
-**Start the API first**
+Prerequisites: [Bun](https://bun.sh) and the hub API running locally (see `apps/api`).
 
 ```bash
-# in apps/api
+git clone https://github.com/EpicenterHQ/epicenter.git
+cd epicenter
+bun install
+
+# Start the API first (must be running at localhost:8787)
+cd apps/api
+bun run dev:local
+
+# Then start the dashboard (in another terminal)
+cd apps/dashboard
 bun run dev:local
 ```
 
-The API must be running at `localhost:8787` before starting the dashboard. The Vite dev server proxies `/api` and `/auth` there.
-
-**Start the dashboard**
+Runs on port 5178. The Vite dev server proxies `/api` and `/auth` to `localhost:8787`.
 
 ```bash
-# in apps/dashboard
-bun run dev:local
+bun run build    # Static output with /dashboard base path
 ```
 
-Runs on port 5178.
-
-**Build**
-
-```bash
-bun run build
-```
-
-Outputs a static site with `/dashboard` as the base path.
+---
 
 ## License
 
-[AGPL-3.0](../../LICENSE). Note that most packages in this monorepo are MIT licensed—this app is the exception.
+[AGPL-3.0](../../LICENSE). Most packages in this monorepo are MIT—this app is the exception.

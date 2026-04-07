@@ -1,26 +1,54 @@
 # Tab Manager
 
-A browser extension side panel that shows your live tabs, lets you save and bookmark URLs into an Epicenter workspace, and includes an AI chat drawer that can call workspace tools with inline approval.
+Live tabs and saved tabs are fundamentally different things. Live tabs mirror Chrome's reality—they're ephemeral, they vanish on restart, and they're not yours to own. Saved tabs and bookmarks are workspace data: they persist, sync across devices, and survive browser restarts. Tab Manager is a browser extension that keeps these two layers separate and bridges them with an AI chat drawer that can act on your workspace.
 
 Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT licensed.
 
 ---
 
+## Architecture
+
+```
+┌──────────────────────────────────────────────────┐
+│  WXT Side Panel (Svelte app)                     │
+├──────────────────────────────────────────────────┤
+│  Chrome APIs (tabs, windows, identity)           │
+├──────────────┬───────────────────────────────────┤
+│  Browser     │  Workspace state (saved tabs,     │
+│  state       │  bookmarks, chat, tool trust)     │
+│  (ephemeral) │  @epicenter/workspace + sync      │
+├──────────────┴───────────────────────────────────┤
+│  @epicenter/ai (tool bridge for AI chat)         │
+└──────────────────────────────────────────────────┘
+```
+
+The extension never fights Chrome for ownership of tab state. Ephemeral state seeds from `chrome.windows.getAll` and stays current via event listeners. Workspace state persists to IndexedDB, syncs over WebSocket, and replicates to every device you sign into.
+
+---
+
 ## How it works
 
-The extension has two distinct layers of state that serve different purposes.
+### Browser state
 
-**Ephemeral browser state** lives in `browser-state.svelte.ts`. On load it seeds from `chrome.windows.getAll`, then stays current via Chrome's tab and window event listeners. This layer owns the live tab list and exposes actions like close, activate, pin, mute, reload, and duplicate. Nothing here persists; it's a reactive mirror of what the browser already knows.
+On load, `browser-state.svelte.ts` seeds a reactive map of every open window and tab. Chrome's tab and window event listeners keep it current. This layer exposes actions—close, activate, pin, mute, reload, duplicate—all backed by Chrome APIs. Nothing here persists; it's a mirror.
 
-**Synced workspace state** is the persistent layer. Saved tabs and bookmarks are stored in Epicenter workspace tables and synced across devices over WebSocket. The UI reads from these tables via `fromTable` and writes through workspace actions. This is what survives a browser restart or shows up on another device.
+### Workspace state
 
-The side panel is a Svelte app mounted into `#app`. There's no popup and no content scripts—everything runs in the side panel, which opens when you click the extension action button. The background service worker is minimal; its only job is to open the side panel on click.
+Saved tabs and bookmarks live in Epicenter workspace tables and sync across devices over WebSocket. The UI reads from these tables via `fromTable` and writes through workspace actions. Save a tab on your laptop and it shows up on your desktop.
 
-The main UI (`App.svelte`) has a search bar with case-sensitive, regex, and exact-match toggles, a unified tab list that shows open tabs grouped by window alongside saved tabs and bookmarks in a single virtualized list, per-tab actions, a command palette for bulk operations (dedupe, group by domain, sort, close by domain, save all), and a sync status indicator with reconnect and sign-out controls.
+### Side panel
+
+A Svelte app mounted into `#app`. There's no popup and no content scripts—everything runs in the side panel, which opens when you click the extension action button. The background service worker is minimal; its only job is to open the side panel on click.
+
+### UI
+
+The main UI has a search bar with case-sensitive, regex, and exact-match toggles; a unified tab list that shows open tabs grouped by window alongside saved tabs and bookmarks in a single virtualized list; per-tab actions; a command palette for bulk operations (dedupe, group by domain, sort, close by domain, save all); and a sync status indicator.
+
+---
 
 ## Workspace schema
 
-The workspace ID is `epicenter.tab-manager`. It defines six tables:
+Workspace ID: `epicenter.tab-manager`. Six tables:
 
 | Table | Key | Notable fields |
 |---|---|---|
@@ -33,36 +61,67 @@ The workspace ID is `epicenter.tab-manager`. It defines six tables:
 
 Awareness entries carry `{ deviceId, client: "extension" | "desktop" | "cli" }` so you can see which devices are currently connected.
 
+---
+
 ## AI chat
 
 The `AiDrawer` component is a sign-in-gated chat drawer that supports multiple conversations. Chat streams via SSE from the configured remote server. Workspace actions are converted to AI tools via `@epicenter/ai`'s `actionsToClientTools`, so the AI can read and write workspace data directly.
 
-Destructive tool calls require inline approval before they execute. Each tool can also be set to "always allow," and that preference is stored in the `toolTrust` table so it syncs across all your devices.
+Destructive tool calls require inline approval before they execute. Each tool can also be set to "always allow," and that preference is stored in the `toolTrust` table—so it syncs across all your devices like any other workspace data.
+
+---
 
 ## Development
 
-```sh
-# Start dev server against local backend
-bun run dev:local
+Prerequisites: [Bun](https://bun.sh).
 
-# Start dev server against production backend
+```bash
+git clone https://github.com/EpicenterHQ/epicenter.git
+cd epicenter
+bun install
+cd apps/tab-manager
+bun dev
+```
+
+This starts a dev build. To load the extension in Chrome: open `chrome://extensions`, enable Developer Mode, click "Load unpacked," and select the `.output/chrome-mv3-dev` directory.
+
+To run against the production sync server:
+
+```bash
 bun run dev:remote
+```
 
-# Firefox
+Firefox:
+
+```bash
 bun run dev:firefox
+```
 
-# Production build
-bun run build
+To build for distribution:
 
-# Package for Chrome Web Store / Firefox Add-ons
-bun run zip
-bun run zip:firefox
-
-# Type check
-bun run typecheck
+```bash
+bun run build          # Chrome
+bun run zip            # Package for Chrome Web Store
+bun run zip:firefox    # Package for Firefox Add-ons
 ```
 
 Auth uses Google OAuth via `browser.identity`. Encryption keys are applied on login.
+
+---
+
+## Tech stack
+
+- [WXT](https://wxt.dev)—browser extension framework
+- [Svelte 5](https://svelte.dev)—UI (side panel)
+- [Yjs](https://yjs.dev)—CRDT engine
+- [virtua](https://github.com/inokawa/virtua)—virtualized tab list
+- [Tailwind CSS](https://tailwindcss.com)—styling
+- `@epicenter/workspace`—CRDT-backed tables, sync, persistence
+- `@epicenter/ai`—workspace-to-LLM tool bridge
+- `@epicenter/svelte`—auth integration
+- `@epicenter/ui`—shadcn-svelte component library
+
+---
 
 ## License
 
