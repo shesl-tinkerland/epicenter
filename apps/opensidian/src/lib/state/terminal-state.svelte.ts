@@ -1,7 +1,9 @@
 import { defineCommand } from 'just-bash';
+	import { createPersistedState } from '@epicenter/svelte';
 import { bash, fs } from '$lib/client';
 import { fsState } from '$lib/state/fs-state.svelte';
 import { Ok, tryAsync } from 'wellcrafted/result';
+import { type } from 'arktype';
 
 /**
  * A single entry in the terminal history.
@@ -36,7 +38,11 @@ type TerminalEntry =
  * ```
  */
 function createTerminalState() {
-	let open = $state(false);
+	const openState = createPersistedState({
+		key: 'opensidian.terminal-open',
+		schema: type('boolean'),
+		defaultValue: false,
+	});
 	let history = $state<TerminalEntry[]>([]);
 	let commandHistory = $state<string[]>([]);
 	let historyIndex = $state(-1);
@@ -67,10 +73,31 @@ function createTerminalState() {
 			return { stdout: `Opened ${path}\n`, stderr: '', exitCode: 0 };
 		}),
 	);
+	const WELCOME_MESSAGE = [
+		'Welcome to OpenSidian \u2014 notes on CRDTs with a bash terminal.',
+		'',
+		'Try these:',
+		'  echo "# Hello HN" > /hello.md    create a file',
+		'  ls /                              list files',
+		'  open /hello.md                    open in editor',
+		'  cat /hello.md                     print contents',
+		'',
+		'80+ commands: awk, sed, grep, jq, find, sqlite3, curl, and more.',
+		'Press \u2318` to toggle this terminal.',
+	].join('\n');
+
+	function ensureWelcome() {
+		if (history.length === 0) {
+			history = [{ type: 'output', stdout: WELCOME_MESSAGE + '\n', stderr: '', exitCode: 0 }];
+		}
+	}
+
+	// If terminal was persisted as open, show welcome on load.
+	if (openState.current) ensureWelcome();
 
 	return {
 		get open() {
-			return open;
+			return openState.current;
 		},
 		get history() {
 			return history;
@@ -81,17 +108,19 @@ function createTerminalState() {
 
 		/** Toggle the terminal panel open/closed. */
 		toggle() {
-			open = !open;
+			openState.current = !openState.current;
+			if (openState.current) ensureWelcome();
 		},
 
 		/** Show the terminal panel. */
 		show() {
-			open = true;
+			openState.current = true;
+			ensureWelcome();
 		},
 
 		/** Hide the terminal panel. */
 		hide() {
-			open = false;
+			openState.current = false;
 		},
 
 		/**
@@ -170,6 +199,11 @@ function createTerminalState() {
 		/** Clear all terminal output history. */
 		clear() {
 			history = [];
+		},
+
+		/** Print a welcome message as a single output entry. */
+		printWelcome() {
+			ensureWelcome();
 		},
 	};
 }

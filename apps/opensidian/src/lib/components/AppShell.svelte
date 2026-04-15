@@ -14,6 +14,7 @@
 	import { sidebarSearchState } from '$lib/state/sidebar-search-state.svelte';
 	import { terminalState } from '$lib/state/terminal-state.svelte';
 	import { getFileIcon } from '$lib/utils/file-icons';
+	import { sampleDataLoader } from '$lib/utils/load-sample-data.svelte';
 	import AiChat from './chat/AiChat.svelte';
 	import ContentPanel from './editor/ContentPanel.svelte';
 	import StatusBar from './editor/StatusBar.svelte';
@@ -25,6 +26,25 @@
 	let paletteOpen = $state(false);
 	let chatOpen = $state(false);
 
+	// ── First-visit onboarding ──────────────────────────────────────
+	let onboarded = false;
+	$effect(() => {
+		if (onboarded) return;
+		if (fsState.rootChildIds.length > 0) {
+			onboarded = true;
+			return;
+		}
+		// Empty file tree on first render — seed data, open terminal, show welcome.
+		onboarded = true;
+		sampleDataLoader.load().then(() => {
+			const readme = fsState.walkTree((id, row) => {
+				if (row.type === 'file' && row.name === 'README.md') return { collect: id, descend: false };
+				return { descend: true };
+			});
+			if (readme[0]) fsState.selectFile(readme[0]);
+		});
+		terminalState.show();
+	});
 	$effect(() => {
 		if (!paletteOpen) searchState.reset();
 	});

@@ -8,7 +8,7 @@
 	import InlineNameInput from './InlineNameInput.svelte';
 	import { Button } from '@epicenter/ui/button';
 	import { Spinner } from '@epicenter/ui/spinner';
-	import { loadSampleData, seeding } from '$lib/utils/load-sample-data.svelte';
+	import { sampleDataLoader } from '$lib/utils/load-sample-data.svelte';
 
 	/**
 	 * Flat list of visible item IDs in visual order.
@@ -142,8 +142,8 @@
 			<Empty.Title>No files yet</Empty.Title>
 			<Empty.Description>Create files or load sample data to get started</Empty.Description>
 		</Empty.Header>
-		<Button variant="outline" size="sm" onclick={() => loadSampleData()} disabled={isSeeding()}>
-			{#if isSeeding()}<Spinner class="size-3.5" />{:else}Load Sample Data{/if}
+		<Button variant="outline" size="sm" onclick={() => sampleDataLoader.load()} disabled={sampleDataLoader.seeding}>
+			{#if sampleDataLoader.seeding}<Spinner class="size-3.5" />{:else}Load Sample Data{/if}
 		</Button>
 	</Empty.Root>
 {:else}
