@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MaybePromise } from '../../../workspace/lifecycle.js';
-import type { KvHelper, TableHelper } from '../../../workspace/types.js';
+import type { BaseRow, KvHelper, TableHelper } from '../../../workspace/types.js';
 import type { SerializeResult } from './markdown.js';
 import { toMarkdown } from './markdown.js';
 import { parseMarkdownFile } from './parse-markdown-file.js';
@@ -54,7 +54,7 @@ export function createMarkdownMaterializer<
 	};
 
 	type TableRow<TName extends keyof TTables & string> =
-		TTables[TName] extends TableHelper<infer TRow> ? TRow : never;
+		(TTables[TName] extends TableHelper<infer TRow> ? TRow : never) & BaseRow;
 
 	type MaterializerBuilder = {
 		table<TName extends keyof TTables & string>(
