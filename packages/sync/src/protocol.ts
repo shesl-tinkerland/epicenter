@@ -142,7 +142,7 @@ export type DecodedSyncMessage =
  * @returns Encoded message ready to send over WebSocket
  */
 export function encodeSyncStep1({ doc }: { doc: Y.Doc }): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.SYNC);
 		encoding.writeVarUint(encoder, SYNC_MESSAGE_TYPE.STEP1);
 		encoding.writeVarUint8Array(encoder, Y.encodeStateVector(doc));
@@ -161,7 +161,7 @@ export function encodeSyncStep1({ doc }: { doc: Y.Doc }): Uint8Array {
  * @returns Encoded MESSAGE_SYNC + STEP2 message with full doc state
  */
 export function encodeSyncStep2({ doc }: { doc: Y.Doc }): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.SYNC);
 		encoding.writeVarUint(encoder, SYNC_MESSAGE_TYPE.STEP2);
 		encoding.writeVarUint8Array(encoder, Y.encodeStateAsUpdateV2(doc));
@@ -183,7 +183,7 @@ export function encodeSyncUpdate({
 }: {
 	update: Uint8Array;
 }): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.SYNC);
 		encoding.writeVarUint(encoder, SYNC_MESSAGE_TYPE.UPDATE);
 		encoding.writeVarUint8Array(encoder, update);
@@ -256,7 +256,7 @@ export function handleSyncPayload({
 	switch (syncType) {
 		case SYNC_MESSAGE_TYPE.STEP1: {
 			const diff = Y.encodeStateAsUpdateV2(doc, payload);
-			return encoding.encode((encoder) => {
+			return encoding.encode((encoder: encoding.Encoder) => {
 				encoding.writeVarUint(encoder, MESSAGE_TYPE.SYNC);
 				encoding.writeVarUint(encoder, SYNC_MESSAGE_TYPE.STEP2);
 				encoding.writeVarUint8Array(encoder, diff);
@@ -291,7 +291,7 @@ export function encodeAwareness({
 }: {
 	update: Uint8Array;
 }): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.AWARENESS);
 		encoding.writeVarUint8Array(encoder, update);
 	});
@@ -328,7 +328,7 @@ export function encodeAwarenessStates({
  * @returns Encoded message ready to send over WebSocket
  */
 export function encodeQueryAwareness(): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.QUERY_AWARENESS);
 	});
 }
@@ -363,7 +363,7 @@ export function encodeSyncRequest(
 	stateVector: Uint8Array,
 	update?: Uint8Array,
 ): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint8Array(encoder, stateVector);
 		encoding.writeVarUint8Array(encoder, update ?? new Uint8Array(0));
 	});
@@ -419,7 +419,7 @@ export function stateVectorsEqual(a: Uint8Array, b: Uint8Array): boolean {
  * @returns Encoded SYNC_STATUS message ready to send
  */
 export function encodeSyncStatus(localVersion: number): Uint8Array {
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.SYNC_STATUS);
 		encoding.writeVarUint(encoder, localVersion);
 	});
@@ -508,7 +508,7 @@ export function encodeRpcRequest({
 	input?: unknown;
 }): Uint8Array {
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(input ?? null));
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.RPC);
 		encoding.writeVarUint(encoder, RPC_TYPE.REQUEST);
 		encoding.writeVarUint(encoder, requestId);
@@ -540,7 +540,7 @@ export function encodeRpcResponse({
 	result: { data: unknown; error: unknown };
 }): Uint8Array {
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(result));
-	return encoding.encode((encoder) => {
+	return encoding.encode((encoder: encoding.Encoder) => {
 		encoding.writeVarUint(encoder, MESSAGE_TYPE.RPC);
 		encoding.writeVarUint(encoder, RPC_TYPE.RESPONSE);
 		encoding.writeVarUint(encoder, requestId);

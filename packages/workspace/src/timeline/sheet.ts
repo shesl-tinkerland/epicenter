@@ -112,7 +112,7 @@ export function serializeSheetToCsv({ columns, rows }: SheetBinding): string {
 		colMap: Y.Map<string>;
 		order: number;
 	}> = [];
-	columns.forEach((colMap, colId) => {
+	columns.forEach((colMap: Y.Map<string>, colId: string) => {
 		const orderStr = colMap.get('order') ?? '0';
 		columnEntries.push({
 			id: colId,
@@ -139,7 +139,7 @@ export function serializeSheetToCsv({ columns, rows }: SheetBinding): string {
 		rowMap: Y.Map<string>;
 		order: number;
 	}> = [];
-	rows.forEach((rowMap, rowId) => {
+	rows.forEach((rowMap: Y.Map<string>, rowId: string) => {
 		const orderStr = rowMap.get('order') ?? '0';
 		rowEntries.push({
 			id: rowId,

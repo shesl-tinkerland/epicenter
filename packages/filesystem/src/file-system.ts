@@ -86,7 +86,7 @@ export function createYjsFileSystem(
 		// READS — metadata only (fast, no content doc loaded)
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async readdir(path) {
+		async readdir(path: string) {
 			const abs = posixResolve(cwd, path);
 			const id = tree.resolveId(abs);
 			tree.assertDirectory(id, abs);
@@ -97,7 +97,7 @@ export function createYjsFileSystem(
 				.sort();
 		},
 
-		async readdirWithFileTypes(path) {
+		async readdirWithFileTypes(path: string) {
 			const abs = posixResolve(cwd, path);
 			const id = tree.resolveId(abs);
 			tree.assertDirectory(id, abs);
@@ -113,7 +113,7 @@ export function createYjsFileSystem(
 				.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 		},
 
-		async stat(path) {
+		async stat(path: string) {
 			const abs = posixResolve(cwd, path);
 			if (abs === '/') {
 				return {
@@ -138,11 +138,11 @@ export function createYjsFileSystem(
 			};
 		},
 
-		async lstat(path) {
+		async lstat(path: string) {
 			return this.stat(path);
 		},
 
-		async exists(path) {
+		async exists(path: string) {
 			const abs = posixResolve(cwd, path);
 			return tree.exists(abs);
 		},
@@ -151,7 +151,7 @@ export function createYjsFileSystem(
 		// READS — content (may load a per-file content doc)
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async readFile(path, _options?) {
+		async readFile(path: string, _options?: unknown) {
 			const abs = posixResolve(cwd, path);
 			const id = tree.resolveId(abs);
 			if (id === null) throw FS_ERRORS.ENOENT(abs);
@@ -161,7 +161,7 @@ export function createYjsFileSystem(
 			return content.read();
 		},
 
-		async readFileBuffer(path) {
+		async readFileBuffer(path: string) {
 			const text = await this.readFile(path);
 			return new TextEncoder().encode(text);
 		},
@@ -170,7 +170,11 @@ export function createYjsFileSystem(
 		// WRITES
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async writeFile(path, data, _options?) {
+		async writeFile(
+			path: string,
+			data: string | Uint8Array | ArrayBuffer,
+			_options?: unknown,
+		) {
 			const abs = posixResolve(cwd, path);
 			const textData =
 				typeof data === 'string' ? data : new TextDecoder().decode(data);
@@ -192,7 +196,11 @@ export function createYjsFileSystem(
 			tree.touch(id, size);
 		},
 
-		async appendFile(path, data, _options?) {
+		async appendFile(
+			path: string,
+			data: string | Uint8Array | ArrayBuffer,
+			_options?: unknown,
+		) {
 			const abs = posixResolve(cwd, path);
 			const text =
 				typeof data === 'string' ? data : new TextDecoder().decode(data);
@@ -212,7 +220,7 @@ export function createYjsFileSystem(
 		// STRUCTURE — mkdir, rm, cp, mv
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async mkdir(path, options?) {
+		async mkdir(path: string, options?: { recursive?: boolean }) {
 			const abs = posixResolve(cwd, path);
 			if (tree.exists(abs)) {
 				const existingId = tree.lookupId(abs);
@@ -251,7 +259,7 @@ export function createYjsFileSystem(
 			}
 		},
 
-		async rm(path, options?) {
+		async rm(path: string, options?: { force?: boolean; recursive?: boolean }) {
 			const abs = posixResolve(cwd, path);
 			const id = tree.lookupId(abs);
 			if (!id) {
@@ -275,7 +283,7 @@ export function createYjsFileSystem(
 			}
 		},
 
-		async cp(src, dest, options?) {
+		async cp(src: string, dest: string, options?: { recursive?: boolean }) {
 			const resolvedSrc = posixResolve(cwd, src);
 			const resolvedDest = posixResolve(cwd, dest);
 			const srcId = tree.resolveId(resolvedSrc);
@@ -300,7 +308,7 @@ export function createYjsFileSystem(
 			}
 		},
 
-		async mv(src, dest) {
+		async mv(src: string, dest: string) {
 			const resolvedSrc = posixResolve(cwd, src);
 			const resolvedDest = posixResolve(cwd, dest);
 			const id = tree.resolveId(resolvedSrc);
@@ -315,11 +323,11 @@ export function createYjsFileSystem(
 		// PATH RESOLUTION
 		// ═══════════════════════════════════════════════════════════════════════
 
-		resolvePath(base, path) {
+		resolvePath(base: string, path: string) {
 			return posixResolve(base, path);
 		},
 
-		async realpath(path) {
+		async realpath(path: string) {
 			const abs = posixResolve(cwd, path);
 			if (!tree.exists(abs)) throw FS_ERRORS.ENOENT(abs);
 			return abs;
@@ -333,12 +341,12 @@ export function createYjsFileSystem(
 		// PERMISSIONS / TIMESTAMPS — no-op in a collaborative system
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async chmod(path, _mode) {
+		async chmod(path: string, _mode: number) {
 			const abs = posixResolve(cwd, path);
 			tree.resolveId(abs);
 		},
 
-		async utimes(path, _atime, mtime) {
+		async utimes(path: string, _atime: Date, mtime: Date) {
 			const abs = posixResolve(cwd, path);
 			const id = tree.resolveId(abs);
 			if (id === null) return;
@@ -349,15 +357,15 @@ export function createYjsFileSystem(
 		// SYMLINKS / LINKS — not supported (always throws ENOSYS)
 		// ═══════════════════════════════════════════════════════════════════════
 
-		async symlink(_target, _linkPath) {
+		async symlink(_target: string, _linkPath: string) {
 			throw FS_ERRORS.ENOSYS('symlinks not supported');
 		},
 
-		async link(_existingPath, _newPath) {
+		async link(_existingPath: string, _newPath: string) {
 			throw FS_ERRORS.ENOSYS('hard links not supported');
 		},
 
-		async readlink(_path) {
+		async readlink(_path: string) {
 			throw FS_ERRORS.ENOSYS('symlinks not supported');
 		},
 	});

@@ -114,7 +114,7 @@ export function standardSchemaToJsonSchema(
 					fallback: ARKTYPE_FALLBACK,
 				},
 			}),
-		catch: (e) => {
+		catch: (e: unknown) => {
 			console.warn(
 				'[standardSchemaToJsonSchema] Conversion failure, using permissive fallback:',
 				e,

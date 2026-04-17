@@ -374,7 +374,10 @@ export class YKeyValueLww<T> {
 		}
 
 		// Set up observer for future changes
-		this._observer = (event, transaction) => {
+		this._observer = (
+			event: Y.YArrayEvent<YKeyValueLwwEntry<T>>,
+			transaction: Y.Transaction,
+		) => {
 			// Dedup deletions are always no-ops — _map already has the winner.
 			// Skip entirely to avoid useless work on re-entrant observer calls.
 			if (transaction.origin === DEDUP_ORIGIN) return;
@@ -394,7 +397,7 @@ export class YKeyValueLww<T> {
 			}
 
 			// Handle deletions first
-			event.changes.deleted.forEach((deletedItem) => {
+			event.changes.deleted.forEach((deletedItem: Y.Item) => {
 				deletedItem.content
 					.getContent()
 					.forEach((entry: YKeyValueLwwEntry<T>) => {
@@ -588,7 +591,9 @@ export class YKeyValueLww<T> {
 	 * cleaned up on construction and during sync), so this only deletes one entry.
 	 */
 	private deleteEntryByKey(key: string): void {
-		const index = this.yarray.toArray().findIndex((e) => e.key === key);
+		const index = this.yarray
+			.toArray()
+			.findIndex((e: YKeyValueLwwEntry<T>) => e.key === key);
 		if (index !== -1) this.yarray.delete(index);
 	}
 

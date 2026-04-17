@@ -40,7 +40,9 @@ export function createUnionSchema<
 		'~standard': {
 			version: 1,
 			vendor: 'epicenter',
-			validate: (value) => {
+			validate: (
+				value: Parameters<CombinedStandardSchema['~standard']['validate']>[0],
+			) => {
 				const allIssues: StandardSchemaV1.Issue[] = [];
 
 				for (const schema of schemas) {
@@ -70,10 +72,18 @@ export function createUnionSchema<
 				};
 			},
 			jsonSchema: {
-				input: (options) => ({
+				input: (
+					options: Parameters<
+						CombinedStandardSchema['~standard']['jsonSchema']['input']
+					>[0],
+				) => ({
 					oneOf: schemas.map((s) => s['~standard'].jsonSchema.input(options)),
 				}),
-				output: (options) => ({
+				output: (
+					options: Parameters<
+						CombinedStandardSchema['~standard']['jsonSchema']['output']
+					>[0],
+				) => ({
 					oneOf: schemas.map((s) => s['~standard'].jsonSchema.output(options)),
 				}),
 			},

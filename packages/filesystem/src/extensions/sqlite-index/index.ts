@@ -166,7 +166,9 @@ export function createSqliteIndex({
 			await rebuild();
 
 			// Observe ongoing table mutations
-			unobserve = filesTable.observe((changedIds) => scheduleSync(changedIds));
+			unobserve = filesTable.observe((changedIds: ReadonlySet<string>) =>
+				scheduleSync(changedIds),
+			);
 		})();
 
 		// ── Debounced sync ────────────────────────────────────────────
@@ -419,12 +421,19 @@ export function createSqliteIndex({
 					args: [trimmed],
 				});
 
-				return result.rows.map((row) => ({
-					id: row.file_id as string,
-					name: row.name as string,
-					path: (row.path as string) ?? null,
-					snippet: row.snippet as string,
-				}));
+				return result.rows.map(
+					(row: {
+						file_id: string;
+						name: string;
+						path: string | null;
+						snippet: string;
+					}) => ({
+						id: row.file_id as string,
+						name: row.name as string,
+						path: (row.path as string) ?? null,
+						snippet: row.snippet as string,
+					}),
+				);
 			} catch {
 				// Invalid FTS5 query syntax — return empty rather than throw
 				return [];

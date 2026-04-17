@@ -53,7 +53,7 @@ export function updateYMapFromRecord(
 	const apply = () => {
 		// Delete keys not in target
 		const keysToDelete: string[] = [];
-		ymap.forEach((_, key) => {
+		ymap.forEach((_: unknown, key: string) => {
 			if (!(key in target)) keysToDelete.push(key);
 		});
 		for (const key of keysToDelete) ymap.delete(key);
@@ -75,7 +75,7 @@ export function updateYMapFromRecord(
 /** Convert Y.Map to a plain Record */
 export function yMapToRecord(ymap: Y.Map<unknown>): Record<string, unknown> {
 	const result: Record<string, unknown> = {};
-	ymap.forEach((value, key) => {
+	ymap.forEach((value: unknown, key: string) => {
 		result[key] = value;
 	});
 	return result;

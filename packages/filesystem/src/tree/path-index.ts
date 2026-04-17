@@ -38,7 +38,7 @@ export function createFileSystemIndex(filesTable: TableHelper<FileRow>) {
 
 	rebuild();
 
-	const unobserve = filesTable.observe((changedIds) => {
+	const unobserve = filesTable.observe((changedIds: ReadonlySet<string>) => {
 		if (rebuilding) return;
 		processChanges(changedIds);
 	});
@@ -63,14 +63,14 @@ export function createFileSystemIndex(filesTable: TableHelper<FileRow>) {
 
 		let activeRows = filesTable
 			.getAllValid()
-			.filter((r) => r.trashedAt === null);
+			.filter((r: FileRow) => r.trashedAt === null);
 
 		// Fix data integrity issues first (these mutate the table).
 		// Run before building indexes so indexes reflect corrected state.
 		fixCircularReferences(filesTable, activeRows);
 
 		// Re-read after circular ref fixes — parentIds may have changed
-		activeRows = filesTable.getAllValid().filter((r) => r.trashedAt === null);
+		activeRows = filesTable.getAllValid().filter((r: FileRow) => r.trashedAt === null);
 
 		// Build childrenOf from corrected data
 		for (const row of activeRows) {
@@ -81,7 +81,7 @@ export function createFileSystemIndex(filesTable: TableHelper<FileRow>) {
 		fixOrphans(filesTable, activeRows, childrenOf);
 
 		// Re-read one more time after orphan fixes
-		activeRows = filesTable.getAllValid().filter((r) => r.trashedAt === null);
+		activeRows = filesTable.getAllValid().filter((r: FileRow) => r.trashedAt === null);
 
 		// Build display names (disambiguation) per folder
 		for (const [parentId, childIds] of childrenOf) {

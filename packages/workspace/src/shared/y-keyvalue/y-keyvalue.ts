@@ -329,93 +329,102 @@ export class YKeyValue<T> {
 			}
 		});
 
-		yarray.observe((event, transaction) => {
-			const changes = new Map<string, YKeyValueChange<T>>();
-			const addedItems: Y.Item[] = Array.from(event.changes.added);
+		yarray.observe(
+			(event: Y.YArrayEvent<YKeyValueEntry<T>>, transaction: Y.Transaction) => {
+				const changes = new Map<string, YKeyValueChange<T>>();
+				const addedItems: Y.Item[] = Array.from(event.changes.added);
 
-			event.changes.deleted.forEach((deletedItem) => {
-				deletedItem.content.getContent().forEach((entry: YKeyValueEntry<T>) => {
-					// Always clear pendingDeletes for this key — even if the ref-equality
-					// check fails (e.g. set+delete in same txn where entry never reached map)
-					this.pendingDeletes.delete(entry.key);
+				event.changes.deleted.forEach((deletedItem: Y.Item) => {
+					deletedItem.content
+						.getContent()
+						.forEach((entry: YKeyValueEntry<T>) => {
+							// Always clear pendingDeletes for this key — even if the ref-equality
+							// check fails (e.g. set+delete in same txn where entry never reached map)
+							this.pendingDeletes.delete(entry.key);
 
-					// Reference equality: only process if this is the entry we have cached
-					// (Yjs returns the same object reference from the array)
-					if (this.map.get(entry.key) === entry) {
-						this.map.delete(entry.key);
-						changes.set(entry.key, { action: 'delete', oldValue: entry.val });
-					}
-				});
-			});
-
-			const addedEntriesByKey = new Map<string, YKeyValueEntry<T>>();
-			addedItems
-				.flatMap((addedItem) => addedItem.content.getContent())
-				.forEach((entry: YKeyValueEntry<T>) => {
-					addedEntriesByKey.set(entry.key, entry);
-				});
-
-			const keysToRemove = new Set<string>();
-			const allEntries = yarray.toArray();
-
-			this.doc.transact(() => {
-				for (
-					let i = allEntries.length - 1;
-					i >= 0 && (addedEntriesByKey.size > 0 || keysToRemove.size > 0);
-					i--
-				) {
-					const currentEntry = allEntries[i];
-					if (!currentEntry) continue;
-
-					if (keysToRemove.has(currentEntry.key)) {
-						keysToRemove.delete(currentEntry.key);
-						yarray.delete(i, 1);
-					} else if (addedEntriesByKey.get(currentEntry.key) === currentEntry) {
-						const previousEntry = this.map.get(currentEntry.key);
-						if (previousEntry) {
-							keysToRemove.add(currentEntry.key);
-							changes.set(currentEntry.key, {
-								action: 'update',
-								oldValue: previousEntry.val,
-								newValue: currentEntry.val,
-							});
-						} else {
-							const deleteEvent = changes.get(currentEntry.key);
-							if (deleteEvent && deleteEvent.action === 'delete') {
-								changes.set(currentEntry.key, {
-									action: 'update',
-									newValue: currentEntry.val,
-									oldValue: deleteEvent.oldValue,
-								});
-							} else {
-								changes.set(currentEntry.key, {
-									action: 'add',
-									newValue: currentEntry.val,
+							// Reference equality: only process if this is the entry we have cached
+							// (Yjs returns the same object reference from the array)
+							if (this.map.get(entry.key) === entry) {
+								this.map.delete(entry.key);
+								changes.set(entry.key, {
+									action: 'delete',
+									oldValue: entry.val,
 								});
 							}
-						}
-						addedEntriesByKey.delete(currentEntry.key);
-						this.map.set(currentEntry.key, currentEntry);
-						this.pendingDeletes.delete(currentEntry.key);
+						});
+				});
 
-						// Clear from pending once processed.
-						// Use reference equality to only clear if it's the exact entry we added.
-						if (this.pending.get(currentEntry.key) === currentEntry) {
-							this.pending.delete(currentEntry.key);
+				const addedEntriesByKey = new Map<string, YKeyValueEntry<T>>();
+				addedItems
+					.flatMap((addedItem) => addedItem.content.getContent())
+					.forEach((entry: YKeyValueEntry<T>) => {
+						addedEntriesByKey.set(entry.key, entry);
+					});
+
+				const keysToRemove = new Set<string>();
+				const allEntries = yarray.toArray();
+
+				this.doc.transact(() => {
+					for (
+						let i = allEntries.length - 1;
+						i >= 0 && (addedEntriesByKey.size > 0 || keysToRemove.size > 0);
+						i--
+					) {
+						const currentEntry = allEntries[i];
+						if (!currentEntry) continue;
+
+						if (keysToRemove.has(currentEntry.key)) {
+							keysToRemove.delete(currentEntry.key);
+							yarray.delete(i, 1);
+						} else if (
+							addedEntriesByKey.get(currentEntry.key) === currentEntry
+						) {
+							const previousEntry = this.map.get(currentEntry.key);
+							if (previousEntry) {
+								keysToRemove.add(currentEntry.key);
+								changes.set(currentEntry.key, {
+									action: 'update',
+									oldValue: previousEntry.val,
+									newValue: currentEntry.val,
+								});
+							} else {
+								const deleteEvent = changes.get(currentEntry.key);
+								if (deleteEvent && deleteEvent.action === 'delete') {
+									changes.set(currentEntry.key, {
+										action: 'update',
+										newValue: currentEntry.val,
+										oldValue: deleteEvent.oldValue,
+									});
+								} else {
+									changes.set(currentEntry.key, {
+										action: 'add',
+										newValue: currentEntry.val,
+									});
+								}
+							}
+							addedEntriesByKey.delete(currentEntry.key);
+							this.map.set(currentEntry.key, currentEntry);
+							this.pendingDeletes.delete(currentEntry.key);
+
+							// Clear from pending once processed.
+							// Use reference equality to only clear if it's the exact entry we added.
+							if (this.pending.get(currentEntry.key) === currentEntry) {
+								this.pending.delete(currentEntry.key);
+							}
+						} else if (addedEntriesByKey.has(currentEntry.key)) {
+							keysToRemove.add(currentEntry.key);
+							addedEntriesByKey.delete(currentEntry.key);
 						}
-					} else if (addedEntriesByKey.has(currentEntry.key)) {
-						keysToRemove.add(currentEntry.key);
-						addedEntriesByKey.delete(currentEntry.key);
+					}
+				});
+
+				if (changes.size > 0) {
+					for (const handler of this.changeHandlers) {
+						handler(changes, transaction);
 					}
 				}
-			});
-
-			if (changes.size > 0) {
-				for (const handler of this.changeHandlers) {
-					handler(changes, transaction);
-				}
-			}
-		});
+			},
+		);
 	}
 
 	/**
@@ -425,7 +434,9 @@ export class YKeyValue<T> {
 	 * cleaned up on construction and during sync), so this only deletes one entry.
 	 */
 	private deleteEntryByKey(key: string): void {
-		const index = this.yarray.toArray().findIndex((e) => e.key === key);
+		const index = this.yarray
+			.toArray()
+			.findIndex((e: YKeyValueEntry<T>) => e.key === key);
 		if (index !== -1) this.yarray.delete(index);
 	}
 

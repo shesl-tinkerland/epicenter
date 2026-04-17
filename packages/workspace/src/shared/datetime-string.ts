@@ -127,7 +127,7 @@ export type ParsedDateTimeString = {
 
 // ─── Arktype validator (base) ────────────────────────────────────────────────
 
-const validator = type('string').pipe((s): DateTimeString => {
+const validator = type('string').pipe((s: string): DateTimeString => {
 	if (!DATE_TIME_STRING_REGEX.test(s)) {
 		throw new Error(
 			`Invalid DateTimeString: "${s}" does not match "YYYY-MM-DDTHH:mm:ss.sssZ|Timezone"`,

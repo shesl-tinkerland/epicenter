@@ -193,7 +193,6 @@ export type SyncExtensionExports = {
 // Constants
 // ============================================================================
 
-
 // Liveness tuning: the client sends a text "ping" every PING_INTERVAL_MS.
 // The server auto-responds with "pong" via setWebSocketAutoResponse (no DO
 // wake, no duration charge). However, each incoming ping still counts as a
@@ -278,12 +277,16 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 		// BroadcastChannel cross-tab sync — instant convergence between same-origin tabs.
 		// Runs independently of WebSocket. Passes SYNC_ORIGIN so BC won't re-broadcast
 		// server-delivered updates (each tab has its own WebSocket connection).
-		const bc = broadcastChannelSync({ ydoc: doc, transportOrigin: SYNC_ORIGIN });
+		const bc = broadcastChannelSync({
+			ydoc: doc,
+			transportOrigin: SYNC_ORIGIN,
+		});
 
 		// ── Zone 2: Mutable state ──
 
 		const status = createStatusEmitter<SyncStatus>({ phase: 'offline' });
-		const { promise: whenConnected, resolve: resolveConnected } = Promise.withResolvers<void>();
+		const { promise: whenConnected, resolve: resolveConnected } =
+			Promise.withResolvers<void>();
 		const backoff = createBackoff();
 
 		/** User intent: should we be connected? Set by connect()/goOffline(). */
@@ -386,7 +389,7 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 
 			const { data, error } = await tryAsync({
 				try: async () => target(rpc.input),
-				catch: (err) =>
+				catch: (err: unknown) =>
 					RpcError.ActionFailed({ action: rpc.action, cause: err }),
 			});
 
@@ -442,7 +445,8 @@ export function createSyncExtension(config: SyncExtensionConfig): (
 		 * Note: y-websocket has the same gap (ignores origin in its awareness
 		 * handler). We fix it here to avoid unnecessary server round-trips.
 		 */
-		function handleAwarenessUpdate({
+		function handleAwarenessUpdate(
+			{
 				added,
 				updated,
 				removed,

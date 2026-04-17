@@ -35,7 +35,7 @@ export async function prepareMarkdownFiles(
 	directory: string,
 ): Promise<PrepareResult> {
 	const entries = await readdir(directory);
-	const mdFiles = entries.filter((f) => f.endsWith('.md'));
+	const mdFiles = entries.filter((f: string) => f.endsWith('.md'));
 
 	// First pass: parse all files and collect existing IDs
 	const idToFiles = new Map<string, string[]>();

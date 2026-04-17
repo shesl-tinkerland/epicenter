@@ -288,10 +288,10 @@ export function createTimeline(ydoc: Y.Doc): Timeline {
 				switch (entry.type) {
 					case 'sheet':
 						// Clear columns/rows and repopulate from CSV
-						entry.columns.forEach((_, key) => {
+						entry.columns.forEach((_value: Y.Map<string>, key: string) => {
 							entry.columns.delete(key);
 						});
-						entry.rows.forEach((_, key) => {
+						entry.rows.forEach((_value: Y.Map<string>, key: string) => {
 							entry.rows.delete(key);
 						});
 						parseSheetFromCsv(text, entry);
@@ -429,10 +429,12 @@ export function createTimeline(ydoc: Y.Doc): Timeline {
 							const children = entry.content
 								.toArray()
 								.filter(
-									(c): c is Y.XmlElement | Y.XmlText =>
+									(
+										c: Y.XmlElement | Y.XmlText,
+									): c is Y.XmlElement | Y.XmlText =>
 										c instanceof Y.XmlElement || c instanceof Y.XmlText,
 								)
-								.map((c) => c.clone());
+								.map((c: Y.XmlElement | Y.XmlText) => c.clone());
 							result.content.insert(0, children);
 						});
 						break;
