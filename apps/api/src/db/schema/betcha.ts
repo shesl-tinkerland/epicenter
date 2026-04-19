@@ -6,13 +6,14 @@ import {
 	text,
 	timestamp,
 	unique,
+	uuid,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
 import { user } from './auth';
 
-/** 15-char alphanumeric ID — matches generateGuid in @epicenter/workspace. */
-const generateId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
+/** 15-char alphanumeric slug for shareable wager URLs. */
+const generateSlug = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
 
 /**
  * Committer's verdict on themselves — flippable by committer or any witness.
@@ -39,11 +40,16 @@ export type WagerOutcome = (typeof wagerOutcomes)[number];
  *
  * `outcomeActorId` records the *most recent* flipper; per-flip attribution
  * lives on each ledger row's `actorUserId`.
+ *
+ * `id` is a UUIDv7 (time-ordered, index-friendly) used for all internal joins.
+ * `slug` is a short nanoid exposed in share/invite URLs — decouples public
+ * identifiers from the PK so links can be rotated without touching FKs.
  */
 export const wager = pgTable(
 	'wager',
 	{
-		id: text('id').primaryKey().$defaultFn(generateId),
+		id: uuid('id').primaryKey().default(sql`uuidv7()`),
+		slug: text('slug').notNull().unique().$defaultFn(generateSlug),
 		committerId: text('committer_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
@@ -94,8 +100,8 @@ export const wager = pgTable(
 export const witness = pgTable(
 	'witness',
 	{
-		id: text('id').primaryKey().$defaultFn(generateId),
-		wagerId: text('wager_id')
+		id: uuid('id').primaryKey().default(sql`uuidv7()`),
+		wagerId: uuid('wager_id')
 			.notNull()
 			.references(() => wager.id, { onDelete: 'cascade' }),
 		userId: text('user_id')
@@ -139,8 +145,8 @@ export const witness = pgTable(
 export const ledger = pgTable(
 	'ledger',
 	{
-		id: text('id').primaryKey().$defaultFn(generateId),
-		wagerId: text('wager_id').references(() => wager.id, {
+		id: uuid('id').primaryKey().default(sql`uuidv7()`),
+		wagerId: uuid('wager_id').references(() => wager.id, {
 			onDelete: 'set null',
 		}),
 		fromUserId: text('from_user_id')
