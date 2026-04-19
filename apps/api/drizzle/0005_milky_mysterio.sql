@@ -1,0 +1,1 @@
+ALTER TABLE "challenge" ADD CONSTRAINT "challenge_amount_positive" CHECK (amount > 0);
