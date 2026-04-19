@@ -481,6 +481,9 @@ betchaRoutes.post(
 				return { error: 'not_live' as const };
 			}
 
+			// No-op flip: preserve the original outcomeAt / outcomeActorId — the
+			// attribution belongs to whoever set the outcome first, not to a
+			// subsequent idempotent retry.
 			if (wagerRow.outcome === data.outcome) {
 				return { ok: { wager: wagerRow, entries: [] } };
 			}
@@ -506,7 +509,7 @@ betchaRoutes.post(
 			const committerId = wagerRow.committerId;
 			const amountCents = Math.round(Number(wagerRow.amount) * 100);
 			const baseCents = Math.floor(amountCents / witnesses.length);
-			const remainderCents = amountCents - baseCents * witnesses.length;
+			const remainderCents = amountCents % witnesses.length;
 
 			// One grouped query for all prior (committer → witness) sums on this
 			// wager. `::bigint` returns as string from pg; parse in TS to avoid
@@ -534,10 +537,10 @@ betchaRoutes.post(
 
 			for (let i = 0; i < witnesses.length; i += 1) {
 				const w = witnesses[i]!;
-				const expectedCents =
-					data.outcome === 'missed'
-						? baseCents + (i < remainderCents ? 1 : 0)
-						: 0;
+				// First `remainderCents` witnesses get +1 to absorb the rounding
+				// penny so all shares sum to amountCents exactly.
+				const shareCents = baseCents + (i < remainderCents ? 1 : 0);
+				const expectedCents = data.outcome === 'missed' ? shareCents : 0;
 				const currentCents = currentCentsByUser.get(w.userId) ?? 0;
 				const deltaCents = expectedCents - currentCents;
 
@@ -608,17 +611,24 @@ betchaRoutes.post(
  * Return current balances for the authenticated user against every
  * counterparty they share a ledger with.
  *
- * Queries each direction separately so both can use their single-column index
- * (`ledger_from_user_idx`, `ledger_to_user_idx`). A combined `OR` filter with
- * a `CASE` in GROUP BY can't use either index cleanly.
+ * Invariant: each ledger row encodes a directional obligation. Summing
+ * `amount` over rows where (from_user_id = X, to_user_id = Y) gives how much
+ * X currently owes Y. Payments that settle a debt are written with negative
+ * amount in the same (from, to) direction, so the sum drops back to zero.
+ *
+ * Balance for `userId` against counterparty C, positive = C owes userId:
+ *     SUM(amount where from=C, to=userId)    (what C owes userId)
+ *   − SUM(amount where from=userId, to=C)    (what userId owes C)
+ *
+ * Queries each direction separately so both can use their single-column
+ * index (`ledger_from_user_idx`, `ledger_to_user_idx`). A combined `OR`
+ * filter with a `CASE` in GROUP BY can't use either index cleanly.
  */
 betchaRoutes.get('/balances', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 
-	const [owedToOthers, owedByOthers] = await Promise.all([
-		// Rows where userId is the payer → counterparty is toUserId, they owe
-		// `amount` to userId (stored sign flips: positive means userId owes them).
+	const [userOwesOthers, othersOweUser] = await Promise.all([
 		db
 			.select({
 				counterpartyId: ledger.toUserId,
@@ -627,7 +637,6 @@ betchaRoutes.get('/balances', async (c) => {
 			.from(ledger)
 			.where(eq(ledger.fromUserId, userId))
 			.groupBy(ledger.toUserId),
-		// Rows where userId is the payee → counterparty is fromUserId.
 		db
 			.select({
 				counterpartyId: ledger.fromUserId,
@@ -638,14 +647,16 @@ betchaRoutes.get('/balances', async (c) => {
 			.groupBy(ledger.fromUserId),
 	]);
 
-	// Merge: positive balance means `userId` is owed by counterparty.
 	const centsByCounterparty = new Map<string, number>();
-	for (const row of owedByOthers) {
+	for (const row of othersOweUser) {
 		centsByCounterparty.set(row.counterpartyId, Number(row.totalCents));
 	}
-	for (const row of owedToOthers) {
+	for (const row of userOwesOthers) {
 		const existing = centsByCounterparty.get(row.counterpartyId) ?? 0;
-		centsByCounterparty.set(row.counterpartyId, existing - Number(row.totalCents));
+		centsByCounterparty.set(
+			row.counterpartyId,
+			existing - Number(row.totalCents),
+		);
 	}
 
 	return c.json(
