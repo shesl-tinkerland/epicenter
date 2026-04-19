@@ -234,18 +234,18 @@ betchaRoutes.get('/wagers', async (c) => {
 });
 
 /**
- * GET /wagers/:id
+ * GET /wagers/:slug
  *
  * Get one wager with its witnesses and ledger history.
  * Caller must be the committer or a witness.
  */
-betchaRoutes.get('/wagers/:id', async (c) => {
+betchaRoutes.get('/wagers/:slug', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const wagerId = c.req.param('id');
+	const slug = c.req.param('slug');
 
 	const wagerRow = await db.query.wager.findFirst({
-		where: eq(wager.id, wagerId),
+		where: eq(wager.slug, slug),
 		with: {
 			witnesses: {
 				with: { user: { columns: { id: true, name: true, image: true } } },
@@ -276,21 +276,21 @@ betchaRoutes.get('/wagers/:id', async (c) => {
 // ── Wager lifecycle ──────────────────────────────────────────────────────
 
 /**
- * POST /wagers/:id/cancel
+ * POST /wagers/:slug/cancel
  *
  * Cancel a live wager. Committer only; only allowed while `outcome IS NULL`
  * and `cancelledAt IS NULL`. Writes `cancelledAt`/`cancelledBy`; no ledger
  * impact (a cancelled wager never posted any deltas to reconcile).
  */
-betchaRoutes.post('/wagers/:id/cancel', async (c) => {
+betchaRoutes.post('/wagers/:slug/cancel', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const wagerId = c.req.param('id');
+	const slug = c.req.param('slug');
 
 	const [wagerRow] = await db
 		.select()
 		.from(wager)
-		.where(eq(wager.id, wagerId))
+		.where(eq(wager.slug, slug))
 		.limit(1);
 
 	if (!wagerRow) {
@@ -308,7 +308,7 @@ betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 	const [updatedWager] = await db
 		.update(wager)
 		.set({ cancelledAt: new Date(), cancelledBy: userId })
-		.where(eq(wager.id, wagerId))
+		.where(eq(wager.id, wagerRow.id))
 		.returning();
 
 	return c.json({ ...updatedWager!, state: deriveState(updatedWager!) });
@@ -335,12 +335,12 @@ betchaRoutes.post('/wagers/:id/cancel', async (c) => {
  *   5. Update wager.outcome, outcomeAt, outcomeActorId.
  */
 betchaRoutes.post(
-	'/wagers/:id/outcome',
+	'/wagers/:slug/outcome',
 	sValidator('json', outcomeSchema),
 	async (c) => {
 		const db = c.var.db;
 		const actorUserId = c.var.user.id;
-		const wagerId = c.req.param('id');
+		const slug = c.req.param('slug');
 		const data = c.req.valid('json');
 
 		type OutcomeSuccess = {
@@ -353,11 +353,13 @@ betchaRoutes.post(
 				const [wagerRow] = await tx
 					.select()
 					.from(wager)
-					.where(eq(wager.id, wagerId))
+					.where(eq(wager.slug, slug))
 					.for('update')
 					.limit(1);
 
 				if (!wagerRow) return WagerError.NotFound();
+
+				const wagerId = wagerRow.id;
 
 				if (wagerRow.cancelledAt) {
 					return WagerError.AlreadyResolved({ action: 'flip outcome on' });
