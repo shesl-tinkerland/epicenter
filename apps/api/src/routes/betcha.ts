@@ -57,7 +57,6 @@ const WagerError = defineErrors({
 			'Every witness must be a mutual follow (friend) of yours. Add them as friends first.',
 		userIds: [...userIds],
 	}),
-	InsertFailed: () => ({ message: 'Could not create the wager.' }),
 	SelfPayment: () => ({ message: "You can't pay yourself." }),
 });
 type WagerError = InferErrors<typeof WagerError>;
@@ -75,7 +74,6 @@ const WagerErrorHttpStatus: Record<WagerError['name'], ContentfulStatusCode> = {
 	InvalidAmount: 400,
 	NoUsableWitnesses: 400,
 	WitnessesMustBeFriends: 400,
-	InsertFailed: 500,
 	SelfPayment: 400,
 };
 
@@ -171,26 +169,26 @@ betchaRoutes.post(
 			})
 			.returning();
 
-		if (!createdWager) {
-			return c.json(WagerError.InsertFailed(), 500);
-		}
+		// `.returning()` on a successful single-row INSERT always yields one row;
+		// any failure would have thrown. Assertion documents that invariant.
+		const wagerRow = createdWager!;
 
 		await db.insert(witness).values(
 			witnessUserIds.map((witnessUserId) => ({
-				wagerId: createdWager.id,
+				wagerId: wagerRow.id,
 				userId: witnessUserId,
 				addedBy: userId,
 			})),
 		);
 
 		const witnesses = await db.query.witness.findMany({
-			where: eq(witness.wagerId, createdWager.id),
+			where: eq(witness.wagerId, wagerRow.id),
 			with: { user: { columns: { id: true, name: true, image: true } } },
 			orderBy: witness.joinedAt,
 		});
 
 		return c.json(
-			{ ...createdWager, witnesses, state: deriveState(createdWager) },
+			{ ...wagerRow, witnesses, state: deriveState(wagerRow) },
 			201,
 		);
 	},
@@ -399,9 +397,12 @@ betchaRoutes.post(
 					.orderBy(witness.joinedAt);
 
 				// Should be impossible: POST /wagers rejects empty witness lists.
-				// Guard against DB state drift anyway.
+				// Surface as 500 (thrown, not a domain error) if DB state drifted —
+				// this isn't a permission problem and OutcomeForbidden would lie.
 				if (witnesses.length === 0) {
-					return WagerError.OutcomeForbidden();
+					throw new Error(
+						`Wager ${wagerId} has no witnesses — DB state is inconsistent.`,
+					);
 				}
 
 				const committerId = wagerRow.committerId;
