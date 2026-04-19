@@ -317,7 +317,7 @@ betchaRoutes.post('/wagers/:slug/cancel', async (c) => {
 // ── Outcome (the committer's verdict) ────────────────────────────────────
 
 /**
- * POST /wagers/:id/outcome
+ * POST /wagers/:slug/outcome
  *
  * Flip the committer's outcome. Any witness OR the committer can call this.
  * The pot-split ledger is reconciled inside the transaction via per-witness
