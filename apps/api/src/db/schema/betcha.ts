@@ -19,59 +19,52 @@ const generateId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
  * adding a value to the exported array updates both TS union + SQL CHECK.
  */
 function inValuesCheck(column: string, values: readonly string[]): SQL {
-	const quoted = values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
-	return sql.raw(`${column} IN (${quoted})`);
+	return sql`${sql.identifier(column)} IN (${sql.join(
+		values.map((v) => sql`${v}`),
+		sql`, `,
+	)})`;
 }
 
-/** Stored lifecycle for challenge.status — acceptance/activation state. */
-export const challengeStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
-export type ChallengeStatus = (typeof challengeStatuses)[number];
+/** Acceptance lifecycle — whether the wager is active and counting. */
+export const wagerStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
+export type WagerStatus = (typeof wagerStatuses)[number];
 
-/** The committer's personal outcome. Only one outcome per challenge. */
-export const challengeOutcomes = ['pending', 'done', 'missed'] as const;
-export type ChallengeOutcome = (typeof challengeOutcomes)[number];
-
-/** Ledger row discriminator. Sign of amount carries direction. */
-export const ledgerEntryTypes = ['challenge_outcome', 'payment'] as const;
-export type LedgerEntryType = (typeof ledgerEntryTypes)[number];
+/** Committer's verdict on themselves — flippable by committer or any accepted witness. */
+export const wagerOutcomes = ['pending', 'done', 'missed'] as const;
+export type WagerOutcome = (typeof wagerOutcomes)[number];
 
 /**
- * A unidirectional wager.
+ * A unidirectional accountability wager.
  *
- * `createdBy` is the committer — the ONLY stakeholder. They put up `amount`.
- * Participants (see `participant` table) are witnesses, not stakeholders.
- *
- * Committer wins (outcome='done') → keeps their stake. No transfers.
- * Committer loses (outcome='missed') → `amount` splits evenly among witnesses.
- * Committer unresolved (outcome='pending') → no transfers.
+ * The committer stakes `amount` on themselves doing a thing. Witnesses (see
+ * `witness` table) stake nothing — they observe, judge, and collect a share
+ * of the stake if the committer misses.
  *
  * Two orthogonal state machines:
- *   status:   draft → sent → live → cancelled         (acceptance lifecycle)
- *   outcome:  pending → {done | missed}  (flippable)  (committer's verdict)
+ *   status:   draft → sent → live → cancelled           (acceptance lifecycle)
+ *   outcome:  pending → {done | missed}   (flippable)   (committer's verdict)
  *
- * Anyone in the challenge (committer or any accepted witness) can flip the
- * outcome at any time. Every flip writes compensating ledger entries.
+ * `outcomeActorId` records the *most recent* flipper; per-flip attribution
+ * lives on each ledger row's `actorUserId`.
  */
-export const challenge = pgTable(
-	'challenge',
+export const wager = pgTable(
+	'wager',
 	{
 		id: text('id').primaryKey().$defaultFn(generateId),
+		committerId: text('committer_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
 		title: text('title').notNull(),
 		description: text('description'),
 		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
 		currency: text('currency').notNull().default('USD'),
 		deadline: timestamp('deadline', { withTimezone: true }).notNull(),
-		status: text('status', { enum: challengeStatuses })
-			.notNull()
-			.default('draft'),
-		outcome: text('outcome', { enum: challengeOutcomes })
+		status: text('status', { enum: wagerStatuses }).notNull().default('draft'),
+		outcome: text('outcome', { enum: wagerOutcomes })
 			.notNull()
 			.default('pending'),
 		outcomeAt: timestamp('outcome_at', { withTimezone: true }),
 		outcomeActorId: text('outcome_actor_id').references(() => user.id, {
-			onDelete: 'set null',
-		}),
-		createdBy: text('created_by').references(() => user.id, {
 			onDelete: 'set null',
 		}),
 		createdAt: timestamp('created_at', { withTimezone: true })
@@ -83,46 +76,27 @@ export const challenge = pgTable(
 			.notNull(),
 	},
 	(t) => [
-		check('challenge_amount_positive', sql`amount > 0`),
-		check(
-			'challenge_status_valid',
-			inValuesCheck('status', challengeStatuses),
-		),
-		check(
-			'challenge_outcome_valid',
-			inValuesCheck('outcome', challengeOutcomes),
-		),
-		index('challenge_created_by_idx').on(t.createdBy),
-		index('challenge_status_idx').on(t.status),
-		index('challenge_outcome_idx').on(t.outcome),
-		index('challenge_deadline_idx').on(t.deadline),
+		check('wager_amount_positive', sql`amount > 0`),
+		check('wager_status_valid', inValuesCheck('status', wagerStatuses)),
+		check('wager_outcome_valid', inValuesCheck('outcome', wagerOutcomes)),
+		index('wager_committer_idx').on(t.committerId),
 	],
 );
 
 /**
- * A witness row — a user invited to observe and judge a challenge.
+ * A user invited to observe and judge a wager.
  *
- * Witnesses do NOT stake money. They're the counterparty who receives a share
- * of the committer's stake if the committer loses, and who can flip the
- * outcome status.
- *
- * Acceptance:
- *   - `acceptedAt = null` → invited, not yet accepted
- *   - `acceptedAt != null` → accepted; counts toward pot-split
- *
- * A challenge can be activated only when at least one witness has accepted.
- * Unaccepted witnesses are excluded from the pot-split math.
- *
- * `invitedBy` records who pulled this user in. Typically the committer, but
- * could be another witness in group flows where witnesses invite more.
+ * Witnesses stake nothing. Only accepted witnesses (`acceptedAt IS NOT NULL`)
+ * count toward the pot-split and can flip the outcome. Ordered by `joinedAt`
+ * for deterministic rounding-remainder assignment.
  */
-export const participant = pgTable(
-	'participant',
+export const witness = pgTable(
+	'witness',
 	{
 		id: text('id').primaryKey().$defaultFn(generateId),
-		challengeId: text('challenge_id')
+		wagerId: text('wager_id')
 			.notNull()
-			.references(() => challenge.id, { onDelete: 'cascade' }),
+			.references(() => wager.id, { onDelete: 'cascade' }),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
@@ -139,54 +113,56 @@ export const participant = pgTable(
 			.notNull(),
 	},
 	(t) => [
-		// UNIQUE(challenge_id, user_id) — also serves as the prefix index for
-		// lookups by challenge_id alone, so no separate challenge_id index.
-		unique().on(t.challengeId, t.userId),
-		index('participant_user_id_idx').on(t.userId),
-		index('participant_invited_by_idx').on(t.invitedBy),
+		// UNIQUE(wager_id, user_id) — also the prefix index for lookups by
+		// wager_id alone, so no separate wager_id index.
+		unique().on(t.wagerId, t.userId),
+		index('witness_user_idx').on(t.userId),
 	],
 );
 
 /**
- * Append-only ledger of balance changes between users.
+ * Append-only ledger of balance changes between two users.
  *
- * Outcome-driven entries always flow committer → witness. Payments can flow
- * any direction between users. Running balance = SUM(amount) grouped by
- * (fromUserId, toUserId) pair.
+ * Row kind is derived from `wagerId`:
+ *   - `wagerId IS NOT NULL` → wager outcome delta (committer → witness)
+ *   - `wagerId IS NULL`     → manual payment (any direction)
  *
- * Positive amount = fromUser owes toUser.
- * Reversal of a prior outcome entry = same (from, to) pair with negative amount.
- * Payments (Venmo, PayPal, cash) use negative amounts to reduce balance.
+ * Running balance between any pair = SUM(amount) grouped by (from_user_id, to_user_id).
+ * Positive amount = fromUser owes toUser. Reversals and payments use negative amounts.
+ *
+ * Immutability: never UPDATE or DELETE — always emit a new compensating row.
+ * FK policies enforce this: `fromUserId`/`toUserId` are `restrict` so a user
+ * with any ledger history can't be hard-deleted without first settling (which
+ * writes compensating rows). `wagerId` is `set null` only for the theoretical
+ * case of wager deletion; in practice wagers are never deleted.
  */
 export const ledger = pgTable(
 	'ledger',
 	{
 		id: text('id').primaryKey().$defaultFn(generateId),
-		challengeId: text('challenge_id').references(() => challenge.id, {
+		wagerId: text('wager_id').references(() => wager.id, {
 			onDelete: 'set null',
 		}),
-		fromUserId: text('from_user_id').references(() => user.id, {
-			onDelete: 'set null',
-		}),
-		toUserId: text('to_user_id').references(() => user.id, {
-			onDelete: 'set null',
-		}),
+		fromUserId: text('from_user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'restrict' }),
+		toUserId: text('to_user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'restrict' }),
 		actorUserId: text('actor_user_id').references(() => user.id, {
 			onDelete: 'set null',
 		}),
 		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
 		currency: text('currency').notNull(),
-		type: text('type', { enum: ledgerEntryTypes }).notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
 	},
 	(t) => [
 		check('ledger_no_self_transfer', sql`from_user_id <> to_user_id`),
-		check('ledger_type_valid', inValuesCheck('type', ledgerEntryTypes)),
-		index('ledger_from_user_id_idx').on(t.fromUserId),
-		index('ledger_to_user_id_idx').on(t.toUserId),
-		index('ledger_challenge_id_idx').on(t.challengeId),
+		index('ledger_from_user_idx').on(t.fromUserId),
+		index('ledger_to_user_idx').on(t.toUserId),
+		index('ledger_wager_idx').on(t.wagerId),
 	],
 );
 
@@ -194,42 +170,42 @@ export const ledger = pgTable(
 // `relationName` is only needed when 2+ relations connect the same pair of
 // tables. Single-FK relations are left unnamed.
 
-export const challengeRelations = relations(challenge, ({ one, many }) => ({
-	creator: one(user, {
-		fields: [challenge.createdBy],
+export const wagerRelations = relations(wager, ({ one, many }) => ({
+	committer: one(user, {
+		fields: [wager.committerId],
 		references: [user.id],
-		relationName: 'challenge_creator',
+		relationName: 'wager_committer',
 	}),
 	outcomeActor: one(user, {
-		fields: [challenge.outcomeActorId],
+		fields: [wager.outcomeActorId],
 		references: [user.id],
-		relationName: 'challenge_outcome_actor',
+		relationName: 'wager_outcome_actor',
 	}),
-	witnesses: many(participant),
+	witnesses: many(witness),
 	ledgerEntries: many(ledger),
 }));
 
-export const participantRelations = relations(participant, ({ one }) => ({
-	challenge: one(challenge, {
-		fields: [participant.challengeId],
-		references: [challenge.id],
+export const witnessRelations = relations(witness, ({ one }) => ({
+	wager: one(wager, {
+		fields: [witness.wagerId],
+		references: [wager.id],
 	}),
 	user: one(user, {
-		fields: [participant.userId],
+		fields: [witness.userId],
 		references: [user.id],
-		relationName: 'participant_user',
+		relationName: 'witness_user',
 	}),
 	inviter: one(user, {
-		fields: [participant.invitedBy],
+		fields: [witness.invitedBy],
 		references: [user.id],
-		relationName: 'participant_inviter',
+		relationName: 'witness_inviter',
 	}),
 }));
 
 export const ledgerRelations = relations(ledger, ({ one }) => ({
-	challenge: one(challenge, {
-		fields: [ledger.challengeId],
-		references: [challenge.id],
+	wager: one(wager, {
+		fields: [ledger.wagerId],
+		references: [wager.id],
 	}),
 	from: one(user, {
 		fields: [ledger.fromUserId],

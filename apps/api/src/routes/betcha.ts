@@ -1,15 +1,15 @@
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
-import { and, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Env } from '../app';
-import { challenge, ledger, participant, user } from '../db';
+import { ledger, user, wager, witness } from '../db';
 
 const betchaRoutes = new Hono<Env>();
 
 // ── Validation schemas ───────────────────────────────────────────────────
 
-const createChallengeSchema = type({
+const createWagerSchema = type({
 	title: 'string > 0',
 	'description?': 'string',
 	amount: 'string.numeric',
@@ -30,55 +30,41 @@ const paymentSchema = type({
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/**
- * Convert a positive amount string to a negative 2-decimal string.
- *
- * Robust against `+5`, whitespace, scientific notation, and invalid input
- * that arktype's `string.numeric` might let through.
- */
-function toNegativeAmount(value: string): string {
-	const parsed = Number(value);
-	if (!Number.isFinite(parsed) || parsed <= 0) {
-		throw new Error(`Expected positive numeric amount, got: ${value}`);
-	}
-	return (-parsed).toFixed(2);
-}
-
-async function getChallengeWitnesses(
+async function getWagerWitnesses(
 	db: Env['Variables']['db'],
-	challengeId: string,
+	wagerId: string,
 ) {
 	return db
 		.select({
-			id: participant.id,
-			challengeId: participant.challengeId,
-			userId: participant.userId,
-			invitedBy: participant.invitedBy,
-			acceptedAt: participant.acceptedAt,
-			joinedAt: participant.joinedAt,
+			id: witness.id,
+			wagerId: witness.wagerId,
+			userId: witness.userId,
+			invitedBy: witness.invitedBy,
+			acceptedAt: witness.acceptedAt,
+			joinedAt: witness.joinedAt,
 			user: {
 				id: user.id,
 				name: user.name,
 				image: user.image,
 			},
 		})
-		.from(participant)
-		.innerJoin(user, eq(participant.userId, user.id))
-		.where(eq(participant.challengeId, challengeId))
-		.orderBy(participant.joinedAt);
+		.from(witness)
+		.innerJoin(user, eq(witness.userId, user.id))
+		.where(eq(witness.wagerId, wagerId))
+		.orderBy(witness.joinedAt);
 }
 
-// ── Challenge CRUD ───────────────────────────────────────────────────────
+// ── Wager CRUD ───────────────────────────────────────────────────────────
 
 /**
- * POST /challenges
+ * POST /wagers
  *
- * Create a draft challenge. The authenticated user is the committer. Invited
- * witnesses are added as participant rows (unaccepted).
+ * Create a draft wager. The authenticated user is the committer. Invited
+ * witnesses are added as witness rows (unaccepted).
  */
 betchaRoutes.post(
-	'/challenges',
-	sValidator('json', createChallengeSchema),
+	'/wagers',
+	sValidator('json', createWagerSchema),
 	async (c) => {
 		const data = c.req.valid('json');
 		const db = c.var.db;
@@ -104,226 +90,221 @@ betchaRoutes.post(
 			);
 		}
 
-		const [createdChallenge] = await db
-			.insert(challenge)
+		const [createdWager] = await db
+			.insert(wager)
 			.values({
 				title: data.title,
-				description: data.description ?? null,
+				description: data.description,
 				amount: data.amount,
 				currency: data.currency ?? 'USD',
 				deadline,
 				status: 'draft',
-				createdBy: userId,
+				committerId: userId,
 			})
 			.returning();
 
-		if (!createdChallenge) {
-			return c.json({ message: 'Could not create the challenge.' }, 500);
+		if (!createdWager) {
+			return c.json({ message: 'Could not create the wager.' }, 500);
 		}
 
-		await db.insert(participant).values(
+		await db.insert(witness).values(
 			witnessUserIds.map((witnessUserId) => ({
-				challengeId: createdChallenge.id,
+				wagerId: createdWager.id,
 				userId: witnessUserId,
 				invitedBy: userId,
 			})),
 		);
 
-		const witnesses = await getChallengeWitnesses(db, createdChallenge.id);
+		const witnesses = await getWagerWitnesses(db, createdWager.id);
 
-		return c.json({ ...createdChallenge, witnesses }, 201);
+		return c.json({ ...createdWager, witnesses }, 201);
 	},
 );
 
 /**
- * GET /challenges
+ * GET /wagers
  *
- * List every challenge the current user is part of (as committer or witness),
+ * List every wager the current user is part of (as committer or witness),
  * newest first.
  */
-betchaRoutes.get('/challenges', async (c) => {
+betchaRoutes.get('/wagers', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 
 	const asWitnessRows = await db
-		.select({ challengeId: participant.challengeId })
-		.from(participant)
-		.where(eq(participant.userId, userId));
+		.select({ wagerId: witness.wagerId })
+		.from(witness)
+		.where(eq(witness.userId, userId));
 
 	const asCommitterRows = await db
-		.select({ id: challenge.id })
-		.from(challenge)
-		.where(eq(challenge.createdBy, userId));
+		.select({ id: wager.id })
+		.from(wager)
+		.where(eq(wager.committerId, userId));
 
-	const challengeIds = [
+	const wagerIds = [
 		...new Set([
-			...asWitnessRows.map((row) => row.challengeId),
+			...asWitnessRows.map((row) => row.wagerId),
 			...asCommitterRows.map((row) => row.id),
 		]),
 	];
 
-	if (challengeIds.length === 0) {
+	if (wagerIds.length === 0) {
 		return c.json([]);
 	}
 
-	const challengeRows = await db
+	const wagerRows = await db
 		.select()
-		.from(challenge)
-		.where(inArray(challenge.id, challengeIds))
-		.orderBy(desc(challenge.createdAt));
+		.from(wager)
+		.where(inArray(wager.id, wagerIds))
+		.orderBy(desc(wager.createdAt));
 
 	const witnessRows = await db
 		.select({
-			id: participant.id,
-			challengeId: participant.challengeId,
-			userId: participant.userId,
-			invitedBy: participant.invitedBy,
-			acceptedAt: participant.acceptedAt,
-			joinedAt: participant.joinedAt,
+			id: witness.id,
+			wagerId: witness.wagerId,
+			userId: witness.userId,
+			invitedBy: witness.invitedBy,
+			acceptedAt: witness.acceptedAt,
+			joinedAt: witness.joinedAt,
 			user: {
 				id: user.id,
 				name: user.name,
 				image: user.image,
 			},
 		})
-		.from(participant)
-		.innerJoin(user, eq(participant.userId, user.id))
-		.where(inArray(participant.challengeId, challengeIds))
-		.orderBy(participant.joinedAt);
+		.from(witness)
+		.innerJoin(user, eq(witness.userId, user.id))
+		.where(inArray(witness.wagerId, wagerIds))
+		.orderBy(witness.joinedAt);
 
-	const witnessesByChallenge = new Map<string, typeof witnessRows>();
+	const witnessesByWager = new Map<string, typeof witnessRows>();
 	for (const row of witnessRows) {
-		const existing = witnessesByChallenge.get(row.challengeId) ?? [];
+		const existing = witnessesByWager.get(row.wagerId) ?? [];
 		existing.push(row);
-		witnessesByChallenge.set(row.challengeId, existing);
+		witnessesByWager.set(row.wagerId, existing);
 	}
 
 	return c.json(
-		challengeRows.map((challengeRow) => ({
-			...challengeRow,
-			witnesses: witnessesByChallenge.get(challengeRow.id) ?? [],
+		wagerRows.map((wagerRow) => ({
+			...wagerRow,
+			witnesses: witnessesByWager.get(wagerRow.id) ?? [],
 		})),
 	);
 });
 
 /**
- * GET /challenges/:id
+ * GET /wagers/:id
  *
- * Get one challenge with its witnesses and ledger history.
+ * Get one wager with its witnesses and ledger history.
  * Caller must be the committer or a witness.
  */
-betchaRoutes.get('/challenges/:id', async (c) => {
+betchaRoutes.get('/wagers/:id', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeId = c.req.param('id');
+	const wagerId = c.req.param('id');
 
-	const [challengeRow] = await db
+	const [wagerRow] = await db
 		.select()
-		.from(challenge)
-		.where(eq(challenge.id, challengeId))
+		.from(wager)
+		.where(eq(wager.id, wagerId))
 		.limit(1);
 
-	if (!challengeRow) {
-		return c.json({ message: 'Challenge not found.' }, 404);
+	if (!wagerRow) {
+		return c.json({ message: 'Wager not found.' }, 404);
 	}
 
-	if (challengeRow.createdBy !== userId) {
+	if (wagerRow.committerId !== userId) {
 		const [witnessRow] = await db
-			.select({ id: participant.id })
-			.from(participant)
+			.select({ id: witness.id })
+			.from(witness)
 			.where(
-				and(
-					eq(participant.challengeId, challengeId),
-					eq(participant.userId, userId),
-				),
+				and(eq(witness.wagerId, wagerId), eq(witness.userId, userId)),
 			)
 			.limit(1);
 
 		if (!witnessRow) {
-			return c.json({ message: 'Challenge not found.' }, 404);
+			return c.json({ message: 'Wager not found.' }, 404);
 		}
 	}
 
-	const witnesses = await getChallengeWitnesses(db, challengeId);
+	const witnesses = await getWagerWitnesses(db, wagerId);
 
 	const ledgerHistory = await db
 		.select()
 		.from(ledger)
-		.where(eq(ledger.challengeId, challengeId))
+		.where(eq(ledger.wagerId, wagerId))
 		.orderBy(desc(ledger.createdAt));
 
 	return c.json({
-		...challengeRow,
+		...wagerRow,
 		witnesses,
 		ledgerHistory,
 	});
 });
 
-// ── Challenge lifecycle ──────────────────────────────────────────────────
+// ── Wager lifecycle ──────────────────────────────────────────────────────
 
 /**
- * POST /challenges/:id/submit
+ * POST /wagers/:id/submit
  *
- * Move a challenge from draft to sent (awaiting acceptance).
+ * Move a wager from draft to sent (awaiting acceptance).
  */
-betchaRoutes.post('/challenges/:id/submit', async (c) => {
+betchaRoutes.post('/wagers/:id/submit', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeId = c.req.param('id');
+	const wagerId = c.req.param('id');
 
-	const [challengeRow] = await db
+	const [wagerRow] = await db
 		.select()
-		.from(challenge)
-		.where(eq(challenge.id, challengeId))
+		.from(wager)
+		.where(eq(wager.id, wagerId))
 		.limit(1);
 
-	if (!challengeRow) {
-		return c.json({ message: 'Challenge not found.' }, 404);
+	if (!wagerRow) {
+		return c.json({ message: 'Wager not found.' }, 404);
 	}
 
-	if (challengeRow.createdBy !== userId) {
+	if (wagerRow.committerId !== userId) {
 		return c.json(
-			{ message: 'Only the committer can submit this challenge.' },
+			{ message: 'Only the committer can submit this wager.' },
 			403,
 		);
 	}
 
-	if (challengeRow.status !== 'draft') {
-		return c.json({ message: 'Only draft challenges can be submitted.' }, 400);
+	if (wagerRow.status !== 'draft') {
+		return c.json({ message: 'Only draft wagers can be submitted.' }, 400);
 	}
 
-	const [updatedChallenge] = await db
-		.update(challenge)
+	const [updatedWager] = await db
+		.update(wager)
 		.set({ status: 'sent' })
-		.where(eq(challenge.id, challengeId))
+		.where(eq(wager.id, wagerId))
 		.returning();
 
-	return c.json(updatedChallenge);
+	return c.json(updatedWager);
 });
 
 /**
- * POST /challenges/:id/accept
+ * POST /wagers/:id/accept
  *
  * Witness accepts the invitation. Idempotent.
  */
-betchaRoutes.post('/challenges/:id/accept', async (c) => {
+betchaRoutes.post('/wagers/:id/accept', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeId = c.req.param('id');
+	const wagerId = c.req.param('id');
 
 	const [witnessRow] = await db
 		.select()
-		.from(participant)
-		.where(
-			and(
-				eq(participant.challengeId, challengeId),
-				eq(participant.userId, userId),
-			),
-		)
+		.from(witness)
+		.where(and(eq(witness.wagerId, wagerId), eq(witness.userId, userId)))
 		.limit(1);
 
 	if (!witnessRow) {
-		return c.json({ message: 'You are not a witness on this challenge.' }, 404);
+		return c.json(
+			{ message: 'You are not a witness on this wager.' },
+			404,
+		);
 	}
 
 	if (witnessRow.acceptedAt) {
@@ -331,54 +312,51 @@ betchaRoutes.post('/challenges/:id/accept', async (c) => {
 	}
 
 	const [updatedWitness] = await db
-		.update(participant)
+		.update(witness)
 		.set({ acceptedAt: new Date() })
-		.where(eq(participant.id, witnessRow.id))
+		.where(eq(witness.id, witnessRow.id))
 		.returning();
 
 	return c.json(updatedWitness);
 });
 
 /**
- * POST /challenges/:id/activate
+ * POST /wagers/:id/activate
  *
- * Move a challenge from sent to live. Requires at least one accepted witness.
+ * Move a wager from sent to live. Requires at least one accepted witness.
  */
-betchaRoutes.post('/challenges/:id/activate', async (c) => {
+betchaRoutes.post('/wagers/:id/activate', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeId = c.req.param('id');
+	const wagerId = c.req.param('id');
 
-	const [challengeRow] = await db
+	const [wagerRow] = await db
 		.select()
-		.from(challenge)
-		.where(eq(challenge.id, challengeId))
+		.from(wager)
+		.where(eq(wager.id, wagerId))
 		.limit(1);
 
-	if (!challengeRow) {
-		return c.json({ message: 'Challenge not found.' }, 404);
+	if (!wagerRow) {
+		return c.json({ message: 'Wager not found.' }, 404);
 	}
 
-	if (challengeRow.createdBy !== userId) {
+	if (wagerRow.committerId !== userId) {
 		return c.json(
-			{ message: 'Only the committer can activate this challenge.' },
+			{ message: 'Only the committer can activate this wager.' },
 			403,
 		);
 	}
 
-	if (challengeRow.status !== 'sent') {
-		return c.json(
-			{ message: 'Only sent challenges can be activated.' },
-			400,
-		);
+	if (wagerRow.status !== 'sent') {
+		return c.json({ message: 'Only sent wagers can be activated.' }, 400);
 	}
 
 	const [counts] = await db
 		.select({
-			accepted: sql<number>`count(*) filter (where ${participant.acceptedAt} is not null)::int`,
+			accepted: sql<number>`count(*) filter (where ${witness.acceptedAt} is not null)::int`,
 		})
-		.from(participant)
-		.where(eq(participant.challengeId, challengeId));
+		.from(witness)
+		.where(eq(witness.wagerId, wagerId));
 
 	if (!counts || counts.accepted === 0) {
 		return c.json(
@@ -387,111 +365,109 @@ betchaRoutes.post('/challenges/:id/activate', async (c) => {
 		);
 	}
 
-	const [updatedChallenge] = await db
-		.update(challenge)
+	const [updatedWager] = await db
+		.update(wager)
 		.set({ status: 'live' })
-		.where(eq(challenge.id, challengeId))
+		.where(eq(wager.id, wagerId))
 		.returning();
 
-	return c.json(updatedChallenge);
+	return c.json(updatedWager);
 });
 
 /**
- * POST /challenges/:id/cancel
+ * POST /wagers/:id/cancel
  *
- * Cancel a draft or sent challenge (committer only, no live challenges).
+ * Cancel a draft or sent wager (committer only, no live wagers).
  */
-betchaRoutes.post('/challenges/:id/cancel', async (c) => {
+betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeId = c.req.param('id');
+	const wagerId = c.req.param('id');
 
-	const [challengeRow] = await db
+	const [wagerRow] = await db
 		.select()
-		.from(challenge)
-		.where(eq(challenge.id, challengeId))
+		.from(wager)
+		.where(eq(wager.id, wagerId))
 		.limit(1);
 
-	if (!challengeRow) {
-		return c.json({ message: 'Challenge not found.' }, 404);
+	if (!wagerRow) {
+		return c.json({ message: 'Wager not found.' }, 404);
 	}
 
-	if (challengeRow.createdBy !== userId) {
+	if (wagerRow.committerId !== userId) {
 		return c.json(
-			{ message: 'Only the committer can cancel this challenge.' },
+			{ message: 'Only the committer can cancel this wager.' },
 			403,
 		);
 	}
 
-	if (challengeRow.status !== 'draft' && challengeRow.status !== 'sent') {
+	if (wagerRow.status !== 'draft' && wagerRow.status !== 'sent') {
 		return c.json(
-			{ message: 'Only draft or sent challenges can be cancelled.' },
+			{ message: 'Only draft or sent wagers can be cancelled.' },
 			400,
 		);
 	}
 
-	const [updatedChallenge] = await db
-		.update(challenge)
+	const [updatedWager] = await db
+		.update(wager)
 		.set({ status: 'cancelled' })
-		.where(eq(challenge.id, challengeId))
+		.where(eq(wager.id, wagerId))
 		.returning();
 
-	return c.json(updatedChallenge);
+	return c.json(updatedWager);
 });
 
 // ── Outcome (the committer's verdict) ────────────────────────────────────
 
 /**
- * POST /challenges/:id/outcome
+ * POST /wagers/:id/outcome
  *
  * Flip the committer's outcome. Any accepted witness OR the committer can
  * call this. The pot-split ledger is reconciled inside the transaction via
  * per-witness deltas, so the operation is idempotent and append-only.
  *
- * Algorithm (inside tx, with FOR UPDATE on the challenge row):
- *   1. Lock challenge. If outcome already matches, return (no-op).
+ * Algorithm (inside tx, with FOR UPDATE on the wager row):
+ *   1. Lock wager. If outcome already matches, return (no-op).
  *   2. Load accepted witnesses, ordered by joinedAt.
  *   3. Compute per-witness expected cents under new outcome:
  *        missed → floor(amount_cents / N); first `remainder` witnesses get +1
  *        done / pending → 0
- *   4. For each witness:
- *        current = SUM(ledger.amount) for (committer → witness, this challenge,
- *                                          type='challenge_outcome')
- *        delta = expected - current
- *        if delta != 0: insert ledger row with amount = delta
- *   5. Update challenge.outcome, outcomeAt, outcomeActorId.
+ *   4. Single grouped query: current cents per witness from prior ledger rows
+ *      (committer → *, this wager). Loop witnesses in memory; insert a delta
+ *      row where expected - current != 0.
+ *   5. Update wager.outcome, outcomeAt, outcomeActorId.
  */
 betchaRoutes.post(
-	'/challenges/:id/outcome',
+	'/wagers/:id/outcome',
 	sValidator('json', outcomeSchema),
 	async (c) => {
 		const db = c.var.db;
 		const actorUserId = c.var.user.id;
-		const challengeId = c.req.param('id');
+		const wagerId = c.req.param('id');
 		const data = c.req.valid('json');
 
 		const result = await db.transaction(async (tx) => {
-			const [challengeRow] = await tx
+			const [wagerRow] = await tx
 				.select()
-				.from(challenge)
-				.where(eq(challenge.id, challengeId))
+				.from(wager)
+				.where(eq(wager.id, wagerId))
 				.for('update')
 				.limit(1);
 
-			if (!challengeRow) {
+			if (!wagerRow) {
 				return { error: 'not_found' as const };
 			}
 
-			const isCommitter = challengeRow.createdBy === actorUserId;
+			const isCommitter = wagerRow.committerId === actorUserId;
 
 			if (!isCommitter) {
 				const [witnessRow] = await tx
-					.select({ acceptedAt: participant.acceptedAt })
-					.from(participant)
+					.select({ acceptedAt: witness.acceptedAt })
+					.from(witness)
 					.where(
 						and(
-							eq(participant.challengeId, challengeId),
-							eq(participant.userId, actorUserId),
+							eq(witness.wagerId, wagerId),
+							eq(witness.userId, actorUserId),
 						),
 					)
 					.limit(1);
@@ -501,63 +477,68 @@ betchaRoutes.post(
 				}
 			}
 
-			if (challengeRow.status !== 'live') {
+			if (wagerRow.status !== 'live') {
 				return { error: 'not_live' as const };
 			}
 
-			if (!challengeRow.createdBy) {
-				return { error: 'committer_missing' as const };
-			}
-
-			if (challengeRow.outcome === data.outcome) {
-				return { ok: { challenge: challengeRow, entries: [] } };
+			if (wagerRow.outcome === data.outcome) {
+				return { ok: { wager: wagerRow, entries: [] } };
 			}
 
 			const witnesses = await tx
 				.select({
-					id: participant.id,
-					userId: participant.userId,
+					id: witness.id,
+					userId: witness.userId,
 				})
-				.from(participant)
+				.from(witness)
 				.where(
 					and(
-						eq(participant.challengeId, challengeId),
-						isNotNull(participant.acceptedAt),
+						eq(witness.wagerId, wagerId),
+						isNotNull(witness.acceptedAt),
 					),
 				)
-				.orderBy(participant.joinedAt);
+				.orderBy(witness.joinedAt);
 
 			if (witnesses.length === 0) {
 				return { error: 'no_witnesses' as const };
 			}
 
-			const committerId = challengeRow.createdBy;
-			const amountCents = Math.round(Number(challengeRow.amount) * 100);
+			const committerId = wagerRow.committerId;
+			const amountCents = Math.round(Number(wagerRow.amount) * 100);
 			const baseCents = Math.floor(amountCents / witnesses.length);
 			const remainderCents = amountCents - baseCents * witnesses.length;
+
+			// One grouped query for all prior (committer → witness) sums on this
+			// wager. `::bigint` returns as string from pg; parse in TS to avoid
+			// int4 overflow at 2^31 cents (~$21M aggregated).
+			const priorSumRows = await tx
+				.select({
+					toUserId: ledger.toUserId,
+					totalCents: sql<string>`coalesce(sum(${ledger.amount} * 100), 0)::bigint`,
+				})
+				.from(ledger)
+				.where(
+					and(
+						eq(ledger.wagerId, wagerId),
+						eq(ledger.fromUserId, committerId),
+					),
+				)
+				.groupBy(ledger.toUserId);
+
+			const currentCentsByUser = new Map<string, number>();
+			for (const row of priorSumRows) {
+				currentCentsByUser.set(row.toUserId, Number(row.totalCents));
+			}
 
 			const entries: (typeof ledger.$inferSelect)[] = [];
 
 			for (let i = 0; i < witnesses.length; i += 1) {
-				const witness = witnesses[i]!;
+				const w = witnesses[i]!;
 				const expectedCents =
-					data.outcome === 'missed' ? baseCents + (i < remainderCents ? 1 : 0) : 0;
-
-				const [currentRow] = await tx
-					.select({
-						totalCents: sql<number>`coalesce(sum(${ledger.amount} * 100), 0)::int`,
-					})
-					.from(ledger)
-					.where(
-						and(
-							eq(ledger.challengeId, challengeId),
-							eq(ledger.fromUserId, committerId),
-							eq(ledger.toUserId, witness.userId),
-							eq(ledger.type, 'challenge_outcome'),
-						),
-					);
-
-				const currentCents = currentRow?.totalCents ?? 0;
+					data.outcome === 'missed'
+						? baseCents + (i < remainderCents ? 1 : 0)
+						: 0;
+				const currentCents = currentCentsByUser.get(w.userId) ?? 0;
 				const deltaCents = expectedCents - currentCents;
 
 				if (deltaCents === 0) continue;
@@ -565,49 +546,46 @@ betchaRoutes.post(
 				const [entry] = await tx
 					.insert(ledger)
 					.values({
-						challengeId,
+						wagerId,
 						fromUserId: committerId,
-						toUserId: witness.userId,
+						toUserId: w.userId,
 						actorUserId,
 						amount: (deltaCents / 100).toFixed(2),
-						currency: challengeRow.currency,
-						type: 'challenge_outcome',
+						currency: wagerRow.currency,
 					})
 					.returning();
 
 				if (entry) entries.push(entry);
 			}
 
-			const [updatedChallenge] = await tx
-				.update(challenge)
+			const [updatedWager] = await tx
+				.update(wager)
 				.set({
 					outcome: data.outcome,
 					outcomeAt: new Date(),
 					outcomeActorId: actorUserId,
 				})
-				.where(eq(challenge.id, challengeId))
+				.where(eq(wager.id, wagerId))
 				.returning();
 
-			return { ok: { challenge: updatedChallenge, entries } };
+			return { ok: { wager: updatedWager, entries } };
 		});
 
 		if ('error' in result) {
 			switch (result.error) {
 				case 'not_found':
-					return c.json({ message: 'Challenge not found.' }, 404);
+					return c.json({ message: 'Wager not found.' }, 404);
 				case 'forbidden':
 					return c.json(
-						{ message: 'Only the committer or an accepted witness can flip the outcome.' },
+						{
+							message:
+								'Only the committer or an accepted witness can flip the outcome.',
+						},
 						403,
 					);
 				case 'not_live':
 					return c.json(
-						{ message: 'Only live challenges have an outcome.' },
-						400,
-					);
-				case 'committer_missing':
-					return c.json(
-						{ message: 'This challenge has no committer (account deleted).' },
+						{ message: 'Only live wagers have an outcome.' },
 						400,
 					);
 				case 'no_witnesses':
@@ -629,38 +607,60 @@ betchaRoutes.post(
  *
  * Return current balances for the authenticated user against every
  * counterparty they share a ledger with.
+ *
+ * Queries each direction separately so both can use their single-column index
+ * (`ledger_from_user_idx`, `ledger_to_user_idx`). A combined `OR` filter with
+ * a `CASE` in GROUP BY can't use either index cleanly.
  */
 betchaRoutes.get('/balances', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const otherUserIdSql = sql<string>`case
-		when ${ledger.fromUserId} = ${userId} then ${ledger.toUserId}
-		else ${ledger.fromUserId}
-	end`;
-	const balanceSql = sql<string>`sum(case
-		when ${ledger.toUserId} = ${userId} then ${ledger.amount}
-		else -${ledger.amount}
-	end)::text`;
-	const balanceRows = await db
-		.select({
-			userId: otherUserIdSql,
-			balance: balanceSql,
-		})
-		.from(ledger)
-		.where(or(eq(ledger.fromUserId, userId), eq(ledger.toUserId, userId)))
-		.groupBy(otherUserIdSql);
+
+	const [owedToOthers, owedByOthers] = await Promise.all([
+		// Rows where userId is the payer → counterparty is toUserId, they owe
+		// `amount` to userId (stored sign flips: positive means userId owes them).
+		db
+			.select({
+				counterpartyId: ledger.toUserId,
+				totalCents: sql<string>`coalesce(sum(${ledger.amount} * 100), 0)::bigint`,
+			})
+			.from(ledger)
+			.where(eq(ledger.fromUserId, userId))
+			.groupBy(ledger.toUserId),
+		// Rows where userId is the payee → counterparty is fromUserId.
+		db
+			.select({
+				counterpartyId: ledger.fromUserId,
+				totalCents: sql<string>`coalesce(sum(${ledger.amount} * 100), 0)::bigint`,
+			})
+			.from(ledger)
+			.where(eq(ledger.toUserId, userId))
+			.groupBy(ledger.fromUserId),
+	]);
+
+	// Merge: positive balance means `userId` is owed by counterparty.
+	const centsByCounterparty = new Map<string, number>();
+	for (const row of owedByOthers) {
+		centsByCounterparty.set(row.counterpartyId, Number(row.totalCents));
+	}
+	for (const row of owedToOthers) {
+		const existing = centsByCounterparty.get(row.counterpartyId) ?? 0;
+		centsByCounterparty.set(row.counterpartyId, existing - Number(row.totalCents));
+	}
 
 	return c.json(
-		balanceRows.filter(
-			(row): row is typeof row & { userId: string } => row.userId !== null,
-		),
+		[...centsByCounterparty].map(([counterpartyUserId, cents]) => ({
+			userId: counterpartyUserId,
+			balance: (cents / 100).toFixed(2),
+		})),
 	);
 });
 
 /**
  * POST /payments
  *
- * Record a payment that reduces an existing balance.
+ * Record a payment that reduces an existing balance. Payments have no
+ * associated wager (`wagerId` is null).
  */
 betchaRoutes.post('/payments', sValidator('json', paymentSchema), async (c) => {
 	const data = c.req.valid('json');
@@ -678,13 +678,12 @@ betchaRoutes.post('/payments', sValidator('json', paymentSchema), async (c) => {
 	const [paymentEntry] = await db
 		.insert(ledger)
 		.values({
-			challengeId: null,
+			wagerId: null,
 			fromUserId: userId,
 			toUserId: data.toUserId,
 			actorUserId: userId,
-			amount: toNegativeAmount(data.amount),
+			amount: (-Number(data.amount)).toFixed(2),
 			currency: data.currency,
-			type: 'payment',
 		})
 		.returning();
 

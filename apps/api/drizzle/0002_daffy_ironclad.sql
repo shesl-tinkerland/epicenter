@@ -1,2 +1,0 @@
-ALTER TABLE "ledger" ADD CONSTRAINT "ledger_no_self_transfer" CHECK (from_user_id <> to_user_id);--> statement-breakpoint
-ALTER TABLE "follow" ADD CONSTRAINT "follow_no_self_follow" CHECK (follower_id <> following_id);
