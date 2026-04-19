@@ -1,6 +1,6 @@
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Env } from '../app';
 import { challenge, ledger, participant, user } from '../db';
@@ -15,11 +15,11 @@ const createChallengeSchema = type({
 	amount: 'string.numeric',
 	'currency?': 'string',
 	deadline: 'string',
-	participantUserIds: 'string[] >= 1',
+	witnessUserIds: 'string[] >= 1',
 });
 
-const participantStatusSchema = type({
-	status: "'done' | 'missed'",
+const outcomeSchema = type({
+	outcome: "'done' | 'missed'",
 });
 
 const paymentSchema = type({
@@ -30,11 +30,21 @@ const paymentSchema = type({
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function normalizeNegativeAmount(value: string) {
-	return value.startsWith('-') ? value : `-${value}`;
+/**
+ * Convert a positive amount string to a negative 2-decimal string.
+ *
+ * Robust against `+5`, whitespace, scientific notation, and invalid input
+ * that arktype's `string.numeric` might let through.
+ */
+function toNegativeAmount(value: string): string {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		throw new Error(`Expected positive numeric amount, got: ${value}`);
+	}
+	return (-parsed).toFixed(2);
 }
 
-async function getChallengeParticipants(
+async function getChallengeWitnesses(
 	db: Env['Variables']['db'],
 	challengeId: string,
 ) {
@@ -43,8 +53,8 @@ async function getChallengeParticipants(
 			id: participant.id,
 			challengeId: participant.challengeId,
 			userId: participant.userId,
-			status: participant.status,
-			statusAt: participant.statusAt,
+			invitedBy: participant.invitedBy,
+			acceptedAt: participant.acceptedAt,
 			joinedAt: participant.joinedAt,
 			user: {
 				id: user.id,
@@ -58,32 +68,13 @@ async function getChallengeParticipants(
 		.orderBy(participant.joinedAt);
 }
 
-/**
- * Determine who receives the ledger entry when a participant is marked missed.
- * Prefers the challenge creator; falls back to another participant.
- */
-function getLedgerRecipientUserId(params: {
-	challengeRow: typeof challenge.$inferSelect;
-	participantRows: Array<typeof participant.$inferSelect>;
-	targetUserId: string;
-}) {
-	const { challengeRow, participantRows, targetUserId } = params;
-
-	if (challengeRow.createdBy && challengeRow.createdBy !== targetUserId) {
-		return challengeRow.createdBy;
-	}
-
-	return (
-		participantRows.find((row) => row.userId !== targetUserId)?.userId ?? null
-	);
-}
-
 // ── Challenge CRUD ───────────────────────────────────────────────────────
 
 /**
  * POST /challenges
  *
- * Create a draft challenge and attach the creator plus invited participants.
+ * Create a draft challenge. The authenticated user is the committer. Invited
+ * witnesses are added as participant rows (unaccepted).
  */
 betchaRoutes.post(
 	'/challenges',
@@ -102,9 +93,16 @@ betchaRoutes.post(
 			return c.json({ message: 'Amount must be greater than 0.' }, 400);
 		}
 
-		const invitedUserIds = [...new Set(data.participantUserIds)].filter(
-			(participantUserId) => participantUserId !== userId,
+		const witnessUserIds = [...new Set(data.witnessUserIds)].filter(
+			(witnessUserId) => witnessUserId !== userId,
 		);
+
+		if (witnessUserIds.length === 0) {
+			return c.json(
+				{ message: 'Add at least one witness who is not yourself.' },
+				400,
+			);
+		}
 
 		const [createdChallenge] = await db
 			.insert(challenge)
@@ -123,54 +121,64 @@ betchaRoutes.post(
 			return c.json({ message: 'Could not create the challenge.' }, 500);
 		}
 
-		await db.insert(participant).values([
-			{ challengeId: createdChallenge.id, userId },
-			...invitedUserIds.map((participantUserId) => ({
+		await db.insert(participant).values(
+			witnessUserIds.map((witnessUserId) => ({
 				challengeId: createdChallenge.id,
-				userId: participantUserId,
+				userId: witnessUserId,
+				invitedBy: userId,
 			})),
-		]);
-
-		const participants = await getChallengeParticipants(
-			db,
-			createdChallenge.id,
 		);
 
-		return c.json({ ...createdChallenge, participants }, 201);
+		const witnesses = await getChallengeWitnesses(db, createdChallenge.id);
+
+		return c.json({ ...createdChallenge, witnesses }, 201);
 	},
 );
 
 /**
  * GET /challenges
  *
- * List every challenge the current user participates in, newest first.
+ * List every challenge the current user is part of (as committer or witness),
+ * newest first.
  */
 betchaRoutes.get('/challenges', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
-	const challengeIdRows = await db
+
+	const asWitnessRows = await db
 		.select({ challengeId: participant.challengeId })
 		.from(participant)
 		.where(eq(participant.userId, userId));
 
-	if (challengeIdRows.length === 0) {
+	const asCommitterRows = await db
+		.select({ id: challenge.id })
+		.from(challenge)
+		.where(eq(challenge.createdBy, userId));
+
+	const challengeIds = [
+		...new Set([
+			...asWitnessRows.map((row) => row.challengeId),
+			...asCommitterRows.map((row) => row.id),
+		]),
+	];
+
+	if (challengeIds.length === 0) {
 		return c.json([]);
 	}
 
-	const challengeIds = challengeIdRows.map((row) => row.challengeId);
 	const challengeRows = await db
 		.select()
 		.from(challenge)
 		.where(inArray(challenge.id, challengeIds))
 		.orderBy(desc(challenge.createdAt));
 
-	const participantRows = await db
+	const witnessRows = await db
 		.select({
 			id: participant.id,
 			challengeId: participant.challengeId,
 			userId: participant.userId,
-			status: participant.status,
-			statusAt: participant.statusAt,
+			invitedBy: participant.invitedBy,
+			acceptedAt: participant.acceptedAt,
 			joinedAt: participant.joinedAt,
 			user: {
 				id: user.id,
@@ -183,18 +191,17 @@ betchaRoutes.get('/challenges', async (c) => {
 		.where(inArray(participant.challengeId, challengeIds))
 		.orderBy(participant.joinedAt);
 
-	const participantsByChallenge = new Map<string, typeof participantRows>();
-	for (const participantRow of participantRows) {
-		const existingRows =
-			participantsByChallenge.get(participantRow.challengeId) ?? [];
-		existingRows.push(participantRow);
-		participantsByChallenge.set(participantRow.challengeId, existingRows);
+	const witnessesByChallenge = new Map<string, typeof witnessRows>();
+	for (const row of witnessRows) {
+		const existing = witnessesByChallenge.get(row.challengeId) ?? [];
+		existing.push(row);
+		witnessesByChallenge.set(row.challengeId, existing);
 	}
 
 	return c.json(
 		challengeRows.map((challengeRow) => ({
 			...challengeRow,
-			participants: participantsByChallenge.get(challengeRow.id) ?? [],
+			witnesses: witnessesByChallenge.get(challengeRow.id) ?? [],
 		})),
 	);
 });
@@ -202,26 +209,43 @@ betchaRoutes.get('/challenges', async (c) => {
 /**
  * GET /challenges/:id
  *
- * Get one challenge with its participants and ledger history.
+ * Get one challenge with its witnesses and ledger history.
+ * Caller must be the committer or a witness.
  */
 betchaRoutes.get('/challenges/:id', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const challengeId = c.req.param('id');
+
 	const [challengeRow] = await db
 		.select()
 		.from(challenge)
-		.innerJoin(participant, eq(participant.challengeId, challenge.id))
-		.where(and(eq(challenge.id, challengeId), eq(participant.userId, userId)))
+		.where(eq(challenge.id, challengeId))
 		.limit(1);
 
 	if (!challengeRow) {
 		return c.json({ message: 'Challenge not found.' }, 404);
 	}
 
-	const participants = await getChallengeParticipants(db, challengeId);
+	if (challengeRow.createdBy !== userId) {
+		const [witnessRow] = await db
+			.select({ id: participant.id })
+			.from(participant)
+			.where(
+				and(
+					eq(participant.challengeId, challengeId),
+					eq(participant.userId, userId),
+				),
+			)
+			.limit(1);
 
-	// Inline — single call site, simple query
+		if (!witnessRow) {
+			return c.json({ message: 'Challenge not found.' }, 404);
+		}
+	}
+
+	const witnesses = await getChallengeWitnesses(db, challengeId);
+
 	const ledgerHistory = await db
 		.select()
 		.from(ledger)
@@ -229,8 +253,8 @@ betchaRoutes.get('/challenges/:id', async (c) => {
 		.orderBy(desc(ledger.createdAt));
 
 	return c.json({
-		...challengeRow.challenge,
-		participants,
+		...challengeRow,
+		witnesses,
 		ledgerHistory,
 	});
 });
@@ -240,12 +264,13 @@ betchaRoutes.get('/challenges/:id', async (c) => {
 /**
  * POST /challenges/:id/submit
  *
- * Move a challenge from draft to pending.
+ * Move a challenge from draft to sent (awaiting acceptance).
  */
 betchaRoutes.post('/challenges/:id/submit', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const challengeId = c.req.param('id');
+
 	const [challengeRow] = await db
 		.select()
 		.from(challenge)
@@ -258,7 +283,7 @@ betchaRoutes.post('/challenges/:id/submit', async (c) => {
 
 	if (challengeRow.createdBy !== userId) {
 		return c.json(
-			{ message: 'Only the creator can submit this challenge.' },
+			{ message: 'Only the committer can submit this challenge.' },
 			403,
 		);
 	}
@@ -269,7 +294,7 @@ betchaRoutes.post('/challenges/:id/submit', async (c) => {
 
 	const [updatedChallenge] = await db
 		.update(challenge)
-		.set({ status: 'pending' })
+		.set({ status: 'sent' })
 		.where(eq(challenge.id, challengeId))
 		.returning();
 
@@ -279,13 +304,14 @@ betchaRoutes.post('/challenges/:id/submit', async (c) => {
 /**
  * POST /challenges/:id/accept
  *
- * Placeholder accept route for future invite flows.
+ * Witness accepts the invitation. Idempotent.
  */
 betchaRoutes.post('/challenges/:id/accept', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const challengeId = c.req.param('id');
-	const [participantRow] = await db
+
+	const [witnessRow] = await db
 		.select()
 		.from(participant)
 		.where(
@@ -296,22 +322,33 @@ betchaRoutes.post('/challenges/:id/accept', async (c) => {
 		)
 		.limit(1);
 
-	if (!participantRow) {
-		return c.json({ message: 'You are not part of this challenge.' }, 404);
+	if (!witnessRow) {
+		return c.json({ message: 'You are not a witness on this challenge.' }, 404);
 	}
 
-	return c.json(participantRow);
+	if (witnessRow.acceptedAt) {
+		return c.json(witnessRow);
+	}
+
+	const [updatedWitness] = await db
+		.update(participant)
+		.set({ acceptedAt: new Date() })
+		.where(eq(participant.id, witnessRow.id))
+		.returning();
+
+	return c.json(updatedWitness);
 });
 
 /**
  * POST /challenges/:id/activate
  *
- * Move a challenge from pending to active.
+ * Move a challenge from sent to live. Requires at least one accepted witness.
  */
 betchaRoutes.post('/challenges/:id/activate', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const challengeId = c.req.param('id');
+
 	const [challengeRow] = await db
 		.select()
 		.from(challenge)
@@ -324,33 +361,35 @@ betchaRoutes.post('/challenges/:id/activate', async (c) => {
 
 	if (challengeRow.createdBy !== userId) {
 		return c.json(
-			{ message: 'Only the creator can activate this challenge.' },
+			{ message: 'Only the committer can activate this challenge.' },
 			403,
 		);
 	}
 
-	if (challengeRow.status !== 'pending') {
+	if (challengeRow.status !== 'sent') {
 		return c.json(
-			{ message: 'Only pending challenges can be activated.' },
+			{ message: 'Only sent challenges can be activated.' },
 			400,
 		);
 	}
 
-	const [participantCountRow] = await db
-		.select({ count: sql<number>`count(*)` })
+	const [counts] = await db
+		.select({
+			accepted: sql<number>`count(*) filter (where ${participant.acceptedAt} is not null)::int`,
+		})
 		.from(participant)
 		.where(eq(participant.challengeId, challengeId));
 
-	if (!participantCountRow || participantCountRow.count === 0) {
+	if (!counts || counts.accepted === 0) {
 		return c.json(
-			{ message: 'Add participants before you activate this challenge.' },
+			{ message: 'At least one witness must accept before activation.' },
 			400,
 		);
 	}
 
 	const [updatedChallenge] = await db
 		.update(challenge)
-		.set({ status: 'active' })
+		.set({ status: 'live' })
 		.where(eq(challenge.id, challengeId))
 		.returning();
 
@@ -360,12 +399,13 @@ betchaRoutes.post('/challenges/:id/activate', async (c) => {
 /**
  * POST /challenges/:id/cancel
  *
- * Cancel a draft or pending challenge.
+ * Cancel a draft or sent challenge (committer only, no live challenges).
  */
 betchaRoutes.post('/challenges/:id/cancel', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const challengeId = c.req.param('id');
+
 	const [challengeRow] = await db
 		.select()
 		.from(challenge)
@@ -378,14 +418,14 @@ betchaRoutes.post('/challenges/:id/cancel', async (c) => {
 
 	if (challengeRow.createdBy !== userId) {
 		return c.json(
-			{ message: 'Only the creator can cancel this challenge.' },
+			{ message: 'Only the committer can cancel this challenge.' },
 			403,
 		);
 	}
 
-	if (challengeRow.status !== 'draft' && challengeRow.status !== 'pending') {
+	if (challengeRow.status !== 'draft' && challengeRow.status !== 'sent') {
 		return c.json(
-			{ message: 'Only draft or pending challenges can be cancelled.' },
+			{ message: 'Only draft or sent challenges can be cancelled.' },
 			400,
 		);
 	}
@@ -399,123 +439,186 @@ betchaRoutes.post('/challenges/:id/cancel', async (c) => {
 	return c.json(updatedChallenge);
 });
 
-// ── Participant status ───────────────────────────────────────────────────
+// ── Outcome (the committer's verdict) ────────────────────────────────────
 
 /**
- * POST /challenges/:id/participants/:participantId/status
+ * POST /challenges/:id/outcome
  *
- * Update one participant's status and write the matching ledger record
- * in the same transaction.
+ * Flip the committer's outcome. Any accepted witness OR the committer can
+ * call this. The pot-split ledger is reconciled inside the transaction via
+ * per-witness deltas, so the operation is idempotent and append-only.
+ *
+ * Algorithm (inside tx, with FOR UPDATE on the challenge row):
+ *   1. Lock challenge. If outcome already matches, return (no-op).
+ *   2. Load accepted witnesses, ordered by joinedAt.
+ *   3. Compute per-witness expected cents under new outcome:
+ *        missed → floor(amount_cents / N); first `remainder` witnesses get +1
+ *        done / pending → 0
+ *   4. For each witness:
+ *        current = SUM(ledger.amount) for (committer → witness, this challenge,
+ *                                          type='challenge_outcome')
+ *        delta = expected - current
+ *        if delta != 0: insert ledger row with amount = delta
+ *   5. Update challenge.outcome, outcomeAt, outcomeActorId.
  */
 betchaRoutes.post(
-	'/challenges/:id/participants/:participantId/status',
-	sValidator('json', participantStatusSchema),
+	'/challenges/:id/outcome',
+	sValidator('json', outcomeSchema),
 	async (c) => {
 		const db = c.var.db;
 		const actorUserId = c.var.user.id;
 		const challengeId = c.req.param('id');
-		const participantId = c.req.param('participantId');
 		const data = c.req.valid('json');
 
-		// Validate outside the transaction — reads don't need tx isolation
-		const [challengeRow] = await db
-			.select()
-			.from(challenge)
-			.where(eq(challenge.id, challengeId))
-			.limit(1);
-
-		if (!challengeRow) {
-			return c.json({ message: 'Challenge not found.' }, 404);
-		}
-
-		const [actorParticipantRow] = await db
-			.select()
-			.from(participant)
-			.where(
-				and(
-					eq(participant.challengeId, challengeId),
-					eq(participant.userId, actorUserId),
-				),
-			)
-			.limit(1);
-
-		if (!actorParticipantRow) {
-			return c.json(
-				{ message: 'Only participants can change challenge status.' },
-				403,
-			);
-		}
-
-		const [targetParticipantRow] = await db
-			.select()
-			.from(participant)
-			.where(
-				and(
-					eq(participant.id, participantId),
-					eq(participant.challengeId, challengeId),
-				),
-			)
-			.limit(1);
-
-		if (!targetParticipantRow) {
-			return c.json({ message: 'Participant not found.' }, 404);
-		}
-
-		// No-op if status hasn't changed
-		if (targetParticipantRow.status === data.status) {
-			return c.json({ participant: targetParticipantRow, ledgerEntry: null });
-		}
-
-		// Mutation in transaction — participant update + ledger insert are atomic
 		const result = await db.transaction(async (tx) => {
-			const allParticipantRows = await tx
+			const [challengeRow] = await tx
 				.select()
-				.from(participant)
-				.where(eq(participant.challengeId, challengeId));
+				.from(challenge)
+				.where(eq(challenge.id, challengeId))
+				.for('update')
+				.limit(1);
 
-			const recipientUserId = getLedgerRecipientUserId({
-				challengeRow,
-				participantRows: allParticipantRows,
-				targetUserId: targetParticipantRow.userId,
-			});
+			if (!challengeRow) {
+				return { error: 'not_found' as const };
+			}
 
-			const [updatedParticipant] = await tx
-				.update(participant)
-				.set({ status: data.status, statusAt: new Date() })
-				.where(eq(participant.id, participantId))
-				.returning();
+			const isCommitter = challengeRow.createdBy === actorUserId;
 
-			let ledgerEntry: typeof ledger.$inferSelect | null = null;
+			if (!isCommitter) {
+				const [witnessRow] = await tx
+					.select({ acceptedAt: participant.acceptedAt })
+					.from(participant)
+					.where(
+						and(
+							eq(participant.challengeId, challengeId),
+							eq(participant.userId, actorUserId),
+						),
+					)
+					.limit(1);
 
-			if (recipientUserId && recipientUserId !== targetParticipantRow.userId) {
-				const isMarkingMissed = data.status === 'missed';
-				const isReversingMissed = targetParticipantRow.status === 'missed';
-
-				if (isMarkingMissed || isReversingMissed) {
-					const [entry] = await tx
-						.insert(ledger)
-						.values({
-							challengeId,
-							fromUserId: targetParticipantRow.userId,
-							toUserId: recipientUserId,
-							actorUserId,
-							amount: isMarkingMissed
-								? challengeRow.amount
-								: normalizeNegativeAmount(challengeRow.amount),
-							currency: challengeRow.currency,
-							type: isMarkingMissed
-								? 'participant_status'
-								: 'participant_status_reversal',
-						})
-						.returning();
-					ledgerEntry = entry ?? null;
+				if (!witnessRow || !witnessRow.acceptedAt) {
+					return { error: 'forbidden' as const };
 				}
 			}
 
-			return { participant: updatedParticipant, ledgerEntry };
+			if (challengeRow.status !== 'live') {
+				return { error: 'not_live' as const };
+			}
+
+			if (!challengeRow.createdBy) {
+				return { error: 'committer_missing' as const };
+			}
+
+			if (challengeRow.outcome === data.outcome) {
+				return { ok: { challenge: challengeRow, entries: [] } };
+			}
+
+			const witnesses = await tx
+				.select({
+					id: participant.id,
+					userId: participant.userId,
+				})
+				.from(participant)
+				.where(
+					and(
+						eq(participant.challengeId, challengeId),
+						isNotNull(participant.acceptedAt),
+					),
+				)
+				.orderBy(participant.joinedAt);
+
+			if (witnesses.length === 0) {
+				return { error: 'no_witnesses' as const };
+			}
+
+			const committerId = challengeRow.createdBy;
+			const amountCents = Math.round(Number(challengeRow.amount) * 100);
+			const baseCents = Math.floor(amountCents / witnesses.length);
+			const remainderCents = amountCents - baseCents * witnesses.length;
+
+			const entries: (typeof ledger.$inferSelect)[] = [];
+
+			for (let i = 0; i < witnesses.length; i += 1) {
+				const witness = witnesses[i]!;
+				const expectedCents =
+					data.outcome === 'missed' ? baseCents + (i < remainderCents ? 1 : 0) : 0;
+
+				const [currentRow] = await tx
+					.select({
+						totalCents: sql<number>`coalesce(sum(${ledger.amount} * 100), 0)::int`,
+					})
+					.from(ledger)
+					.where(
+						and(
+							eq(ledger.challengeId, challengeId),
+							eq(ledger.fromUserId, committerId),
+							eq(ledger.toUserId, witness.userId),
+							eq(ledger.type, 'challenge_outcome'),
+						),
+					);
+
+				const currentCents = currentRow?.totalCents ?? 0;
+				const deltaCents = expectedCents - currentCents;
+
+				if (deltaCents === 0) continue;
+
+				const [entry] = await tx
+					.insert(ledger)
+					.values({
+						challengeId,
+						fromUserId: committerId,
+						toUserId: witness.userId,
+						actorUserId,
+						amount: (deltaCents / 100).toFixed(2),
+						currency: challengeRow.currency,
+						type: 'challenge_outcome',
+					})
+					.returning();
+
+				if (entry) entries.push(entry);
+			}
+
+			const [updatedChallenge] = await tx
+				.update(challenge)
+				.set({
+					outcome: data.outcome,
+					outcomeAt: new Date(),
+					outcomeActorId: actorUserId,
+				})
+				.where(eq(challenge.id, challengeId))
+				.returning();
+
+			return { ok: { challenge: updatedChallenge, entries } };
 		});
 
-		return c.json(result);
+		if ('error' in result) {
+			switch (result.error) {
+				case 'not_found':
+					return c.json({ message: 'Challenge not found.' }, 404);
+				case 'forbidden':
+					return c.json(
+						{ message: 'Only the committer or an accepted witness can flip the outcome.' },
+						403,
+					);
+				case 'not_live':
+					return c.json(
+						{ message: 'Only live challenges have an outcome.' },
+						400,
+					);
+				case 'committer_missing':
+					return c.json(
+						{ message: 'This challenge has no committer (account deleted).' },
+						400,
+					);
+				case 'no_witnesses':
+					return c.json(
+						{ message: 'No accepted witnesses to split the pot with.' },
+						400,
+					);
+			}
+		}
+
+		return c.json(result.ok);
 	},
 );
 
@@ -524,7 +627,8 @@ betchaRoutes.post(
 /**
  * GET /balances
  *
- * Return current friend balances for the authenticated user.
+ * Return current balances for the authenticated user against every
+ * counterparty they share a ledger with.
  */
 betchaRoutes.get('/balances', async (c) => {
 	const db = c.var.db;
@@ -578,7 +682,7 @@ betchaRoutes.post('/payments', sValidator('json', paymentSchema), async (c) => {
 			fromUserId: userId,
 			toUserId: data.toUserId,
 			actorUserId: userId,
-			amount: normalizeNegativeAmount(data.amount),
+			amount: toNegativeAmount(data.amount),
 			currency: data.currency,
 			type: 'payment',
 		})
