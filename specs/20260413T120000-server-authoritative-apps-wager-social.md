@@ -1,9 +1,11 @@
 # Server-Authoritative Apps: Betcha + The Ark
 
 **Date**: 2026-04-13
-**Last Updated**: 2026-04-19 (Betcha schema redesign: wager/witness model)
-**Status**: Phase 0 + Phase 1 Implemented; Phase 1 schema redesigned 2026-04-19
+**Last Updated**: 2026-04-19 (Betcha lifecycle simplification: create-live, friends-as-witnesses, no acceptance)
+**Status**: Phase 0 + Phase 1 Implemented; Phase 1 schema redesigned 2026-04-19; lifecycle simplified 2026-04-19
 **Author**: AI-assisted (Sisyphus)
+
+> **Readers**: the two "Review" sections at the bottom describe the live implementation. The earlier "Schema Redesign" review (draft → sent → live) is historical — superseded by the later "Lifecycle Simplification" review. When they conflict, the later review wins.
 
 ## Overview
 
@@ -127,7 +129,10 @@ Host in EU from day one. US has no data localization laws for consumer apps—st
 | Data isolation | File-per-domain in `public` schema | All first-party apps, shared domain concepts (follows, notifications), no Drizzle `pgSchema()` bugs, standard `pgTable()` everywhere |
 | Auth tables | All tables in `public` schema | Single schema, file-based organization provides code-level namespacing |
 | Wager model (redesigned 2026-04-19) | Unidirectional commitment: one committer stakes, N witnesses observe | The committer is the ONLY stakeholder. Witnesses stake nothing — they observe, judge, and collect a share of the pot only if the committer misses. Renamed from `challenge`/`participant` because "participant" implied stakeholder. |
-| Outcome model | Editable ledger — no verification ceremony | Any accepted witness OR the committer can flip `outcome` between `done` and `missed` at any time. Every flip writes compensating delta rows to the append-only ledger. History visible through `ledger.actorUserId`. |
+| Wager lifecycle (simplified 2026-04-19) | **Create-live, no acceptance, no activation.** `POST /wagers` produces a live wager instantly. | Acceptance/activation exists to solve consent; friendship solves it upstream. See "Betcha Lifecycle Simplification" review for full rationale. |
+| Witness eligibility (added 2026-04-19) | **Must be a mutual follow (friend) of the committer at create time.** | Friendship = standing consent to be a witness. No per-wager opt-in. Rejected wagers cite `WagerError.WitnessesMustBeFriends`. |
+| Outcome model | Editable ledger — no verification ceremony | Committer OR any witness can flip `outcome` between `done` and `missed` at any time. Every flip writes compensating delta rows to the append-only ledger. History visible through `ledger.actorUserId`. |
+| Deadline handling | **Lazy.** Past the deadline without an outcome, UI shows `awaiting_verdict`. No auto-miss cron. | Zero ops cost; add a worker only if the product demands it. |
 | Payment model | Running balance + settle-up (Splitwise model) | Failed challenges accumulate a balance between friends. Pay whenever. App never touches money. Challenges change balances; payments reduce balances. Per-user payment methods are deferred to Phase 2. |
 | Disputes | No dispute system—just edit the participant status | "Dispute" = someone changes the status. The ledger history shows who changed what. If you're in a flip-flop war, that's a friendship problem, not a software problem. |
 | Group challenges | Same flow as 1v1, scales naturally | Each participant has their own status row. Anyone in the challenge can mark anyone's status. No majority voting in v1—add later if edit wars emerge. |
@@ -343,14 +348,16 @@ The live schema is in `apps/api/src/db/schema/betcha.ts`. Below is the shape + r
 | `ledger.type` enum column | (derived from `wagerId IS NULL`) | One less column; payment vs. outcome is discoverable from the existing FK |
 | `participant.status` (per-row) | `wager.outcome` (one value) | Only the committer has an outcome; there's no per-witness status |
 
-**Two orthogonal state machines on `wager`:**
+**Single derived state on `wager`:**
 
 ```
-status:   draft → sent → live → cancelled           (acceptance lifecycle)
-outcome:  pending → {done | missed}   (flippable)   (committer's verdict)
+live → {awaiting_verdict | cancelled | done | missed}
 ```
 
-Any accepted witness OR the committer can flip `outcome` between `done` and `missed` at any time. Every flip writes compensating deltas to the append-only ledger.
+Derived from `outcome` (nullable), `cancelledAt`, and `deadline`. No stored
+`status` column. Committer OR any witness can flip `outcome` between `done`
+and `missed` at any time. Every flip writes compensating deltas to the
+append-only ledger.
 
 ```typescript
 // apps/api/src/db/schema/betcha.ts — shape summary (full file in repo)
@@ -358,9 +365,8 @@ Any accepted witness OR the committer can flip `outcome` between `done` and `mis
 // Stored tuple + CHECK constraint. Chose text-with-enum over pgEnum because
 // removing an enum value via drizzle-kit generates a drop/cast migration that
 // fails hard if any row still holds the removed value; CHECK is a one-line
-// DROP/ADD. TS union + SQL CHECK stay in sync via `inValuesCheck(...)`.
-export const wagerStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
-export const wagerOutcomes = ['pending', 'done', 'missed'] as const;
+// DROP/ADD.
+export const wagerOutcomes = ['done', 'missed'] as const;  // NULL = pending
 
 export const wager = pgTable('wager', {
   id: text('id').primaryKey().$defaultFn(generateId),
@@ -370,15 +376,15 @@ export const wager = pgTable('wager', {
   amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
   currency: text('currency').notNull().default('USD'),
   deadline: timestamp('deadline', { withTimezone: true }).notNull(),
-  status: text('status', { enum: wagerStatuses }).notNull().default('draft'),
-  outcome: text('outcome', { enum: wagerOutcomes }).notNull().default('pending'),
+  outcome: text('outcome', { enum: wagerOutcomes }),                     // NULL = no verdict
   outcomeAt: timestamp('outcome_at', { withTimezone: true }),
   outcomeActorId: text('outcome_actor_id').references(() => user.id, { onDelete: 'set null' }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledBy: text('cancelled_by').references(() => user.id, { onDelete: 'set null' }),
   // createdAt / updatedAt with $onUpdate
 }, (t) => [
   check('wager_amount_positive', sql`amount > 0`),
-  check('wager_status_valid', inValuesCheck('status', wagerStatuses)),
-  check('wager_outcome_valid', inValuesCheck('outcome', wagerOutcomes)),
+  check('wager_outcome_valid', sql`outcome IS NULL OR outcome IN ('done', 'missed')`),
   index('wager_committer_idx').on(t.committerId),
 ]);
 
@@ -386,8 +392,7 @@ export const witness = pgTable('witness', {
   id: text('id').primaryKey().$defaultFn(generateId),
   wagerId: text('wager_id').notNull().references(() => wager.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  invitedBy: text('invited_by').references(() => user.id, { onDelete: 'set null' }),
-  acceptedAt: timestamp('accepted_at', { withTimezone: true }),  // NULL until accepted
+  addedBy: text('added_by').references(() => user.id, { onDelete: 'set null' }),
   joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
   // updatedAt with $onUpdate
 }, (t) => [
@@ -518,74 +523,89 @@ const schema = { ...publicSchema, ...betchaSchema, ...sharedSchema };
 c.set('db', drizzle(client, { schema }));
 ```
 
-### Challenge State Machine (stored states)
+### Wager State (derived, not stored)
+
+The DB stores `outcome`, `cancelledAt`, and `deadline`. State is a pure
+function of those three:
 
 ```
           ┌──────────┐
-          │  draft   │  Creator drafts (not yet sent)
+          │   live   │  outcome IS NULL, cancelledAt IS NULL, deadline > now()
           └────┬─────┘
-               │ submit
-          ┌────▼─────┐
-          │ pending  │  Sent to partner(s), awaiting acceptance
-          └────┬─────┘
-               │ accept
-          ┌────▼─────┐
-          │  active   │  Status edits happen here
-          └────┬─────┘
-               │ cancel
-          ┌────▼─────┐
-          │ cancelled │
-          └──────────┘
+               ├──────────────────────────────┐
+               │                              │
+               ▼ deadline passes, no flip     ▼ committer cancels
+     ┌──────────────────┐               ┌──────────┐
+     │ awaiting_verdict │               │ cancelled │
+     └────────┬─────────┘               └──────────┘
+              │
+              │ any witness or committer flips
+              ▼
+      ┌───────────────┐
+      │  done | missed │
+      └───────────────┘
 
-Completion is derived when no participant remains `pending`.
+No draft/sent/activate ceremony. `POST /wagers` produces a live wager
+directly. Lazy auto-miss: `awaiting_verdict` persists until someone flips.
 ```
 
-### Participant Statuses (per participant, not per challenge)
+### Outcome Transitions
 
 ```
-  pending  ─────────┬───────────────────────────────┐
-                │                              │
-                ▼                              ▼
-              done  ◄────────────────────►  missed
-                │      (anyone can flip)      │
-                │      (each flip = ledger record)
-                │                              │
-          no balance change              balance adjusts
-          (success)                      (failure)
+  NULL ─────────────────┬──────────────────┐
+                        │                  │
+                        ▼                  ▼
+                      done  ◄───────►  missed
+                        │    (flip)      │
+                        │    (each flip → ledger delta)
+                        │                  │
+                  no balance change    balance adjusts
+                  (success)            (failure)
 
-  Deadline auto-converts:  pending → missed  (+ ledger record)
-  Manual mark before deadline:  pending → done  (any participant)
-  Manual flip after deadline:  done ↔ missed  (anyone in challenge)
+  Committer OR any witness can flip. Every flip appends compensating
+  deltas to the ledger. Flipping to a value that's already set is a
+  no-op (preserves original outcomeAt/outcomeActorId). Un-flipping back
+  to NULL is not a supported operation — use cancel for that.
 ```
 
 ### UX Flow
 
-**Active challenge (before deadline):**
+**Live wager (before deadline, no outcome set):**
 ```
 ┌─────────────────────────────────────┐
 │  Run 3x this week                   │
-│  Deadline: Apr 20 • Amount: $20      │
+│  Committer: Alice                    │
+│  Witnesses: Bob, Carol               │
+│  Deadline: Apr 20 • Stake: $20       │
+│  State: live                         │
 │                                     │
-│  Bob (creator)       [ ⭕ pending ]  │  ← Tap to mark done
-│  Alice (partner)                     │
-│                                     │
-│  [✅ I did it!]                     │  ← One tap. Status → done.
+│  [✅ I did it]   [❌ I missed]       │  ← Committer flips own outcome
 └─────────────────────────────────────┘
 ```
 
-**After deadline (derived completion):**
+**Awaiting verdict (deadline passed, still no outcome):**
 ```
 ┌─────────────────────────────────────┐
 │  Run 3x this week                   │
-│  Complete (derived) • Amount: $20   │
+│  State: awaiting_verdict             │
 │                                     │
-│  Bob (creator)       [ ❌ missed ]   │  ← Auto-missed (didn't mark done)
-│  Alice (partner)                     │
+│  Deadline passed Apr 20. No one has  │
+│  called it yet.                      │
 │                                     │
-│  Balance: Bob owes Alice $20         │
+│  [✅ Done]   [❌ Missed]             │  ← Committer OR any witness flips
+└─────────────────────────────────────┘
+```
+
+**Resolved (outcome set, still flippable):**
+```
+┌─────────────────────────────────────┐
+│  Run 3x this week                   │
+│  State: missed • Set by Bob, Apr 20  │
 │                                     │
-│  [Change to ✅ done]                 │  ← Either party can flip it.
-│                                     │    Ledger adjusts automatically.
+│  Alice owes Bob    $10.00             │
+│  Alice owes Carol  $10.00             │
+│                                     │
+│  [Change to ✅ done]                 │  ← Reversal posts negating deltas
 └─────────────────────────────────────┘
 ```
 
@@ -594,12 +614,12 @@ Completion is derived when no participant remains `pending`.
 ┌─────────────────────────────────────┐
 │  History                             │
 │                                     │
-│  Apr 20  ⏰ Auto-missed (deadline)    │  system
-│  Apr 20  ✅ Alice marked done          │  alice
-│  Apr 21  ❌ Bob changed to missed      │  bob
-│  Apr 21  ✅ Alice changed to done       │  alice
+│  Apr 20  ❌ Bob flipped to missed    │  +$10 to Bob, +$10 to Carol
+│  Apr 21  ✅ Alice flipped to done     │  −$10 Bob, −$10 Carol
+│  Apr 21  ❌ Carol flipped to missed   │  +$10 Bob, +$10 Carol
 │                                     │
-│  Every change is visible.            │
+│  Every flip is appended. Nothing     │
+│  is ever deleted or rewritten.       │
 └─────────────────────────────────────┘
 ```
 
@@ -608,41 +628,38 @@ Completion is derived when no participant remains `pending`.
 ┌─────────────────────────────────────┐
 │  Balances                            │
 │                                     │
-│  You owe Alice     $53.33            │  ← 3 lost challenges
-│  Bob owes you      $20.00            │
+│  You owe Bob      $53.33             │  ← accumulated across wagers
+│  Carol owes you   $20.00             │
 │                                     │
-│  [💰 Record payment to Alice]         │  ← Deep-link/payment prefs deferred
+│  [💰 Record payment to Bob]          │  ← Deep-link/payment prefs deferred
 └─────────────────────────────────────┘
 ```
 
-**Group challenge (same flow, N people):**
+**Group wager (N witnesses, one committer):**
 ```
 ┌─────────────────────────────────────┐
 │  Run 3x this week                   │
-│  5 people • $20 each • $100 pot       │
+│  Committer: Alice • Stake: $100      │
+│  Witnesses: Bob, Carol, Dave, Eve    │
+│  State: missed                       │
 │                                     │
-│  Bob       [ ✅ done ]                │
-│  Alice     [ ✅ done ]                │
-│  Charlie   [ ❌ missed ]              │
-│  Diana     [ ✅ done ]                │
-│  Eve       [ ❌ missed ]              │
-  │                                     │
-  │  3 winners split $40 from 2 losers   │
-  │  Each winner: +$13.33                │
-│  Each loser: -$20.00                 │
+│  $100 ÷ 4 witnesses = $25 each        │
 │                                     │
-  │  Ledger entries (one per pair):       │
-  │  Charlie → Bob:     $6.67            │
-  │  Charlie → Alice:   $6.67            │
-  │  Charlie → Diana:   $6.67            │
-  │  Eve     → Bob:     $6.67            │
-  │  Eve     → Alice:   $6.67            │
-│  Eve     → Diana:   $6.67            │
+│  Ledger entries (committer → each):  │
+│  Alice → Bob:   $25.00                │
+│  Alice → Carol: $25.00                │
+│  Alice → Dave:  $25.00                │
+│  Alice → Eve:   $25.00                │
 │                                     │
-│  Everyone wins → no transfers         │
-│  Nobody wins  → no transfers         │
+│  If flipped to done: four negating   │
+│  −$25 rows are appended; balances    │
+│  return to zero.                     │
 └─────────────────────────────────────┘
 ```
+
+> The old "participants staking against each other" mockup (everyone's status
+> is their own, losers pay winners) is not how Betcha works. Only the
+> committer stakes. Witnesses never owe anything — they only collect on miss.
 
 ### App Structure
 
@@ -883,6 +900,154 @@ Implemented the database infrastructure (Phase 0) and Betcha API layer (Phase 1)
 - Deadline auto-expiry cron handler (requires wrangler.jsonc scheduled trigger config)
 - Betcha frontend (Phase 2) — must track the wire-format rename (`challenge` → `wager`, `participant` → `witness`, `challengeId` → `wagerId`, and `WagerError` result-shape responses for non-2xx)
 - The Ark schema + routes (Phase 4)
+
+## Review — Betcha Lifecycle Simplification
+
+**Completed**: 2026-04-19 (design locked; implementation pending)
+
+### Summary
+
+Collapse the wager lifecycle from two state machines (`status` × `outcome`, 4 + 3 states) into a **single derivable state** driven by three stored fields (`outcome`, `cancelledAt`, `deadline`). Witnesses become first-class by virtue of being added — no acceptance step — and must be **mutual follows** (friends) of the committer. Three endpoints (`/submit`, `/accept`, `/activate`) are deleted. A wager is live the instant it is created.
+
+This is a behavioral simplification driven by one observation: the ceremony we built (draft → submit → witness accepts → committer activates) exists to solve consent problems we already solve upstream if "witnesses must be friends" is a hard invariant. Once two users are mutual follows, they have already consented to be on the hook for each other's commitments.
+
+### Design Decisions
+
+| Question | Answer | Rationale |
+|---|---|---|
+| Can any user be added as a witness? | **No — must be a mutual follow (friend) of the committer** at create time. | Consent happens once at the friendship layer, not per-wager. Matches Venmo/Strava social model. |
+| Does a witness accept individual wagers? | **No.** Being added IS being a witness. | Friendship = standing consent to observe commitments. Friction-free by default. |
+| Is there a draft / sent / activated phase? | **No.** `POST /wagers` creates a live wager. | The draft/sent/activate ceremony only made sense when acceptance existed. |
+| Who can flip outcome to `done`? | Committer OR any witness. | Unchanged from current: symmetric authority. |
+| Who can flip outcome to `missed`? | Committer OR any witness. | Unchanged: symmetric authority, trust the relationship. |
+| What happens at the deadline? | **Lazy.** UI shows "awaiting verdict" until someone flips. No cron. | Zero ops cost. Defer auto-miss worker until the product needs it. |
+| Can a committer cancel? | Yes, before any outcome is set. Writes `cancelledAt` + `cancelledBy`. | Replaces "cancel" on status machine. |
+| Can a witness be removed after create? | Out of scope for v1. If wrong witnesses were added, cancel and recreate. | Avoids an entire "witness removal writes compensating ledger deltas" subsystem. |
+
+### Derived State (not stored)
+
+One column (`outcome`) plus two timestamps replace the four-value `status` enum entirely:
+
+| Condition | Derived state |
+|---|---|
+| `cancelledAt IS NOT NULL` | `cancelled` |
+| `outcome = 'missed'` | `missed` |
+| `outcome = 'done'` | `done` |
+| `outcome IS NULL AND deadline < now()` | `awaiting_verdict` |
+| otherwise | `live` |
+
+### Schema Changes
+
+**`wager` table:**
+
+```diff
+  export const wager = pgTable('wager', {
+    id, committerId, title, description, amount, currency, deadline,
+-   status: text('status', { enum: wagerStatuses }).notNull().default('draft'),
+-   outcome: text('outcome', { enum: wagerOutcomes }).notNull().default('pending'),
++   // outcome is nullable — NULL means "no verdict yet" (replaces 'pending' literal).
++   outcome: text('outcome', { enum: ['done', 'missed'] }),
+    outcomeAt, outcomeActorId,
++   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
++   cancelledBy: text('cancelled_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt, updatedAt,
+  });
+```
+
+Drop `wagerStatuses` tuple + CHECK entirely. `wagerOutcomes` loses `'pending'`:
+
+```diff
+- export const wagerStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
+- export const wagerOutcomes = ['pending', 'done', 'missed'] as const;
++ export const wagerOutcomes = ['done', 'missed'] as const;  // NULL = pending
+```
+
+**`witness` table:**
+
+```diff
+  export const witness = pgTable('witness', {
+    id, wagerId, userId,
+-   invitedBy: text('invited_by').references(() => user.id, { onDelete: 'set null' }),
+-   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
++   addedBy: text('added_by').references(() => user.id, { onDelete: 'set null' }),
+    joinedAt, updatedAt,
+  });
+```
+
+`acceptedAt` disappears. `invitedBy` → `addedBy` (still useful audit — who put this person on the hook).
+
+**`ledger`:** unchanged. Pot-split math already iterates witnesses ordered by `joinedAt`; dropping `acceptedAt` just means the filter `WHERE acceptedAt IS NOT NULL` goes away. Every witness counts.
+
+### Endpoint Changes
+
+| Endpoint | Change |
+|---|---|
+| `POST /wagers` | Wager is created with status=`live` implicitly. Validates every `witnessUserIds[i]` is a mutual follow of committer at this instant — reject the whole request if any witness isn't a friend. |
+| `POST /wagers/:id/submit` | **Deleted.** |
+| `POST /wagers/:id/accept` | **Deleted.** |
+| `POST /wagers/:id/activate` | **Deleted.** |
+| `POST /wagers/:id/outcome` | Unchanged logic. Drops the `status === 'live'` guard (replaced by `cancelledAt IS NULL`). Drops the `WHERE acceptedAt IS NOT NULL` filter when loading witnesses. |
+| `POST /wagers/:id/cancel` | Writes `cancelledAt = now()`, `cancelledBy = userId`. Only allowed when `outcome IS NULL`. Committer only. |
+| `GET /wagers/:id` | Returns derived state on the wire (see table above) so clients don't duplicate derivation logic. |
+
+### Friendship Validation at Create
+
+Pseudocode inside `POST /wagers`:
+
+```typescript
+// Both-directions-exist = mutual follow = friend
+const friendIds = await db.select({ id: follow.followingId })
+  .from(follow)
+  .innerJoin(
+    alias(follow, 'f2'),
+    and(
+      eq(follow.followingId, f2.followerId),
+      eq(follow.followerId, f2.followingId),
+    ),
+  )
+  .where(eq(follow.followerId, committerId));
+
+const friendSet = new Set(friendIds.map((r) => r.id));
+const nonFriends = witnessUserIds.filter((id) => !friendSet.has(id));
+if (nonFriends.length > 0) return WagerError.WitnessesMustBeFriends({ userIds: nonFriends });
+```
+
+New error variant: `WagerError.WitnessesMustBeFriends` → 400.
+
+### Edge Cases
+
+- **Committer unfriends a witness mid-wager.** Wager is unaffected — friendship is only checked at create time. Rationale: the witness consented by being friends *at the moment the commitment was made*. Retroactively invalidating live commitments would be a UX disaster.
+- **Witness blocks committer mid-wager.** Same — out of scope for v1. Add a `hiddenFromFeed` flag on `witness` in Phase 2 if real users complain.
+- **Auto-miss.** Lazy only. The `/wagers/:id/outcome` endpoint is the sole writer; cron worker is not implemented. UI displays `awaiting_verdict` past deadline.
+- **Cancel after outcome set.** Rejected (`InvalidStatus`). Use the outcome flip to reverse effects, then cancel if needed — keeps ledger semantics clean (cancel is never reconciled against ledger rows).
+
+### What Doesn't Change
+
+- Ledger is still append-only with delta reconciliation on every outcome flip.
+- Pot-split arithmetic, `FOR UPDATE` locking, integer-cent math, bigint aggregation — all identical.
+- Payment endpoint, balance query, currency semantics — identical.
+
+### Migration Notes
+
+On the running DB (if any wagers exist):
+
+1. Drop `wager.status` column + CHECK.
+2. Alter `wager.outcome` to nullable; migrate rows where `outcome='pending'` → NULL.
+3. Re-create CHECK on outcome: `outcome IN ('done', 'missed')` (or leave unconstrained via enum list).
+4. Add `wager.cancelledAt`, `wager.cancelledBy`.
+5. Drop `witness.acceptedAt`.
+6. Rename `witness.invitedBy` → `witness.addedBy`.
+
+If the DB is still pre-production, squash into the fresh migration alongside the prior redesign rather than layering a new one.
+
+### Follow-up Work
+
+- Implement the endpoint deletions + handler updates in `apps/api/src/routes/betcha.ts`.
+- Update frontend to: remove the accept/activate screens, add friend-picker to create flow, render derived state strings.
+- Add `WitnessesMustBeFriends` error variant + HTTP status mapping.
+- Document the `friend = mutual follow` invariant somewhere user-facing so the permission denial is explainable.
+
+---
 
 ## Review — Betcha Schema Redesign
 
