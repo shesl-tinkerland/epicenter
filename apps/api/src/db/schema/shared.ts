@@ -6,7 +6,7 @@ import {
 	timestamp,
 	unique,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
 import { user } from './auth';
 
@@ -45,8 +45,22 @@ export const follow = pgTable(
 	},
 	(t) => [
 		check('follow_no_self_follow', sql`follower_id <> following_id`),
+		// UNIQUE(follower_id, following_id) — also the prefix index for lookups
+		// by follower_id alone, so no separate follower_id index.
 		unique().on(t.followerId, t.followingId),
-		index('follow_follower_id_idx').on(t.followerId),
 		index('follow_following_id_idx').on(t.followingId),
 	],
 );
+
+export const followRelations = relations(follow, ({ one }) => ({
+	follower: one(user, {
+		fields: [follow.followerId],
+		references: [user.id],
+		relationName: 'follow_follower',
+	}),
+	following: one(user, {
+		fields: [follow.followingId],
+		references: [user.id],
+		relationName: 'follow_following',
+	}),
+}));
