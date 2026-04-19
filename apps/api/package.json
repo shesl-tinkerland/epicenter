@@ -22,7 +22,7 @@
 		"dev:remote": "mkdir -p ../dashboard/build/dashboard && infisical run --env=prod --watch --path=/api -- wrangler dev",
 		"deploy": "bun --cwd ../dashboard run build && wrangler deploy",
 		"typegen": "wrangler types",
-		"auth:generate": "infisical run --env=prod --path=/api -- bun x @better-auth/cli generate --yes --config ./better-auth.config.ts --output ./src/db/schema.ts",
+		"auth:generate": "infisical run --env=prod --path=/api -- bun x @better-auth/cli generate --yes --config ./better-auth.config.ts --output ./src/db/schema/auth.ts",
 		"db:generate": "drizzle-kit generate",
 		"db:drop": "drizzle-kit drop",
 		"db:push:local": "drizzle-kit push",
