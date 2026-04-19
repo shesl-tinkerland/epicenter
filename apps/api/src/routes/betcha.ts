@@ -13,11 +13,14 @@ const betchaRoutes = new Hono<Env>();
 
 // ── Validation schemas ───────────────────────────────────────────────────
 
+/** ISO 4217 shape: exactly 3 uppercase letters. Mirrors the DB CHECK. */
+const currencyCode = '/^[A-Z]{3}$/';
+
 const createWagerSchema = type({
 	title: 'string > 0',
 	'description?': 'string',
 	amount: 'string.numeric',
-	'currency?': 'string',
+	'currency?': currencyCode,
 	deadline: 'string',
 	witnessUserIds: 'string[] >= 1',
 });
@@ -29,7 +32,7 @@ const outcomeSchema = type({
 const paymentSchema = type({
 	toUserId: 'string',
 	amount: 'string.numeric',
-	currency: 'string',
+	currency: currencyCode,
 });
 
 // ── Errors ───────────────────────────────────────────────────────────────
