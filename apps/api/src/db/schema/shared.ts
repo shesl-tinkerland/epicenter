@@ -8,7 +8,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
-import { user } from './core';
+import { user } from './auth';
 
 /** 15-char alphanumeric ID — matches generateGuid in @epicenter/workspace. */
 const generateId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
