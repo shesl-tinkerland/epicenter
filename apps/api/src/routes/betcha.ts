@@ -2,6 +2,9 @@ import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { defineErrors, type InferErrors } from 'wellcrafted/error';
+import { Ok, type Result } from 'wellcrafted/result';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '../app';
 import { ledger, user, wager, witness } from '../db';
 
@@ -27,6 +30,75 @@ const paymentSchema = type({
 	amount: 'string.numeric',
 	currency: 'string',
 });
+
+// ── Errors ───────────────────────────────────────────────────────────────
+
+const WagerError = defineErrors({
+	NotFound: () => ({ message: 'Wager not found.' }),
+	WitnessNotFound: () => ({
+		message: 'You are not a witness on this wager.',
+	}),
+	OnlyCommitter: ({ action }: { action: string }) => ({
+		message: `Only the committer can ${action} this wager.`,
+		action,
+	}),
+	OutcomeForbidden: () => ({
+		message: 'Only the committer or an accepted witness can flip the outcome.',
+	}),
+	InvalidStatus: ({
+		allowed,
+		action,
+	}: {
+		allowed: readonly string[];
+		action: string;
+	}) => ({
+		message: `Only ${allowed.join(' or ')} wagers can be ${action}.`,
+		allowed: [...allowed],
+		action,
+	}),
+	NotLive: () => ({ message: 'Only live wagers have an outcome.' }),
+	NoAcceptedWitnesses: () => ({
+		message: 'At least one witness must accept before activation.',
+	}),
+	NoSplitRecipients: () => ({
+		message: 'No accepted witnesses to split the pot with.',
+	}),
+	InvalidDeadline: () => ({ message: 'Deadline must be a valid date.' }),
+	InvalidAmount: () => ({ message: 'Amount must be greater than 0.' }),
+	NoUsableWitnesses: () => ({
+		message: 'Add at least one witness who is not yourself.',
+	}),
+	InsertFailed: () => ({ message: 'Could not create the wager.' }),
+	SelfPayment: () => ({ message: "You can't pay yourself." }),
+});
+type WagerError = InferErrors<typeof WagerError>;
+
+/**
+ * Map a business-domain error to its HTTP status. Keeps HTTP concerns out of
+ * the transaction/service layer — the tx returns `Result<T, WagerError>` and
+ * the handler routes each variant to a status code here.
+ */
+function httpStatus(error: WagerError): ContentfulStatusCode {
+	switch (error.name) {
+		case 'NotFound':
+		case 'WitnessNotFound':
+			return 404;
+		case 'OnlyCommitter':
+		case 'OutcomeForbidden':
+			return 403;
+		case 'InsertFailed':
+			return 500;
+		case 'InvalidStatus':
+		case 'NotLive':
+		case 'NoAcceptedWitnesses':
+		case 'NoSplitRecipients':
+		case 'InvalidDeadline':
+		case 'InvalidAmount':
+		case 'NoUsableWitnesses':
+		case 'SelfPayment':
+			return 400;
+	}
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -72,11 +144,11 @@ betchaRoutes.post(
 		const deadline = new Date(data.deadline);
 
 		if (Number.isNaN(deadline.getTime())) {
-			return c.json({ message: 'Deadline must be a valid date.' }, 400);
+			return c.json(WagerError.InvalidDeadline(), 400);
 		}
 
 		if (Number(data.amount) <= 0) {
-			return c.json({ message: 'Amount must be greater than 0.' }, 400);
+			return c.json(WagerError.InvalidAmount(), 400);
 		}
 
 		const witnessUserIds = [...new Set(data.witnessUserIds)].filter(
@@ -84,10 +156,7 @@ betchaRoutes.post(
 		);
 
 		if (witnessUserIds.length === 0) {
-			return c.json(
-				{ message: 'Add at least one witness who is not yourself.' },
-				400,
-			);
+			return c.json(WagerError.NoUsableWitnesses(), 400);
 		}
 
 		const [createdWager] = await db
@@ -104,7 +173,7 @@ betchaRoutes.post(
 			.returning();
 
 		if (!createdWager) {
-			return c.json({ message: 'Could not create the wager.' }, 500);
+			return c.json(WagerError.InsertFailed(), 500);
 		}
 
 		await db.insert(witness).values(
@@ -210,7 +279,7 @@ betchaRoutes.get('/wagers/:id', async (c) => {
 		.limit(1);
 
 	if (!wagerRow) {
-		return c.json({ message: 'Wager not found.' }, 404);
+		return c.json(WagerError.NotFound(), 404);
 	}
 
 	if (wagerRow.committerId !== userId) {
@@ -223,7 +292,7 @@ betchaRoutes.get('/wagers/:id', async (c) => {
 			.limit(1);
 
 		if (!witnessRow) {
-			return c.json({ message: 'Wager not found.' }, 404);
+			return c.json(WagerError.NotFound(), 404);
 		}
 	}
 
@@ -261,18 +330,18 @@ betchaRoutes.post('/wagers/:id/submit', async (c) => {
 		.limit(1);
 
 	if (!wagerRow) {
-		return c.json({ message: 'Wager not found.' }, 404);
+		return c.json(WagerError.NotFound(), 404);
 	}
 
 	if (wagerRow.committerId !== userId) {
-		return c.json(
-			{ message: 'Only the committer can submit this wager.' },
-			403,
-		);
+		return c.json(WagerError.OnlyCommitter({ action: 'submit' }), 403);
 	}
 
 	if (wagerRow.status !== 'draft') {
-		return c.json({ message: 'Only draft wagers can be submitted.' }, 400);
+		return c.json(
+			WagerError.InvalidStatus({ allowed: ['draft'], action: 'submitted' }),
+			400,
+		);
 	}
 
 	const [updatedWager] = await db
@@ -301,10 +370,7 @@ betchaRoutes.post('/wagers/:id/accept', async (c) => {
 		.limit(1);
 
 	if (!witnessRow) {
-		return c.json(
-			{ message: 'You are not a witness on this wager.' },
-			404,
-		);
+		return c.json(WagerError.WitnessNotFound(), 404);
 	}
 
 	if (witnessRow.acceptedAt) {
@@ -337,18 +403,18 @@ betchaRoutes.post('/wagers/:id/activate', async (c) => {
 		.limit(1);
 
 	if (!wagerRow) {
-		return c.json({ message: 'Wager not found.' }, 404);
+		return c.json(WagerError.NotFound(), 404);
 	}
 
 	if (wagerRow.committerId !== userId) {
-		return c.json(
-			{ message: 'Only the committer can activate this wager.' },
-			403,
-		);
+		return c.json(WagerError.OnlyCommitter({ action: 'activate' }), 403);
 	}
 
 	if (wagerRow.status !== 'sent') {
-		return c.json({ message: 'Only sent wagers can be activated.' }, 400);
+		return c.json(
+			WagerError.InvalidStatus({ allowed: ['sent'], action: 'activated' }),
+			400,
+		);
 	}
 
 	const [counts] = await db
@@ -359,10 +425,7 @@ betchaRoutes.post('/wagers/:id/activate', async (c) => {
 		.where(eq(witness.wagerId, wagerId));
 
 	if (!counts || counts.accepted === 0) {
-		return c.json(
-			{ message: 'At least one witness must accept before activation.' },
-			400,
-		);
+		return c.json(WagerError.NoAcceptedWitnesses(), 400);
 	}
 
 	const [updatedWager] = await db
@@ -391,19 +454,19 @@ betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 		.limit(1);
 
 	if (!wagerRow) {
-		return c.json({ message: 'Wager not found.' }, 404);
+		return c.json(WagerError.NotFound(), 404);
 	}
 
 	if (wagerRow.committerId !== userId) {
-		return c.json(
-			{ message: 'Only the committer can cancel this wager.' },
-			403,
-		);
+		return c.json(WagerError.OnlyCommitter({ action: 'cancel' }), 403);
 	}
 
 	if (wagerRow.status !== 'draft' && wagerRow.status !== 'sent') {
 		return c.json(
-			{ message: 'Only draft or sent wagers can be cancelled.' },
+			WagerError.InvalidStatus({
+				allowed: ['draft', 'sent'],
+				action: 'cancelled',
+			}),
 			400,
 		);
 	}
@@ -446,70 +509,74 @@ betchaRoutes.post(
 		const wagerId = c.req.param('id');
 		const data = c.req.valid('json');
 
-		const result = await db.transaction(async (tx) => {
-			const [wagerRow] = await tx
-				.select()
-				.from(wager)
-				.where(eq(wager.id, wagerId))
-				.for('update')
-				.limit(1);
+		type OutcomeSuccess = {
+			wager: typeof wager.$inferSelect;
+			entries: (typeof ledger.$inferSelect)[];
+		};
 
-			if (!wagerRow) {
-				return { error: 'not_found' as const };
-			}
+		const result: Result<OutcomeSuccess, WagerError> = await db.transaction(
+			async (tx) => {
+				const [wagerRow] = await tx
+					.select()
+					.from(wager)
+					.where(eq(wager.id, wagerId))
+					.for('update')
+					.limit(1);
 
-			const isCommitter = wagerRow.committerId === actorUserId;
+				if (!wagerRow) return WagerError.NotFound();
 
-			if (!isCommitter) {
-				const [witnessRow] = await tx
-					.select({ acceptedAt: witness.acceptedAt })
+				const isCommitter = wagerRow.committerId === actorUserId;
+				if (!isCommitter) {
+					const [witnessRow] = await tx
+						.select({ acceptedAt: witness.acceptedAt })
+						.from(witness)
+						.where(
+							and(
+								eq(witness.wagerId, wagerId),
+								eq(witness.userId, actorUserId),
+							),
+						)
+						.limit(1);
+					if (!witnessRow || !witnessRow.acceptedAt) {
+						return WagerError.OutcomeForbidden();
+					}
+				}
+
+				if (wagerRow.status !== 'live') return WagerError.NotLive();
+
+				// No-op flip: preserve the original outcomeAt / outcomeActorId — the
+				// attribution belongs to whoever set the outcome first, not to a
+				// subsequent idempotent retry.
+				if (wagerRow.outcome === data.outcome) {
+					return Ok({ wager: wagerRow, entries: [] });
+				}
+
+				const witnesses = await tx
+					.select({
+						id: witness.id,
+						userId: witness.userId,
+					})
 					.from(witness)
 					.where(
 						and(
 							eq(witness.wagerId, wagerId),
-							eq(witness.userId, actorUserId),
+							isNotNull(witness.acceptedAt),
 						),
 					)
-					.limit(1);
+					.orderBy(witness.joinedAt);
 
-				if (!witnessRow || !witnessRow.acceptedAt) {
-					return { error: 'forbidden' as const };
+				if (witnesses.length === 0) {
+					return WagerError.NoSplitRecipients();
 				}
-			}
 
-			if (wagerRow.status !== 'live') {
-				return { error: 'not_live' as const };
-			}
-
-			// No-op flip: preserve the original outcomeAt / outcomeActorId — the
-			// attribution belongs to whoever set the outcome first, not to a
-			// subsequent idempotent retry.
-			if (wagerRow.outcome === data.outcome) {
-				return { ok: { wager: wagerRow, entries: [] } };
-			}
-
-			const witnesses = await tx
-				.select({
-					id: witness.id,
-					userId: witness.userId,
-				})
-				.from(witness)
-				.where(
-					and(
-						eq(witness.wagerId, wagerId),
-						isNotNull(witness.acceptedAt),
-					),
-				)
-				.orderBy(witness.joinedAt);
-
-			if (witnesses.length === 0) {
-				return { error: 'no_witnesses' as const };
-			}
-
-			const committerId = wagerRow.committerId;
-			const amountCents = Math.round(Number(wagerRow.amount) * 100);
-			const baseCents = Math.floor(amountCents / witnesses.length);
-			const remainderCents = amountCents % witnesses.length;
+				const committerId = wagerRow.committerId;
+				// `Math.round` is load-bearing: `Number("10.01") * 100 = 1000.9999...`
+				// in IEEE-754. All numeric(10,2) values round-trip cleanly via round.
+				const amountCents = Math.round(Number(wagerRow.amount) * 100);
+				const baseCents = Math.floor(amountCents / witnesses.length);
+				const remainderCents = amountCents % witnesses.length;
+				// Invariant: baseCents * N + remainderCents = amountCents,
+				// so Σ shareCents across all witnesses = amountCents exactly.
 
 			// One grouped query for all prior (committer → witness) sums on this
 			// wager. `::bigint` returns as string from pg; parse in TS to avoid
@@ -561,45 +628,25 @@ betchaRoutes.post(
 				if (entry) entries.push(entry);
 			}
 
-			const [updatedWager] = await tx
-				.update(wager)
-				.set({
-					outcome: data.outcome,
-					outcomeAt: new Date(),
-					outcomeActorId: actorUserId,
-				})
-				.where(eq(wager.id, wagerId))
-				.returning();
+				const [updatedWager] = await tx
+					.update(wager)
+					.set({
+						outcome: data.outcome,
+						outcomeAt: new Date(),
+						outcomeActorId: actorUserId,
+					})
+					.where(eq(wager.id, wagerId))
+					.returning();
 
-			return { ok: { wager: updatedWager, entries } };
-		});
+				if (!updatedWager) return WagerError.NotFound();
+				return Ok({ wager: updatedWager, entries });
+			},
+		);
 
-		if ('error' in result) {
-			switch (result.error) {
-				case 'not_found':
-					return c.json({ message: 'Wager not found.' }, 404);
-				case 'forbidden':
-					return c.json(
-						{
-							message:
-								'Only the committer or an accepted witness can flip the outcome.',
-						},
-						403,
-					);
-				case 'not_live':
-					return c.json(
-						{ message: 'Only live wagers have an outcome.' },
-						400,
-					);
-				case 'no_witnesses':
-					return c.json(
-						{ message: 'No accepted witnesses to split the pot with.' },
-						400,
-					);
-			}
+		if (result.error) {
+			return c.json(result, httpStatus(result.error));
 		}
-
-		return c.json(result.ok);
+		return c.json(result.data);
 	},
 );
 
@@ -679,11 +726,11 @@ betchaRoutes.post('/payments', sValidator('json', paymentSchema), async (c) => {
 	const userId = c.var.user.id;
 
 	if (Number(data.amount) <= 0) {
-		return c.json({ message: 'Amount must be greater than 0.' }, 400);
+		return c.json(WagerError.InvalidAmount(), 400);
 	}
 
 	if (data.toUserId === userId) {
-		return c.json({ message: "You can't pay yourself." }, 400);
+		return c.json(WagerError.SelfPayment(), 400);
 	}
 
 	const [paymentEntry] = await db
