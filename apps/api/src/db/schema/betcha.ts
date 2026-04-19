@@ -84,6 +84,12 @@ export const wager = pgTable(
 			'wager_outcome_valid',
 			sql`outcome IS NULL OR outcome IN ('done', 'missed')`,
 		),
+		// ISO 4217 shape — 3 uppercase letters. Prevents "usd"/"USD" drift
+		// in GROUP BY aggregates (see /balances).
+		check(
+			'wager_currency_iso4217',
+			sql`length(currency) = 3 AND currency = upper(currency)`,
+		),
 		index('wager_committer_idx').on(t.committerId),
 	],
 );
@@ -166,6 +172,10 @@ export const ledger = pgTable(
 	},
 	(t) => [
 		check('ledger_no_self_transfer', sql`from_user_id <> to_user_id`),
+		check(
+			'ledger_currency_iso4217',
+			sql`length(currency) = 3 AND currency = upper(currency)`,
+		),
 		index('ledger_from_user_idx').on(t.fromUserId),
 		index('ledger_to_user_idx').on(t.toUserId),
 		index('ledger_wager_idx').on(t.wagerId),
