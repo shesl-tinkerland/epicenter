@@ -74,31 +74,26 @@ const WagerError = defineErrors({
 type WagerError = InferErrors<typeof WagerError>;
 
 /**
- * Map a business-domain error to its HTTP status. Keeps HTTP concerns out of
- * the transaction/service layer — the tx returns `Result<T, WagerError>` and
- * the handler routes each variant to a status code here.
+ * HTTP status per `WagerError` variant. Typed as `Record<variant, status>` so
+ * adding a new variant without a mapping is a compile error. Keeps HTTP
+ * concerns out of the tx/service layer — `/outcome` returns
+ * `Result<T, WagerError>` and the handler dispatches through this map.
  */
-function httpStatus(error: WagerError): ContentfulStatusCode {
-	switch (error.name) {
-		case 'NotFound':
-		case 'WitnessNotFound':
-			return 404;
-		case 'OnlyCommitter':
-		case 'OutcomeForbidden':
-			return 403;
-		case 'InsertFailed':
-			return 500;
-		case 'InvalidStatus':
-		case 'NotLive':
-		case 'NoAcceptedWitnesses':
-		case 'NoSplitRecipients':
-		case 'InvalidDeadline':
-		case 'InvalidAmount':
-		case 'NoUsableWitnesses':
-		case 'SelfPayment':
-			return 400;
-	}
-}
+const WagerErrorHttpStatus: Record<WagerError['name'], ContentfulStatusCode> = {
+	NotFound: 404,
+	WitnessNotFound: 404,
+	OnlyCommitter: 403,
+	OutcomeForbidden: 403,
+	InvalidStatus: 400,
+	NotLive: 400,
+	NoAcceptedWitnesses: 400,
+	NoSplitRecipients: 400,
+	InvalidDeadline: 400,
+	InvalidAmount: 400,
+	NoUsableWitnesses: 400,
+	InsertFailed: 500,
+	SelfPayment: 400,
+};
 
 // ── Wager CRUD ───────────────────────────────────────────────────────────
 
@@ -508,56 +503,59 @@ betchaRoutes.post(
 				// Invariant: baseCents * N + remainderCents = amountCents,
 				// so Σ shareCents across all witnesses = amountCents exactly.
 
-			// One grouped query for all prior (committer → witness) sums on this
-			// wager. `::bigint` returns as string from pg; parse in TS to avoid
-			// int4 overflow at 2^31 cents (~$21M aggregated).
-			const priorSumRows = await tx
-				.select({
-					toUserId: ledger.toUserId,
-					totalCents: sql<string>`coalesce(sum(${ledger.amount} * 100), 0)::bigint`,
-				})
-				.from(ledger)
-				.where(
-					and(
-						eq(ledger.wagerId, wagerId),
-						eq(ledger.fromUserId, committerId),
-					),
-				)
-				.groupBy(ledger.toUserId);
-
-			const currentCentsByUser = new Map<string, number>();
-			for (const row of priorSumRows) {
-				currentCentsByUser.set(row.toUserId, Number(row.totalCents));
-			}
-
-			const entries: (typeof ledger.$inferSelect)[] = [];
-
-			for (let i = 0; i < witnesses.length; i += 1) {
-				const w = witnesses[i]!;
-				// First `remainderCents` witnesses get +1 to absorb the rounding
-				// penny so all shares sum to amountCents exactly.
-				const shareCents = baseCents + (i < remainderCents ? 1 : 0);
-				const expectedCents = data.outcome === 'missed' ? shareCents : 0;
-				const currentCents = currentCentsByUser.get(w.userId) ?? 0;
-				const deltaCents = expectedCents - currentCents;
-
-				if (deltaCents === 0) continue;
-
-				const [entry] = await tx
-					.insert(ledger)
-					.values({
-						wagerId,
-						fromUserId: committerId,
-						toUserId: w.userId,
-						actorUserId,
-						amount: (deltaCents / 100).toFixed(2),
-						currency: wagerRow.currency,
+				// One grouped query for all prior (committer → witness) sums on this
+				// wager. `::bigint` returns as string from pg; parse in TS to avoid
+				// int4 overflow at 2^31 cents (~$21M aggregated).
+				const priorSumRows = await tx
+					.select({
+						toUserId: ledger.toUserId,
+						totalCents: sql<string>`coalesce(sum(${ledger.amount} * 100), 0)::bigint`,
 					})
-					.returning();
-
-				if (entry) entries.push(entry);
-			}
-
+					.from(ledger)
+					.where(
+						and(
+							eq(ledger.wagerId, wagerId),
+							eq(ledger.fromUserId, committerId),
+						),
+					)
+					.groupBy(ledger.toUserId);
+	
+				const currentCentsByUser = new Map<string, number>();
+				for (const row of priorSumRows) {
+					currentCentsByUser.set(row.toUserId, Number(row.totalCents));
+				}
+	
+				const entries: (typeof ledger.$inferSelect)[] = [];
+	
+				for (let i = 0; i < witnesses.length; i += 1) {
+					const w = witnesses[i]!;
+					// First `remainderCents` witnesses get +1 to absorb the rounding
+					// penny so all shares sum to amountCents exactly.
+					const shareCents = baseCents + (i < remainderCents ? 1 : 0);
+					const expectedCents = data.outcome === 'missed' ? shareCents : 0;
+					const currentCents = currentCentsByUser.get(w.userId) ?? 0;
+					const deltaCents = expectedCents - currentCents;
+	
+					if (deltaCents === 0) continue;
+	
+					const [entry] = await tx
+						.insert(ledger)
+						.values({
+							wagerId,
+							fromUserId: committerId,
+							toUserId: w.userId,
+							actorUserId,
+							amount: (deltaCents / 100).toFixed(2),
+							currency: wagerRow.currency,
+						})
+						.returning();
+	
+					if (entry) entries.push(entry);
+				}
+	
+				// The FOR UPDATE lock at the top of the tx guarantees this row
+				// exists and is exclusively ours for the rest of the tx, so
+				// `.returning()` cannot come back empty here.
 				const [updatedWager] = await tx
 					.update(wager)
 					.set({
@@ -568,13 +566,12 @@ betchaRoutes.post(
 					.where(eq(wager.id, wagerId))
 					.returning();
 
-				if (!updatedWager) return WagerError.NotFound();
-				return Ok({ wager: updatedWager, entries });
+				return Ok({ wager: updatedWager!, entries });
 			},
 		);
 
 		if (result.error) {
-			return c.json(result, httpStatus(result.error));
+			return c.json(result, WagerErrorHttpStatus[result.error.name]);
 		}
 		return c.json(result.data);
 	},
