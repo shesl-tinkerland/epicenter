@@ -22,9 +22,11 @@ import {
 	renderSignInPage,
 } from './auth-pages';
 import { createAutumn } from './autumn';
+import { betchaRoutes } from './betcha-routes';
+import { sharedRoutes } from './shared-routes';
 import { billingRoutes } from './billing-routes';
 import { MAX_PAYLOAD_BYTES } from './constants';
-import * as schema from './db/schema';
+import * as schema from './db';
 
 export { DocumentRoom } from './document-room';
 // Re-export so wrangler types generates DurableObjectNamespace<WorkspaceRoom|DocumentRoom>
@@ -289,7 +291,9 @@ app.use('/ai/*', authGuard);
 app.use('/workspaces/*', authGuard);
 app.use('/documents/*', authGuard);
 app.use('/api/billing/*', authGuard);
+app.use('/api/betcha/*', authGuard);
 app.use('/api/assets/*', authGuard);
+app.use('/api/social/*', authGuard);
 
 // Ensure Autumn customer exists and stash planId for model gating.
 // Runs after authGuard for AI routes so c.var.user is available.
@@ -329,6 +333,12 @@ app.get('/dashboard', async (c) => {
 
 // Billing API routes — typed JSON routes consumed by the dashboard SPA via hc<AppType>
 app.route('/api/billing', billingRoutes);
+
+// Betcha API routes — typed JSON routes consumed by the Betcha client.
+app.route('/api/betcha', betchaRoutes);
+
+// Shared social routes — follow, friends (used by Betcha + The Ark)
+app.route('/api/social', sharedRoutes);
 
 // Asset routes — upload + delete (authed, mounted after authGuard)
 app.route('/api/assets', assetAuthedRoutes);
