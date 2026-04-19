@@ -1,7 +1,8 @@
 # Server-Authoritative Apps: Betcha + The Ark
 
 **Date**: 2026-04-13
-**Status**: Phase 0 + Phase 1 Implemented
+**Last Updated**: 2026-04-19 (Betcha schema redesign: wager/witness model)
+**Status**: Phase 0 + Phase 1 Implemented; Phase 1 schema redesigned 2026-04-19
 **Author**: AI-assisted (Sisyphus)
 
 ## Overview
@@ -125,8 +126,8 @@ Host in EU from day one. US has no data localization laws for consumer apps—st
 | Database | PlanetScale Postgres (EU region) via Hyperdrive | Battle-tested (Cash App, Intercom), NVMe Metal upgrade path ($50/mo), Cloudflare partnership |
 | Data isolation | File-per-domain in `public` schema | All first-party apps, shared domain concepts (follows, notifications), no Drizzle `pgSchema()` bugs, standard `pgTable()` everywhere |
 | Auth tables | All tables in `public` schema | Single schema, file-based organization provides code-level namespacing |
-| Challenge model | One-directional commitment device | Creator stakes money on a task. Success = keep it (no payment). Failure = pay partner(s). Payment only flows one direction. |
-| Participant status model | Editable ledger—no verification ceremony | Any participant can mark `done`/`missed`. Deadline auto-marks unresolved participants as `missed`. History is visible through `ledger.actorUserId`. Same flow for 1v1 and groups. |
+| Wager model (redesigned 2026-04-19) | Unidirectional commitment: one committer stakes, N witnesses observe | The committer is the ONLY stakeholder. Witnesses stake nothing — they observe, judge, and collect a share of the pot only if the committer misses. Renamed from `challenge`/`participant` because "participant" implied stakeholder. |
+| Outcome model | Editable ledger — no verification ceremony | Any accepted witness OR the committer can flip `outcome` between `done` and `missed` at any time. Every flip writes compensating delta rows to the append-only ledger. History visible through `ledger.actorUserId`. |
 | Payment model | Running balance + settle-up (Splitwise model) | Failed challenges accumulate a balance between friends. Pay whenever. App never touches money. Challenges change balances; payments reduce balances. Per-user payment methods are deferred to Phase 2. |
 | Disputes | No dispute system—just edit the participant status | "Dispute" = someone changes the status. The ledger history shows who changed what. If you're in a flip-flop war, that's a friendship problem, not a software problem. |
 | Group challenges | Same flow as 1v1, scales naturally | Each participant has their own status row. Anyone in the challenge can mark anyone's status. No majority voting in v1—add later if edit wars emerge. |
@@ -260,10 +261,10 @@ PlanetScale Postgres (eu-west-1) via Hyperdrive
     │  PLATFORM
     ├── durable_object_instance, asset
     │
-    │  BETCHA (apps/api/src/db/betcha-schema.ts)
-    ├── challenge              ← Container for participants (1v1 or group)
-    ├── participant            ← Per-person status: pending → done | missed
-    ├── ledger                 ← Append-only balance changes + status history
+    │  BETCHA (apps/api/src/db/schema/betcha.ts) — redesigned 2026-04-19
+    ├── wager                  ← The committer's stake + orthogonal status/outcome state machines
+    ├── witness                ← Users invited to observe; accepted witnesses collect on miss
+    ├── ledger                 ← Append-only deltas; wagerId NULL = manual payment, NOT NULL = outcome split
     │
     │  THE ARK (apps/api/src/db/ark-schema.ts)
     ├── profile, post, comment, reaction
@@ -279,9 +280,9 @@ PlanetScale Postgres (eu-west-1) via Hyperdrive
 ### FK Dependency Graph
 
 ```
-challenge ──────────FK──▶ user (set null)
-participant ────────FK──▶ user (cascade) + challenge (cascade)
-ledger ─────────────FK──▶ user (from/to/actor set null) + challenge (set null)
+wager ──────────────FK──▶ user (committer: cascade; outcomeActor: set null)
+witness ────────────FK──▶ user (userId: cascade; invitedBy: set null) + wager (cascade)
+ledger ─────────────FK──▶ user (from/to: RESTRICT; actor: set null) + wager (set null)
 
 profile ────────────FK──▶ user
 post ───────────────FK──▶ user
@@ -290,6 +291,8 @@ comment ────────────FK──▶ user + post
 
 All tables in public schema — standard FKs, no cross-schema complexity.
 ```
+
+**Ledger FK policy is intentionally `restrict` for `fromUserId`/`toUserId`** (not `set null`): ledger rows are immutable financial records. Allowing a counterparty to go NULL would silently corrupt balance sums across every surviving row. A user with any ledger history can't be hard-deleted without first settling (which writes compensating zero-sum rows). Soft-delete is the mechanism for account closure with outstanding history.
 
 ### Shared Drizzle Schema
 
@@ -328,95 +331,164 @@ export const follow = pgTable('follow', {
   index('follow_following_id_idx').on(t.followingId),
 ]);
 ```
-### Betcha Drizzle Schema
+### Betcha Drizzle Schema (redesigned 2026-04-19)
+
+The live schema is in `apps/api/src/db/schema/betcha.ts`. Below is the shape + rationale. Key changes vs. the original Phase 1 design:
+
+| Old name | New name | Why renamed |
+|---|---|---|
+| `challenge` | `wager` | "Wager" names the staking act directly; "challenge" is generic SaaS-speak |
+| `participant` | `witness` | "Participant" implied stakeholder — actively misleading since witnesses stake nothing |
+| `challenge.createdBy` (nullable, set-null) | `wager.committerId` (NOT NULL, cascade) | Committer is a structural role, not an audit field. Nullable committer admits a state the code can't handle |
+| `ledger.type` enum column | (derived from `wagerId IS NULL`) | One less column; payment vs. outcome is discoverable from the existing FK |
+| `participant.status` (per-row) | `wager.outcome` (one value) | Only the committer has an outcome; there's no per-witness status |
+
+**Two orthogonal state machines on `wager`:**
+
+```
+status:   draft → sent → live → cancelled           (acceptance lifecycle)
+outcome:  pending → {done | missed}   (flippable)   (committer's verdict)
+```
+
+Any accepted witness OR the committer can flip `outcome` between `done` and `missed` at any time. Every flip writes compensating deltas to the append-only ledger.
 
 ```typescript
-// apps/api/src/db/betcha-schema.ts
-import { index, numeric, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
-import { customAlphabet } from 'nanoid';
-import { user } from './schema';
+// apps/api/src/db/schema/betcha.ts — shape summary (full file in repo)
 
-/** 15-char alphanumeric ID — matches generateGuid in @epicenter/workspace. */
-const generateId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
+// Stored tuple + CHECK constraint. Chose text-with-enum over pgEnum because
+// removing an enum value via drizzle-kit generates a drop/cast migration that
+// fails hard if any row still holds the removed value; CHECK is a one-line
+// DROP/ADD. TS union + SQL CHECK stay in sync via `inValuesCheck(...)`.
+export const wagerStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
+export const wagerOutcomes = ['pending', 'done', 'missed'] as const;
 
-
-/**
- * Core challenge record. The container for one or more participants.
- *
- * 1v1: creator stakes money and invites one partner.
- * Group: N participants stake money on the same goal. Winners split losers' stakes.
- *
- * Stored states: draft → pending → active → cancelled.
- * Completion is derived from participant statuses, not stored on the challenge row.
- */
-export const challenge = pgTable('challenge', {
+export const wager = pgTable('wager', {
   id: text('id').primaryKey().$defaultFn(generateId),
+  committerId: text('committer_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   description: text('description'),
   amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
-  currency: text('currency').notNull().default('USD'),  // ISO 4217
+  currency: text('currency').notNull().default('USD'),
   deadline: timestamp('deadline', { withTimezone: true }).notNull(),
-  status: text('status').notNull().default('draft'),
-  // draft → pending → active → cancelled
-  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  status: text('status', { enum: wagerStatuses }).notNull().default('draft'),
+  outcome: text('outcome', { enum: wagerOutcomes }).notNull().default('pending'),
+  outcomeAt: timestamp('outcome_at', { withTimezone: true }),
+  outcomeActorId: text('outcome_actor_id').references(() => user.id, { onDelete: 'set null' }),
+  // createdAt / updatedAt with $onUpdate
 }, (t) => [
-  index('challenge_created_by_idx').on(t.createdBy),
-  index('challenge_status_idx').on(t.status),
-  index('challenge_deadline_idx').on(t.deadline),
+  check('wager_amount_positive', sql`amount > 0`),
+  check('wager_status_valid', inValuesCheck('status', wagerStatuses)),
+  check('wager_outcome_valid', inValuesCheck('outcome', wagerOutcomes)),
+  index('wager_committer_idx').on(t.committerId),
 ]);
 
-/**
- * One person's participant row within a challenge.
- *
- * Each participant has their own status: pending, done, or missed.
- * Anyone in the challenge can change anyone's status at any time.
- * The deadline auto-converts `pending` to `missed`.
- *
- * The challenge creator is the committer. Additional rows represent the invited
- * partner(s) or group members attached to the same challenge.
- */
-export const participant = pgTable('participant', {
+export const witness = pgTable('witness', {
   id: text('id').primaryKey().$defaultFn(generateId),
-  challengeId: text('challenge_id').notNull().references(() => challenge.id, { onDelete: 'cascade' }),
+  wagerId: text('wager_id').notNull().references(() => wager.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  status: text('status').notNull().default('pending'),  // 'pending' | 'done' | 'missed'
-  statusAt: timestamp('status_at', { withTimezone: true }),
+  invitedBy: text('invited_by').references(() => user.id, { onDelete: 'set null' }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),  // NULL until accepted
   joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  // updatedAt with $onUpdate
 }, (t) => [
-  unique().on(t.challengeId, t.userId),
-  index('participant_user_id_idx').on(t.userId),
-  index('participant_challenge_id_idx').on(t.challengeId),
+  unique().on(t.wagerId, t.userId),  // also the prefix index for wagerId scans
+  index('witness_user_idx').on(t.userId),
 ]);
 
-/**
- * Append-only ledger of balance changes between friends.
- *
- * Every status change (done → missed, missed → done, or auto-expiry)
- * creates a ledger record. Running balance = SUM(amount) grouped by
- * (fromUserId, toUserId) pair.
- *
- * Positive amount = fromUser owes toUser.
- * Payments (Venmo, PayPal, cash) also create entries with negative amounts
- * to reduce the balance.
- */
 export const ledger = pgTable('ledger', {
   id: text('id').primaryKey().$defaultFn(generateId),
-  challengeId: text('challenge_id').references(() => challenge.id, { onDelete: 'set null' }),
-  fromUserId: text('from_user_id').references(() => user.id, { onDelete: 'set null' }),
-  toUserId: text('to_user_id').references(() => user.id, { onDelete: 'set null' }),
+  wagerId: text('wager_id').references(() => wager.id, { onDelete: 'set null' }),
+  // NOT NULL + restrict: user with ledger history can't be hard-deleted
+  // without settling first (which writes compensating zero-sum rows). Allowing
+  // NULL counterparties would silently corrupt balance sums.
+  fromUserId: text('from_user_id').notNull().references(() => user.id, { onDelete: 'restrict' }),
+  toUserId: text('to_user_id').notNull().references(() => user.id, { onDelete: 'restrict' }),
   actorUserId: text('actor_user_id').references(() => user.id, { onDelete: 'set null' }),
   amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
   currency: text('currency').notNull(),
-  type: text('type').notNull(),           // 'status' | 'payment'
+  // no `type` column — wagerId IS NULL → manual payment; NOT NULL → outcome split
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
+  check('ledger_no_self_transfer', sql`from_user_id <> to_user_id`),
   index('ledger_from_user_idx').on(t.fromUserId),
   index('ledger_to_user_idx').on(t.toUserId),
-  index('ledger_challenge_id_idx').on(t.challengeId),
+  index('ledger_wager_idx').on(t.wagerId),
 ]);
 
 // Phase 2: `user_payment_method` is deferred from the MVP schema.
+```
+
+### Pot-Split Arithmetic — Invariants
+
+Implemented in `POST /wagers/:id/outcome` inside `db.transaction(...)` with `SELECT … FOR UPDATE` on the wager row.
+
+Given: `amountCents = Math.round(Number(wager.amount) * 100)`, `N = accepted witnesses`, ordered by `joinedAt ASC`:
+
+```
+baseCents      = Math.floor(amountCents / N)
+remainderCents = amountCents % N
+
+shareCents(i) = baseCents + (i < remainderCents ? 1 : 0)  // first `remainder` witnesses get +1
+
+expectedCents(i) = data.outcome === 'missed' ? shareCents(i) : 0
+currentCents(i)  = SUM(ledger.amount*100) WHERE wagerId=X AND fromUserId=committer AND toUserId=witness_i
+deltaCents(i)    = expectedCents(i) - currentCents(i)
+
+If deltaCents(i) ≠ 0: INSERT ledger row with amount=delta/100, currency=wager.currency
+Then: UPDATE wager SET outcome, outcomeAt, outcomeActorId
+```
+
+**Invariants the implementation proves:**
+
+1. **Share conservation.** Σᵢ shareCents(i) = baseCents·N + remainderCents = amountCents. The rounding penny is always absorbed, never lost.
+2. **Idempotence.** Flipping to the current outcome short-circuits before any writes; `outcomeAt`/`outcomeActorId` remain the original flipper's.
+3. **Reversibility.** Flipping `missed → done` computes expected=0 for every witness; writes negative deltas that sum to `-amountCents`. Balance for the pair returns to zero.
+4. **Append-only.** Ledger rows are never `UPDATE`d or `DELETE`d. Every flip appends; every reversal appends a compensating row.
+5. **Race-safety.** `FOR UPDATE` on the wager row serializes concurrent flips. A second flip either short-circuits (same target) or computes a fresh delta against the committed state.
+6. **Float safety.** `Math.round` on the cent conversion is load-bearing: `Number("10.01") * 100 = 1000.9999…` in IEEE-754. Round recovers every `numeric(10,2)` value exactly.
+7. **Overflow safety.** `numeric(10,2)` caps a single wager at ~$99.99M → ≤10¹⁰ cents, well inside 2^53. Per-pair running sum is SQL-side `bigint`, parsed in TS through `Number(string)`.
+8. **Currency conservation.** Every ledger row for a wager inherits `wager.currency`. Mixing currencies within a wager is impossible at write time.
+
+### Error Handling — wellcrafted `defineErrors` + Hono
+
+Route errors use wellcrafted's `defineErrors` namespace pattern (matches `AssetError` in `routes/assets.ts`). Each variant name describes a specific failure mode:
+
+```typescript
+const WagerError = defineErrors({
+  NotFound: () => ({ message: 'Wager not found.' }),
+  OnlyCommitter: ({ action }: { action: string }) => ({
+    message: `Only the committer can ${action} this wager.`,
+    action,
+  }),
+  InvalidStatus: ({ allowed, action }: { allowed: readonly string[]; action: string }) => ({
+    message: `Only ${allowed.join(' or ')} wagers can be ${action}.`,
+    allowed: [...allowed],
+    action,
+  }),
+  // ... 10 more variants
+});
+
+// Simple handlers — inline c.json with the variant factory
+if (!wagerRow) return c.json(WagerError.NotFound(), 404);
+if (wagerRow.committerId !== userId) {
+  return c.json(WagerError.OnlyCommitter({ action: 'submit' }), 403);
+}
+
+// The outcome-flip transaction returns Result<T, WagerError>. Business-level
+// errors are regular returns (so the tx commits with no writes); throws are
+// reserved for infrastructure failures (real rollbacks).
+const result: Result<OutcomeSuccess, WagerError> = await db.transaction(async (tx) => {
+  if (!wagerRow) return WagerError.NotFound();           // commits, no writes
+  if (!authorized) return WagerError.OutcomeForbidden();  // commits, no writes
+  // ... perform writes ...
+  return Ok({ wager: updatedWager, entries });
+});
+
+if (result.error) return c.json(result, httpStatus(result.error));
+return c.json(result.data);
+```
+
+`httpStatus(error: WagerError): ContentfulStatusCode` pattern-matches on `error.name` to route each variant to its code — keeping HTTP concerns out of the tx callback. The wire shape is `{ data: null, error: { name, message, ...fields } }` for errors (wellcrafted `Result` shape, serialized directly by `c.json`) and bare data for successes; matches the rest of the codebase.
 
 ### Drizzle Config Change
 
@@ -809,6 +881,33 @@ Implemented the database infrastructure (Phase 0) and Betcha API layer (Phase 1)
 ### Follow-up Work
 
 - Deadline auto-expiry cron handler (requires wrangler.jsonc scheduled trigger config)
-- Group challenge pot-split ledger calculation (Phase 3)
-- Betcha frontend (Phase 2)
+- Betcha frontend (Phase 2) — must track the wire-format rename (`challenge` → `wager`, `participant` → `witness`, `challengeId` → `wagerId`, and `WagerError` result-shape responses for non-2xx)
 - The Ark schema + routes (Phase 4)
+
+## Review — Betcha Schema Redesign
+
+**Completed**: 2026-04-19
+
+### Summary
+
+Redesigned the Betcha schema to correctly model the product as a **unidirectional accountability wager** rather than a generic group challenge. Only the committer stakes money; witnesses stake nothing and collect on miss. The original `challenge` + `participant` names implied symmetric stakeholding that doesn't exist.
+
+Also collapsed drizzle migrations 0001–0006 (incremental churn on the old schema) into a single fresh migration on top of the applied baseline 0000. Nothing downstream of 0000 had been applied.
+
+### Changes
+
+- Renamed `challenge` → `wager`, `participant` → `witness`
+- Dropped `challenge.createdBy` (nullable) in favor of `wager.committerId` NOT NULL with cascade — committer is a structural role, not an audit field
+- Added `wager.outcome` + `outcomeAt` + `outcomeActorId` as a second state machine orthogonal to `status`
+- Dropped `ledger.type` column; kind is derivable from `wagerId IS NULL` (payment) vs NOT NULL (outcome split)
+- Tightened `ledger.fromUserId`/`toUserId` to NOT NULL + `ON DELETE RESTRICT` — ledger rows are immutable financial records; hard-deleting a user with outstanding history would corrupt balance sums
+- Collapsed the N+1 per-witness SUM loop in the outcome flip into one grouped query (shrinks `FOR UPDATE` lock hold time)
+- Switched ledger aggregations to `::bigint` casts parsed via `Number(string)` (int4 would overflow at 2^31 cents aggregated)
+- Replaced ad-hoc `{ message }` error payloads + `{ error: 'literal' as const }` discriminated unions with a single `WagerError` namespace via wellcrafted `defineErrors`, matching `AssetError` in `routes/assets.ts`
+- Rewrote `/balances` to query each direction separately so both can use their single-column index; `OR(from=me, to=me) GROUP BY CASE` couldn't use either
+
+### Deviations from Original Spec
+
+- **Group pot-split is now live**, not deferred to Phase 3. The outcome-flip handler splits evenly across accepted witnesses, with rounding-remainder pennies going to the earliest-joining witness first. The "Phase 3" label only applies to group-specific UX.
+- **Deadline auto-expiry is still deferred** — requires wrangler.jsonc scheduled trigger config.
+- **Status naming drift**: original spec had `draft → pending → active → cancelled`; redesigned schema uses `draft → sent → live → cancelled` to be unambiguous about "sent to witnesses" vs. "live and accepting outcome flips."
