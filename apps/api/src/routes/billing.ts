@@ -11,8 +11,8 @@
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
 import { Hono } from 'hono';
-import type { Env } from './app';
-import { createAutumn } from './autumn';
+import type { Env } from '../app';
+import { createAutumn } from '../autumn';
 import type {
 	AggregateResponse,
 	AttachResponse,
@@ -21,9 +21,9 @@ import type {
 	PlansListResponse,
 	PortalResponse,
 	PreviewResponse,
-} from './billing-contract';
-import { ANNUAL_PLANS, FEATURE_IDS, PLAN_IDS, PLANS } from './billing-plans';
-import { MODEL_CREDITS } from './model-costs';
+} from '../billing-contract';
+import { ANNUAL_PLANS, FEATURE_IDS, PLAN_IDS, PLANS } from '../billing-plans';
+import { MODEL_CREDITS } from '../model-costs';
 
 const billingRoutes = new Hono<Env>();
 

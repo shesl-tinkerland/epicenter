@@ -2,10 +2,10 @@ import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import type { Env } from './app';
-import { follow, user } from './db';
+import type { Env } from '../app';
+import { follow, user } from '../db';
 
-const sharedRoutes = new Hono<Env>();
+const socialRoutes = new Hono<Env>();
 
 // ── Validation schemas ───────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ const followSchema = type({
  *
  * Follow another user.
  */
-sharedRoutes.post('/follow', sValidator('json', followSchema), async (c) => {
+socialRoutes.post('/follow', sValidator('json', followSchema), async (c) => {
 	const data = c.req.valid('json');
 	const db = c.var.db;
 	const userId = c.var.user.id;
@@ -42,7 +42,7 @@ sharedRoutes.post('/follow', sValidator('json', followSchema), async (c) => {
  *
  * Unfollow a user.
  */
-sharedRoutes.delete('/follow/:userId', async (c) => {
+socialRoutes.delete('/follow/:userId', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const followingUserId = c.req.param('userId');
@@ -64,7 +64,7 @@ sharedRoutes.delete('/follow/:userId', async (c) => {
  *
  * List mutual follows for the current user.
  */
-sharedRoutes.get('/friends', async (c) => {
+socialRoutes.get('/friends', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const friendRows = await db
@@ -98,7 +98,7 @@ sharedRoutes.get('/friends', async (c) => {
  *
  * List people who follow the current user.
  */
-sharedRoutes.get('/followers', async (c) => {
+socialRoutes.get('/followers', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const followerRows = await db
@@ -122,7 +122,7 @@ sharedRoutes.get('/followers', async (c) => {
  *
  * List people the current user follows.
  */
-sharedRoutes.get('/following', async (c) => {
+socialRoutes.get('/following', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 	const followingRows = await db
@@ -141,4 +141,4 @@ sharedRoutes.get('/following', async (c) => {
 	return c.json(followingRows);
 });
 
-export { sharedRoutes };
+export { socialRoutes };

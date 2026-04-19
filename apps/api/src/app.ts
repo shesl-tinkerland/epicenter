@@ -13,7 +13,7 @@ import { createFactory } from 'hono/factory';
 import { describeRoute } from 'hono-openapi';
 import pg from 'pg';
 import { aiChatHandlers } from './ai-chat';
-import { assetAuthedRoutes, assetPublicRoutes } from './asset-routes';
+import { assetAuthedRoutes, assetPublicRoutes } from './routes/assets';
 import { createAuth } from './auth/create-auth';
 import {
 	renderConsentPage,
@@ -22,9 +22,9 @@ import {
 	renderSignInPage,
 } from './auth-pages';
 import { createAutumn } from './autumn';
-import { betchaRoutes } from './betcha-routes';
-import { sharedRoutes } from './shared-routes';
-import { billingRoutes } from './billing-routes';
+import { betchaRoutes } from './routes/betcha';
+import { billingRoutes } from './routes/billing';
+import { socialRoutes } from './routes/social';
 import { MAX_PAYLOAD_BYTES } from './constants';
 import * as schema from './db';
 
@@ -338,7 +338,7 @@ app.route('/api/billing', billingRoutes);
 app.route('/api/betcha', betchaRoutes);
 
 // Shared social routes — follow, friends (used by Betcha + The Ark)
-app.route('/api/social', sharedRoutes);
+app.route('/api/social', socialRoutes);
 
 // Asset routes — upload + delete (authed, mounted after authGuard)
 app.route('/api/assets', assetAuthedRoutes);

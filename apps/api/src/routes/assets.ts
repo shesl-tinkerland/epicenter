@@ -22,11 +22,11 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
 import { defineErrors } from 'wellcrafted/error';
-import type { Env } from './app.js';
-import { createAutumn } from './autumn.js';
-import { FEATURE_IDS } from './billing-plans.js';
-import { MAX_ASSET_BYTES } from './constants.js';
-import * as schema from './db';
+import type { Env } from '../app.js';
+import { createAutumn } from '../autumn.js';
+import { FEATURE_IDS } from '../billing-plans.js';
+import { MAX_ASSET_BYTES } from '../constants.js';
+import * as schema from '../db';
 
 const ALLOWED_MIME_TYPES = new Set([
 	'image/png',

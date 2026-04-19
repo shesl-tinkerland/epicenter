@@ -2,8 +2,8 @@ import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import type { Env } from './app';
-import { challenge, ledger, participant, user } from './db';
+import type { Env } from '../app';
+import { challenge, ledger, participant, user } from '../db';
 
 const betchaRoutes = new Hono<Env>();
 
