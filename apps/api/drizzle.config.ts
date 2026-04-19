@@ -7,7 +7,7 @@ config({ path: fileURLToPath(new URL('.dev.vars', import.meta.url)) });
 
 export default defineConfig({
 	dialect: 'postgresql',
-	schema: './src/db/schema.ts',
+	schema: './src/db/*.ts',
 	out: './drizzle',
 	dbCredentials: {
 		url: process.env.DATABASE_URL ?? LOCAL_DATABASE_URL,
