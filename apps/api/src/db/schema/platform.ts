@@ -28,11 +28,19 @@ export const durableObjectInstance = pgTable(
 		resourceName: text('resource_name').notNull(),
 		doName: text('do_name').primaryKey(),
 		storageBytes: bigint('storage_bytes', { mode: 'number' }),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		lastAccessedAt: timestamp('last_accessed_at').defaultNow().notNull(),
-		storageMeasuredAt: timestamp('storage_measured_at'),
+		createdAt: timestamp('created_at', { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		storageMeasuredAt: timestamp('storage_measured_at', {
+			withTimezone: true,
+		}),
 	},
-	(table) => [index('doi_user_id_idx').on(table.userId)],
+	(table) => [
+		index('durable_object_instance_user_id_idx').on(table.userId),
+	],
 );
 
 export const asset = pgTable(
@@ -45,7 +53,9 @@ export const asset = pgTable(
 		contentType: text('content_type').notNull(),
 		sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
 		originalName: text('original_name').notNull(),
-		uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+		uploadedAt: timestamp('uploaded_at', { withTimezone: true })
+			.defaultNow()
+			.notNull(),
 	},
 	(table) => [index('asset_user_id_idx').on(table.userId)],
 );
