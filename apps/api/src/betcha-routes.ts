@@ -3,8 +3,7 @@ import { type } from 'arktype';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Env } from './app';
-import { challenge, ledger, participant } from './db/betcha-schema';
-import { user } from './db/schema';
+import { challenge, ledger, participant, user } from './db';
 
 const betchaRoutes = new Hono<Env>();
 

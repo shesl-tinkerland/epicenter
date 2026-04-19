@@ -13,7 +13,7 @@
 import { sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { FEATURE_IDS } from './billing-plans.js';
-import * as schema from './db/schema.js';
+import * as schema from './db';
 
 type ReconcileResult = {
 	usersProcessed: number;

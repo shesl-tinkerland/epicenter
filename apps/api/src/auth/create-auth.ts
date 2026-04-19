@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { createAutumn } from '../autumn';
 import { FEATURE_IDS } from '../billing-plans';
-import * as schema from '../db/schema';
+import * as schema from '../db';
 import { BASE_AUTH_CONFIG } from './base-config';
 import type { SessionResponse } from './contracts';
 import { deriveUserEncryptionKeys } from './encryption';

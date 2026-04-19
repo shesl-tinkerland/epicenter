@@ -3,8 +3,7 @@ import { type } from 'arktype';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Env } from './app';
-import { user } from './db/schema';
-import { follow } from './db/shared-schema';
+import { follow, user } from './db';
 
 const sharedRoutes = new Hono<Env>();
 
