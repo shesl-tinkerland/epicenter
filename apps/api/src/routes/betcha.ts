@@ -1,12 +1,13 @@
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
-import { and, desc, eq, exists, isNotNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, inArray, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { Hono } from 'hono';
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '../app';
-import { ledger, wager, witness } from '../db';
+import { follow, ledger, wager, witness } from '../db';
 
 const betchaRoutes = new Hono<Env>();
 
@@ -35,38 +36,26 @@ const paymentSchema = type({
 
 const WagerError = defineErrors({
 	NotFound: () => ({ message: 'Wager not found.' }),
-	WitnessNotFound: () => ({
-		message: 'You are not a witness on this wager.',
-	}),
 	OnlyCommitter: ({ action }: { action: string }) => ({
 		message: `Only the committer can ${action} this wager.`,
 		action,
 	}),
 	OutcomeForbidden: () => ({
-		message: 'Only the committer or an accepted witness can flip the outcome.',
+		message: 'Only the committer or a witness can flip the outcome.',
 	}),
-	InvalidStatus: ({
-		allowed,
+	AlreadyResolved: ({ action }: { action: string }) => ({
+		message: `Cannot ${action} a wager that already has an outcome or is cancelled.`,
 		action,
-	}: {
-		allowed: readonly string[];
-		action: string;
-	}) => ({
-		message: `Only ${allowed.join(' or ')} wagers can be ${action}.`,
-		allowed: [...allowed],
-		action,
-	}),
-	NotLive: () => ({ message: 'Only live wagers have an outcome.' }),
-	NoAcceptedWitnesses: () => ({
-		message: 'At least one witness must accept before activation.',
-	}),
-	NoSplitRecipients: () => ({
-		message: 'No accepted witnesses to split the pot with.',
 	}),
 	InvalidDeadline: () => ({ message: 'Deadline must be a valid date.' }),
 	InvalidAmount: () => ({ message: 'Amount must be greater than 0.' }),
 	NoUsableWitnesses: () => ({
 		message: 'Add at least one witness who is not yourself.',
+	}),
+	WitnessesMustBeFriends: ({ userIds }: { userIds: string[] }) => ({
+		message:
+			'Every witness must be a mutual follow (friend) of yours. Add them as friends first.',
+		userIds: [...userIds],
 	}),
 	InsertFailed: () => ({ message: 'Could not create the wager.' }),
 	SelfPayment: () => ({ message: "You can't pay yourself." }),
@@ -75,33 +64,48 @@ type WagerError = InferErrors<typeof WagerError>;
 
 /**
  * HTTP status per `WagerError` variant. Typed as `Record<variant, status>` so
- * adding a new variant without a mapping is a compile error. Keeps HTTP
- * concerns out of the tx/service layer — `/outcome` returns
- * `Result<T, WagerError>` and the handler dispatches through this map.
+ * adding a new variant without a mapping is a compile error.
  */
 const WagerErrorHttpStatus: Record<WagerError['name'], ContentfulStatusCode> = {
 	NotFound: 404,
-	WitnessNotFound: 404,
 	OnlyCommitter: 403,
 	OutcomeForbidden: 403,
-	InvalidStatus: 400,
-	NotLive: 400,
-	NoAcceptedWitnesses: 400,
-	NoSplitRecipients: 400,
+	AlreadyResolved: 400,
 	InvalidDeadline: 400,
 	InvalidAmount: 400,
 	NoUsableWitnesses: 400,
+	WitnessesMustBeFriends: 400,
 	InsertFailed: 500,
 	SelfPayment: 400,
 };
+
+// ── Derived state ────────────────────────────────────────────────────────
+
+/**
+ * Derive the wager's display state from stored columns. The DB has no
+ * `status` column — it's computed here so clients don't duplicate the logic.
+ */
+function deriveState(w: {
+	outcome: string | null;
+	cancelledAt: Date | null;
+	deadline: Date;
+}): 'cancelled' | 'done' | 'missed' | 'awaiting_verdict' | 'live' {
+	if (w.cancelledAt) return 'cancelled';
+	if (w.outcome === 'done' || w.outcome === 'missed') return w.outcome;
+	if (w.deadline.getTime() < Date.now()) return 'awaiting_verdict';
+	return 'live';
+}
 
 // ── Wager CRUD ───────────────────────────────────────────────────────────
 
 /**
  * POST /wagers
  *
- * Create a draft wager. The authenticated user is the committer. Invited
- * witnesses are added as witness rows (unaccepted).
+ * Create a live wager. No draft/submit/activate ceremony — the wager is
+ * immediately accepting outcome flips the moment this returns.
+ *
+ * Every `witnessUserIds[i]` must be a mutual follow (friend) of the
+ * committer at this instant, or the whole request is rejected.
  */
 betchaRoutes.post(
 	'/wagers',
@@ -128,6 +132,33 @@ betchaRoutes.post(
 			return c.json(WagerError.NoUsableWitnesses(), 400);
 		}
 
+		// Mutual-follow check: for each requested witness W, require both rows
+		// (userId→W) and (W→userId) to exist in `follow`. Single self-join
+		// restricted to the candidate set.
+		const f2 = alias(follow, 'f2');
+		const mutuals = await db
+			.select({ friendId: follow.followingId })
+			.from(follow)
+			.innerJoin(
+				f2,
+				and(
+					eq(follow.followingId, f2.followerId),
+					eq(follow.followerId, f2.followingId),
+				),
+			)
+			.where(
+				and(
+					eq(follow.followerId, userId),
+					inArray(follow.followingId, witnessUserIds),
+				),
+			);
+
+		const friendSet = new Set(mutuals.map((row) => row.friendId));
+		const nonFriends = witnessUserIds.filter((id) => !friendSet.has(id));
+		if (nonFriends.length > 0) {
+			return c.json(WagerError.WitnessesMustBeFriends({ userIds: nonFriends }), 400);
+		}
+
 		const [createdWager] = await db
 			.insert(wager)
 			.values({
@@ -136,7 +167,6 @@ betchaRoutes.post(
 				amount: data.amount,
 				currency: data.currency ?? 'USD',
 				deadline,
-				status: 'draft',
 				committerId: userId,
 			})
 			.returning();
@@ -149,7 +179,7 @@ betchaRoutes.post(
 			witnessUserIds.map((witnessUserId) => ({
 				wagerId: createdWager.id,
 				userId: witnessUserId,
-				invitedBy: userId,
+				addedBy: userId,
 			})),
 		);
 
@@ -159,7 +189,10 @@ betchaRoutes.post(
 			orderBy: witness.joinedAt,
 		});
 
-		return c.json({ ...createdWager, witnesses }, 201);
+		return c.json(
+			{ ...createdWager, witnesses, state: deriveState(createdWager) },
+			201,
+		);
 	},
 );
 
@@ -197,7 +230,7 @@ betchaRoutes.get('/wagers', async (c) => {
 		orderBy: desc(wager.createdAt),
 	});
 
-	return c.json(wagers);
+	return c.json(wagers.map((w) => ({ ...w, state: deriveState(w) })));
 });
 
 /**
@@ -233,139 +266,21 @@ betchaRoutes.get('/wagers/:id', async (c) => {
 	}
 
 	const { ledgerEntries, ...rest } = wagerRow;
-	return c.json({ ...rest, ledgerHistory: ledgerEntries });
+	return c.json({
+		...rest,
+		ledgerHistory: ledgerEntries,
+		state: deriveState(wagerRow),
+	});
 });
 
 // ── Wager lifecycle ──────────────────────────────────────────────────────
 
 /**
- * POST /wagers/:id/submit
- *
- * Move a wager from draft to sent (awaiting acceptance).
- */
-betchaRoutes.post('/wagers/:id/submit', async (c) => {
-	const db = c.var.db;
-	const userId = c.var.user.id;
-	const wagerId = c.req.param('id');
-
-	const [wagerRow] = await db
-		.select()
-		.from(wager)
-		.where(eq(wager.id, wagerId))
-		.limit(1);
-
-	if (!wagerRow) {
-		return c.json(WagerError.NotFound(), 404);
-	}
-
-	if (wagerRow.committerId !== userId) {
-		return c.json(WagerError.OnlyCommitter({ action: 'submit' }), 403);
-	}
-
-	if (wagerRow.status !== 'draft') {
-		return c.json(
-			WagerError.InvalidStatus({ allowed: ['draft'], action: 'submitted' }),
-			400,
-		);
-	}
-
-	const [updatedWager] = await db
-		.update(wager)
-		.set({ status: 'sent' })
-		.where(eq(wager.id, wagerId))
-		.returning();
-
-	return c.json(updatedWager);
-});
-
-/**
- * POST /wagers/:id/accept
- *
- * Witness accepts the invitation. Idempotent.
- */
-betchaRoutes.post('/wagers/:id/accept', async (c) => {
-	const db = c.var.db;
-	const userId = c.var.user.id;
-	const wagerId = c.req.param('id');
-
-	const [witnessRow] = await db
-		.select()
-		.from(witness)
-		.where(and(eq(witness.wagerId, wagerId), eq(witness.userId, userId)))
-		.limit(1);
-
-	if (!witnessRow) {
-		return c.json(WagerError.WitnessNotFound(), 404);
-	}
-
-	if (witnessRow.acceptedAt) {
-		return c.json(witnessRow);
-	}
-
-	const [updatedWitness] = await db
-		.update(witness)
-		.set({ acceptedAt: new Date() })
-		.where(eq(witness.id, witnessRow.id))
-		.returning();
-
-	return c.json(updatedWitness);
-});
-
-/**
- * POST /wagers/:id/activate
- *
- * Move a wager from sent to live. Requires at least one accepted witness.
- */
-betchaRoutes.post('/wagers/:id/activate', async (c) => {
-	const db = c.var.db;
-	const userId = c.var.user.id;
-	const wagerId = c.req.param('id');
-
-	const [wagerRow] = await db
-		.select()
-		.from(wager)
-		.where(eq(wager.id, wagerId))
-		.limit(1);
-
-	if (!wagerRow) {
-		return c.json(WagerError.NotFound(), 404);
-	}
-
-	if (wagerRow.committerId !== userId) {
-		return c.json(WagerError.OnlyCommitter({ action: 'activate' }), 403);
-	}
-
-	if (wagerRow.status !== 'sent') {
-		return c.json(
-			WagerError.InvalidStatus({ allowed: ['sent'], action: 'activated' }),
-			400,
-		);
-	}
-
-	const [counts] = await db
-		.select({
-			accepted: sql<number>`count(*) filter (where ${witness.acceptedAt} is not null)::int`,
-		})
-		.from(witness)
-		.where(eq(witness.wagerId, wagerId));
-
-	if (!counts || counts.accepted === 0) {
-		return c.json(WagerError.NoAcceptedWitnesses(), 400);
-	}
-
-	const [updatedWager] = await db
-		.update(wager)
-		.set({ status: 'live' })
-		.where(eq(wager.id, wagerId))
-		.returning();
-
-	return c.json(updatedWager);
-});
-
-/**
  * POST /wagers/:id/cancel
  *
- * Cancel a draft or sent wager (committer only, no live wagers).
+ * Cancel a live wager. Committer only; only allowed while `outcome IS NULL`
+ * and `cancelledAt IS NULL`. Writes `cancelledAt`/`cancelledBy`; no ledger
+ * impact (a cancelled wager never posted any deltas to reconcile).
  */
 betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 	const db = c.var.db;
@@ -386,23 +301,17 @@ betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 		return c.json(WagerError.OnlyCommitter({ action: 'cancel' }), 403);
 	}
 
-	if (wagerRow.status !== 'draft' && wagerRow.status !== 'sent') {
-		return c.json(
-			WagerError.InvalidStatus({
-				allowed: ['draft', 'sent'],
-				action: 'cancelled',
-			}),
-			400,
-		);
+	if (wagerRow.cancelledAt || wagerRow.outcome) {
+		return c.json(WagerError.AlreadyResolved({ action: 'cancel' }), 400);
 	}
 
 	const [updatedWager] = await db
 		.update(wager)
-		.set({ status: 'cancelled' })
+		.set({ cancelledAt: new Date(), cancelledBy: userId })
 		.where(eq(wager.id, wagerId))
 		.returning();
 
-	return c.json(updatedWager);
+	return c.json({ ...updatedWager!, state: deriveState(updatedWager!) });
 });
 
 // ── Outcome (the committer's verdict) ────────────────────────────────────
@@ -410,16 +319,16 @@ betchaRoutes.post('/wagers/:id/cancel', async (c) => {
 /**
  * POST /wagers/:id/outcome
  *
- * Flip the committer's outcome. Any accepted witness OR the committer can
- * call this. The pot-split ledger is reconciled inside the transaction via
- * per-witness deltas, so the operation is idempotent and append-only.
+ * Flip the committer's outcome. Any witness OR the committer can call this.
+ * The pot-split ledger is reconciled inside the transaction via per-witness
+ * deltas, so the operation is idempotent and append-only.
  *
  * Algorithm (inside tx, with FOR UPDATE on the wager row):
- *   1. Lock wager. If outcome already matches, return (no-op).
- *   2. Load accepted witnesses, ordered by joinedAt.
+ *   1. Lock wager. Reject if cancelled. If outcome already matches, no-op.
+ *   2. Load witnesses, ordered by joinedAt.
  *   3. Compute per-witness expected cents under new outcome:
  *        missed → floor(amount_cents / N); first `remainder` witnesses get +1
- *        done / pending → 0
+ *        done   → 0
  *   4. Single grouped query: current cents per witness from prior ledger rows
  *      (committer → *, this wager). Loop witnesses in memory; insert a delta
  *      row where expected - current != 0.
@@ -450,10 +359,14 @@ betchaRoutes.post(
 
 				if (!wagerRow) return WagerError.NotFound();
 
+				if (wagerRow.cancelledAt) {
+					return WagerError.AlreadyResolved({ action: 'flip outcome on' });
+				}
+
 				const isCommitter = wagerRow.committerId === actorUserId;
 				if (!isCommitter) {
 					const [witnessRow] = await tx
-						.select({ acceptedAt: witness.acceptedAt })
+						.select({ id: witness.id })
 						.from(witness)
 						.where(
 							and(
@@ -462,12 +375,10 @@ betchaRoutes.post(
 							),
 						)
 						.limit(1);
-					if (!witnessRow || !witnessRow.acceptedAt) {
+					if (!witnessRow) {
 						return WagerError.OutcomeForbidden();
 					}
 				}
-
-				if (wagerRow.status !== 'live') return WagerError.NotLive();
 
 				// No-op flip: preserve the original outcomeAt / outcomeActorId — the
 				// attribution belongs to whoever set the outcome first, not to a
@@ -482,16 +393,13 @@ betchaRoutes.post(
 						userId: witness.userId,
 					})
 					.from(witness)
-					.where(
-						and(
-							eq(witness.wagerId, wagerId),
-							isNotNull(witness.acceptedAt),
-						),
-					)
+					.where(eq(witness.wagerId, wagerId))
 					.orderBy(witness.joinedAt);
 
+				// Should be impossible: POST /wagers rejects empty witness lists.
+				// Guard against DB state drift anyway.
 				if (witnesses.length === 0) {
-					return WagerError.NoSplitRecipients();
+					return WagerError.OutcomeForbidden();
 				}
 
 				const committerId = wagerRow.committerId;
@@ -519,14 +427,14 @@ betchaRoutes.post(
 						),
 					)
 					.groupBy(ledger.toUserId);
-	
+
 				const currentCentsByUser = new Map<string, number>();
 				for (const row of priorSumRows) {
 					currentCentsByUser.set(row.toUserId, Number(row.totalCents));
 				}
-	
+
 				const entries: (typeof ledger.$inferSelect)[] = [];
-	
+
 				for (let i = 0; i < witnesses.length; i += 1) {
 					const w = witnesses[i]!;
 					// First `remainderCents` witnesses get +1 to absorb the rounding
@@ -535,9 +443,9 @@ betchaRoutes.post(
 					const expectedCents = data.outcome === 'missed' ? shareCents : 0;
 					const currentCents = currentCentsByUser.get(w.userId) ?? 0;
 					const deltaCents = expectedCents - currentCents;
-	
+
 					if (deltaCents === 0) continue;
-	
+
 					const [entry] = await tx
 						.insert(ledger)
 						.values({
@@ -549,10 +457,10 @@ betchaRoutes.post(
 							currency: wagerRow.currency,
 						})
 						.returning();
-	
+
 					if (entry) entries.push(entry);
 				}
-	
+
 				// The FOR UPDATE lock at the top of the tx guarantees this row
 				// exists and is exclusively ours for the rest of the tx, so
 				// `.returning()` cannot come back empty here.
@@ -573,7 +481,10 @@ betchaRoutes.post(
 		if (result.error) {
 			return c.json(result, WagerErrorHttpStatus[result.error.name]);
 		}
-		return c.json(result.data);
+		return c.json({
+			...result.data,
+			wager: { ...result.data.wager, state: deriveState(result.data.wager) },
+		});
 	},
 );
 

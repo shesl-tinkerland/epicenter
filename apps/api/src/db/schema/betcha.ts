@@ -7,7 +7,7 @@ import {
 	timestamp,
 	unique,
 } from 'drizzle-orm/pg-core';
-import { relations, sql, type SQL } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
 import { user } from './auth';
 
@@ -15,22 +15,12 @@ import { user } from './auth';
 const generateId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
 
 /**
- * Build a `col IN (...)` CHECK from a const-tuple. Single source of truth:
- * adding a value to the exported array updates both TS union + SQL CHECK.
+ * Committer's verdict on themselves — flippable by committer or any witness.
+ * NULL = no verdict yet (replaces the old `'pending'` literal). Once set,
+ * flipping between `done` and `missed` reconciles via compensating ledger
+ * deltas; unflipping back to NULL is not a supported operation.
  */
-function inValuesCheck(column: string, values: readonly string[]): SQL {
-	return sql`${sql.identifier(column)} IN (${sql.join(
-		values.map((v) => sql`${v}`),
-		sql`, `,
-	)})`;
-}
-
-/** Acceptance lifecycle — whether the wager is active and counting. */
-export const wagerStatuses = ['draft', 'sent', 'live', 'cancelled'] as const;
-export type WagerStatus = (typeof wagerStatuses)[number];
-
-/** Committer's verdict on themselves — flippable by committer or any accepted witness. */
-export const wagerOutcomes = ['pending', 'done', 'missed'] as const;
+export const wagerOutcomes = ['done', 'missed'] as const;
 export type WagerOutcome = (typeof wagerOutcomes)[number];
 
 /**
@@ -40,9 +30,12 @@ export type WagerOutcome = (typeof wagerOutcomes)[number];
  * `witness` table) stake nothing — they observe, judge, and collect a share
  * of the stake if the committer misses.
  *
- * Two orthogonal state machines:
- *   status:   draft → sent → live → cancelled           (acceptance lifecycle)
- *   outcome:  pending → {done | missed}   (flippable)   (committer's verdict)
+ * Wagers are live the instant they're created; there is no draft/sent/
+ * activate ceremony. State is derived, not stored:
+ *   - `cancelledAt IS NOT NULL`                        → cancelled
+ *   - `outcome IS NOT NULL`                            → done | missed
+ *   - `outcome IS NULL AND deadline < now()`           → awaiting_verdict
+ *   - otherwise                                        → live
  *
  * `outcomeActorId` records the *most recent* flipper; per-flip attribution
  * lives on each ledger row's `actorUserId`.
@@ -59,12 +52,13 @@ export const wager = pgTable(
 		amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
 		currency: text('currency').notNull().default('USD'),
 		deadline: timestamp('deadline', { withTimezone: true }).notNull(),
-		status: text('status', { enum: wagerStatuses }).notNull().default('draft'),
-		outcome: text('outcome', { enum: wagerOutcomes })
-			.notNull()
-			.default('pending'),
+		outcome: text('outcome', { enum: wagerOutcomes }),
 		outcomeAt: timestamp('outcome_at', { withTimezone: true }),
 		outcomeActorId: text('outcome_actor_id').references(() => user.id, {
+			onDelete: 'set null',
+		}),
+		cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+		cancelledBy: text('cancelled_by').references(() => user.id, {
 			onDelete: 'set null',
 		}),
 		createdAt: timestamp('created_at', { withTimezone: true })
@@ -77,18 +71,25 @@ export const wager = pgTable(
 	},
 	(t) => [
 		check('wager_amount_positive', sql`amount > 0`),
-		check('wager_status_valid', inValuesCheck('status', wagerStatuses)),
-		check('wager_outcome_valid', inValuesCheck('outcome', wagerOutcomes)),
+		// outcome is nullable; CHECK allows NULL (no verdict) or the two
+		// verdict literals. Inline because drizzle-kit emits parameter
+		// markers for sql-tagged values, which Postgres rejects in DDL.
+		check(
+			'wager_outcome_valid',
+			sql`outcome IS NULL OR outcome IN ('done', 'missed')`,
+		),
 		index('wager_committer_idx').on(t.committerId),
 	],
 );
 
 /**
- * A user invited to observe and judge a wager.
+ * A user added to observe and judge a wager.
  *
- * Witnesses stake nothing. Only accepted witnesses (`acceptedAt IS NOT NULL`)
- * count toward the pot-split and can flip the outcome. Ordered by `joinedAt`
- * for deterministic rounding-remainder assignment.
+ * Witnesses stake nothing and don't opt in per-wager — being added IS being
+ * a witness. Consent is enforced upstream by requiring mutual-follow
+ * friendship at create time. Every witness counts toward the pot-split and
+ * can flip the outcome. Ordered by `joinedAt` for deterministic
+ * rounding-remainder assignment.
  */
 export const witness = pgTable(
 	'witness',
@@ -100,10 +101,9 @@ export const witness = pgTable(
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
-		invitedBy: text('invited_by').references(() => user.id, {
+		addedBy: text('added_by').references(() => user.id, {
 			onDelete: 'set null',
 		}),
-		acceptedAt: timestamp('accepted_at', { withTimezone: true }),
 		joinedAt: timestamp('joined_at', { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -181,6 +181,11 @@ export const wagerRelations = relations(wager, ({ one, many }) => ({
 		references: [user.id],
 		relationName: 'wager_outcome_actor',
 	}),
+	canceller: one(user, {
+		fields: [wager.cancelledBy],
+		references: [user.id],
+		relationName: 'wager_canceller',
+	}),
 	witnesses: many(witness),
 	ledgerEntries: many(ledger),
 }));
@@ -195,10 +200,10 @@ export const witnessRelations = relations(witness, ({ one }) => ({
 		references: [user.id],
 		relationName: 'witness_user',
 	}),
-	inviter: one(user, {
-		fields: [witness.invitedBy],
+	adder: one(user, {
+		fields: [witness.addedBy],
 		references: [user.id],
-		relationName: 'witness_inviter',
+		relationName: 'witness_adder',
 	}),
 }));
 
