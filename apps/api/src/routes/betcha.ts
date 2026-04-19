@@ -1,12 +1,12 @@
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, isNotNull, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '../app';
-import { ledger, user, wager, witness } from '../db';
+import { ledger, wager, witness } from '../db';
 
 const betchaRoutes = new Hono<Env>();
 
@@ -100,32 +100,6 @@ function httpStatus(error: WagerError): ContentfulStatusCode {
 	}
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-async function getWagerWitnesses(
-	db: Env['Variables']['db'],
-	wagerId: string,
-) {
-	return db
-		.select({
-			id: witness.id,
-			wagerId: witness.wagerId,
-			userId: witness.userId,
-			invitedBy: witness.invitedBy,
-			acceptedAt: witness.acceptedAt,
-			joinedAt: witness.joinedAt,
-			user: {
-				id: user.id,
-				name: user.name,
-				image: user.image,
-			},
-		})
-		.from(witness)
-		.innerJoin(user, eq(witness.userId, user.id))
-		.where(eq(witness.wagerId, wagerId))
-		.orderBy(witness.joinedAt);
-}
-
 // ── Wager CRUD ───────────────────────────────────────────────────────────
 
 /**
@@ -184,7 +158,11 @@ betchaRoutes.post(
 			})),
 		);
 
-		const witnesses = await getWagerWitnesses(db, createdWager.id);
+		const witnesses = await db.query.witness.findMany({
+			where: eq(witness.wagerId, createdWager.id),
+			with: { user: { columns: { id: true, name: true, image: true } } },
+			orderBy: witness.joinedAt,
+		});
 
 		return c.json({ ...createdWager, witnesses }, 201);
 	},
@@ -200,65 +178,31 @@ betchaRoutes.get('/wagers', async (c) => {
 	const db = c.var.db;
 	const userId = c.var.user.id;
 
-	const asWitnessRows = await db
-		.select({ wagerId: witness.wagerId })
-		.from(witness)
-		.where(eq(witness.userId, userId));
-
-	const asCommitterRows = await db
-		.select({ id: wager.id })
-		.from(wager)
-		.where(eq(wager.committerId, userId));
-
-	const wagerIds = [
-		...new Set([
-			...asWitnessRows.map((row) => row.wagerId),
-			...asCommitterRows.map((row) => row.id),
-		]),
-	];
-
-	if (wagerIds.length === 0) {
-		return c.json([]);
-	}
-
-	const wagerRows = await db
-		.select()
-		.from(wager)
-		.where(inArray(wager.id, wagerIds))
-		.orderBy(desc(wager.createdAt));
-
-	const witnessRows = await db
-		.select({
-			id: witness.id,
-			wagerId: witness.wagerId,
-			userId: witness.userId,
-			invitedBy: witness.invitedBy,
-			acceptedAt: witness.acceptedAt,
-			joinedAt: witness.joinedAt,
-			user: {
-				id: user.id,
-				name: user.name,
-				image: user.image,
+	const wagers = await db.query.wager.findMany({
+		where: or(
+			eq(wager.committerId, userId),
+			exists(
+				db
+					.select({ one: sql`1` })
+					.from(witness)
+					.where(
+						and(
+							eq(witness.wagerId, wager.id),
+							eq(witness.userId, userId),
+						),
+					),
+			),
+		),
+		with: {
+			witnesses: {
+				with: { user: { columns: { id: true, name: true, image: true } } },
+				orderBy: witness.joinedAt,
 			},
-		})
-		.from(witness)
-		.innerJoin(user, eq(witness.userId, user.id))
-		.where(inArray(witness.wagerId, wagerIds))
-		.orderBy(witness.joinedAt);
+		},
+		orderBy: desc(wager.createdAt),
+	});
 
-	const witnessesByWager = new Map<string, typeof witnessRows>();
-	for (const row of witnessRows) {
-		const existing = witnessesByWager.get(row.wagerId) ?? [];
-		existing.push(row);
-		witnessesByWager.set(row.wagerId, existing);
-	}
-
-	return c.json(
-		wagerRows.map((wagerRow) => ({
-			...wagerRow,
-			witnesses: witnessesByWager.get(wagerRow.id) ?? [],
-		})),
-	);
+	return c.json(wagers);
 });
 
 /**
@@ -272,43 +216,29 @@ betchaRoutes.get('/wagers/:id', async (c) => {
 	const userId = c.var.user.id;
 	const wagerId = c.req.param('id');
 
-	const [wagerRow] = await db
-		.select()
-		.from(wager)
-		.where(eq(wager.id, wagerId))
-		.limit(1);
+	const wagerRow = await db.query.wager.findFirst({
+		where: eq(wager.id, wagerId),
+		with: {
+			witnesses: {
+				with: { user: { columns: { id: true, name: true, image: true } } },
+				orderBy: witness.joinedAt,
+			},
+			ledgerEntries: { orderBy: desc(ledger.createdAt) },
+		},
+	});
 
 	if (!wagerRow) {
 		return c.json(WagerError.NotFound(), 404);
 	}
 
-	if (wagerRow.committerId !== userId) {
-		const [witnessRow] = await db
-			.select({ id: witness.id })
-			.from(witness)
-			.where(
-				and(eq(witness.wagerId, wagerId), eq(witness.userId, userId)),
-			)
-			.limit(1);
-
-		if (!witnessRow) {
-			return c.json(WagerError.NotFound(), 404);
-		}
+	const isCommitter = wagerRow.committerId === userId;
+	const isWitness = wagerRow.witnesses.some((w) => w.userId === userId);
+	if (!isCommitter && !isWitness) {
+		return c.json(WagerError.NotFound(), 404);
 	}
 
-	const witnesses = await getWagerWitnesses(db, wagerId);
-
-	const ledgerHistory = await db
-		.select()
-		.from(ledger)
-		.where(eq(ledger.wagerId, wagerId))
-		.orderBy(desc(ledger.createdAt));
-
-	return c.json({
-		...wagerRow,
-		witnesses,
-		ledgerHistory,
-	});
+	const { ledgerEntries, ...rest } = wagerRow;
+	return c.json({ ...rest, ledgerHistory: ledgerEntries });
 });
 
 // ── Wager lifecycle ──────────────────────────────────────────────────────
