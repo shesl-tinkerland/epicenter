@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CircleIcon from '@lucide/svelte/icons/circle';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
 	import { cn, type WithoutChild } from '#/utils.js';
 
@@ -15,17 +15,18 @@
 	bind:ref
 	data-slot="dropdown-menu-radio-item"
 	class={cn(
-		"focus:bg-accent focus:text-accent-foreground outline-hidden relative flex cursor-default select-none items-center gap-2 rounded-sm py-1.5 pe-2 ps-8 text-sm data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-		className,
+		"focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground gap-2.5 rounded-2xl py-2 pr-8 pl-3 text-sm font-medium data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		className
 	)}
 	{...restProps}
 >
 	{#snippet children({ checked })}
 		<span
-			class="pointer-events-none absolute start-2 flex size-3.5 items-center justify-center"
+			class="absolute right-2 flex items-center justify-center pointer-events-none"
+			data-slot="dropdown-menu-radio-item-indicator"
 		>
 			{#if checked}
-				<CircleIcon class="size-2 fill-current" />
+				<CheckIcon />
 			{/if}
 		</span>
 		{@render childrenProp?.({ checked })}

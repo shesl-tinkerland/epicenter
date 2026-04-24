@@ -1,4 +1,5 @@
 import { getContext, setContext } from 'svelte';
+import { IsMobile } from '#/hooks/is-mobile.svelte.js';
 import { SIDEBAR_KEYBOARD_SHORTCUT } from './constants.js';
 
 type Getter<T> = () => T;
@@ -22,12 +23,21 @@ export type SidebarStateProps = {
 class SidebarState {
 	readonly props: SidebarStateProps;
 	open = $derived.by(() => this.props.open());
+	openMobile = $state(false);
 	setOpen: SidebarStateProps['setOpen'];
+	#isMobile: IsMobile;
 	state = $derived.by(() => (this.open ? 'expanded' : 'collapsed'));
 
 	constructor(props: SidebarStateProps) {
 		this.setOpen = props.setOpen;
+		this.#isMobile = new IsMobile();
 		this.props = props;
+	}
+
+	// Convenience getter for checking if the sidebar is mobile
+	// without this, we would need to use `sidebar.isMobile.current` everywhere
+	get isMobile() {
+		return this.#isMobile.current;
 	}
 
 	// Event handler to apply to the `<svelte:window>`
@@ -38,8 +48,14 @@ class SidebarState {
 		}
 	};
 
+	setOpenMobile = (value: boolean) => {
+		this.openMobile = value;
+	};
+
 	toggle = () => {
-		return this.setOpen(!this.open);
+		return this.#isMobile.current
+			? (this.openMobile = !this.openMobile)
+			: this.setOpen(!this.open);
 	};
 }
 

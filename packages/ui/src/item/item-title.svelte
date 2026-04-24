@@ -14,10 +14,10 @@
 	bind:this={ref}
 	data-slot="item-title"
 	class={cn(
-		'flex items-center gap-2 text-sm leading-snug font-medium',
-		// Custom override: upstream uses `w-fit` here. We use `min-w-0` instead
+		"font-heading gap-2 text-sm leading-snug font-medium underline-offset-4 line-clamp-1 flex w-fit items-center",
+		// Custom override: upstream uses `w-fit` here. We use `w-auto min-w-0` instead
 		// to enable text truncation inside flex containers.
-		'min-w-0',
+		"w-auto min-w-0",
 		className,
 	)}
 	{...restProps}

@@ -9,9 +9,11 @@
 		checked = $bindable(false),
 		indeterminate = $bindable(false),
 		class: className,
+		inset,
 		children: childrenProp,
 		...restProps
 	}: WithoutChildrenOrChild<ContextMenuPrimitive.CheckboxItemProps> & {
+		inset?: boolean;
 		children?: Snippet;
 	} = $props();
 </script>
@@ -21,18 +23,17 @@
 	bind:checked
 	bind:indeterminate
 	data-slot="context-menu-checkbox-item"
+	data-inset={inset}
 	class={cn(
-		"data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 ps-8 pe-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-		className,
+		"focus:bg-accent focus:text-accent-foreground gap-2.5 rounded-2xl py-2 pr-8 pl-3 text-sm font-medium data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		className
 	)}
 	{...restProps}
 >
 	{#snippet children({ checked })}
-		<span
-			class="pointer-events-none absolute start-2 flex size-3.5 items-center justify-center"
-		>
+		<span class="absolute right-2 pointer-events-none">
 			{#if checked}
-				<CheckIcon class="size-4" />
+				<CheckIcon />
 			{/if}
 		</span>
 		{@render childrenProp?.()}

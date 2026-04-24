@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { localTimezone, parseNaturalLanguageDate, toDateTimeString } from './parse-date.js';
+import {
+	localTimezone,
+	parseNaturalLanguageDate,
+	toDateTimeString,
+} from './parse-date.js';
 
 function getTomorrowLocalDate() {
 	const date = new Date();
@@ -16,7 +20,10 @@ describe('parseNaturalLanguageDate', () => {
 
 	it('parses tomorrow at 3pm with the expected components', () => {
 		const expected = getTomorrowLocalDate();
-		const parsed = parseNaturalLanguageDate('tomorrow at 3pm', 'America/New_York');
+		const parsed = parseNaturalLanguageDate(
+			'tomorrow at 3pm',
+			'America/New_York',
+		);
 
 		expect(parsed).not.toBeNull();
 		if (!parsed) {
@@ -48,7 +55,10 @@ describe('parseNaturalLanguageDate', () => {
 	});
 
 	it('returns different UTC dates for different timezones', () => {
-		const newYork = parseNaturalLanguageDate('tomorrow at 3pm', 'America/New_York');
+		const newYork = parseNaturalLanguageDate(
+			'tomorrow at 3pm',
+			'America/New_York',
+		);
 		const utc = parseNaturalLanguageDate('tomorrow at 3pm', 'UTC');
 		const tokyo = parseNaturalLanguageDate('tomorrow at 3pm', 'Asia/Tokyo');
 
@@ -69,7 +79,10 @@ describe('parseNaturalLanguageDate', () => {
 
 describe('toDateTimeString', () => {
 	it('formats UTC date and timezone with a pipe separator', () => {
-		const value = toDateTimeString(new Date('2024-01-01T20:00:00.000Z'), 'America/New_York');
+		const value = toDateTimeString(
+			new Date('2024-01-01T20:00:00.000Z'),
+			'America/New_York',
+		);
 
 		expect(value).toBe('2024-01-01T20:00:00.000Z|America/New_York');
 		expect(value).toContain('|');

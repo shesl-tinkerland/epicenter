@@ -14,12 +14,12 @@
 </script>
 
 <Sonner
-	richColors
 	theme={mode.current}
 	class="toaster group"
 	style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
 	{...restProps}
-	>{#snippet loadingIcon()}
+>
+	{#snippet loadingIcon()}
 		<Loader2Icon class="size-4 animate-spin" />
 	{/snippet}
 	{#snippet successIcon()}

@@ -27,10 +27,9 @@ import type { Result } from 'wellcrafted/result';
  * bookmarkState.toggle(tab).then((r) => toastOnError(r, 'Failed to toggle bookmark'));
  * ```
  */
-export function toastOnError<TInput extends Result<unknown, AnyTaggedError> | AnyTaggedError>(
-	resultOrError: TInput,
-	title: string,
-): TInput {
+export function toastOnError<
+	TInput extends Result<unknown, AnyTaggedError> | AnyTaggedError,
+>(resultOrError: TInput, title: string): TInput {
 	const error = 'data' in resultOrError ? resultOrError.error : resultOrError;
 	if (error) {
 		toast.error(title, { description: error.message });

@@ -18,10 +18,10 @@
 </script>
 
 <script lang="ts">
-	import Button from '#/button/button.svelte';
-	import { cn } from '#/utils';
 	import { cubicInOut } from 'svelte/easing';
 	import { Tween } from 'svelte/motion';
+	import Button from '#/button/button.svelte';
+	import { cn } from '#/utils';
 
 	let {
 		starsTweenedDuration = 5000,

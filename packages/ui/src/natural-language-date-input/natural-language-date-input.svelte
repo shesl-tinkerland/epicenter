@@ -8,14 +8,14 @@
 </script>
 
 <script lang="ts">
-	import * as Command from '#/command';
 	import * as chrono from 'chrono-node';
+	import * as Command from '#/command';
 
 	let {
 		placeholder = 'E.g. "tomorrow at 5pm" or "in 2 hours"',
 		min,
 		max,
-		onChoice
+		onChoice,
 	}: NaturalLanguageDateInputProps = $props();
 
 	let value = $state('');
@@ -47,9 +47,7 @@
 					}}
 				>
 					<div class="flex w-full place-items-center justify-between gap-2">
-						<span>
-							{suggestion.label}
-						</span>
+						<span> {suggestion.label} </span>
 						<span class="text-muted-foreground">
 							{suggestion.date.toDateString()}
 							{suggestion.date.toLocaleTimeString()}

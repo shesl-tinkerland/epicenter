@@ -1,9 +1,14 @@
 @import "tailwindcss";
-/* @import '@fontsource-variable/manrope'; */
 
 @import "tw-animate-css";
 
 @import "./prose.css";
+
+@import "shadcn-svelte/tailwind.css";
+
+@import "@fontsource-variable/inter";
+
+@import "@fontsource-variable/lora";
 
 @source "./**/*.{svelte,ts}";
 
@@ -23,89 +28,94 @@
 	::file-selector-button {
 		border-color: var(--color-gray-200, currentcolor);
 	}
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+	html {
+		@apply font-sans;
+	}
 }
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--font-sans:
-		"Manrope Variable", system-ui, -apple-system, BlinkMacSystemFont,
-		"Segoe UI", Roboto, sans-serif;
 	--radius: 0.625rem;
 	--background: oklch(1 0 0);
-	--foreground: oklch(0.129 0.042 264.695);
+	--foreground: oklch(0.147 0.004 49.3);
 	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.129 0.042 264.695);
+	--card-foreground: oklch(0.147 0.004 49.3);
 	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.129 0.042 264.695);
-	--primary: oklch(0.208 0.042 265.755);
-	--primary-foreground: oklch(0.984 0.003 247.858);
-	--secondary: oklch(0.968 0.007 247.896);
-	--secondary-foreground: oklch(0.208 0.042 265.755);
-	--muted: oklch(0.968 0.007 247.896);
-	--muted-foreground: oklch(0.554 0.046 257.417);
-	--accent: oklch(0.968 0.007 247.896);
-	--accent-foreground: oklch(0.208 0.042 265.755);
+	--popover-foreground: oklch(0.147 0.004 49.3);
+	--primary: oklch(0.214 0.009 43.1);
+	--primary-foreground: oklch(0.986 0.002 67.8);
+	--secondary: oklch(0.96 0.002 17.2);
+	--secondary-foreground: oklch(0.214 0.009 43.1);
+	--muted: oklch(0.96 0.002 17.2);
+	--muted-foreground: oklch(0.547 0.021 43.1);
+	--accent: oklch(0.96 0.002 17.2);
+	--accent-foreground: oklch(0.214 0.009 43.1);
 	--destructive: oklch(0.577 0.245 27.325);
 	--warning: oklch(0.666 0.179 58.318);
 	--success: oklch(0.736 0.196 144.128);
-	--border: oklch(0.929 0.013 255.508);
-	--input: oklch(0.929 0.013 255.508);
-	--ring: oklch(0.704 0.04 256.788);
-	--chart-1: oklch(0.646 0.222 41.116);
-	--chart-2: oklch(0.6 0.118 184.704);
-	--chart-3: oklch(0.398 0.07 227.392);
-	--chart-4: oklch(0.828 0.189 84.429);
-	--chart-5: oklch(0.769 0.188 70.08);
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.205 0 0);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	--border: oklch(0.922 0.005 34.3);
+	--input: oklch(0.922 0.005 34.3);
+	--ring: oklch(0.714 0.014 41.2);
+	--chart-1: oklch(0.868 0.007 39.5);
+	--chart-2: oklch(0.547 0.021 43.1);
+	--chart-3: oklch(0.438 0.017 39.3);
+	--chart-4: oklch(0.367 0.016 35.7);
+	--chart-5: oklch(0.268 0.011 36.5);
+	--sidebar: oklch(0.986 0.002 67.8);
+	--sidebar-foreground: oklch(0.147 0.004 49.3);
+	--sidebar-primary: oklch(0.214 0.009 43.1);
+	--sidebar-primary-foreground: oklch(0.986 0.002 67.8);
+	--sidebar-accent: oklch(0.96 0.002 17.2);
+	--sidebar-accent-foreground: oklch(0.214 0.009 43.1);
+	--sidebar-border: oklch(0.922 0.005 34.3);
+	--sidebar-ring: oklch(0.714 0.014 41.2);
 }
 
 .dark {
-	--font-sans: "Manrope Variable", sans-serif;
-	--background: oklch(0.129 0.042 264.695);
-	--foreground: oklch(0.984 0.003 247.858);
-	--card: oklch(0.208 0.042 265.755);
-	--card-foreground: oklch(0.984 0.003 247.858);
-	--popover: oklch(0.208 0.042 265.755);
-	--popover-foreground: oklch(0.984 0.003 247.858);
-	--primary: oklch(0.929 0.013 255.508);
-	--primary-foreground: oklch(0.208 0.042 265.755);
-	--secondary: oklch(0.279 0.041 260.031);
-	--secondary-foreground: oklch(0.984 0.003 247.858);
-	--muted: oklch(0.279 0.041 260.031);
-	--muted-foreground: oklch(0.704 0.04 256.788);
-	--accent: oklch(0.279 0.041 260.031);
-	--accent-foreground: oklch(0.984 0.003 247.858);
+	--background: oklch(0.147 0.004 49.3);
+	--foreground: oklch(0.986 0.002 67.8);
+	--card: oklch(0.214 0.009 43.1);
+	--card-foreground: oklch(0.986 0.002 67.8);
+	--popover: oklch(0.214 0.009 43.1);
+	--popover-foreground: oklch(0.986 0.002 67.8);
+	--primary: oklch(0.922 0.005 34.3);
+	--primary-foreground: oklch(0.214 0.009 43.1);
+	--secondary: oklch(0.268 0.011 36.5);
+	--secondary-foreground: oklch(0.986 0.002 67.8);
+	--muted: oklch(0.268 0.011 36.5);
+	--muted-foreground: oklch(0.714 0.014 41.2);
+	--accent: oklch(0.268 0.011 36.5);
+	--accent-foreground: oklch(0.986 0.002 67.8);
 	--destructive: oklch(0.704 0.191 22.216);
 	--warning: oklch(0.769 0.188 70.08);
 	--success: oklch(0.64 0.169 145.386);
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.551 0.027 264.364);
-	--chart-1: oklch(0.488 0.243 264.376);
-	--chart-2: oklch(0.696 0.17 162.48);
-	--chart-3: oklch(0.769 0.188 70.08);
-	--chart-4: oklch(0.627 0.265 303.9);
-	--chart-5: oklch(0.645 0.246 16.439);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--ring: oklch(0.547 0.021 43.1);
+	--chart-1: oklch(0.868 0.007 39.5);
+	--chart-2: oklch(0.547 0.021 43.1);
+	--chart-3: oklch(0.438 0.017 39.3);
+	--chart-4: oklch(0.367 0.016 35.7);
+	--chart-5: oklch(0.268 0.011 36.5);
+	--sidebar: oklch(0.214 0.009 43.1);
+	--sidebar-foreground: oklch(0.986 0.002 67.8);
+	--sidebar-primary: oklch(0.922 0.005 34.3);
+	--sidebar-primary-foreground: oklch(0.214 0.009 43.1);
+	--sidebar-accent: oklch(0.268 0.011 36.5);
+	--sidebar-accent-foreground: oklch(0.986 0.002 67.8);
 	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.439 0 0);
+	--sidebar-ring: oklch(0.547 0.021 43.1);
 }
 
 @theme inline {
-	--font-sans: var(--font-sans);
+	--font-sans: "Inter Variable", sans-serif;
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -146,13 +156,8 @@
 	/* Custom breakpoints */
 	--breakpoint-xxs: 196px;
 	--breakpoint-xs: 320px;
-}
-
-@layer base {
-	* {
-		@apply border-border outline-ring/50;
-	}
-	body {
-		@apply bg-background text-foreground;
-	}
+	--font-heading: "Lora Variable", serif;
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
 }
