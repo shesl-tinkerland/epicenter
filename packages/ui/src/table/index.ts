@@ -1,3 +1,5 @@
+import SelectAllPopover from './SelectAllPopover.svelte';
+import SortableTableHeader from './SortableTableHeader.svelte';
 import Root from './table.svelte';
 import Body from './table-body.svelte';
 import Caption from './table-caption.svelte';
@@ -25,4 +27,6 @@ export {
 	Root as Table,
 	Row,
 	Row as TableRow,
+	SelectAllPopover,
+	SortableTableHeader,
 };
