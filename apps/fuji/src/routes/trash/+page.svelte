@@ -82,7 +82,7 @@
 										<RotateCcwIcon class="size-4" />
 									</Button>
 									<Button
-										variant="ghost-destructive"
+										variant="destructive"
 										size="icon-sm"
 										title="Delete permanently"
 										onclick={() => {

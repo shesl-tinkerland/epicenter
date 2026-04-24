@@ -25,11 +25,11 @@
 	>
 		<span class="min-w-0 flex-1">{displayMessage}</span>
 		<div class="flex shrink-0 items-center gap-1">
-			<Button variant="ghost-destructive" onclick={onRetry}>
+			<Button variant="destructive" onclick={onRetry}>
 				<RotateCcwIcon class="size-3" />
 				Retry
 			</Button>
-			<Button variant="ghost-destructive" size="icon-xs" onclick={onDismiss}>
+			<Button variant="destructive" size="icon-xs" onclick={onDismiss}>
 				<XIcon class="size-3" />
 			</Button>
 		</div>

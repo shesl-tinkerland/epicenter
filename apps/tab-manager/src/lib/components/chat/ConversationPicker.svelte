@@ -121,7 +121,7 @@
 											>{formatRelativeTime(conv.updatedAt)}</span
 										>
 										<Button
-											variant="ghost-destructive"
+											variant="destructive"
 											size="icon-xs"
 											class="opacity-0 group-hover:opacity-100"
 											onclick={(e: MouseEvent) => {

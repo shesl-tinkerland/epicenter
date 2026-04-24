@@ -7,14 +7,14 @@
 		toDateTimeString,
 	} from '@epicenter/ui/natural-language-date-input';
 	import * as Popover from '@epicenter/ui/popover';
+	import { Spinner } from '@epicenter/ui/spinner';
 	import * as StarRating from '@epicenter/ui/star-rating';
 	import { TimezoneCombobox } from '@epicenter/ui/timezone-combobox';
-	import { Spinner } from '@epicenter/ui/spinner';
+	import type { RichTextHandle } from '@epicenter/workspace';
 	import { DateTimeString } from '@epicenter/workspace';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { format } from 'date-fns';
-	import type { RichTextHandle } from '@epicenter/workspace';
 	import { goto } from '$app/navigation';
 	import { workspace } from '$lib/client';
 	import type { Entry } from '$lib/workspace';
@@ -76,7 +76,7 @@
 			<span class="text-sm text-muted-foreground">Back to entries</span>
 		</div>
 		<Button
-			variant="ghost-destructive"
+			variant="destructive"
 			size="icon-sm"
 			onclick={() => {
 				confirmationDialog.open({
