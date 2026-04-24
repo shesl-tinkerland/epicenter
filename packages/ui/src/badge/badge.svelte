@@ -18,9 +18,6 @@
 				success:
 					'bg-success/10 text-success [a]:hover:bg-success/20 focus-visible:ring-success/20 dark:focus-visible:ring-success/40 dark:bg-success/20',
 				id: 'rounded-md bg-muted text-muted-foreground [a]:hover:bg-muted/90 px-1.5 font-mono text-xs font-normal',
-				'status.completed': 'bg-green-500/10 text-green-500',
-				'status.failed': 'bg-red-500/10 text-red-500',
-				'status.running': 'bg-blue-500/10 text-blue-500',
 			},
 		},
 		defaultVariants: {

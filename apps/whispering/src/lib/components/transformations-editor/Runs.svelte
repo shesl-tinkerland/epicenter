@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
@@ -17,6 +16,7 @@
 	import type { TransformationRun } from '$lib/state/transformation-runs.svelte';
 	import { transformationRuns } from '$lib/state/transformation-runs.svelte';
 	import { viewTransition } from '$lib/utils/viewTransitions';
+	import RunStatusBadge from './RunStatusBadge.svelte';
 
 	let { runs }: { runs: TransformationRun[] } = $props();
 
@@ -96,9 +96,7 @@
 									{/if}
 								</Button>
 							</Table.Cell>
-							<Table.Cell>
-								<Badge variant={`status.${run.status}`}> {run.status} </Badge>
-							</Table.Cell>
+							<Table.Cell> <RunStatusBadge status={run.status} /> </Table.Cell>
 							<Table.Cell> {formatDate(run.startedAt)} </Table.Cell>
 							<Table.Cell>
 								{run.completedAt ? formatDate(run.completedAt) : '-'}
@@ -160,9 +158,7 @@
 														{#each run.stepRuns as stepRun}
 															<Table.Row>
 																<Table.Cell>
-																	<Badge variant={`status.${stepRun.status}`}>
-																		{stepRun.status}
-																	</Badge>
+																	<RunStatusBadge status={stepRun.status} />
 																</Table.Cell>
 																<Table.Cell>
 																	{formatDate(stepRun.startedAt)}
