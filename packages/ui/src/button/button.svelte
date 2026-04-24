@@ -74,6 +74,7 @@
 
 {#snippet buttonContent(tooltipProps?: Record<string, unknown>)}
 	{#if href}
+		<!-- biome-ignore lint/a11y/useValidAriaRole: conditional role is valid -->
 		<a
 			bind:this={ref}
 			data-slot="button"
