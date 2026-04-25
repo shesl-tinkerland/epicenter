@@ -116,6 +116,78 @@ When extending shadcn-svelte components with custom styles, we use a specific pa
 
 This pattern makes component updates much clearer: shadcn's style updates show in the first `cn()` argument, while our customizations remain visually separate in subsequent arguments.
 
+## Theming
+
+Theming lives in [`src/app.css`](./src/app.css). Every component reads CSS variables (`var(--primary)`, `var(--radius)`, etc.) — never hard-coded colors. To change the look, change the variables. No CLI, no recompute, no component edits.
+
+### Adjust a color or radius
+
+Edit the variable in `:root` (light mode) and/or `.dark` (dark mode). Hot reload picks it up.
+
+```css
+:root {
+    --radius: 0.625rem;     /* one value drives all radius sizes */
+    --primary: oklch(0.214 0.009 43.1);
+    --background: oklch(1 0 0);
+}
+```
+
+The radius scale is derived once in `@theme inline`:
+
+```css
+--radius-sm: calc(var(--radius) - 4px);
+--radius-md: calc(var(--radius) - 2px);
+--radius-lg: var(--radius);
+--radius-xl: calc(var(--radius) + 4px);
+--radius-2xl: calc(var(--radius) * 1.8);
+--radius-3xl: calc(var(--radius) * 2.2);
+--radius-4xl: calc(var(--radius) * 2.6);
+```
+
+So a single `--radius` change cascades into button (`rounded-4xl`), badge (`rounded-3xl`), dialog (`rounded-4xl`), and everything else proportionally.
+
+### Swap fonts
+
+Fonts are not managed by the shadcn-svelte CLI. We import them via `@fontsource-variable/*` packages and reference them in `@theme inline`:
+
+```css
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/lora";
+
+@theme inline {
+    --font-sans: "Inter Variable", sans-serif;
+    --font-heading: "Lora Variable", serif;
+}
+```
+
+Headings are wired via the registry's per-component `class="font-heading"` (CardTitle, AlertDialogTitle, etc.) — that's the idiomatic Luma pattern, no global `h1–h6` rule needed.
+
+### Wholesale restyle (rare)
+
+When a single-variable edit isn't enough — switching base color family (taupe → mauve), changing styles (Luma → New York), or adopting a brand-new preset — re-run the CLI. This rewrites `app.css`'s palette and (depending on flags) registry components, so it's destructive on purpose.
+
+```bash
+# Single base-color swap
+bun x shadcn-svelte@latest init --overwrite --no-deps \
+  --base-color mauve --css src/app.css \
+  --components-alias '#' --lib-alias '#/lib' \
+  --utils-alias '#/utils' --hooks-alias '#/hooks' --ui-alias '#'
+
+# Whole new preset (build one at https://shadcn-svelte.com/create)
+bun x shadcn-svelte@latest init --overwrite --no-deps \
+  --preset PRESET_ID --css src/app.css \
+  --components-alias '#' --lib-alias '#/lib' \
+  --utils-alias '#/utils' --hooks-alias '#/hooks' --ui-alias '#'
+```
+
+Available base colors: `neutral`, `stone`, `zinc`, `mauve`, `olive`, `mist`, `taupe`.
+
+**Always commit before running this.** The CLI will wipe Epicenter customizations: custom `--warning`/`--success` tokens, the dark-mode `--sidebar-primary` retint, font imports, the `prose.css` import, etc. After the rewrite, `git diff` shows what got clobbered. Restore by grepping for `// Custom:` and `// Custom override:` comments in the diff — those mark every intentional Epicenter deviation.
+
+### What not to edit
+
+Component class strings (`rounded-4xl`, `bg-primary`, etc.) reference theme variables. Don't search-and-replace them — change the underlying variable instead. The whole point of the variable layer is that one edit propagates everywhere.
+
 ## Component Management Workflow
 
 ### Adding New Components
