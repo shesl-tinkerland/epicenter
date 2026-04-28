@@ -12,4 +12,9 @@ export {
 	type SessionStore,
 } from './auth/session-store';
 export { createCLI } from './cli';
+export {
+	connectWorkspace,
+	type ConnectedWorkspace,
+	type ConnectWorkspaceOptions,
+} from './connect';
 export { type LoadConfigResult, loadConfig } from './load-config';
