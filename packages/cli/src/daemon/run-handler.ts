@@ -24,10 +24,10 @@ import {
 } from '@epicenter/workspace';
 import { Ok } from 'wellcrafted/result';
 
-import { RunError, type RunResponse } from '../commands/run.js';
 import type { WorkspaceEntry } from '../load-config.js';
 import { explainEmpty, waitForPeer } from '../util/peer-wait.js';
 import type { RunInput } from './app.js';
+import { RunError, type RunResponse } from './run-errors.js';
 
 export async function executeRun(
 	entry: WorkspaceEntry,

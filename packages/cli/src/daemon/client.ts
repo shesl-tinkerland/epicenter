@@ -29,12 +29,12 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
-import type { RunError } from '../commands/run.js';
 import { CONFIG_FILENAME } from '../load-config.js';
 import type { ResolvedTarget } from '../util/common-options.js';
 import type { ResolveError } from '../util/resolve-entry.js';
 import type { ListInput, PeerSnapshot, RunInput } from './app.js';
 import { socketPathFor } from './paths.js';
+import type { RunError } from './run-errors.js';
 
 /**
  * Tagged-error variants returned by daemon client surfaces. Domain errors
