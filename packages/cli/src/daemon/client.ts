@@ -24,15 +24,11 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { Ok, type Result } from 'wellcrafted/result';
+import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
-import type { ActionManifest } from '@epicenter/workspace';
-
-import type { RunError } from '../commands/run.js';
 import { CONFIG_FILENAME } from '../load-config.js';
 import type { ResolvedTarget } from '../util/common-options.js';
-import type { ResolveError } from '../util/resolve-entry.js';
-import type { DaemonApp, PeerSnapshot } from './app.js';
+import type { DaemonApp } from './app.js';
 import { socketPathFor } from './paths.js';
 
 /**
@@ -120,46 +116,18 @@ export async function pingDaemon(
 }
 
 /**
- * Make one route call and merge transport + domain errors into one union.
- *
- * Every route's body is `Result<T, E>` (with `E = never` for routes that
- * have no domain failures). On success, that body is the return value
- * directly: success/Err narrowing happens once at the call site. On
- * transport-plane failures (connect / timeout / non-2xx), we synthesize
- * the matching `DaemonError` variant and return it in the same union.
- */
-async function callRoute<T, E>(
-	socketPath: string,
-	timeoutMs: number,
-	pending: Promise<Response>,
-): Promise<Result<T, E | DaemonError>> {
-	try {
-		const res = await pending;
-		if (!res.ok) {
-			const body = await res.text().catch(() => '');
-			return DaemonError.HandlerCrashed({
-				socketPath,
-				cause: body || `HTTP ${res.status}`,
-			});
-		}
-		return (await res.json()) as Result<T, E>;
-	} catch (cause) {
-		if (cause instanceof Error && cause.name === 'TimeoutError') {
-			return DaemonError.Timeout({ socketPath, timeoutMs });
-		}
-		return DaemonError.Unreachable({ socketPath, cause });
-	}
-}
-
-/**
  * Build a typed client for a daemon listening on `socketPath`. The returned
  * methods are derived from {@link DaemonApp} via `hc<DaemonApp>`, so call
- * sites get input-shape checking and inferred return types without
- * redeclaring the contracts.
+ * sites get input-shape checking and `Result` body types inferred from the
+ * route handlers (no manual `<T, E>` re-declaration).
  *
- * Each method returns `Promise<Result<Success, DomainErr | DaemonError>>`.
- * The renderer narrows `error.name` across both unions; no second `if`
- * needed at the call site.
+ * Each method merges Hono's typed body `Result<T, E>` with `DaemonError`
+ * (transport failures + non-2xx) into a single union the renderer narrows
+ * by `error.name`. The transport handling is inlined per method to keep
+ * Hono's status-discriminated narrowing on `res.ok` and `res.json()`
+ * intact; only `Timeout` is named explicitly because it's the one rejection
+ * with a different remediation, everything else folds into `Unreachable`
+ * with `cause` preserved for diagnostics.
  */
 export function daemonClient(
 	socketPath: string,
@@ -175,29 +143,85 @@ export function daemonClient(
 	});
 
 	return {
-		peers: (args: { workspace?: string }) =>
-			callRoute<PeerSnapshot[], never>(
-				socketPath,
-				timeoutMs,
-				client.peers.$post({ json: args }),
-			),
+		peers: async (args: { workspace?: string }) => {
+			const fetched = await tryAsync({
+				try: () => client.peers.$post({ json: args }),
+				catch: (cause) =>
+					cause instanceof Error && cause.name === 'TimeoutError'
+						? DaemonError.Timeout({ socketPath, timeoutMs })
+						: DaemonError.Unreachable({ socketPath, cause }),
+			});
+			if (fetched.error !== null) return fetched;
+			const res = fetched.data;
+			if (!res.ok) {
+				const body = await res.text().catch(() => '');
+				return DaemonError.HandlerCrashed({
+					socketPath,
+					cause: body || `HTTP ${res.status}`,
+				});
+			}
+			return await res.json();
+		},
 
-		list: (args: Parameters<typeof client.list.$post>[0]['json']) =>
-			callRoute<ActionManifest, ResolveError>(
-				socketPath,
-				timeoutMs,
-				client.list.$post({ json: args }),
-			),
+		list: async (args: Parameters<typeof client.list.$post>[0]['json']) => {
+			const fetched = await tryAsync({
+				try: () => client.list.$post({ json: args }),
+				catch: (cause) =>
+					cause instanceof Error && cause.name === 'TimeoutError'
+						? DaemonError.Timeout({ socketPath, timeoutMs })
+						: DaemonError.Unreachable({ socketPath, cause }),
+			});
+			if (fetched.error !== null) return fetched;
+			const res = fetched.data;
+			if (!res.ok) {
+				const body = await res.text().catch(() => '');
+				return DaemonError.HandlerCrashed({
+					socketPath,
+					cause: body || `HTTP ${res.status}`,
+				});
+			}
+			return await res.json();
+		},
 
-		run: (args: Parameters<typeof client.run.$post>[0]['json']) =>
-			callRoute<unknown, RunError | ResolveError>(
-				socketPath,
-				timeoutMs,
-				client.run.$post({ json: args }),
-			),
+		run: async (args: Parameters<typeof client.run.$post>[0]['json']) => {
+			const fetched = await tryAsync({
+				try: () => client.run.$post({ json: args }),
+				catch: (cause) =>
+					cause instanceof Error && cause.name === 'TimeoutError'
+						? DaemonError.Timeout({ socketPath, timeoutMs })
+						: DaemonError.Unreachable({ socketPath, cause }),
+			});
+			if (fetched.error !== null) return fetched;
+			const res = fetched.data;
+			if (!res.ok) {
+				const body = await res.text().catch(() => '');
+				return DaemonError.HandlerCrashed({
+					socketPath,
+					cause: body || `HTTP ${res.status}`,
+				});
+			}
+			return await res.json();
+		},
 
-		shutdown: () =>
-			callRoute<null, never>(socketPath, timeoutMs, client.shutdown.$post()),
+		shutdown: async () => {
+			const fetched = await tryAsync({
+				try: () => client.shutdown.$post(),
+				catch: (cause) =>
+					cause instanceof Error && cause.name === 'TimeoutError'
+						? DaemonError.Timeout({ socketPath, timeoutMs })
+						: DaemonError.Unreachable({ socketPath, cause }),
+			});
+			if (fetched.error !== null) return fetched;
+			const res = fetched.data;
+			if (!res.ok) {
+				const body = await res.text().catch(() => '');
+				return DaemonError.HandlerCrashed({
+					socketPath,
+					cause: body || `HTTP ${res.status}`,
+				});
+			}
+			return await res.json();
+		},
 	};
 }
 
