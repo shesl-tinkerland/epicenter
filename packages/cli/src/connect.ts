@@ -55,6 +55,13 @@ export type ConnectWorkspaceOptions = {
 	encryption: EncryptionAttachment;
 	/** Server URL. Defaults to `process.env.EPICENTER_SERVER` then `'https://api.epicenter.so'`. */
 	serverUrl?: string;
+	/**
+	 * Override the local SQLite persistence path. Defaults to
+	 * `~/.epicenter/persistence/<ydoc.guid>.db`. Useful for tests (a tmpdir
+	 * keeps state per-test) and for self-hosted deployments that put state
+	 * outside the home directory.
+	 */
+	persistencePath?: string;
 };
 
 export type ConnectedWorkspace = {
@@ -69,11 +76,12 @@ export function connectWorkspace({
 	ydoc,
 	encryption,
 	serverUrl = process.env.EPICENTER_SERVER ?? DEFAULT_SERVER_URL,
+	persistencePath = epicenterPaths.persistence(ydoc.guid),
 }: ConnectWorkspaceOptions): ConnectedWorkspace {
 	const sessions = createSessionStore();
 
 	const persistence = attachSqlite(ydoc, {
-		filePath: epicenterPaths.persistence(ydoc.guid),
+		filePath: persistencePath,
 	});
 
 	const unlock = attachSessionUnlock(encryption, {

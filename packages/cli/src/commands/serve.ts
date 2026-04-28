@@ -50,15 +50,11 @@ import { dirFromArgv, dirOption } from '../util/common-options.js';
 
 /**
  * Hardcoded ceiling on how long any single workspace's `whenConnected`
- * may hang before `serve` gives up on startup. This exists *only* because
- * `@epicenter/workspace`'s sync layer doesn't reject `whenConnected` on
- * permanent auth failures (it just retries forever); without a clock, an
- * expired token would freeze startup indefinitely.
- *
- * Tracked: `specs/20260427T120000-workspace-sync-failed-phase.md`. When
- * the workspace package surfaces a `failed` SyncStatus phase and rejects
- * `whenConnected` accordingly, this constant and the `raceTimeout` call
- * site go away.
+ * may hang before `serve` gives up on startup. The workspace package now
+ * rejects `whenConnected` on permanent auth failures (`SyncFailedError`),
+ * so this is a sanity bound for transient/flaky paths only: a network
+ * that's degraded but not dead can keep retrying for arbitrary long, and
+ * we'd rather fail startup with a clear timeout than hang.
  */
 const CONNECT_TIMEOUT_MS = 10000;
 
