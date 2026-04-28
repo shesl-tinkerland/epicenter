@@ -25,7 +25,16 @@ export const peersCommand: CommandModule = {
 		yargs
 			.option('dir', dirOption)
 			.option('workspace', workspaceOption)
-			.options(formatYargsOptions()),
+			.options(formatYargsOptions())
+			.example('$0 peers', 'Table of currently connected peers')
+			.example(
+				'$0 peers --format json | jq -r \'.[].deviceId\'',
+				'Just the deviceIds, one per line',
+			)
+			.example(
+				'$0 peers --format jsonl | fzf | jq -r .deviceId',
+				'Pick a peer interactively',
+			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const target = resolveTarget(args);

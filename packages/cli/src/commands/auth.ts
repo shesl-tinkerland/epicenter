@@ -38,10 +38,17 @@ export const authCommand: CommandModule = {
 				command: 'login [server]',
 				describe: 'Log in to an Epicenter server (opens browser)',
 				builder: (y: Argv) =>
-					y.positional('server', {
-						type: 'string',
-						describe: `Server URL (default: ${DEFAULT_SERVER})`,
-					}),
+					y
+						.positional('server', {
+							type: 'string',
+							default: DEFAULT_SERVER,
+							describe: 'Server URL (override for self-hosted)',
+						})
+						.example('$0 auth login', 'Log in to the public Epicenter server')
+						.example(
+							'$0 auth login https://self-hosted.example.com',
+							'Log in to a self-hosted instance',
+						),
 				handler: async (argv) => {
 					const serverUrl =
 						typeof argv.server === 'string' && argv.server.length > 0

@@ -49,7 +49,17 @@ export const listCommand: CommandModule = {
 			})
 			.option('dir', dirOption)
 			.option('workspace', workspaceOption)
-			.options(formatYargsOptions()),
+			.options(formatYargsOptions())
+			.example('$0 list', 'Tree of every exposed action (human view)')
+			.example('$0 list sync.peers', 'Drill into one subtree')
+			.example(
+				'$0 list --format json | jq -r \'.[] | select(.type=="mutation") | .path\'',
+				'Every mutation path, via jq',
+			)
+			.example(
+				'$0 list --format jsonl | fzf | jq -r .path | xargs $0 run',
+				'Interactive action picker piped into `run`',
+			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const path = typeof args.path === 'string' ? args.path : '';

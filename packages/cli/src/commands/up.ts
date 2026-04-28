@@ -258,7 +258,19 @@ export const upCommand: CommandModule = {
 				default: false,
 				description:
 					'Suppress awareness join/leave lines (sync state changes still print)',
-			}),
+			})
+			.example(
+				'$0 up',
+				'Bring the workspace in the cwd online; park in the foreground',
+			)
+			.example(
+				'$0 up -C ~/notes',
+				'Run the daemon for a workspace in another directory',
+			)
+			.example(
+				'$0 up & $0 list && $0 run sync.status',
+				'Background the daemon, then drive it from the same shell',
+			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const options: UpOptions = {

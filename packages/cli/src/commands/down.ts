@@ -153,7 +153,9 @@ export const downCommand: CommandModule = {
 				type: 'boolean',
 				default: false,
 				description: 'Stop every running daemon for this user.',
-			}),
+			})
+			.example('$0 down', 'Stop the daemon for the cwd workspace')
+			.example('$0 down --all', 'Stop every running daemon for this user'),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const options: DownOptions = {

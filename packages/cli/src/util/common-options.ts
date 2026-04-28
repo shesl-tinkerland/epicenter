@@ -19,7 +19,8 @@ export const dirOption: Options = {
 	type: 'string',
 	alias: 'C',
 	default: '.',
-	description: 'Directory containing epicenter.config.ts',
+	description:
+		'Directory containing epicenter.config.ts (default: cwd). Mirrors `git -C`.',
 };
 
 export function dirFromArgv(argv: Record<string, unknown>): string {

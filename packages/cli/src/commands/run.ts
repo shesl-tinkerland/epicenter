@@ -53,7 +53,8 @@ const peerOption: Options = {
 
 const waitOption: Options = {
 	type: 'number',
-	description: `Total ms to wait for peer resolution + RPC; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
+	default: DEFAULT_PEER_WAIT_MS,
+	description: 'Total ms to wait for peer resolution + RPC; requires --peer.',
 };
 
 /**
@@ -125,12 +126,11 @@ export const runCommand: CommandModule = {
 		yargs
 			.positional('action', {
 				type: 'string',
-				demandOption: true,
 				describe: 'Action path, e.g. savedTabs.create',
 			})
 			.positional('input', {
 				type: 'string',
-				describe: 'Inline JSON or @file.json',
+				describe: 'Inline JSON, @file.json, or omit to read stdin',
 			})
 			.option('dir', dirOption)
 			.option('workspace', workspaceOption)
@@ -138,7 +138,23 @@ export const runCommand: CommandModule = {
 			.option('wait', waitOption)
 			.implies('wait', 'peer')
 			.options(formatYargsOptions())
-			.strict(),
+			.example('$0 run sync.status', 'Invoke a query with no input')
+			.example(
+				'$0 run savedTabs.create \'{"url":"https://...","title":"..."}\'',
+				'Inline JSON input',
+			)
+			.example(
+				'$0 run savedTabs.create @tab.json',
+				'Read JSON input from a file',
+			)
+			.example(
+				'echo \'{"id":"abc"}\' | $0 run savedTabs.remove',
+				'Pipe JSON input on stdin',
+			)
+			.example(
+				'$0 run sync.status --peer device-mac',
+				'Dispatch to a remote peer over the sync room',
+			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const actionPath = String(args.action);
@@ -147,8 +163,7 @@ export const runCommand: CommandModule = {
 			typeof args.peer === 'string' && args.peer.length > 0
 				? args.peer
 				: undefined;
-		const waitMs =
-			typeof args.wait === 'number' ? args.wait : DEFAULT_PEER_WAIT_MS;
+		const waitMs = args.wait as number;
 		const target = resolveTarget(args);
 		const input = await resolveInput(args);
 

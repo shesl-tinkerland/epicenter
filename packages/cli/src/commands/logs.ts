@@ -159,7 +159,19 @@ export const logsCommand: CommandModule = {
 				alias: 'f',
 				default: false,
 				description: 'Stream new lines as they are appended.',
-			}),
+			})
+			.example(
+				'$0 logs',
+				'Print the last 50 lines of the sole running daemon (errors if more than one)',
+			)
+			.example(
+				'$0 logs -f',
+				'Stream new lines as they are appended (Ctrl-C to stop)',
+			)
+			.example(
+				'$0 logs -C ~/notes -f',
+				'Follow logs for a specific workspace directory',
+			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
 		const explicitDir = typeof args.dir === 'string' ? args.dir : undefined;
