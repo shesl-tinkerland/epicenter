@@ -21,7 +21,7 @@ import {
 import type { Result } from 'wellcrafted/result';
 
 import type { AwarenessState } from '../load-config.js';
-import type { ResolveError } from '../util/resolve-entry.js';
+import type { ResolveError } from './resolve-entry.js';
 
 /**
  * CLI-specific failures of the `/run` route. Carrying the failure mode

@@ -21,7 +21,7 @@ import { type } from 'arktype';
 import { Hono } from 'hono';
 import { Err, Ok } from 'wellcrafted/result';
 
-import { resolveEntry } from '../util/resolve-entry.js';
+import { resolveEntry } from './resolve-entry.js';
 import type { WorkspaceEntry } from '../load-config.js';
 import { executeRun } from './run-handler.js';
 

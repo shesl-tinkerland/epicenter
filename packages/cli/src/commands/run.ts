@@ -26,7 +26,7 @@ import type { RunInput } from '../daemon/app';
 import { type DaemonError, getDaemon } from '../daemon/client';
 import type { RunError } from '../daemon/run-errors';
 import type { AwarenessState } from '../load-config';
-import type { ResolveError } from '../util/resolve-entry';
+import type { ResolveError } from '../daemon/resolve-entry';
 import {
 	dirOption,
 	resolveTarget,
