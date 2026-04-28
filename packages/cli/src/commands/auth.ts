@@ -10,6 +10,7 @@
  * Self-hosters pass their own URL; everyone else omits it.
  */
 
+import pc from 'picocolors';
 import type { Argv, CommandModule } from 'yargs';
 import { createAuthApi } from '../auth/api';
 import { createSessionStore } from '../auth/session-store';
@@ -54,8 +55,12 @@ export const authCommand: CommandModule = {
 					const api = createAuthApi(serverUrl);
 					const codeData = await api.requestDeviceCode();
 
-					console.log(`\nVisit: ${codeData.verification_uri_complete}`);
-					console.log(`Enter code: ${codeData.user_code}\n`);
+					console.log(
+						`\n${pc.dim('Visit:')}      ${pc.cyan(codeData.verification_uri_complete)}`,
+					);
+					console.log(
+						`${pc.dim('Enter code:')} ${pc.bold(codeData.user_code)}\n`,
+					);
 
 					let interval = codeData.interval * 1000;
 					const deadline = Date.now() + codeData.expires_in * 1000;
@@ -74,7 +79,7 @@ export const authCommand: CommandModule = {
 								sessionData.user?.name ??
 								sessionData.user?.email ??
 								serverUrl;
-							console.log(`✓ Logged in as ${displayName}`);
+							console.log(`${pc.green('✓')} Logged in as ${pc.bold(displayName)}`);
 							return;
 						}
 
@@ -131,7 +136,7 @@ export const authCommand: CommandModule = {
 					}
 
 					await sessions.clear(session.server);
-					console.log('✓ Logged out.');
+					console.log(`${pc.green('✓')} Logged out.`);
 				},
 			} satisfies CommandModule)
 			.command({
@@ -161,22 +166,24 @@ export const authCommand: CommandModule = {
 						const remote = await api.getSession();
 						const displayName = remote.user.name ?? remote.user.email;
 						console.log(
-							`Logged in as: ${displayName} (${remote.user.email})`,
+							`${pc.dim('Logged in as:')} ${pc.bold(displayName)} ${pc.dim(`(${remote.user.email})`)}`,
 						);
-						console.log(`Server:       ${session.server}`);
-						console.log(`Session:      valid`);
+						console.log(`${pc.dim('Server:      ')} ${session.server}`);
+						console.log(`${pc.dim('Session:     ')} ${pc.green('valid')}`);
 						if (remote.session.expiresAt) {
 							console.log(
-								`Expires at:   ${new Date(remote.session.expiresAt).toLocaleString()}`,
+								`${pc.dim('Expires at:  ')} ${new Date(remote.session.expiresAt).toLocaleString()}`,
 							);
 						}
 					} catch {
 						const displayName =
 							session.user?.name ?? session.user?.email ?? '(unknown)';
-						console.log(`Logged in as: ${displayName} [stored]`);
-						console.log(`Server:       ${session.server}`);
+						console.log(
+							`${pc.dim('Logged in as:')} ${pc.bold(displayName)} ${pc.dim('[stored]')}`,
+						);
+						console.log(`${pc.dim('Server:      ')} ${session.server}`);
 						console.warn(
-							'Warning: Could not verify session with remote server.',
+							`${pc.yellow('Warning:')} Could not verify session with remote server.`,
 						);
 					}
 				},

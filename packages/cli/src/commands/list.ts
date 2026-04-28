@@ -17,11 +17,12 @@
  */
 
 import { type ActionManifest } from '@epicenter/workspace';
+import pc from 'picocolors';
 import Type, { type TSchema } from 'typebox';
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule } from 'yargs';
 
-import { type DaemonError, getDaemon } from '../daemon/client';
+import { getDaemon } from '../daemon/client';
 import {
 	dirOption,
 	resolveTarget,
@@ -32,7 +33,7 @@ import {
 	output,
 	outputError,
 } from '../util/format-output';
-import type { ResolveError } from '../util/resolve-entry';
+import type { ResolveError } from '../daemon/resolve-entry';
 
 type Format = 'json' | 'jsonl' | undefined;
 
@@ -62,7 +63,10 @@ export const listCommand: CommandModule = {
 			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
-		const path = typeof args.path === 'string' ? args.path : '';
+		const path =
+			typeof args.path === 'string' && args.path.length > 0
+				? args.path
+				: undefined;
 		const format = args.format as Format;
 		const target = resolveTarget(args);
 
@@ -73,91 +77,82 @@ export const listCommand: CommandModule = {
 			return;
 		}
 		const result = await daemon.list({ workspace: target.userWorkspace });
-		renderResult(result, path, format);
+		if (result.error) {
+			outputError(`${pc.red('error:')} ${result.error.message}`);
+			process.exitCode = 1;
+			return;
+		}
+
+		if (path === undefined) {
+			renderAll(result.data, format);
+			return;
+		}
+		renderAtPath(result.data, path, format);
 	},
 };
 
-function renderResult(
-	result: Result<ActionManifest, ResolveError | DaemonError>,
-	path: string,
-	format: Format,
-): void {
-	if (result.error !== null) {
-		switch (result.error.name) {
-			case 'UnknownWorkspace':
-			case 'AmbiguousWorkspace':
-			case 'MissingConfig':
-			case 'Required':
-			case 'Timeout':
-			case 'Unreachable':
-			case 'HandlerCrashed':
-				outputError(`error: ${result.error.message}`);
-				process.exitCode = 1;
-				return;
-		}
-		return;
-	}
+function renderAll(entries: ActionManifest, format: Format): void {
 	if (format) {
-		renderJson(result.data, path, format);
+		const rows = Object.entries(entries).map(([p, meta]) =>
+			toActionDescriptor(meta, p),
+		);
+		output(rows, { format });
 		return;
 	}
-	renderText(result.data, path);
-}
-
-function renderJson(
-	entries: ActionManifest,
-	path: string,
-	format: Exclude<Format, undefined>,
-): void {
-	if (path && entries[path]) {
-		output(toActionDescriptor(entries[path]!, path), { format });
-		return;
-	}
-
-	const subset = filterByPath(entries, path);
-	const rows = Object.entries(subset).map(([p, meta]) =>
-		toActionDescriptor(meta, p),
-	);
-	if (path && rows.length === 0) {
-		fail(`"${path}" is not defined.`);
-		return;
-	}
-	output(rows, { format });
-}
-
-function renderText(entries: ActionManifest, path: string): void {
-	const subset = filterByPath(entries, path);
-	const matches = Object.keys(subset).length;
-
-	if (path && matches === 0) {
-		fail(`"${path}" is not defined.`);
-		return;
-	}
-
-	if (matches === 0) {
+	if (Object.keys(entries).length === 0) {
 		console.log('(no actions exposed)');
 		return;
 	}
+	printTree(entries, '');
+}
 
-	const leaf = path ? entries[path] : undefined;
-	if (leaf && matches === 1) {
-		printActionDetail(path, leaf);
+function renderAtPath(
+	entries: ActionManifest,
+	path: string,
+	format: Format,
+): void {
+	const exact = entries[path];
+	if (exact !== undefined) {
+		if (format) {
+			output(toActionDescriptor(exact, path), { format });
+			return;
+		}
+		printActionDetail(path, exact);
+		return;
+	}
+
+	const subset = filterChildren(entries, path);
+	if (Object.keys(subset).length === 0) {
+		fail(`"${path}" is not defined.`);
+		return;
+	}
+	if (format) {
+		const rows = Object.entries(subset).map(([p, meta]) =>
+			toActionDescriptor(meta, p),
+		);
+		output(rows, { format });
 		return;
 	}
 	printTree(subset, path);
 }
 
 function fail(message: string): void {
-	outputError(`error: ${message}`);
+	outputError(`${pc.red('error:')} ${message}`);
 	process.exitCode = 1;
 }
 
-export function filterByPath(entries: ActionManifest, path: string): ActionManifest {
-	if (!path) return entries;
+/**
+ * Children of `path` in the manifest. The exact match at `path` is handled
+ * separately by the caller; this returns proper descendants only.
+ */
+export function filterChildren(
+	entries: ActionManifest,
+	path: string,
+): ActionManifest {
 	const pfx = path + '.';
 	const out: ActionManifest = {};
 	for (const [p, meta] of Object.entries(entries)) {
-		if (p === path || p.startsWith(pfx)) out[p] = meta;
+		if (p.startsWith(pfx)) out[p] = meta;
 	}
 	return out;
 }
@@ -210,11 +205,11 @@ function printChildren(node: TreeNode, prefix: string): void {
 		const isLast = idx === children.length - 1;
 		const branch = isLast ? '└── ' : '├── ';
 		const label = child.action
-			? `${child.name}  (${child.action.type})${
-					child.action.description ? `  ${child.action.description}` : ''
+			? `${child.name}  ${pc.cyan(`(${child.action.type})`)}${
+					child.action.description ? pc.dim(`  ${child.action.description}`) : ''
 				}`
-			: child.name;
-		console.log(`${prefix}${branch}${label}`);
+			: pc.bold(child.name);
+		console.log(`${pc.dim(prefix + branch)}${label}`);
 		if (child.children.size > 0) {
 			printChildren(child, prefix + (isLast ? '    ' : '│   '));
 		}
@@ -225,28 +220,28 @@ function printActionDetail(
 	path: string,
 	action: ActionManifest[string],
 ): void {
-	console.log(`${path}  (${action.type})`);
+	console.log(`${pc.bold(path)}  ${pc.cyan(`(${action.type})`)}`);
 	if (action.description) {
 		console.log('');
 		console.log(`  ${action.description}`);
 	}
 	if (action.input) {
 		console.log('');
-		console.log('  Input fields (pass as JSON):');
+		console.log(pc.dim('  Input fields (pass as JSON):'));
 		for (const line of describeInput(action.input)) console.log(`    ${line}`);
 	}
 }
 
 function describeInput(schema: TSchema): string[] {
-	if (!Type.IsObject(schema)) return ['(non-object input schema)'];
+	if (!Type.IsObject(schema)) return [pc.dim('(non-object input schema)')];
 	const required = new Set(schema.required ?? []);
 	const lines: string[] = [];
 	for (const [key, field] of Object.entries(schema.properties)) {
 		const f = field as TSchema & { type?: string; description?: string };
 		const typeLabel = f.type ?? 'value';
-		const req = required.has(key) ? 'required' : 'optional';
-		const desc = f.description ? `  ${f.description}` : '';
-		lines.push(`${key}: ${typeLabel}  (${req})${desc}`);
+		const reqLabel = required.has(key) ? pc.yellow('required') : pc.dim('optional');
+		const desc = f.description ? pc.dim(`  ${f.description}`) : '';
+		lines.push(`${key}: ${pc.cyan(typeLabel)}  (${reqLabel})${desc}`);
 	}
 	return lines;
 }

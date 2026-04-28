@@ -7,33 +7,27 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { filterByPath } from './list';
+import { filterChildren } from './list';
 
-describe('filterByPath', () => {
+describe('filterChildren', () => {
 	const entries = {
 		'counter.get': { type: 'query' as const },
 		'counter.set': { type: 'mutation' as const },
 		'other.thing': { type: 'query' as const },
 	};
 
-	test('empty path returns the input unchanged', () => {
-		expect(filterByPath(entries, '')).toBe(entries);
-	});
-
-	test('exact-leaf path returns just that leaf', () => {
-		expect(Object.keys(filterByPath(entries, 'counter.get'))).toEqual([
-			'counter.get',
-		]);
+	test('exact-leaf path returns empty (caller handles exact match)', () => {
+		expect(filterChildren(entries, 'counter.get')).toEqual({});
 	});
 
 	test('subtree prefix returns descendants', () => {
-		expect(Object.keys(filterByPath(entries, 'counter')).sort()).toEqual([
+		expect(Object.keys(filterChildren(entries, 'counter')).sort()).toEqual([
 			'counter.get',
 			'counter.set',
 		]);
 	});
 
 	test('non-matching prefix returns empty', () => {
-		expect(filterByPath(entries, 'nope')).toEqual({});
+		expect(filterChildren(entries, 'nope')).toEqual({});
 	});
 });

@@ -18,6 +18,7 @@
  */
 
 import type { PeerMiss, RpcError } from '@epicenter/workspace';
+import pc from 'picocolors';
 import { extractErrorMessage } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule, Options } from 'yargs';
@@ -183,9 +184,11 @@ export function formatError(
 		case 'RpcError':
 			return formatRpcError(error.cause, error.targetClientId, error.peerState);
 		default:
-			return [`error: ${error.message}`];
+			return [`${ERR} ${error.message}`];
 	}
 }
+
+const ERR = pc.red('error:');
 
 async function resolveInput(argv: Record<string, unknown>): Promise<unknown> {
 	const positional =
@@ -210,11 +213,11 @@ export function formatPeerMiss(
 	const lines: string[] = [];
 	if (!sawPeers) {
 		lines.push(
-			`error: no peers seen after waiting ${waitMs}ms for "${peerTarget}"`,
+			`${ERR} no peers seen after waiting ${waitMs}ms for "${peerTarget}"`,
 		);
 	} else {
 		const scope = workspace ? ` in workspace ${workspace}` : '';
-		lines.push(`error: no peer matches deviceId "${peerTarget}"${scope}`);
+		lines.push(`${ERR} no peer matches deviceId "${peerTarget}"${scope}`);
 		const peersHint = workspace ? ` -w ${workspace}` : '';
 		lines.push(`run \`epicenter peers${peersHint}\` to see connected peers`);
 	}
@@ -239,21 +242,21 @@ export function formatRpcError(
 
 	switch (error.name) {
 		case 'ActionNotFound':
-			return [`error: ActionNotFound "${error.action}" on ${peerLabel}`];
+			return [`${ERR} ActionNotFound "${error.action}" on ${peerLabel}`];
 		case 'Timeout':
-			return [`error: timeout after ${error.ms}ms on ${peerLabel}`];
+			return [`${ERR} timeout after ${error.ms}ms on ${peerLabel}`];
 		case 'PeerOffline':
-			return [`error: peer ${peerLabel} is offline`];
+			return [`${ERR} peer ${peerLabel} is offline`];
 		case 'PeerNotFound':
-			return [`error: no peer with deviceId "${error.peer}"`];
+			return [`${ERR} no peer with deviceId "${error.peer}"`];
 		case 'PeerLeft':
-			return [`error: peer "${error.peer}" disconnected before responding`];
+			return [`${ERR} peer "${error.peer}" disconnected before responding`];
 		case 'ActionFailed':
 			return [
-				`error: "${error.action}" failed on ${peerLabel}: ${extractErrorMessage(error.cause)}`,
+				`${ERR} "${error.action}" failed on ${peerLabel}: ${extractErrorMessage(error.cause)}`,
 			];
 		case 'Disconnected':
-			return [`error: connection lost before ${peerLabel} responded`];
+			return [`${ERR} connection lost before ${peerLabel} responded`];
 		default:
 			error satisfies never;
 			return [];

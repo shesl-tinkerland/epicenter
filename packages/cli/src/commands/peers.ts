@@ -11,6 +11,7 @@
  * mode only; JSON mode always emits a valid array, even if empty).
  */
 
+import pc from 'picocolors';
 import type { Argv, CommandModule } from 'yargs';
 
 import type { PeerSnapshot } from '../daemon/app';
@@ -48,7 +49,7 @@ export const peersCommand: CommandModule = {
 		}
 		const { data: rows, error } = await daemon.peers();
 		if (error) {
-			outputError(`error: ${error.message}`);
+			outputError(`${pc.red('error:')} ${error.message}`);
 			process.exitCode = 1;
 			return;
 		}
@@ -91,18 +92,27 @@ function emit(
 	for (const [name, group] of byWorkspace) {
 		if (!elideHeader) {
 			if (i > 0) console.log('');
-			console.log(name);
+			console.log(pc.bold(name));
 		}
-		console.table(group.map(toRow).sort((a, b) => a.clientID - b.clientID));
+		printGroup(group.slice().sort((a, b) => a.clientID - b.clientID));
 		i++;
 	}
 }
 
-function toRow(snap: PeerSnapshot) {
-	return {
-		clientID: snap.clientID,
-		deviceId: snap.device.id,
-		name: snap.device.name,
-		platform: snap.device.platform,
-	};
+const COLS = ['CLIENT', 'DEVICE', 'NAME', 'PLATFORM'] as const;
+
+function printGroup(snaps: PeerSnapshot[]): void {
+	const rows = snaps.map((s) => [
+		String(s.clientID),
+		s.device.id,
+		s.device.name,
+		s.device.platform,
+	]);
+	const widths = COLS.map((h, i) =>
+		Math.max(h.length, ...rows.map((r) => r[i]!.length)),
+	);
+	const pad = (vals: readonly string[]) =>
+		vals.map((v, i) => v.padEnd(widths[i]!)).join('  ').trimEnd();
+	console.log('  ' + pc.dim(pad(COLS)));
+	for (const row of rows) console.log('  ' + pad(row));
 }
