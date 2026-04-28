@@ -5,6 +5,7 @@
  *
  * Each verb is a one-line shell shortcut for one workspace primitive:
  *
+ *   /peers  ->  workspace.sync.peers()                       cross-workspace, no body
  *   /list   ->  describeActions(workspace.actions)            single-workspace
  *   /run    ->  invokeAction(...) | sync.rpc(...)             single-workspace
  *
@@ -15,7 +16,7 @@
  */
 
 import { sValidator } from '@hono/standard-validator';
-import { describeActions } from '@epicenter/workspace';
+import { describeActions, PeerDevice } from '@epicenter/workspace';
 import { type } from 'arktype';
 import { Hono } from 'hono';
 import { Err, Ok } from 'wellcrafted/result';
@@ -52,6 +53,19 @@ export const RunInput = type({
 export type RunInput = typeof RunInput.infer;
 
 /**
+ * Row shape returned by `/peers`. One row per `(workspace, clientID)` pair,
+ * tagged with its workspace name so a multi-workspace daemon can fan out.
+ * `device` carries the canonical `PeerDevice` shape from
+ * `@epicenter/workspace`; renderers consume it directly without a cast.
+ */
+export const PeerSnapshot = type({
+	workspace: 'string',
+	clientID: 'number',
+	device: PeerDevice,
+});
+export type PeerSnapshot = typeof PeerSnapshot.infer;
+
+/**
  * Build the daemon's Hono app. Tests import this directly; production wires
  * it into `Bun.serve({ unix, fetch: app.fetch })` via `bindUnixSocket`.
  *
@@ -69,6 +83,20 @@ export function buildApp(
 ) {
 	return new Hono()
 		.post('/ping', (c) => c.json(Ok('pong' as const)))
+		.post('/peers', (c) => {
+			const rows: PeerSnapshot[] = [];
+			for (const entry of entries) {
+				const peers = entry.workspace.sync?.peers() ?? new Map();
+				for (const [clientID, state] of peers) {
+					rows.push({
+						workspace: entry.name,
+						clientID,
+						device: state.device,
+					});
+				}
+			}
+			return c.json(Ok(rows));
+		})
 		.post('/list', sValidator('json', ListInput), (c) => {
 			const input = c.req.valid('json');
 			const { data: entry, error } = resolveEntry(entries, input.workspace);
