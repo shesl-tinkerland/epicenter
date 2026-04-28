@@ -15,8 +15,8 @@
  * socket, get back a `Result<T, DomainErr>` JSON envelope from the handler.
  * No `hc` machinery: every route is one line that names its input/output
  * types directly. Body shapes still validate at the daemon boundary via
- * arktype (`schemas.ts` + `@hono/standard-validator`), so a stale CLI
- * still gets a typed 400 instead of a confusing downstream cast failure.
+ * arktype (`app.ts` + `@hono/standard-validator`), so a stale CLI still
+ * gets a typed 400 instead of a confusing downstream cast failure.
  */
 
 import { join } from 'node:path';
@@ -33,9 +33,8 @@ import type { RunError } from '../commands/run.js';
 import { CONFIG_FILENAME } from '../load-config.js';
 import type { ResolvedTarget } from '../util/common-options.js';
 import type { ResolveError } from '../util/resolve-entry.js';
-import type { PeerSnapshot } from './app.js';
+import type { ListInput, PeerSnapshot, RunInput } from './app.js';
 import { socketPathFor } from './paths.js';
-import type { ListInput, RunInput } from './schemas.js';
 
 /**
  * Tagged-error variants returned by daemon client surfaces. Domain errors

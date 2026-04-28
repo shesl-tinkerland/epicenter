@@ -24,7 +24,33 @@ import { Err, Ok } from 'wellcrafted/result';
 import { resolveEntry } from '../util/resolve-entry.js';
 import type { WorkspaceEntry } from '../load-config.js';
 import { executeRun } from './run-handler.js';
-import { ListInput, RunInput } from './schemas.js';
+
+/**
+ * Wire bodies for `/list` and `/run`. Schemas serve two roles:
+ *
+ *   1. Runtime validation at the daemon boundary via
+ *      `@hono/standard-validator`. A stale CLI gets a typed 400 instead of a
+ *      downstream cast failure.
+ *   2. Compile-time inference for the hand-rolled client; both sides import
+ *      the exact same shape.
+ *
+ * Naming follows arktype's idiom (one PascalCase name declares both the
+ * value and the type). `/peers` and `/shutdown` take no body.
+ */
+
+export const ListInput = type({
+	'workspace?': 'string',
+});
+export type ListInput = typeof ListInput.infer;
+
+export const RunInput = type({
+	actionPath: 'string',
+	input: 'unknown',
+	'peerTarget?': 'string',
+	waitMs: 'number',
+	'workspace?': 'string',
+});
+export type RunInput = typeof RunInput.infer;
 
 /**
  * Row shape returned by `/peers`. One row per `(workspace, clientID)` pair,

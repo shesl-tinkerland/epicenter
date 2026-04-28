@@ -11,7 +11,7 @@
  * lives in vault-style TypeScript scripts that load the workspace library
  * directly. The CLI deliberately does not grow flags that shadow scripting.
  *
- * `executeRun` returns a domain `RunResult` that the route serializes
+ * `executeRun` returns a domain `RunResponse` that the route serializes
  * verbatim. Unexpected exceptions bubble out to the route's blanket
  * try/catch and surface as `HandlerCrashed` on the client side.
  */
@@ -24,18 +24,15 @@ import {
 } from '@epicenter/workspace';
 import { Ok } from 'wellcrafted/result';
 
-import {
-	RunError,
-	type RunInput,
-	type RunResult,
-} from '../commands/run.js';
+import { RunError, type RunResponse } from '../commands/run.js';
 import type { WorkspaceEntry } from '../load-config.js';
 import { explainEmpty, waitForPeer } from '../util/peer-wait.js';
+import type { RunInput } from './app.js';
 
 export async function executeRun(
 	entry: WorkspaceEntry,
 	ctx: RunInput,
-): Promise<RunResult> {
+): Promise<RunResponse> {
 	const { workspace } = entry;
 	if (workspace.whenReady) await workspace.whenReady;
 
@@ -69,7 +66,7 @@ export async function executeRun(
 async function invokeRemote(
 	entry: WorkspaceEntry,
 	ctx: RunInput,
-): Promise<RunResult> {
+): Promise<RunResponse> {
 	const { workspace } = entry;
 	const sync = workspace.sync;
 

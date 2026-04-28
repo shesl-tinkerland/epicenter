@@ -26,8 +26,8 @@ import {
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule, Options } from 'yargs';
 
+import type { RunInput } from '../daemon/app';
 import { type DaemonError, getDaemon } from '../daemon/client';
-import type { RunInput } from '../daemon/schemas';
 import type { AwarenessState } from '../load-config';
 import type { ResolveError } from '../util/resolve-entry';
 import {
@@ -41,8 +41,6 @@ import {
 	outputError,
 } from '../util/format-output';
 import { parseJsonInput, readStdin } from '../util/parse-input';
-
-export type { RunInput };
 
 const DEFAULT_PEER_WAIT_MS = 5000;
 
@@ -116,7 +114,12 @@ export const RunError = defineErrors({
 });
 export type RunError = InferErrors<typeof RunError>;
 
-export type RunResult = Result<unknown, RunError | ResolveError>;
+/**
+ * Wire shape of `/run`'s response body. Wider than `executeRun`'s actual
+ * return type because the route prepends `ResolveError` for `-w` misses
+ * before dispatching. The renderer narrows on `error.name`.
+ */
+export type RunResponse = Result<unknown, RunError | ResolveError>;
 
 export const runCommand: CommandModule = {
 	command: 'run <action> [input]',
