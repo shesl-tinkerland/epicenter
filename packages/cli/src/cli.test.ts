@@ -1,7 +1,7 @@
 /**
  * CLI entry-point tests.
  *
- * The binary surfaces four commands: `auth`, `list`, `peers`, `run`. These
+ * The binary surfaces three commands: `auth`, `list`, `run`. These
  * tests assert registration via `--help` output so they stay decoupled from
  * command semantics.
  */
@@ -46,11 +46,10 @@ describe('createCLI', () => {
 		errorSpy.mockRestore();
 	});
 
-	test('help output registers auth, list, peers, and run', async () => {
+	test('help output registers auth, list, and run', async () => {
 		const help = await captureHelp();
 		expect(help).toMatch(/\bauth\b/);
 		expect(help).toMatch(/\blist\b/);
-		expect(help).toMatch(/\bpeers\b/);
 		expect(help).toMatch(/\brun\b/);
 	});
 });

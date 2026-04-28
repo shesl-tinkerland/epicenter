@@ -56,43 +56,43 @@ describe('pingDaemon', () => {
 	});
 });
 
-// Transport-mapping coverage. We use `/peers` as the convenient probe route
-// because the actual `daemonClient` no longer exposes a `.ping()` method
-// (production callers use the boolean `pingDaemon` instead).
+// Transport-mapping coverage. We use `/shutdown` as the convenient probe route
+// because it's body-less and has no domain-error type, so we exercise the
+// transport layer in isolation (typed inputs/outputs are checked by the compiler).
 describe('daemonClient', () => {
-	test('peers resolves to the rows on success', async () => {
-		const app = new Hono().post('/peers', (c) => c.json(Ok([])));
+	test('shutdown resolves to null on success', async () => {
+		const app = new Hono().post('/shutdown', (c) => c.json(Ok(null)));
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { data, error } = await daemonClient(socketPath).peers();
+		const { data, error } = await daemonClient(socketPath).shutdown();
 		expect(error).toBeNull();
-		expect(data).toEqual([]);
+		expect(data).toBeNull();
 	});
 
 	test('returns Unreachable when socket is missing', async () => {
 		const missing = join(tmpdir(), `definitely-not-here-${Date.now()}.sock`);
-		const { error } = await daemonClient(missing).peers();
+		const { error } = await daemonClient(missing).shutdown();
 		expect(error?.name).toBe('Unreachable');
 	});
 
 	test('returns Timeout when route hangs past the deadline', async () => {
-		const app = new Hono().post('/peers', () => new Promise(() => {}));
+		const app = new Hono().post('/shutdown', () => new Promise(() => {}));
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { error } = await daemonClient(socketPath, 100).peers();
+		const { error } = await daemonClient(socketPath, 100).shutdown();
 		expect(error?.name).toBe('Timeout');
 	});
 
 	test('returns HandlerCrashed on a 500 from the daemon', async () => {
-		const app = new Hono().post('/peers', () => {
+		const app = new Hono().post('/shutdown', () => {
 			throw new Error('kaboom');
 		});
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { error } = await daemonClient(socketPath).peers();
+		const { error } = await daemonClient(socketPath).shutdown();
 		expect(error?.name).toBe('HandlerCrashed');
 	});
 });

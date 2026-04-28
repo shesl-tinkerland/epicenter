@@ -7,7 +7,7 @@
  *   per route. Each method returns `Promise<Result<T, DomainErr | DaemonError>>`,
  *   merging transport and domain failures into one tagged union the
  *   renderer narrows by `error.name`.
- * - {@link getDaemon}: dispatch decision for `run` / `list` / `peers`.
+ * - {@link getDaemon}: dispatch decision for `run` / `list`.
  *   Returns a typed client on success, or `MissingConfig` /
  *   `Required` when the workspace isn't configured / has no live daemon.
  *
@@ -32,7 +32,7 @@ import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 import { CONFIG_FILENAME } from '../load-config.js';
 import type { ResolvedTarget } from '../util/common-options.js';
 import type { ResolveError } from '../util/resolve-entry.js';
-import type { ListInput, PeerSnapshot, RunInput } from './app.js';
+import type { ListInput, RunInput } from './app.js';
 import { socketPathFor } from './paths.js';
 import type { RunError } from './run-errors.js';
 
@@ -126,7 +126,7 @@ export async function pingDaemon(
  * failures and unexpected non-2xx responses fold into `DaemonError`.
  *
  * Hostname is a placeholder; routing is done by the unix socket path.
- * Routes without a validator (ping, peers, shutdown) get an empty `{}`
+ * Routes without a validator (ping, shutdown) get an empty `{}`
  * body, which Hono's body-parsing tolerates and validators ignore.
  */
 async function call<TOk, TErr>(
@@ -172,7 +172,6 @@ export function daemonClient(
 	timeoutMs: number = DEFAULT_CALL_TIMEOUT_MS,
 ) {
 	return {
-		peers: () => call<PeerSnapshot[], never>(socketPath, timeoutMs, '/peers'),
 		list: (input: ListInput) =>
 			call<ActionManifest, ResolveError>(socketPath, timeoutMs, '/list', input),
 		run: (input: RunInput) =>
@@ -201,7 +200,7 @@ export type DaemonClient = ReturnType<typeof daemonClient>;
  *   - `Required`: config exists but no daemon is running. Renderer
  *     prints the start-with-`up` hint.
  *
- * `run`, `list`, and `peers` are mandatory-daemon commands; if they hit
+ * `run` and `list` are mandatory-daemon commands; if they hit
  * neither variant they have a typed client to dispatch against.
  */
 export async function getDaemon(
