@@ -35,7 +35,7 @@ import type { ResolvedTarget } from '../util/common-options.js';
 import type { ResolveError } from '../util/resolve-entry.js';
 import type { PeerSnapshot } from './app.js';
 import { socketPathFor } from './paths.js';
-import type { ListCtx, PeersArgs, RunCtx } from './schemas.js';
+import type { ListInput, RunInput } from './schemas.js';
 
 /**
  * Tagged-error variants returned by daemon client surfaces. Domain errors
@@ -127,22 +127,22 @@ export async function pingDaemon(
  * failures and unexpected non-2xx responses fold into `DaemonError`.
  *
  * Hostname is a placeholder; routing is done by the unix socket path.
- * `body === undefined` skips the body for routes that don't take input.
+ * Routes without a validator (ping, peers, shutdown) get an empty `{}`
+ * body, which Hono's body-parsing tolerates and validators ignore.
  */
 async function call<TOk, TErr>(
 	socketPath: string,
 	timeoutMs: number,
 	path: string,
-	body: unknown,
+	body: unknown = {},
 ): Promise<Result<TOk, TErr | DaemonError>> {
 	const fetched = await tryAsync({
 		try: () =>
 			fetch(`http://daemon${path}`, {
 				unix: socketPath,
 				method: 'POST',
-				headers:
-					body === undefined ? undefined : { 'content-type': 'application/json' },
-				body: body === undefined ? undefined : JSON.stringify(body),
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body),
 				signal: AbortSignal.timeout(timeoutMs),
 			}),
 		catch: (cause) =>
@@ -173,18 +173,17 @@ export function daemonClient(
 	timeoutMs: number = DEFAULT_CALL_TIMEOUT_MS,
 ) {
 	return {
-		peers: (args: PeersArgs) =>
-			call<PeerSnapshot[], never>(socketPath, timeoutMs, '/peers', args),
-		list: (args: ListCtx) =>
-			call<ActionManifest, ResolveError>(socketPath, timeoutMs, '/list', args),
-		run: (args: RunCtx) =>
+		peers: () => call<PeerSnapshot[], never>(socketPath, timeoutMs, '/peers'),
+		list: (input: ListInput) =>
+			call<ActionManifest, ResolveError>(socketPath, timeoutMs, '/list', input),
+		run: (input: RunInput) =>
 			call<unknown, RunError | ResolveError>(
 				socketPath,
 				timeoutMs,
 				'/run',
-				args,
+				input,
 			),
-		shutdown: () => call<null, never>(socketPath, timeoutMs, '/shutdown', undefined),
+		shutdown: () => call<null, never>(socketPath, timeoutMs, '/shutdown'),
 	};
 }
 

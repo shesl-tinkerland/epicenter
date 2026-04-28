@@ -65,14 +65,14 @@ describe('daemonClient', () => {
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { data, error } = await daemonClient(socketPath).peers({});
+		const { data, error } = await daemonClient(socketPath).peers();
 		expect(error).toBeNull();
 		expect(data).toEqual([]);
 	});
 
 	test('returns Unreachable when socket is missing', async () => {
 		const missing = join(tmpdir(), `definitely-not-here-${Date.now()}.sock`);
-		const { error } = await daemonClient(missing).peers({});
+		const { error } = await daemonClient(missing).peers();
 		expect(error?.name).toBe('Unreachable');
 	});
 
@@ -81,7 +81,7 @@ describe('daemonClient', () => {
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { error } = await daemonClient(socketPath, 100).peers({});
+		const { error } = await daemonClient(socketPath, 100).peers();
 		expect(error?.name).toBe('Timeout');
 	});
 
@@ -92,7 +92,7 @@ describe('daemonClient', () => {
 		const server = await bindUnixSocket(socketPath, app);
 		servers.push(server);
 
-		const { error } = await daemonClient(socketPath).peers({});
+		const { error } = await daemonClient(socketPath).peers();
 		expect(error?.name).toBe('HandlerCrashed');
 	});
 });

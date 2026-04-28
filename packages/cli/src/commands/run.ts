@@ -27,7 +27,7 @@ import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule, Options } from 'yargs';
 
 import { type DaemonError, getDaemon } from '../daemon/client';
-import type { RunCtx } from '../daemon/schemas';
+import type { RunInput } from '../daemon/schemas';
 import type { AwarenessState } from '../load-config';
 import type { ResolveError } from '../util/resolve-entry';
 import {
@@ -42,7 +42,7 @@ import {
 } from '../util/format-output';
 import { parseJsonInput, readStdin } from '../util/parse-input';
 
-export type { RunCtx };
+export type { RunInput };
 
 const DEFAULT_PEER_WAIT_MS = 5000;
 
@@ -167,7 +167,7 @@ export const runCommand: CommandModule = {
 		const target = resolveTarget(args);
 		const input = await resolveInput(args);
 
-		const ctx: RunCtx = {
+		const ctx: RunInput = {
 			actionPath,
 			input,
 			peerTarget,

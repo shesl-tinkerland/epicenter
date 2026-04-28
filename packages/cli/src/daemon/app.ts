@@ -5,9 +5,9 @@
  *
  * Each verb is a one-line shell shortcut for one workspace primitive:
  *
- *   /peers  ->  workspace.sync.peers()
- *   /list   ->  describeActions(workspace.actions)
- *   /run    ->  invokeAction(...) | sync.rpc(...)         (executeRun branches)
+ *   /peers  ->  workspace.sync.peers()                       cross-workspace, no body
+ *   /list   ->  describeActions(workspace.actions)            single-workspace
+ *   /run    ->  invokeAction(...) | sync.rpc(...)             single-workspace
  *
  * Each route returns the handler's `Result<T, DomainErr>` body directly.
  * Unexpected exceptions propagate to Hono's default error handler (HTTP
@@ -24,13 +24,7 @@ import { Err, Ok } from 'wellcrafted/result';
 import { resolveEntry } from '../util/resolve-entry.js';
 import type { WorkspaceEntry } from '../load-config.js';
 import { executeRun } from './run-handler.js';
-import {
-	type ListCtx,
-	listCtxSchema,
-	peersArgsSchema,
-	type RunCtx,
-	runCtxSchema,
-} from './schemas.js';
+import { ListInput, RunInput } from './schemas.js';
 
 /**
  * Row shape returned by `/peers`. One row per `(workspace, clientID)` pair,
@@ -63,11 +57,9 @@ export function buildApp(
 ) {
 	return new Hono()
 		.post('/ping', (c) => c.json(Ok('pong' as const)))
-		.post('/peers', sValidator('json', peersArgsSchema), (c) => {
-			const { workspace } = c.req.valid('json');
+		.post('/peers', (c) => {
 			const rows: PeerSnapshot[] = [];
 			for (const entry of entries) {
-				if (workspace && entry.name !== workspace) continue;
 				const peers = entry.workspace.sync?.peers() ?? new Map();
 				for (const [clientID, state] of peers) {
 					rows.push({
@@ -79,17 +71,17 @@ export function buildApp(
 			}
 			return c.json(Ok(rows));
 		})
-		.post('/list', sValidator('json', listCtxSchema), (c) => {
-			const ctx = c.req.valid('json') satisfies ListCtx;
-			const { data: entry, error } = resolveEntry(entries, ctx.workspace);
+		.post('/list', sValidator('json', ListInput), (c) => {
+			const input = c.req.valid('json');
+			const { data: entry, error } = resolveEntry(entries, input.workspace);
 			if (error) return c.json(Err(error));
 			return c.json(Ok(describeActions(entry.workspace.actions ?? {})));
 		})
-		.post('/run', sValidator('json', runCtxSchema), async (c) => {
-			const ctx = c.req.valid('json') satisfies RunCtx;
-			const { data: entry, error } = resolveEntry(entries, ctx.workspace);
+		.post('/run', sValidator('json', RunInput), async (c) => {
+			const input = c.req.valid('json');
+			const { data: entry, error } = resolveEntry(entries, input.workspace);
 			if (error) return c.json(Err(error));
-			return c.json(await executeRun(entry, ctx));
+			return c.json(await executeRun(entry, input));
 		})
 		.post('/shutdown', (c) => {
 			// Defer past the current event-loop turn so the response is flushed

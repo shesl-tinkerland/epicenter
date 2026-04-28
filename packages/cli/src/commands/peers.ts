@@ -46,15 +46,17 @@ export const peersCommand: CommandModule = {
 			process.exitCode = 1;
 			return;
 		}
-		const { data: rows, error } = await daemon.peers({
-			workspace: target.userWorkspace,
-		});
+		const { data: rows, error } = await daemon.peers();
 		if (error) {
 			outputError(`error: ${error.message}`);
 			process.exitCode = 1;
 			return;
 		}
-		emit(rows, {
+		const filtered =
+			target.userWorkspace === undefined
+				? rows
+				: rows.filter((r) => r.workspace === target.userWorkspace);
+		emit(filtered, {
 			elideHeader: target.userWorkspace !== undefined,
 			format,
 		});

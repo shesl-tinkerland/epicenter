@@ -26,7 +26,7 @@ import { Ok } from 'wellcrafted/result';
 
 import {
 	RunError,
-	type RunCtx,
+	type RunInput,
 	type RunResult,
 } from '../commands/run.js';
 import type { WorkspaceEntry } from '../load-config.js';
@@ -34,7 +34,7 @@ import { explainEmpty, waitForPeer } from '../util/peer-wait.js';
 
 export async function executeRun(
 	entry: WorkspaceEntry,
-	ctx: RunCtx,
+	ctx: RunInput,
 ): Promise<RunResult> {
 	const { workspace } = entry;
 	if (workspace.whenReady) await workspace.whenReady;
@@ -68,7 +68,7 @@ export async function executeRun(
 
 async function invokeRemote(
 	entry: WorkspaceEntry,
-	ctx: RunCtx,
+	ctx: RunInput,
 ): Promise<RunResult> {
 	const { workspace } = entry;
 	const sync = workspace.sync;
