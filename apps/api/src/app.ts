@@ -287,7 +287,16 @@ const authGuard = factory.createMiddleware(async (c, next) => {
 		headers.set('authorization', `Bearer ${token}`);
 	}
 	const result = await c.var.auth.api.getSession({ headers });
-	if (!result) return c.json(AiChatError.Unauthorized(), 401);
+	if (!result) {
+		if (c.req.header('upgrade') === 'websocket') {
+			const pair = new WebSocketPair();
+			const [client, server] = [pair[0], pair[1]];
+			server.accept();
+			server.close(4401, JSON.stringify({ code: 'invalid_token' }));
+			return new Response(null, { status: 101, webSocket: client });
+		}
+		return c.json(AiChatError.Unauthorized(), 401);
+	}
 
 	c.set('user', result.user);
 	c.set('session', result.session);

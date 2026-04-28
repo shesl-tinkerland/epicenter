@@ -250,8 +250,9 @@ Client states exist but nothing produces `failed` yet. Behavior change is invisi
 
 ### Phase 2 — server in-band reject
 
-- [ ] `apps/api/src/app.ts` authGuard: branch on `upgrade: websocket` header when `getSession` returns null. Accept WS, send `close(4401, JSON.stringify({ code: 'invalid_token' }))`, return 101.
+- [x] `apps/api/src/app.ts` authGuard: branch on `upgrade: websocket` header when `getSession` returns null. Accept WS, send `close(4401, JSON.stringify({ code: 'invalid_token' }))`, return 101.
 - [ ] Tests: bad token over WS upgrade closes with 4401; HTTP 401 still returned for non-upgrade requests; valid token still proceeds to DO.
+  > **Note**: No existing test file covers the authGuard upgrade path (only `apps/api/src/sync-handlers.test.ts` exists, which doesn't exercise middleware). Adding test infra (likely Miniflare integration tests) is deferred. End-to-end verification will happen against the deployed worker.
 
 ### Phase 3 — CLI cleanup
 
