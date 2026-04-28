@@ -6,10 +6,24 @@
  * line-by-line. RPC errors are constructed via `RpcError.X({...}).error` so
  * they match the wire shape exactly.
  */
-import { RpcError } from '@epicenter/workspace';
+import { PeerMiss, RpcError } from '@epicenter/workspace';
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { AwarenessState } from '../load-config';
 import { emitMissError, emitRpcError } from './run';
+
+function miss(opts: {
+	peerTarget: string;
+	sawPeers: boolean;
+	waitMs: number;
+	emptyReason?: string | null;
+}) {
+	return PeerMiss.PeerMiss({
+		peerTarget: opts.peerTarget,
+		sawPeers: opts.sawPeers,
+		waitMs: opts.waitMs,
+		emptyReason: opts.emptyReason ?? null,
+	}).error;
+}
 
 function mockState(device: Partial<AwarenessState['device']> = {}): AwarenessState {
 	return {
@@ -41,7 +55,10 @@ describe('emitMissError', () => {
 
 	test('peers present but no match → points at `epicenter peers`', () => {
 		cap = captureErrors();
-		emitMissError('ghost', true, undefined, 5000);
+		emitMissError(
+			miss({ peerTarget: 'ghost', sawPeers: true, waitMs: 5000 }),
+			undefined,
+		);
 		expect(cap.lines).toEqual([
 			'error: no peer matches deviceId "ghost"',
 			'run `epicenter peers` to see connected peers',
@@ -50,7 +67,10 @@ describe('emitMissError', () => {
 
 	test('peers present + -w → scoped hint', () => {
 		cap = captureErrors();
-		emitMissError('ghost', true, 'tabManager', 5000);
+		emitMissError(
+			miss({ peerTarget: 'ghost', sawPeers: true, waitMs: 5000 }),
+			'tabManager',
+		);
 		expect(cap.lines).toEqual([
 			'error: no peer matches deviceId "ghost" in workspace tabManager',
 			'run `epicenter peers -w tabManager` to see connected peers',
@@ -59,9 +79,30 @@ describe('emitMissError', () => {
 
 	test('no peers seen during wait → "no peers seen after waiting"', () => {
 		cap = captureErrors();
-		emitMissError('macbook-pro', false, undefined, 5000);
+		emitMissError(
+			miss({ peerTarget: 'macbook-pro', sawPeers: false, waitMs: 5000 }),
+			undefined,
+		);
 		expect(cap.lines).toEqual([
 			'error: no peers seen after waiting 5000ms for "macbook-pro"',
+		]);
+	});
+
+	test('emptyReason appended when present', () => {
+		cap = captureErrors();
+		emitMissError(
+			miss({
+				peerTarget: 'ghost',
+				sawPeers: true,
+				waitMs: 5000,
+				emptyReason: 'not connected (auth error after 3 retries)',
+			}),
+			undefined,
+		);
+		expect(cap.lines).toEqual([
+			'error: no peer matches deviceId "ghost"',
+			'run `epicenter peers` to see connected peers',
+			'  reason: not connected (auth error after 3 retries)',
 		]);
 	});
 });

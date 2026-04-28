@@ -25,7 +25,6 @@ import {
 import { Ok } from 'wellcrafted/result';
 
 import type { WorkspaceEntry } from '../load-config.js';
-import { explainEmpty, waitForPeer } from '../util/peer-wait.js';
 import type { RunInput } from './app.js';
 import { RunError, type RunResponse } from './run-errors.js';
 
@@ -71,26 +70,18 @@ async function invokeRemote(
 	const { workspace } = entry;
 	const sync = workspace.sync;
 
-	if (!sync?.rpc) {
+	if (!sync) {
 		return RunError.UsageError({
 			message: `Workspace "${entry.name}" has no sync attachment; --peer requires sync.`,
 		});
 	}
 
-	const deadline = Date.now() + ctx.waitMs;
-	const { hit, sawPeers } = await waitForPeer(workspace, peerTarget, deadline);
-	if (!hit) {
-		return RunError.PeerMiss({
-			peerTarget,
-			sawPeers,
-			workspace: ctx.workspace,
-			waitMs: ctx.waitMs,
-			emptyReason: explainEmpty(workspace),
-		});
-	}
+	const start = Date.now();
+	const found = await sync.waitForPeer(peerTarget, { timeoutMs: ctx.waitMs });
+	if (found.error !== null) return found;
 
-	const { clientID: targetClientId, state: peerState } = hit;
-	const remaining = Math.max(1, deadline - Date.now());
+	const { clientId: targetClientId, state: peerState } = found.data;
+	const remaining = Math.max(1, ctx.waitMs - (Date.now() - start));
 	const result = await sync.rpc(targetClientId, ctx.actionPath, ctx.input, {
 		timeout: remaining,
 	});

@@ -17,7 +17,7 @@
  *   3: peer-miss (`--peer <target>` didn't resolve within `--wait`)
  */
 
-import type { RpcError } from '@epicenter/workspace';
+import type { PeerMiss, RpcError } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule, Options } from 'yargs';
@@ -116,13 +116,14 @@ export const runCommand: CommandModule = {
 			return;
 		}
 		const result = await daemon.run(ctx);
-		renderRunResult(result, format);
+		renderRunResult(result, format, target.userWorkspace);
 	},
 };
 
 function renderRunResult(
-	result: Result<unknown, RunError | ResolveError | DaemonError>,
+	result: Result<unknown, RunError | PeerMiss | ResolveError | DaemonError>,
 	format: 'json' | 'jsonl' | undefined,
+	workspaceTag: string | undefined,
 ): void {
 	if (result.error === null) {
 		output(result.data, { format });
@@ -144,14 +145,7 @@ function renderRunResult(
 			process.exitCode = 2;
 			return;
 		case 'PeerMiss': {
-			emitMissError(
-				result.error.peerTarget,
-				result.error.sawPeers,
-				result.error.workspace,
-				result.error.waitMs,
-			);
-			if (result.error.emptyReason)
-				outputError(`  reason: ${result.error.emptyReason}`);
+			emitMissError(result.error, workspaceTag);
 			process.exitCode = 3;
 			return;
 		}
@@ -188,24 +182,25 @@ async function resolveInput(argv: Record<string, unknown>): Promise<unknown> {
 /**
  * Two miss shapes: nothing seen on the wire (probably a connect-status
  * problem) vs peers visible but none matched the requested deviceId
- * (user typo / wrong workspace).
+ * (user typo / wrong workspace). `workspace` is the user-typed `-w` flag,
+ * known only to the CLI; it scopes the "look here next" hint.
  */
 export function emitMissError(
-	target: string,
-	sawPeers: boolean,
+	error: PeerMiss,
 	workspace: string | undefined,
-	waitMs: number,
 ): void {
-	const scope = workspace ? ` in workspace ${workspace}` : '';
+	const { peerTarget, sawPeers, waitMs, emptyReason } = error;
 	if (!sawPeers) {
 		outputError(
-			`error: no peers seen after waiting ${waitMs}ms for "${target}"`,
+			`error: no peers seen after waiting ${waitMs}ms for "${peerTarget}"`,
 		);
-		return;
+	} else {
+		const scope = workspace ? ` in workspace ${workspace}` : '';
+		outputError(`error: no peer matches deviceId "${peerTarget}"${scope}`);
+		const peersHint = workspace ? ` -w ${workspace}` : '';
+		outputError(`run \`epicenter peers${peersHint}\` to see connected peers`);
 	}
-	outputError(`error: no peer matches deviceId "${target}"${scope}`);
-	const peersHint = workspace ? ` -w ${workspace}` : '';
-	outputError(`run \`epicenter peers${peersHint}\` to see connected peers`);
+	if (emptyReason) outputError(`  reason: ${emptyReason}`);
 }
 
 /**
