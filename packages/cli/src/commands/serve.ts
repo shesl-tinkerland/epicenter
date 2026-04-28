@@ -1,20 +1,19 @@
 /**
- * `epicenter up`: start the long-lived foreground daemon for one `--dir`.
+ * `epicenter serve`: foreground long-lived workspace process for one `--dir`.
  *
  * Loads every workspace exported by `epicenter.config.ts` and exposes a
  * Unix-socket IPC channel for that `--dir`. `peers`, `list`, and `run`
- * dispatch to this daemon over IPC; without `up` they error with a hint
+ * dispatch to this server over IPC; without `serve` they error with a hint
  * pointing back here.
  *
- * One daemon per `--dir`; that daemon serves every workspace the config
- * exports (Invariant 7). Resource isolation between workspaces is
- * expressed by splitting them into different config dirs, not by a flag.
+ * One server per `--dir`; that server hosts every workspace the config
+ * exports. Resource isolation between workspaces is expressed by splitting
+ * them into different config dirs, not by a flag.
  *
- * Foreground by design; backgrounding is the user's job (see Invariant 5
- * in the design spec).
+ * Foreground by design. Backgrounding is the user's job: shell `&`,
+ * `nohup`, tmux, systemd, whatever fits. Stop with SIGINT (Ctrl+C).
  *
- * See spec: `20260426T235000-cli-up-long-lived-peer.md` § "Process lifecycle",
- * § "Logging", § "Invariants".
+ * See spec: `20260428T-script-first-cli-collapse.md` § "Lifecycle collapse".
  */
 
 import { statSync } from 'node:fs';
@@ -82,14 +81,14 @@ function logSyncStatus(message: string): void {
 	process.stderr.write(`${message}\n`);
 }
 
-export type UpOptions = {
+export type ServeOptions = {
 	dir: string;
 	quiet: boolean;
 	cliVersion?: string;
 };
 
 /**
- * `runUp`'s own failure variant: a workspace's `whenReady` /
+ * `runServe`'s own failure variant: a workspace's `whenReady` /
  * `whenConnected` didn't resolve within the connect timeout. The cause
  * from `raceTimeout` already carries the entry name + reason.
  *
@@ -99,16 +98,16 @@ export type UpOptions = {
  * doesn't care which union it came from: `error.message` and exit-1
  * either way.
  */
-export const RunUpError = defineErrors({
+export const ServeError = defineErrors({
 	ConnectFailed: ({ cause }: { cause: unknown }) => ({
 		message: extractErrorMessage(cause),
 		cause,
 	}),
 });
-export type RunUpError = InferErrors<typeof RunUpError>;
+export type ServeError = InferErrors<typeof ServeError>;
 
 /**
- * Handle returned by {@link runUp}. The daemon body is exposed as a
+ * Handle returned by {@link runServe}. The daemon body is exposed as a
  * standalone async function (no `process.exit`) so unit tests can drive
  * startup, exercise the IPC handler in-process, and call `teardown()` to
  * release resources without spawning a child.
@@ -120,7 +119,7 @@ export type RunUpError = InferErrors<typeof RunUpError>;
  * - `teardown()` closes the server, asyncDisposes the config, and unlinks
  *   metadata + socket. Idempotent.
  */
-export type UpHandle = {
+export type ServeHandle = {
 	server: UnixSocketServer;
 	entries: WorkspaceEntry[];
 	config: LoadConfigResult;
@@ -133,7 +132,7 @@ export type UpHandle = {
  * Surface for swapping out config/server construction in tests. The yargs
  * handler passes the production defaults; `up.test.ts` passes fakes.
  */
-export type RunUpDeps = {
+export type ServeDeps = {
 	loadConfig?: (
 		dir: string,
 	) => Promise<Result<LoadConfigResult, LoadError>>;
@@ -158,10 +157,10 @@ export type RunUpDeps = {
  * already have a way to express "I want only this one online": split the
  * config.
  */
-export async function runUp(
-	options: UpOptions,
-	deps: RunUpDeps = {},
-): Promise<Result<UpHandle, RunUpError | LoadError | StartupError>> {
+export async function runServe(
+	options: ServeOptions,
+	deps: ServeDeps = {},
+): Promise<Result<ServeHandle, ServeError | LoadError | StartupError>> {
 	const absDir = resolve(options.dir);
 	const socketPath = socketPathFor(absDir);
 
@@ -171,7 +170,7 @@ export async function runUp(
 	const config = loadResult.data;
 
 	// Wait for every workspace's "ready to accept RPC" gate concurrently.
-	// One bad workspace fails the whole daemon; see runUp's docstring.
+	// One bad workspace fails the whole daemon; see runServe's docstring.
 	const connectResult = await tryAsync({
 		try: () =>
 			Promise.all(
@@ -185,7 +184,7 @@ export async function runUp(
 					),
 				),
 			),
-		catch: (cause) => RunUpError.ConnectFailed({ cause }),
+		catch: (cause) => ServeError.ConnectFailed({ cause }),
 	});
 	if (connectResult.error) {
 		await safeAsyncDispose(config);
@@ -196,7 +195,7 @@ export async function runUp(
 	// daemon's sidecar must stay intact; on a stale-socket recovery
 	// `bindOrRecover` unlinks the orphan metadata internally before our
 	// successful retry, so the writeMetadata below records *our* pid.
-	const app = buildApp(config.entries, () => void teardown());
+	const app = buildApp(config.entries);
 	const bindResult = await bindOrRecover(socketPath, absDir, app, pingDaemon);
 	if (bindResult.error) {
 		await safeAsyncDispose(config);
@@ -241,15 +240,15 @@ export async function runUp(
 }
 
 /**
- * Yargs `up` command. Thin glue: parses argv, calls {@link runUp}, prints
- * the operator-facing banner + initial peers snapshot, wires SIGINT/SIGTERM,
- * subscribes to awareness/status across every loaded workspace, and parks
- * until a signal triggers teardown.
+ * Yargs `serve` command. Thin glue: parses argv, calls {@link runServe},
+ * prints the operator-facing banner + initial peers snapshot, wires
+ * SIGINT/SIGTERM, subscribes to awareness/status across every loaded
+ * workspace, and parks until a signal triggers teardown.
  */
-export const upCommand: CommandModule = {
-	command: 'up',
+export const serveCommand: CommandModule = {
+	command: 'serve',
 	describe:
-		'Bring this config online as a long-lived peer for every workspace it exports (foreground).',
+		'Run this config as a foreground long-lived workspace process (one socket per dir).',
 	builder: (yargs: Argv) =>
 		yargs
 			.option('dir', dirOption)
@@ -260,25 +259,25 @@ export const upCommand: CommandModule = {
 					'Suppress awareness join/leave lines (sync state changes still print)',
 			})
 			.example(
-				'$0 up',
+				'$0 serve',
 				'Bring the workspace in the cwd online; park in the foreground',
 			)
 			.example(
-				'$0 up -C ~/notes',
-				'Run the daemon for a workspace in another directory',
+				'$0 serve -C ~/notes',
+				'Run the workspace process in another directory',
 			)
 			.example(
-				'$0 up & $0 list && $0 run sync.status',
-				'Background the daemon, then drive it from the same shell',
+				'$0 serve & $0 list && $0 run sync.status',
+				'Background via shell, then drive it from the same terminal',
 			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
-		const options: UpOptions = {
+		const options: ServeOptions = {
 			dir: dirFromArgv(args),
 			quiet: args.quiet === true,
 		};
 
-		const { data: handle, error } = await runUp(options);
+		const { data: handle, error } = await runServe(options);
 		if (error) {
 			process.stderr.write(`${error.message}\n`);
 			process.exit(1);

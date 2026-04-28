@@ -1,17 +1,16 @@
 /**
- * Wave 5 unit-level tests for `epicenter up`.
+ * Unit-level tests for `epicenter serve`.
  *
- * These tests run `runUp` in-process with a fake `LoadedWorkspace` /
- * `SyncAttachment` so we never spawn a child or call `process.exit`. The
- * cross-process e2e (real CLI binary, real relay) lands in Wave 8.
+ * These tests run `runServe` in-process with a fake `LoadedWorkspace` /
+ * `SyncAttachment` so we never spawn a child or call `process.exit`.
  *
- * Cases (per the brief):
+ * Cases:
  *   1. Happy path: bindUnixSocket is called, metadata is written, ping replies "pong".
- *   2. Stale-auth fast-fail: whenReady never resolves; runUp throws "connect failed: ..."
+ *   2. Stale-auth fast-fail: whenReady never resolves; runServe throws "connect failed: ..."
  *      within the connect-timeout window.
  *   3. Already-running: pre-write metadata for `process.pid` + a real listening socket;
- *      runUp throws "daemon already running (pid=X)".
- *   4. Orphan: pre-write metadata for a dead pid + phantom socket; runUp proceeds
+ *      runServe throws "server already running (pid=X)".
+ *   4. Orphan: pre-write metadata for a dead pid + phantom socket; runServe proceeds
  *      cleanly (no throw).
  */
 
@@ -38,7 +37,7 @@ import { bindUnixSocket } from '../daemon/unix-socket';
 import { writeMetadata } from '../daemon/metadata';
 import { metadataPathFor, socketPathFor } from '../daemon/paths';
 import type { LoadConfigResult, LoadedWorkspace } from '../load-config';
-import { runUp } from './up';
+import { runServe } from './serve';
 
 let originalXdg: string | undefined;
 let runtimeRoot: string;
@@ -103,12 +102,12 @@ function makeFakeConfig(workspace: LoadedWorkspace): LoadConfigResult {
 	};
 }
 
-describe('runUp: happy path', () => {
+describe('runServe: happy path', () => {
 	test('writes metadata, binds socket, replies to ping', async () => {
 		const workspace = makeFakeWorkspace();
 		const config = makeFakeConfig(workspace);
 
-		const { data: handle, error } = await runUp(
+		const { data: handle, error } = await runServe(
 			{
 				dir: workDir,
 				quiet: true,
@@ -119,7 +118,7 @@ describe('runUp: happy path', () => {
 			},
 		);
 		expect(error).toBeNull();
-		if (error) throw new Error('runUp failed unexpectedly');
+		if (error) throw new Error('runServe failed unexpectedly');
 
 		// Metadata was written.
 		expect(existsSync(metadataPathFor(workDir))).toBe(true);
@@ -141,7 +140,7 @@ describe('runUp: happy path', () => {
 	});
 });
 
-describe('runUp: stale-auth fast-fail', () => {
+describe('runServe: stale-auth fast-fail', () => {
 	test('returns ConnectFailed when whenReady exceeds the timeout', async () => {
 		// whenReady that never resolves; emulates a hung auth handshake.
 		const neverReady = new Promise<void>(() => {
@@ -151,7 +150,7 @@ describe('runUp: stale-auth fast-fail', () => {
 		const config = makeFakeConfig(workspace);
 
 		const start = Date.now();
-		const { error } = await runUp(
+		const { error } = await runServe(
 			{
 				dir: workDir,
 				quiet: true,
@@ -169,7 +168,7 @@ describe('runUp: stale-auth fast-fail', () => {
 	});
 });
 
-describe('runUp: already running', () => {
+describe('runServe: already running', () => {
 	test('returns AlreadyRunning when a live daemon is detected', async () => {
 		const sockPath = socketPathFor(workDir);
 		mkdirSync(join(runtimeRoot, 'epicenter'), { recursive: true });
@@ -188,7 +187,7 @@ describe('runUp: already running', () => {
 		});
 
 		try {
-			const { error } = await runUp(
+			const { error } = await runServe(
 				{
 					dir: workDir,
 					quiet: true,
@@ -208,7 +207,7 @@ describe('runUp: already running', () => {
 	});
 });
 
-describe('runUp: orphan path', () => {
+describe('runServe: orphan path', () => {
 	test('proceeds cleanly when metadata pid is dead and socket is phantom', async () => {
 		const sockPath = socketPathFor(workDir);
 		mkdirSync(join(runtimeRoot, 'epicenter'), { recursive: true });
@@ -226,7 +225,7 @@ describe('runUp: orphan path', () => {
 		const workspace = makeFakeWorkspace();
 		const config = makeFakeConfig(workspace);
 
-		const { data: handle, error } = await runUp(
+		const { data: handle, error } = await runServe(
 			{
 				dir: workDir,
 				quiet: true,
@@ -237,7 +236,7 @@ describe('runUp: orphan path', () => {
 			},
 		);
 		expect(error).toBeNull();
-		if (error) throw new Error('runUp failed unexpectedly');
+		if (error) throw new Error('runServe failed unexpectedly');
 
 		// Daemon came up; fresh metadata for *this* pid was written.
 		expect(handle.metadata.pid).toBe(process.pid);

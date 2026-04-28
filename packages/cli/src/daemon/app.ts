@@ -35,7 +35,7 @@ import { executeRun } from './run-handler.js';
  *      the exact same shape.
  *
  * Naming follows arktype's idiom (one PascalCase name declares both the
- * value and the type). `/peers` and `/shutdown` take no body.
+ * value and the type). `/peers` takes no body.
  */
 
 export const ListInput = type({
@@ -69,18 +69,11 @@ export type PeerSnapshot = typeof PeerSnapshot.infer;
  * Build the daemon's Hono app. Tests import this directly; production wires
  * it into `Bun.serve({ unix, fetch: app.fetch })` via `bindUnixSocket`.
  *
- * `triggerShutdown` is invoked from the `/shutdown` route after the response
- * is queued. We use `setTimeout(.., 0)` rather than `queueMicrotask` so the
- * response bytes hit the wire before the server begins teardown.
- *
  * `resolveEntry` returns a `ResolveError` for typo'd or missing `-w`; we
  * fold that into the route's body `Result` so the user sees a clean
  * error, not `DaemonError.HandlerCrashed`.
  */
-export function buildApp(
-	entries: WorkspaceEntry[],
-	triggerShutdown: () => void,
-) {
+export function buildApp(entries: WorkspaceEntry[]) {
 	return new Hono()
 		.post('/ping', (c) => c.json(Ok('pong' as const)))
 		.post('/peers', (c) => {
@@ -108,11 +101,5 @@ export function buildApp(
 			const { data: entry, error } = resolveEntry(entries, input.workspace);
 			if (error) return c.json(Err(error));
 			return c.json(await executeRun(entry, input));
-		})
-		.post('/shutdown', (c) => {
-			// Defer past the current event-loop turn so the response is flushed
-			// to the kernel before `server.stop()` closes the listening socket.
-			setTimeout(triggerShutdown, 0);
-			return c.json(Ok(null));
 		});
 }

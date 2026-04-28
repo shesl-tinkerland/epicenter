@@ -42,7 +42,7 @@ import type { RunError } from './run-errors.js';
  * call sites narrow once on `result.error.name`. No class hierarchy, no
  * throwing across the seam.
  *
- * - `Required`: no daemon is running for this directory; user must `up`.
+ * - `Required`: no server is running for this directory; user must `serve`.
  * - `Timeout`: the per-call AbortSignal fired before the daemon answered.
  * - `Unreachable`: socket missing, ECONNREFUSED, transport closed.
  * - `HandlerCrashed`: the daemon answered with a non-2xx status. Reserved
@@ -55,7 +55,7 @@ export const DaemonError = defineErrors({
 		absDir,
 	}),
 	Required: ({ absDir }: { absDir: string }) => ({
-		message: `no daemon running for ${absDir}; start one with \`epicenter up\` first`,
+		message: `no server running for ${absDir}; start one with \`epicenter serve\` first`,
 		absDir,
 	}),
 	Timeout: ({
@@ -126,7 +126,7 @@ export async function pingDaemon(
  * failures and unexpected non-2xx responses fold into `DaemonError`.
  *
  * Hostname is a placeholder; routing is done by the unix socket path.
- * Routes without a validator (ping, peers, shutdown) get an empty `{}`
+ * Routes without a validator (ping, peers) get an empty `{}`
  * body, which Hono's body-parsing tolerates and validators ignore.
  */
 async function call<TOk, TErr>(
@@ -182,7 +182,6 @@ export function daemonClient(
 				'/run',
 				input,
 			),
-		shutdown: () => call<null, never>(socketPath, timeoutMs, '/shutdown'),
 	};
 }
 
@@ -197,9 +196,9 @@ export type DaemonClient = ReturnType<typeof daemonClient>;
  *
  *   - `MissingConfig`: no `epicenter.config.ts` in `absDir`. Surfaced
  *     distinctly from `Required` so unconfigured users don't get pointed
- *     at `epicenter up` (which would fail and mislead).
- *   - `Required`: config exists but no daemon is running. Renderer
- *     prints the start-with-`up` hint.
+ *     at `epicenter serve` (which would fail and mislead).
+ *   - `Required`: config exists but no server is running. Renderer
+ *     prints the start-with-`serve` hint.
  *
  * `run`, `list`, and `peers` are mandatory-daemon commands; if they hit
  * neither variant they have a typed client to dispatch against.

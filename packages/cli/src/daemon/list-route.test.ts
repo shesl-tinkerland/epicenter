@@ -32,7 +32,7 @@ async function postList(
 	entry: WorkspaceEntry,
 	body: unknown,
 ): Promise<ListResult> {
-	const app = buildApp([entry], () => {});
+	const app = buildApp([entry]);
 	const res = await app.request('/list', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
