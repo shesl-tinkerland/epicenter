@@ -1,4 +1,6 @@
 import yargs from 'yargs';
+
+import packageJson from '../package.json' with { type: 'json' };
 import { authCommand } from './commands/auth';
 import { downCommand } from './commands/down';
 import { listCommand } from './commands/list';
@@ -7,6 +9,12 @@ import { peersCommand } from './commands/peers';
 import { psCommand } from './commands/ps';
 import { runCommand } from './commands/run';
 import { upCommand } from './commands/up';
+
+const CLI_VERSION = packageJson.version;
+
+const EPILOG = `Scripting: import \`epicenter.config.ts\` in a \`.ts\` script and run with \`bun run\`.
+The CLI is the shell-friendly surface for one-shot queries and invocations;
+loops, fan-out, and joins belong in scripts that call the workspace library directly.`;
 
 /**
  * Create the Epicenter CLI instance.
@@ -27,6 +35,7 @@ export function createCLI() {
 		run: async (argv: string[]) => {
 			const cli = yargs()
 				.scriptName('epicenter')
+				.usage('$0 <command> [options]')
 				.command(authCommand)
 				.command(downCommand)
 				.command(listCommand)
@@ -35,10 +44,15 @@ export function createCLI() {
 				.command(psCommand)
 				.command(runCommand)
 				.command(upCommand)
-				.demandCommand(1)
+				.demandCommand(1, 'Specify a command (run `$0 --help` to see all).')
+				.recommendCommands()
 				.strict()
 				.exitProcess(false)
-				.help();
+				.version(CLI_VERSION)
+				.alias('v', 'version')
+				.help()
+				.alias('h', 'help')
+				.epilog(EPILOG);
 
 			await cli.parse(argv);
 		},
