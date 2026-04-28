@@ -1,7 +1,7 @@
 # Script-first CLI collapse: promoting peer-wait to a workspace primitive
 
 **Date:** 2026-04-28
-**Status:** WIP / thinking-in-progress
+**Status:** Steps 1-4 landed; steps 5-6 pending
 **Author:** AI-assisted (Braden + Claude)
 **Branch:** `post-pr-1705-cleanup-v1`
 
@@ -202,13 +202,127 @@ Open question. Today `loadConfig` walks up directories looking for `epicenter.co
 
 Independent steps, each shippable on its own:
 
-1. **Move `waitForPeer` + `findPeer` + `explainEmpty` into `@epicenter/workspace`.** Co-locate with `attach-sync.ts` or its own module under `packages/workspace/src/document/`. Keep behavior identical. CLI re-imports.
-2. **Promote `PeerMiss` into workspace** as a return type of `waitForPeer`. Update CLI's `RunError` to re-export or compose.
-3. **Method-ify on `SyncAttachment`** (option A from move 1). `sync.waitForPeer(deviceId, { timeoutMs })`.
-4. **Collapse the CLI renderer** in `run.ts` to the table-driven `formatRunError` shape.
-5. **Document the duality** in a `docs/cli-vs-scripts.md` with side-by-side examples.
+1. ~~**Move `waitForPeer` + `findPeer` + `explainEmpty` into `@epicenter/workspace`.**~~ Done. `findPeer` was dead duplication of `sync.find` and got deleted; `explainEmpty` became a private `describeOfflineReason` inside `attach-sync.ts`. Commits: `feat(workspace): add sync.waitForPeer + PeerMiss`, `refactor(cli): use sync.waitForPeer; delete peer-wait helpers`.
+2. ~~**Promote `PeerMiss` into workspace** as a return type of `waitForPeer`.~~ Done. CLI's `RunError` no longer carries a `PeerMiss` variant; `RunResponse` composes `RunError | PeerMiss | ResolveError`.
+3. ~~**Method-ify on `SyncAttachment`**.~~ Done. `sync.waitForPeer(deviceId, { timeoutMs })` ships.
+4. ~~**Collapse the CLI renderer** in `run.ts` to the table-driven shape.~~ Done. `EXIT_CODE` table with `satisfies Record<ErrorName, 1 | 2 | 3>` makes drift a compile error; pure `formatPeerMiss` / `formatRpcError` functions return `string[]` and are testable without `console.error` spies.
+5. **Daemon-optional `list`.** Pending. `list` only needs `walkActions` / `describeActions` (no sync). Add `getWorkspaceOrLoad(target)`: try the daemon first, fall back to inline `loadConfig`. `peers` and `run --peer` stay daemon-required (they need a warm sync room).
+6. **Document the duality** in a `docs/cli-vs-scripts.md` with side-by-side examples. Pending.
 
-Step 1 is mechanical and unblocks everything. Steps 2-3 are typing decisions. Step 4 is the visible payoff. Step 5 cements the rule.
+Steps 1-4 landed in the script-first-cli-collapse PR series. Steps 5-6 are the natural follow-up.
+
+## Future moves (deferred)
+
+These are the "where could this go" options, not commitments. Each is shippable on its own when the trigger condition arrives.
+
+### Option B: daemon as a service
+
+**Today**: daemon code lives in `packages/cli/src/daemon/`, intermingled with CLI commands. The CLI is the only consumer.
+
+**Move**: extract `@epicenter/daemon` (server + client). The unix-socket protocol becomes a documented public contract. CLI imports `connectDaemon` from there; future consumers (Tauri sidecar, web tunnel, mobile bridge) can too.
+
+**Call site after** (CLI side, near-identical):
+
+```ts
+// packages/cli/src/commands/run.ts
+import { connectDaemon } from '@epicenter/daemon/client'
+
+const daemon = await connectDaemon(target)
+const result = await daemon.run({ actionPath, input, peerTarget, waitMs })
+```
+
+**Call site after** (new consumer):
+
+```ts
+// apps/whispering/src-tauri/sidecar.ts (hypothetical)
+import { connectDaemon } from '@epicenter/daemon/client'
+const daemon = await connectDaemon({ socketPath: epicenterSocketPath() })
+const peers = await daemon.peers()  // power a "who's online" indicator in the desktop UI
+```
+
+**Trigger**: a second consumer materializes. Most likely: a Tauri sidecar in `apps/whispering` or `apps/tab-manager` that wants to read peer presence without spawning `epicenter` as a subprocess.
+
+**Cost**: 2-3 days. File moves, package boilerplate, doc the IPC protocol. No behavior change.
+
+**Why defer**: with one consumer, the package boundary is correct architecture without a payoff. The CLI's `daemon/` folder being internal-shaped doesn't hurt anyone today.
+
+### Option C: generated CLI
+
+**Today**: every action is invoked through `epicenter run <dot.path> [json blob]`. JSON input is opaque; no per-action `--help`; no shell completion for action names.
+
+**Move**: derive yargs subcommands from `walkActions(workspace.actions)` at startup. Each `defineQuery` / `defineMutation` becomes a first-class `epicenter <path>` subcommand with typed flags from the action's input schema.
+
+**User experience after**:
+
+```bash
+$ epicenter savedTabs.create --url "https://..." --title "..."
+$ epicenter sync.status
+$ epicenter --peer device-mac savedTabs.create --url "..."
+
+$ epicenter savedTabs.create --help
+Usage: epicenter savedTabs.create [options]
+  Add a saved tab to the workspace.
+Options:
+  --url <string>      (required)
+  --title <string>    (required)
+  --pinned <boolean>  (optional, default: false)
+
+$ epicenter savedT<TAB>           # tab completion
+```
+
+**Implementation sketch**:
+
+```ts
+// cli.ts after option C
+const ws = await getWorkspaceOrExit(target)  // need workspace to know its actions
+const cli = yargs(argv).scriptName('epicenter')
+
+// hand-authored: process management, auth, the tree-listing verb
+cli.command(authCommand)
+   .command(upCommand).command(downCommand).command(psCommand).command(logsCommand)
+   .command(listCommand)
+
+// generated: one yargs subcommand per action in the workspace
+for (const [path, action] of walkActions(ws.actions ?? {})) {
+  cli.command(generateActionCommand(path, action))
+}
+
+await cli.parse()
+```
+
+**Trigger**: the action surface grows past ~20 entries and shell usage is frequent enough that JSON-blob ergonomics actively annoy users.
+
+**Cost**: 1-2 weeks (real work). Schema introspection, schema → flag mapping, completion files, graceful `--help` when no workspace is loadable.
+
+**Downsides** (the "is it worth it" answer):
+
+1. **Schema-to-flags is lossy.** Primitives map cleanly. Nested objects, discriminated unions, recursive schemas, user-defined arktype constructs: not so much. The fallback is `--field '<json>'`, which is what we have today, just hidden one level deeper. For non-trivial inputs the gain over `epicenter run path '<json>'` evaporates.
+
+2. **Error messages get messier.** Yargs validates flags, then arktype validates the resulting input. Two error sources, two error formats, sometimes the same value flagged by both. "Missing required argument: url" (yargs) vs "Expected string, got number at .url" (arktype) needs reconciliation, or you get duplicated errors.
+
+3. **`--help` becomes config-dependent.** Today `epicenter --help` works without any workspace. After option C, you need to load the workspace to know what subcommands exist. If the config is broken, `--help` shows a load error instead of help. Bootstrapping mess.
+
+4. **Tab completion has per-shell tax.** Bash, zsh, fish each need their own completion script. Each has different completion semantics and limitations. Maintaining three is real ongoing cost; shipping one means partial coverage.
+
+5. **Action authors implicitly design CLI surfaces.** Today action authors structure inputs however they want; the CLI just ships JSON. After option C, "I want a discriminated union here" becomes "you have to pick CLI-friendly field names." API design pollutes through into shell ergonomics. Workspace authors who don't care about CLI now have to.
+
+6. **Versioning gets coupled.** Workspace lib version vs CLI version vs action schema version. Today the CLI just sends JSON: workspace bumps don't need CLI bumps. After option C, the CLI introspects the schema, so a workspace lib bump that adds a new schema construct may need a matching CLI bump.
+
+7. **Discovery problem.** Where does the workspace come from? `epicenter.config.ts` in CWD? In `--dir`? What if multiple workspaces? `--workspace` is a chicken-and-egg with subcommand resolution: you need to resolve the workspace to know what subcommands exist, but `--workspace` is itself a CLI flag that needs parsing first.
+
+8. **Loses simplicity as a mental model.** Today: "epicenter run is RPC over a unix socket." After option C: "epicenter is a generated CLI from a TypeScript schema, with daemon transport." More magic, more failure modes, more support burden.
+
+9. **Scripts already solve this.** A user who wants typed CLI args for their actions can write a 30-line script using their own argv parsing. The win for built-in generation is centralized; the cost is in the framework. With small action surfaces, the script is the right tool.
+
+**Honest verdict**: Option C is exciting but has diminishing returns. For 5 actions, JSON blobs are fine. For 50 actions across many users, generation pays. Today we're closer to "fine." If pursued, do it after Options 1+2 land — the schema introspection is more tractable when the daemon already speaks a typed protocol.
+
+### What this rules out
+
+By the same "script-first" principle, these are NOT future moves:
+
+- Adding `--repeat`, `--all-peers`, `--if-then` flags to `run`. Those are scripting concerns; live in user scripts. The CLI's `--peer` + `--wait` is the ceiling.
+- Auto-printing action results in a "smart" format (table, tree, etc). `--format json/jsonl` is already the truthy interchange. Smart printing is a script-level decision.
+- Caching daemon responses in the CLI. The daemon's response is already amortized; another cache layer is misplaced.
 
 ## Open questions
 
