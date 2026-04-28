@@ -10,9 +10,10 @@ import Type from 'typebox';
 import { Err, Ok, isErr } from 'wellcrafted/result';
 import type { Result } from 'wellcrafted/result';
 import { RpcError, isRpcError } from '@epicenter/sync';
-import type {
-	FoundPeer,
-	SyncAttachment,
+import {
+	PeerMiss,
+	type FoundPeer,
+	type SyncAttachment,
 } from '@epicenter/workspace';
 import { defineMutation, defineQuery } from '../shared/actions.js';
 import { peer } from './peer.js';
@@ -77,6 +78,23 @@ function mockSync(opts: {
 		observe(cb) {
 			observers.add(cb);
 			return () => observers.delete(cb);
+		},
+		async waitForPeer(deviceId, { timeoutMs }) {
+			const clientId = present.get(deviceId);
+			if (clientId !== undefined) {
+				return Ok({
+					clientId,
+					state: {
+						device: { id: deviceId, name: deviceId, platform: 'web' },
+					},
+				});
+			}
+			return PeerMiss.PeerMiss({
+				peerTarget: deviceId,
+				sawPeers: present.size > 0,
+				waitMs: timeoutMs,
+				emptyReason: null,
+			});
 		},
 		// rpc dispatch
 		async rpc(target, action, input, options) {

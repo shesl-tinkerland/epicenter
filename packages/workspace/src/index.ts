@@ -150,6 +150,7 @@ export {
 
 export {
 	attachSync,
+	PeerMiss,
 	toWsUrl,
 	type AttachSyncDoc,
 	type SyncAttachment,

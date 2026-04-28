@@ -114,6 +114,61 @@ export const SyncSupervisorError = defineErrors({
 });
 export type SyncSupervisorError = InferErrors<typeof SyncSupervisorError>;
 
+/**
+ * Failure mode of {@link SyncAttachment.waitForPeer}: the requested peer
+ * did not appear in awareness within the wait budget.
+ *
+ * - `peerTarget`: deviceId requested.
+ * - `sawPeers`: whether *any* peers were visible during the wait. Lets
+ *   callers distinguish "nobody at all" from "wrong deviceId".
+ * - `waitMs`: budget that was consumed.
+ * - `emptyReason`: human-readable diagnostic derived from `sync.status` at
+ *   miss time (e.g. "not connected (auth error after 3 retries)"), or
+ *   `null` when the connection itself is healthy and peers are simply
+ *   absent. Default rendering; consumers wanting structured diagnostics
+ *   can read `sync.status` directly.
+ */
+export const PeerMiss = defineErrors({
+	PeerMiss: ({
+		peerTarget,
+		sawPeers,
+		waitMs,
+		emptyReason,
+	}: {
+		peerTarget: string;
+		sawPeers: boolean;
+		waitMs: number;
+		emptyReason: string | null;
+	}) => ({
+		message: `no peer matches deviceId "${peerTarget}"`,
+		peerTarget,
+		sawPeers,
+		waitMs,
+		emptyReason,
+	}),
+});
+export type PeerMiss = InferErrors<typeof PeerMiss>;
+
+/**
+ * Diagnose why no peers are visible by inspecting live sync status.
+ * Returns `null` when the connection is healthy (peers are simply absent,
+ * nothing to explain) or when no presence is configured.
+ *
+ * Surfacing this matters because connect retries can fail silently (server
+ * down, stale prod, auth rejected); without this hint a wait timeout reads
+ * as "everything is fine, you're alone" when really the socket never
+ * handshook.
+ */
+function describeOfflineReason(status: SyncStatus): string | null {
+	if (status.phase === 'connected') return null;
+	if (status.phase === 'connecting' && status.lastError) {
+		const retries = status.retries;
+		const word = retries === 1 ? 'retry' : 'retries';
+		return `not connected (${status.lastError.type} error after ${retries} ${word})`;
+	}
+	return 'not connected';
+}
+
 export type SyncAttachment = {
 	/**
 	 * Resolves after the WebSocket handshake completes and the first sync
@@ -175,6 +230,24 @@ export type SyncAttachment = {
 	 * `undefined` when no peer matches or when no presence is configured.
 	 */
 	find(deviceId: string): FoundPeer | undefined;
+	/**
+	 * Wait for a peer publishing `deviceId` to appear in awareness.
+	 *
+	 * Subscribes to awareness changes (no polling) and resolves on first
+	 * match or when `timeoutMs` expires. Returns a `Result` so the miss
+	 * case is a value, not an exception: callers narrow on
+	 * `result.error.name === 'PeerMiss'` and read `sawPeers` to distinguish
+	 * "nobody at all" from "wrong deviceId".
+	 *
+	 * Deliberately does NOT block on `whenConnected`; the observe loop
+	 * already covers that path (awareness can only arrive after the WS
+	 * handshake completes). Awaiting `whenConnected` would tie this to the
+	 * workspace's full connection lifetime instead of the caller's budget.
+	 */
+	waitForPeer(
+		deviceId: string,
+		options: { timeoutMs: number },
+	): Promise<Result<FoundPeer, PeerMiss>>;
 	/**
 	 * Subscribe to peer change events. Fires when peers join, leave, or
 	 * update their state. Returns an unsubscribe function. No-op when no
@@ -938,6 +1011,62 @@ export function attachSync(
 				}
 			}
 			return undefined;
+		},
+		async waitForPeer(deviceId, { timeoutMs }) {
+			if (!typedAwareness) {
+				return PeerMiss.PeerMiss({
+					peerTarget: deviceId,
+					sawPeers: false,
+					waitMs: timeoutMs,
+					emptyReason: describeOfflineReason(status.get()),
+				});
+			}
+
+			let sawPeers = false;
+			const tryMatch = (): FoundPeer | undefined => {
+				const all = typedAwareness!.peers();
+				if (all.size > 0) sawPeers = true;
+				const sorted = [...all.keys()].sort((a, b) => a - b);
+				for (const clientId of sorted) {
+					const state = all.get(clientId)!;
+					if (state.device.id === deviceId) return { clientId, state };
+				}
+				return undefined;
+			};
+
+			const initial = tryMatch();
+			if (initial) return Ok(initial);
+
+			if (timeoutMs <= 0) {
+				return PeerMiss.PeerMiss({
+					peerTarget: deviceId,
+					sawPeers,
+					waitMs: timeoutMs,
+					emptyReason: describeOfflineReason(status.get()),
+				});
+			}
+
+			return new Promise((resolve) => {
+				const stop = typedAwareness!.observe(() => {
+					const hit = tryMatch();
+					if (hit) {
+						clearTimeout(timer);
+						stop();
+						resolve(Ok(hit));
+					}
+				});
+				const timer = setTimeout(() => {
+					stop();
+					resolve(
+						PeerMiss.PeerMiss({
+							peerTarget: deviceId,
+							sawPeers,
+							waitMs: timeoutMs,
+							emptyReason: describeOfflineReason(status.get()),
+						}),
+					);
+				}, timeoutMs);
+			});
 		},
 		observe(callback) {
 			if (!typedAwareness) return () => {};
