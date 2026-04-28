@@ -28,17 +28,12 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-import {
-	attachSessionUnlock,
-	createSessionStore,
-	epicenterPaths,
-} from '@epicenter/cli';
+import { connectWorkspace, epicenterPaths } from '@epicenter/cli';
 import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
 import {
 	attachEncryption,
 	attachSqlite,
-	attachSync,
 	createDisposableCache,
 	defineMutation,
 } from '@epicenter/workspace';
@@ -51,33 +46,20 @@ import { attachSqliteMaterializer } from '@epicenter/workspace/document/material
 import Type from 'typebox';
 import * as Y from 'yjs';
 
-const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
 const MATERIALIZER_DIR = join(import.meta.dir, '.epicenter', 'materializer');
 mkdirSync(MATERIALIZER_DIR, { recursive: true });
 
 const WORKSPACE_ID = 'opensidian';
-const sessions = createSessionStore();
 
 const ydoc = new Y.Doc({ guid: WORKSPACE_ID, gc: false });
 const encryption = attachEncryption(ydoc);
 const tables = encryption.attachTables(ydoc, opensidianTables);
 const kv = encryption.attachKv(ydoc, {});
 
-const persistence = attachSqlite(ydoc, {
-	filePath: epicenterPaths.persistence(WORKSPACE_ID),
-});
-
-const unlock = attachSessionUnlock(encryption, {
-	sessions,
-	serverUrl: SERVER_URL,
-	waitFor: persistence.whenLoaded,
-});
-
-const sync = attachSync(ydoc, {
-	url: (docId) => `${SERVER_URL}/workspaces/${docId}`,
-	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
-	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+const { persistence, sync, whenReady } = connectWorkspace({
+	ydoc,
+	encryption,
 });
 
 /**
@@ -105,12 +87,6 @@ async function readContent(rowId: string): Promise<string | undefined> {
 	await handle.whenReady;
 	return handle.content.read();
 }
-
-const whenReady = Promise.all([
-	persistence.whenLoaded,
-	unlock.whenChecked,
-	sync.whenConnected,
-]);
 
 const markdown = attachMarkdownMaterializer(ydoc, {
 	dir: MARKDOWN_DIR,
