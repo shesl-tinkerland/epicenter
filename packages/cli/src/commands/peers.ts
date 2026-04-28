@@ -17,7 +17,7 @@ import type { Argv, CommandModule } from 'yargs';
 import type { PeerSnapshot } from '../daemon/app';
 import { getDaemon } from '../daemon/client';
 import { dirOption, resolveTarget, workspaceOption } from '../util/common-options';
-import { formatYargsOptions, output, outputError } from '../util/format-output';
+import { fail, formatYargsOptions, output, outputError } from '../util/format-output';
 
 export const peersCommand: CommandModule = {
 	command: 'peers',
@@ -43,14 +43,12 @@ export const peersCommand: CommandModule = {
 
 		const { data: daemon, error: daemonErr } = await getDaemon(target);
 		if (daemonErr) {
-			outputError(daemonErr.message);
-			process.exitCode = 1;
+			fail(daemonErr.message);
 			return;
 		}
 		const { data: rows, error } = await daemon.peers();
 		if (error) {
-			outputError(`${pc.red('error:')} ${error.message}`);
-			process.exitCode = 1;
+			fail(error.message);
 			return;
 		}
 		const filtered =

@@ -1,3 +1,5 @@
+import pc from 'picocolors';
+
 export type FormatOptions = {
 	/**
 	 * Machine-readable output mode. Omit for human text (callers render
@@ -32,10 +34,27 @@ export function output(value: unknown, options: FormatOptions = {}): void {
 }
 
 /**
- * Output an error message to stderr
+ * Output an error message to stderr (no label, no exit code).
+ *
+ * For terminal command failures, prefer {@link fail}: it adds the
+ * red `error:` label and sets `process.exitCode = 1` in one line.
+ * Use `outputError` for ancillary lines (multi-line error bodies,
+ * empty-state notices like "no peers connected").
  */
 export function outputError(message: string): void {
 	console.error(message);
+}
+
+/**
+ * Print a labeled error to stderr and set `process.exitCode = 1`.
+ * The standard "this command failed" exit path for `list`, `peers`,
+ * `run`, and any future command. Single-line; for multi-line bodies
+ * print extra lines via {@link outputError} before calling `fail`,
+ * or build the lines yourself and skip `fail` (see `run.ts`).
+ */
+export function fail(message: string): void {
+	console.error(`${pc.red('error:')} ${message}`);
+	process.exitCode = 1;
 }
 
 /**

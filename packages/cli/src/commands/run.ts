@@ -34,6 +34,7 @@ import {
 	workspaceOption,
 } from '../util/common-options';
 import {
+	fail,
 	formatYargsOptions,
 	output,
 	outputError,
@@ -112,8 +113,7 @@ export const runCommand: CommandModule = {
 
 		const { data: daemon, error: daemonErr } = await getDaemon(target);
 		if (daemonErr) {
-			outputError(daemonErr.message);
-			process.exitCode = 1;
+			fail(daemonErr.message);
 			return;
 		}
 		const result = await daemon.run(ctx);

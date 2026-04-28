@@ -28,11 +28,7 @@ import {
 	resolveTarget,
 	workspaceOption,
 } from '../util/common-options';
-import {
-	formatYargsOptions,
-	output,
-	outputError,
-} from '../util/format-output';
+import { fail, formatYargsOptions, output } from '../util/format-output';
 import type { ResolveError } from '../daemon/resolve-entry';
 
 type Format = 'json' | 'jsonl' | undefined;
@@ -72,14 +68,12 @@ export const listCommand: CommandModule = {
 
 		const { data: daemon, error: daemonErr } = await getDaemon(target);
 		if (daemonErr) {
-			outputError(daemonErr.message);
-			process.exitCode = 1;
+			fail(daemonErr.message);
 			return;
 		}
 		const result = await daemon.list({ workspace: target.userWorkspace });
 		if (result.error) {
-			outputError(`${pc.red('error:')} ${result.error.message}`);
-			process.exitCode = 1;
+			fail(result.error.message);
 			return;
 		}
 
@@ -126,6 +120,7 @@ function renderAtPath(
 		fail(`"${path}" is not defined.`);
 		return;
 	}
+
 	if (format) {
 		const rows = Object.entries(subset).map(([p, meta]) =>
 			toActionDescriptor(meta, p),
@@ -134,11 +129,6 @@ function renderAtPath(
 		return;
 	}
 	printTree(subset, path);
-}
-
-function fail(message: string): void {
-	outputError(`${pc.red('error:')} ${message}`);
-	process.exitCode = 1;
 }
 
 /**
