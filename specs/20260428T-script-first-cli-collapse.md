@@ -1,9 +1,9 @@
 # Script-first CLI collapse: promoting peer-wait to a workspace primitive
 
 **Date:** 2026-04-28
-**Status:** Steps 1-4 landed; steps 5-6 pending
+**Status:** Shipped
 **Author:** AI-assisted (Braden + Claude)
-**Branch:** `post-pr-1705-cleanup-v1`
+**Branches:** `slice-a-connect-workspace`, `slice-bc-cli-collapse`
 
 ## One-sentence thesis
 
@@ -206,10 +206,13 @@ Independent steps, each shippable on its own:
 2. ~~**Promote `PeerMiss` into workspace** as a return type of `waitForPeer`.~~ Done. CLI's `RunError` no longer carries a `PeerMiss` variant; `RunResponse` composes `RunError | PeerMiss | ResolveError`.
 3. ~~**Method-ify on `SyncAttachment`**.~~ Done. `sync.waitForPeer(deviceId, { timeoutMs })` ships.
 4. ~~**Collapse the CLI renderer** in `run.ts` to the table-driven shape.~~ Done. `EXIT_CODE` table with `satisfies Record<ErrorName, 1 | 2 | 3>` makes drift a compile error; pure `formatPeerMiss` / `formatRpcError` functions return `string[]` and are testable without `console.error` spies.
-5. **Daemon-optional `list`.** Pending. `list` only needs `walkActions` / `describeActions` (no sync). Add `getWorkspaceOrLoad(target)`: try the daemon first, fall back to inline `loadConfig`. `peers` and `run --peer` stay daemon-required (they need a warm sync room).
-6. **Document the duality** in a `docs/cli-vs-scripts.md` with side-by-side examples. Pending.
+5. ~~**Daemon-optional `list`.**~~ Reframed and shipped. Mid-execution we adopted a stronger philosophy: "scripts are the primary API, CLI is shell sugar." That made `list` daemon-optionality moot; `list` and `peers` were considered for deletion, then kept as **discovery commands** (legitimate CLI surface, distinct from action passthroughs).
+6. ~~**Document the duality**~~ Done. `docs/cli-vs-scripts.md` lays out the principle, the surface, what it's NOT for, side-by-side examples, and what's deliberately ruled out.
+7. ~~**Lifecycle collapse.**~~ Done. `up` renamed to `serve` (signals foreground philosophy); `down`/`ps`/`logs`/`log-rotation`/`/shutdown` route all deleted. `serve` parks until SIGINT; backgrounding is the user's job (shell `&`, tmux, systemd). Net delete: ~600 lines.
+8. ~~**`connectWorkspace` shipped.**~~ Done. The 2026-04-14 spec proposed a builder-pattern API; modern workspace uses `attach*` factories on `ydoc`, so the function ships against the current shape. Bundles `attachSqlite + attachSessionUnlock + attachSync` with the Epicenter cloud defaults; saves ~19 lines per script/config.
+9. ~~**`resolveEntry` moved into `daemon/`.**~~ Done. Pure organization: it operates on daemon-layer types and only daemon routes call it.
 
-Steps 1-4 landed in the script-first-cli-collapse PR series. Steps 5-6 are the natural follow-up.
+All steps 1-9 shipped in the slice-a + slice-bc PR series.
 
 ## Future moves (deferred)
 
