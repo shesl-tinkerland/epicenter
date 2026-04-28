@@ -1,6 +1,5 @@
 /**
- * Typed client for the `epicenter up` daemon, derived from the Hono app's
- * static type via `hc<DaemonApp>`. Three surfaces:
+ * Hand-rolled typed client for the `epicenter up` daemon. Three surfaces:
  *
  * - {@link pingDaemon}: cheap liveness probe; never throws, never returns
  *   Result. Boolean is the right shape for a fast-path predicate.
@@ -12,13 +11,17 @@
  *   Returns a typed client on success, or `MissingConfig` /
  *   `Required` when the workspace isn't configured / has no live daemon.
  *
- * Wire format and security model are deliberately internal; see
- * `specs/20260426T235000-cli-up-long-lived-peer.md` § "IPC wire protocol".
+ * The wire protocol is dead simple: POST a JSON body to a path on the unix
+ * socket, get back a `Result<T, DomainErr>` JSON envelope from the handler.
+ * No `hc` machinery: every route is one line that names its input/output
+ * types directly. Body shapes still validate at the daemon boundary via
+ * arktype (`schemas.ts` + `@hono/standard-validator`), so a stale CLI
+ * still gets a typed 400 instead of a confusing downstream cast failure.
  */
 
 import { join } from 'node:path';
 
-import { hc } from 'hono/client';
+import type { ActionManifest } from '@epicenter/workspace';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -26,10 +29,13 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
+import type { RunError } from '../commands/run.js';
 import { CONFIG_FILENAME } from '../load-config.js';
 import type { ResolvedTarget } from '../util/common-options.js';
-import type { DaemonApp } from './app.js';
+import type { ResolveError } from '../util/resolve-entry.js';
+import type { PeerSnapshot } from './app.js';
 import { socketPathFor } from './paths.js';
+import type { ListCtx, PeersArgs, RunCtx } from './schemas.js';
 
 /**
  * Tagged-error variants returned by daemon client surfaces. Domain errors
@@ -116,112 +122,69 @@ export async function pingDaemon(
 }
 
 /**
- * Build a typed client for a daemon listening on `socketPath`. The returned
- * methods are derived from {@link DaemonApp} via `hc<DaemonApp>`, so call
- * sites get input-shape checking and `Result` body types inferred from the
- * route handlers (no manual `<T, E>` re-declaration).
+ * One round-trip to the daemon. The body of a successful 2xx response is
+ * a `Result<TOk, TErr>` envelope produced by the handler; transport
+ * failures and unexpected non-2xx responses fold into `DaemonError`.
  *
- * Each method merges Hono's typed body `Result<T, E>` with `DaemonError`
- * (transport failures + non-2xx) into a single union the renderer narrows
- * by `error.name`. The transport handling is inlined per method to keep
- * Hono's status-discriminated narrowing on `res.ok` and `res.json()`
- * intact; only `Timeout` is named explicitly because it's the one rejection
- * with a different remediation, everything else folds into `Unreachable`
- * with `cause` preserved for diagnostics.
+ * Hostname is a placeholder; routing is done by the unix socket path.
+ * `body === undefined` skips the body for routes that don't take input.
+ */
+async function call<TOk, TErr>(
+	socketPath: string,
+	timeoutMs: number,
+	path: string,
+	body: unknown,
+): Promise<Result<TOk, TErr | DaemonError>> {
+	const fetched = await tryAsync({
+		try: () =>
+			fetch(`http://daemon${path}`, {
+				unix: socketPath,
+				method: 'POST',
+				headers:
+					body === undefined ? undefined : { 'content-type': 'application/json' },
+				body: body === undefined ? undefined : JSON.stringify(body),
+				signal: AbortSignal.timeout(timeoutMs),
+			}),
+		catch: (cause) =>
+			cause instanceof Error && cause.name === 'TimeoutError'
+				? DaemonError.Timeout({ socketPath, timeoutMs })
+				: DaemonError.Unreachable({ socketPath, cause }),
+	});
+	if (fetched.error !== null) return fetched;
+	const res = fetched.data;
+	if (!res.ok) {
+		const text = await res.text().catch(() => '');
+		return DaemonError.HandlerCrashed({
+			socketPath,
+			cause: text || `HTTP ${res.status}`,
+		});
+	}
+	return (await res.json()) as Result<TOk, TErr>;
+}
+
+/**
+ * Build a typed handle for a daemon listening on `socketPath`. Each method
+ * is a one-liner over {@link call}; the input/output types are named
+ * directly here rather than inferred through `hc`. Adding a route is: add
+ * a method whose `<TOk, TErr>` matches the handler's body `Result`.
  */
 export function daemonClient(
 	socketPath: string,
 	timeoutMs: number = DEFAULT_CALL_TIMEOUT_MS,
 ) {
-	const client = hc<DaemonApp>('http://daemon', {
-		fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-			fetch(input, {
-				...init,
-				unix: socketPath,
-				signal: AbortSignal.timeout(timeoutMs),
-			}),
-	});
-
 	return {
-		peers: async (args: { workspace?: string }) => {
-			const fetched = await tryAsync({
-				try: () => client.peers.$post({ json: args }),
-				catch: (cause) =>
-					cause instanceof Error && cause.name === 'TimeoutError'
-						? DaemonError.Timeout({ socketPath, timeoutMs })
-						: DaemonError.Unreachable({ socketPath, cause }),
-			});
-			if (fetched.error !== null) return fetched;
-			const res = fetched.data;
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				return DaemonError.HandlerCrashed({
-					socketPath,
-					cause: body || `HTTP ${res.status}`,
-				});
-			}
-			return await res.json();
-		},
-
-		list: async (args: Parameters<typeof client.list.$post>[0]['json']) => {
-			const fetched = await tryAsync({
-				try: () => client.list.$post({ json: args }),
-				catch: (cause) =>
-					cause instanceof Error && cause.name === 'TimeoutError'
-						? DaemonError.Timeout({ socketPath, timeoutMs })
-						: DaemonError.Unreachable({ socketPath, cause }),
-			});
-			if (fetched.error !== null) return fetched;
-			const res = fetched.data;
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				return DaemonError.HandlerCrashed({
-					socketPath,
-					cause: body || `HTTP ${res.status}`,
-				});
-			}
-			return await res.json();
-		},
-
-		run: async (args: Parameters<typeof client.run.$post>[0]['json']) => {
-			const fetched = await tryAsync({
-				try: () => client.run.$post({ json: args }),
-				catch: (cause) =>
-					cause instanceof Error && cause.name === 'TimeoutError'
-						? DaemonError.Timeout({ socketPath, timeoutMs })
-						: DaemonError.Unreachable({ socketPath, cause }),
-			});
-			if (fetched.error !== null) return fetched;
-			const res = fetched.data;
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				return DaemonError.HandlerCrashed({
-					socketPath,
-					cause: body || `HTTP ${res.status}`,
-				});
-			}
-			return await res.json();
-		},
-
-		shutdown: async () => {
-			const fetched = await tryAsync({
-				try: () => client.shutdown.$post(),
-				catch: (cause) =>
-					cause instanceof Error && cause.name === 'TimeoutError'
-						? DaemonError.Timeout({ socketPath, timeoutMs })
-						: DaemonError.Unreachable({ socketPath, cause }),
-			});
-			if (fetched.error !== null) return fetched;
-			const res = fetched.data;
-			if (!res.ok) {
-				const body = await res.text().catch(() => '');
-				return DaemonError.HandlerCrashed({
-					socketPath,
-					cause: body || `HTTP ${res.status}`,
-				});
-			}
-			return await res.json();
-		},
+		peers: (args: PeersArgs) =>
+			call<PeerSnapshot[], never>(socketPath, timeoutMs, '/peers', args),
+		list: (args: ListCtx) =>
+			call<ActionManifest, ResolveError>(socketPath, timeoutMs, '/list', args),
+		run: (args: RunCtx) =>
+			call<unknown, RunError | ResolveError>(
+				socketPath,
+				timeoutMs,
+				'/run',
+				args,
+			),
+		shutdown: () => call<null, never>(socketPath, timeoutMs, '/shutdown', undefined),
 	};
 }
 

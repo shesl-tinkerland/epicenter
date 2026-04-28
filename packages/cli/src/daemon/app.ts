@@ -1,7 +1,7 @@
 /**
  * Hono app for the `epicenter up` daemon. Single source of truth for the
- * routes; both the server (`bindUnixSocket`) and the typed client
- * (`daemonClient` via `hc<DaemonApp>`) derive from {@link DaemonApp}.
+ * routes; the server (`bindUnixSocket`) wires this into Bun's listener
+ * and the hand-rolled `daemonClient` in `./client.ts` POSTs against it.
  *
  * Each verb is a one-line shell shortcut for one workspace primitive:
  *
@@ -98,10 +98,3 @@ export function buildApp(
 			return c.json(Ok(null));
 		});
 }
-
-/**
- * Static type of the daemon's Hono app. Imported by `client.ts` so
- * `hc<DaemonApp>` infers each route's input/output without us redeclaring
- * the contracts.
- */
-export type DaemonApp = ReturnType<typeof buildApp>;
