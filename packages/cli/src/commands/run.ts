@@ -116,57 +116,74 @@ export const runCommand: CommandModule = {
 			return;
 		}
 		const result = await daemon.run(ctx);
-		renderRunResult(result, format, target.userWorkspace);
+		render(result, { format, workspace: target.userWorkspace });
 	},
 };
 
-function renderRunResult(
-	result: Result<unknown, RunError | PeerMiss | ResolveError | DaemonError>,
-	format: 'json' | 'jsonl' | undefined,
-	workspaceTag: string | undefined,
-): void {
+type RunResult = Result<
+	unknown,
+	RunError | PeerMiss | ResolveError | DaemonError
+>;
+type RenderContext = {
+	format: 'json' | 'jsonl' | undefined;
+	/** The user-typed `-w` flag value, known only to the CLI; scopes "look here next" hints. */
+	workspace: string | undefined;
+};
+type ErrorName = NonNullable<RunResult['error']>['name'];
+
+/**
+ * Exit code for every error variant that can flow through `epicenter run`.
+ * `satisfies` makes drift a compile error: adding a new variant to any of
+ * the upstream error unions (workspace, daemon, CLI) breaks the build
+ * until an exit code is assigned here.
+ *
+ * - 1: usage / config / transport errors
+ * - 2: runtime failure (action threw, RPC failed)
+ * - 3: peer miss (`--peer` target didn't resolve within `--wait`)
+ */
+const EXIT_CODE = {
+	UsageError: 1,
+	RuntimeError: 2,
+	PeerMiss: 3,
+	RpcError: 2,
+	UnknownWorkspace: 1,
+	AmbiguousWorkspace: 1,
+	MissingConfig: 1,
+	Required: 1,
+	Timeout: 1,
+	Unreachable: 1,
+	HandlerCrashed: 1,
+} as const satisfies Record<ErrorName, 1 | 2 | 3>;
+
+function render(result: RunResult, ctx: RenderContext): void {
 	if (result.error === null) {
-		output(result.data, { format });
+		output(result.data, { format: ctx.format });
 		return;
 	}
-	switch (result.error.name) {
+	for (const line of formatError(result.error, ctx)) outputError(line);
+	process.exitCode = EXIT_CODE[result.error.name];
+}
+
+export function formatError(
+	error: NonNullable<RunResult['error']>,
+	ctx: RenderContext,
+): string[] {
+	switch (error.name) {
 		case 'UsageError': {
-			outputError(result.error.message);
-			if (result.error.suggestions && result.error.suggestions.length > 0) {
-				outputError('');
-				outputError('Exposed actions at this path:');
-				for (const line of result.error.suggestions) outputError(line);
+			const lines = [error.message];
+			if (error.suggestions && error.suggestions.length > 0) {
+				lines.push('', 'Exposed actions at this path:', ...error.suggestions);
 			}
-			process.exitCode = 1;
-			return;
+			return lines;
 		}
 		case 'RuntimeError':
-			outputError(result.error.message);
-			process.exitCode = 2;
-			return;
-		case 'PeerMiss': {
-			emitMissError(result.error, workspaceTag);
-			process.exitCode = 3;
-			return;
-		}
+			return [error.message];
+		case 'PeerMiss':
+			return formatPeerMiss(error, ctx.workspace);
 		case 'RpcError':
-			emitRpcError(
-				result.error.cause,
-				result.error.targetClientId,
-				result.error.peerState,
-			);
-			process.exitCode = 2;
-			return;
-		case 'UnknownWorkspace':
-		case 'AmbiguousWorkspace':
-		case 'MissingConfig':
-		case 'Required':
-		case 'Timeout':
-		case 'Unreachable':
-		case 'HandlerCrashed':
-			outputError(`error: ${result.error.message}`);
-			process.exitCode = 1;
-			return;
+			return formatRpcError(error.cause, error.targetClientId, error.peerState);
+		default:
+			return [`error: ${error.message}`];
 	}
 }
 
@@ -185,22 +202,24 @@ async function resolveInput(argv: Record<string, unknown>): Promise<unknown> {
  * (user typo / wrong workspace). `workspace` is the user-typed `-w` flag,
  * known only to the CLI; it scopes the "look here next" hint.
  */
-export function emitMissError(
+export function formatPeerMiss(
 	error: PeerMiss,
 	workspace: string | undefined,
-): void {
+): string[] {
 	const { peerTarget, sawPeers, waitMs, emptyReason } = error;
+	const lines: string[] = [];
 	if (!sawPeers) {
-		outputError(
+		lines.push(
 			`error: no peers seen after waiting ${waitMs}ms for "${peerTarget}"`,
 		);
 	} else {
 		const scope = workspace ? ` in workspace ${workspace}` : '';
-		outputError(`error: no peer matches deviceId "${peerTarget}"${scope}`);
+		lines.push(`error: no peer matches deviceId "${peerTarget}"${scope}`);
 		const peersHint = workspace ? ` -w ${workspace}` : '';
-		outputError(`run \`epicenter peers${peersHint}\` to see connected peers`);
+		lines.push(`run \`epicenter peers${peersHint}\` to see connected peers`);
 	}
-	if (emptyReason) outputError(`  reason: ${emptyReason}`);
+	if (emptyReason) lines.push(`  reason: ${emptyReason}`);
+	return lines;
 }
 
 /**
@@ -210,41 +229,33 @@ export function emitMissError(
  * variant to `@epicenter/workspace`'s `RpcError` breaks the build until a
  * case is added here.
  */
-export function emitRpcError(
+export function formatRpcError(
 	error: RpcError,
 	targetClientId: number,
 	peerState: AwarenessState,
-): void {
+): string[] {
 	const { device } = peerState;
 	const peerLabel = `${device.name} (${targetClientId}, ${device.platform})`;
 
 	switch (error.name) {
 		case 'ActionNotFound':
-			outputError(`error: ActionNotFound "${error.action}" on ${peerLabel}`);
-			return;
+			return [`error: ActionNotFound "${error.action}" on ${peerLabel}`];
 		case 'Timeout':
-			outputError(`error: timeout after ${error.ms}ms on ${peerLabel}`);
-			return;
+			return [`error: timeout after ${error.ms}ms on ${peerLabel}`];
 		case 'PeerOffline':
-			outputError(`error: peer ${peerLabel} is offline`);
-			return;
+			return [`error: peer ${peerLabel} is offline`];
 		case 'PeerNotFound':
-			outputError(`error: no peer with deviceId "${error.peer}"`);
-			return;
+			return [`error: no peer with deviceId "${error.peer}"`];
 		case 'PeerLeft':
-			outputError(
-				`error: peer "${error.peer}" disconnected before responding`,
-			);
-			return;
+			return [`error: peer "${error.peer}" disconnected before responding`];
 		case 'ActionFailed':
-			outputError(
+			return [
 				`error: "${error.action}" failed on ${peerLabel}: ${extractErrorMessage(error.cause)}`,
-			);
-			return;
+			];
 		case 'Disconnected':
-			outputError(`error: connection lost before ${peerLabel} responded`);
-			return;
+			return [`error: connection lost before ${peerLabel} responded`];
 		default:
 			error satisfies never;
+			return [];
 	}
 }
