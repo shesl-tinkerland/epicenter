@@ -53,7 +53,7 @@ export async function executeRun(
 	}
 
 	if (ctx.peerTarget !== undefined) {
-		return invokeRemote(entry, ctx);
+		return invokeRemote(entry, ctx, ctx.peerTarget);
 	}
 
 	const result = await invokeAction(action, ctx.input, ctx.actionPath);
@@ -66,6 +66,7 @@ export async function executeRun(
 async function invokeRemote(
 	entry: WorkspaceEntry,
 	ctx: RunInput,
+	peerTarget: string,
 ): Promise<RunResponse> {
 	const { workspace } = entry;
 	const sync = workspace.sync;
@@ -77,14 +78,10 @@ async function invokeRemote(
 	}
 
 	const deadline = Date.now() + ctx.waitMs;
-	const { hit, sawPeers } = await waitForPeer(
-		workspace,
-		ctx.peerTarget!,
-		deadline,
-	);
+	const { hit, sawPeers } = await waitForPeer(workspace, peerTarget, deadline);
 	if (!hit) {
 		return RunError.PeerMiss({
-			peerTarget: ctx.peerTarget!,
+			peerTarget,
 			sawPeers,
 			workspace: ctx.workspace,
 			waitMs: ctx.waitMs,

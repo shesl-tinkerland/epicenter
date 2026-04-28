@@ -24,7 +24,7 @@ import type { Argv, CommandModule, Options } from 'yargs';
 
 import type { RunInput } from '../daemon/app';
 import { type DaemonError, getDaemon } from '../daemon/client';
-import { RunError } from '../daemon/run-errors';
+import type { RunError } from '../daemon/run-errors';
 import type { AwarenessState } from '../load-config';
 import type { ResolveError } from '../util/resolve-entry';
 import {
