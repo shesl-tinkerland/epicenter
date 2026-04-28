@@ -43,7 +43,7 @@ class FakeWebSocket {
 	readyState = FakeWebSocket.CONNECTING;
 	binaryType: 'arraybuffer' | 'blob' = 'blob';
 	onopen: (() => void) | null = null;
-	onclose: (() => void) | null = null;
+	onclose: ((ev: { code: number; reason: string }) => void) | null = null;
 	onerror: (() => void) | null = null;
 	onmessage: Listener | null = null;
 
@@ -69,14 +69,16 @@ class FakeWebSocket {
 		this.sent.push(data instanceof Uint8Array ? data : new Uint8Array(data));
 	}
 
-	close() {
+	close(code?: number, reason?: string) {
 		if (
 			this.readyState === FakeWebSocket.CLOSED ||
 			this.readyState === FakeWebSocket.CLOSING
 		)
 			return;
 		this.readyState = FakeWebSocket.CLOSED;
-		this.onclose?.();
+		// 1005 = "no status received" — the spec value when JS calls close()
+		// with no code, matching real browser behavior.
+		this.onclose?.({ code: code ?? 1005, reason: reason ?? '' });
 	}
 
 	addEventListener() {}
@@ -737,6 +739,134 @@ describe('attachSync hasLocalChanges', () => {
 		await waitFor(
 			() =>
 				sync.status.phase === 'connected' && !sync.status.hasLocalChanges,
+		);
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+});
+
+// ── Failed phase (server close 4401) ────────────────────────────────────
+
+describe('attachSync failed phase', () => {
+	test('server close 4401 with valid JSON reason transitions to phase: failed with parsed code', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-valid-json' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(4401, JSON.stringify({ code: 'invalid_token' }));
+
+		await waitFor(() => sync.status.phase === 'failed');
+		expect(sync.status).toEqual({
+			phase: 'failed',
+			reason: { type: 'auth', code: 'invalid_token' },
+		});
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('whenConnected rejects with SyncFailedError when entering failed', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-rejects-when-connected' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(4401, JSON.stringify({ code: 'token_expired' }));
+
+		let caught: unknown;
+		try {
+			await sync.whenConnected;
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeDefined();
+		const err = caught as { name: string; code: string };
+		expect(err.name).toBe('AuthRejected');
+		expect(err.code).toBe('token_expired');
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('malformed JSON reason falls back to code: unknown', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-malformed' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(4401, 'not json');
+
+		await waitFor(() => sync.status.phase === 'failed');
+		expect(sync.status).toEqual({
+			phase: 'failed',
+			reason: { type: 'auth', code: 'unknown' },
+		});
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('empty reason on 4401 falls back to code: unknown', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-empty-reason' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(4401, '');
+
+		await waitFor(() => sync.status.phase === 'failed');
+		expect(sync.status).toEqual({
+			phase: 'failed',
+			reason: { type: 'auth', code: 'unknown' },
+		});
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('reconnect() clears failed state and the supervisor opens a new socket', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-then-reconnect' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(4401, JSON.stringify({ code: 'invalid_token' }));
+		await waitFor(() => sync.status.phase === 'failed');
+
+		sync.reconnect();
+
+		const ws2 = await waitFor(() => FakeWebSocket.instances[1]);
+		expect(ws2).toBeDefined();
+		await waitFor(() => sync.status.phase !== 'failed');
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('non-4401 close codes still trigger retry (no regression)', async () => {
+		const ydoc = new Y.Doc({ guid: 'failed-non-4401-retries' });
+		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+
+		ws.close(1006, '');
+
+		const ws2 = await waitFor(() => FakeWebSocket.instances[1], 3000);
+		expect(ws2).toBeDefined();
+		// Status should reach 'connecting' again, never 'failed'.
+		expect(sync.status.phase).not.toBe('failed');
+		await waitFor(
+			() =>
+				sync.status.phase === 'connecting' ||
+				sync.status.phase === 'connected',
 		);
 
 		ydoc.destroy();

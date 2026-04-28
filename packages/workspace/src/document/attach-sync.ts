@@ -86,11 +86,33 @@ export type SyncError =
 	| { type: 'auth'; error: unknown }
 	| { type: 'connection' };
 
+/**
+ * Reason a sync entered the terminal `failed` phase.
+ *
+ * `code` is `string` (not a closed enum): the server is the source of truth
+ * for the vocabulary, so unknown codes pass through. Documented codes today:
+ * 'invalid_token', 'token_expired', 'deauthorized', 'unknown'.
+ */
+export type SyncFailedReason = { type: 'auth'; code: string };
+
 export type SyncStatus =
 	| { phase: 'offline' }
 	| { phase: 'connecting'; retries: number; lastError?: SyncError }
-	| { phase: 'connected'; hasLocalChanges: boolean };
+	| { phase: 'connected'; hasLocalChanges: boolean }
+	| { phase: 'failed'; reason: SyncFailedReason };
 
+/**
+ * Thrown via `whenConnected` rejection when the server signals a permanent
+ * auth failure (close code 4401). The `code` carries the server's canonical
+ * reason string so callers can switch on it without magic strings.
+ */
+export const SyncFailedError = defineErrors({
+	AuthRejected: ({ code }: { code: string }) => ({
+		message: `[attachSync] server rejected auth: ${code}`,
+		code,
+	}),
+});
+export type SyncFailedError = InferErrors<typeof SyncFailedError>;
 
 /** Errors surfaced by the sync supervisor's background lifecycle. */
 export const SyncSupervisorError = defineErrors({
@@ -368,6 +390,39 @@ const PING_INTERVAL_MS = 60_000;
 const LIVENESS_TIMEOUT_MS = 90_000;
 const LIVENESS_CHECK_INTERVAL_MS = 10_000;
 const CONNECT_TIMEOUT_MS = 15_000;
+/**
+ * App-defined WebSocket close code (4000-4999 range) signaling the server
+ * permanently rejected this connection's auth. Distinguishes "give up" from
+ * transient close codes (1006 network blip, 1011 server error, etc.).
+ */
+const PERMANENT_AUTH_CLOSE_CODE = 4401;
+
+/**
+ * Failsafe: returns null when `event` is not a permanent-failure signal,
+ * `SyncFailedReason` otherwise. A buggy server that sends 4401 with malformed
+ * JSON or no reason still produces a usable reason (`code: 'unknown'`); we
+ * never throw from here.
+ */
+function parsePermanentFailure(event: {
+	code: number;
+	reason: string;
+}): SyncFailedReason | null {
+	if (event.code !== PERMANENT_AUTH_CLOSE_CODE) return null;
+	try {
+		const parsed = JSON.parse(event.reason) as unknown;
+		if (
+			parsed !== null &&
+			typeof parsed === 'object' &&
+			'code' in parsed &&
+			typeof (parsed as { code: unknown }).code === 'string'
+		) {
+			return { type: 'auth', code: (parsed as { code: string }).code };
+		}
+	} catch {
+		// fall through to 'unknown'
+	}
+	return { type: 'auth', code: 'unknown' };
+}
 
 // ============================================================================
 // Public API
@@ -465,6 +520,34 @@ export function attachSync(
 	const { promise: whenDisposed, resolve: resolveDisposed } =
 		Promise.withResolvers<void>();
 	const backoff = createBackoff();
+
+	/**
+	 * Set when the server signals permanent failure via close 4401. Read by
+	 * `runLoop` to break the retry loop, and cleared by `reconnect()` so a
+	 * subsequent attempt can leave the `failed` phase.
+	 */
+	let permanentFailure: SyncFailedReason | null = null;
+
+	// `whenConnected` settles off status transitions. The first `connected`
+	// resolves it; the first `failed` rejects with a typed `SyncFailedError`.
+	// Doc-destroy still rejects via the destroy handler below; `connectedSettled`
+	// gates double-settle.
+	const unsubFirstSettle = status.subscribe((s) => {
+		if (s.phase === 'connected') {
+			settleConnected(resolveConnected);
+			unsubFirstSettle();
+		} else if (s.phase === 'failed') {
+			// Attach the no-op catch BEFORE rejecting so the rejection isn't
+			// unhandled when no consumer awaits (same pattern as the dispose
+			// path further down).
+			whenConnected.catch(() => {});
+			const reason = s.reason;
+			settleConnected(() => {
+				rejectConnected(SyncFailedError.AuthRejected({ code: reason.code }).error);
+			});
+			unsubFirstSettle();
+		}
+	});
 
 	/**
 	 * Whether this connection is authenticated. Inferred from the presence of
@@ -654,7 +737,7 @@ export function attachSync(
 			return true;
 		};
 
-		while (desired === 'online') {
+		while (desired === 'online' && !permanentFailure) {
 			const myRunId = runId;
 
 			// Pending RPCs from the previous connection will never resolve —
@@ -704,7 +787,11 @@ export function attachSync(
 			}
 		}
 
-		status.set({ phase: 'offline' });
+		if (permanentFailure) {
+			status.set({ phase: 'failed', reason: permanentFailure });
+		} else {
+			status.set({ phase: 'offline' });
+		}
 	}
 
 	async function attemptConnection(
@@ -761,7 +848,7 @@ export function attachSync(
 			resolveOpen(true);
 		};
 
-		ws.onclose = () => {
+		ws.onclose = (event: CloseEvent) => {
 			clearTimeout(connectTimeout);
 			liveness.stop();
 			if (awareness) {
@@ -773,6 +860,8 @@ export function attachSync(
 					SYNC_ORIGIN,
 				);
 			}
+			const failure = parsePermanentFailure(event);
+			if (failure) permanentFailure = failure;
 			websocket = null;
 			resolveOpen(false);
 			resolveClose();
@@ -812,7 +901,6 @@ export function attachSync(
 							phase: 'connected',
 							hasLocalChanges: localVersion > ackedVersion,
 						});
-						settleConnected(resolveConnected);
 					}
 					break;
 				}
@@ -908,7 +996,7 @@ export function attachSync(
 			// this `.finally` cleared the handle), restart. Without this, the
 			// reconnect's call to `ensureSupervisor` early-returned because
 			// the promise was still set, and the loop would silently die.
-			if (!torn && desired === 'online') ensureSupervisor();
+			if (!torn && desired === 'online' && !permanentFailure) ensureSupervisor();
 		});
 	}
 
@@ -986,6 +1074,7 @@ export function attachSync(
 		goOffline,
 		reconnect() {
 			if (torn) return;
+			permanentFailure = null;
 			runId++;
 			backoff.reset();
 			backoff.wake();
