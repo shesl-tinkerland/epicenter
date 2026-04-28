@@ -1,13 +1,13 @@
 /**
  * `epicenter run <dot.path> [input]`: invoke a `defineQuery` /
- * `defineMutation` by dot-path through the local `epicenter up` daemon.
+ * `defineMutation` by dot-path through the local `epicenter serve` server.
  *
  * `input` is JSON: inline positional, `@file.json` (curl convention), or stdin.
  * With `--peer <target>`, the invocation is dispatched over the sync
  * room's RPC channel to a remote peer instead of running locally.
  *
- * `epicenter run` requires a running daemon for the resolved `--dir`.
- * Without `up`, the handler errors with a hint pointing at `epicenter up`.
+ * `epicenter run` requires a running server for the resolved `--dir`.
+ * Without `serve`, the handler errors with a hint pointing at `epicenter serve`.
  *
  * Exit codes:
  *   1: usage error (unknown action, missing sync for `--peer`),

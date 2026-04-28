@@ -16,8 +16,7 @@
  * See spec: `20260428T-script-first-cli-collapse.md` § "Lifecycle collapse".
  */
 
-import { statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import {
 	defineErrors,
@@ -42,7 +41,6 @@ import {
 } from '../daemon/metadata.js';
 import { socketPathFor } from '../daemon/paths.js';
 import {
-	CONFIG_FILENAME,
 	type LoadConfigResult,
 	type LoadError,
 	type WorkspaceEntry,
@@ -52,10 +50,10 @@ import { dirFromArgv, dirOption } from '../util/common-options.js';
 
 /**
  * Hardcoded ceiling on how long any single workspace's `whenConnected`
- * may hang before `up` gives up on startup. This exists *only* because
+ * may hang before `serve` gives up on startup. This exists *only* because
  * `@epicenter/workspace`'s sync layer doesn't reject `whenConnected` on
  * permanent auth failures (it just retries forever); without a clock, an
- * expired token would freeze the daemon's startup indefinitely.
+ * expired token would freeze startup indefinitely.
  *
  * Tracked: `specs/20260427T120000-workspace-sync-failed-phase.md`. When
  * the workspace package surfaces a `failed` SyncStatus phase and rejects
@@ -63,13 +61,6 @@ import { dirFromArgv, dirOption } from '../util/common-options.js';
  * site go away.
  */
 const CONNECT_TIMEOUT_MS = 10000;
-
-/**
- * Read once at module load. Bun resolves the JSON import relative to this
- * file at build/run time, so no runtime fs work happens per `up` invocation.
- */
-import packageJson from '../../package.json' with { type: 'json' };
-const CLI_VERSION = packageJson.version;
 
 /**
  * Sync-status / awareness lines write directly to stderr so they reach the
@@ -84,7 +75,6 @@ function logSyncStatus(message: string): void {
 export type ServeOptions = {
 	dir: string;
 	quiet: boolean;
-	cliVersion?: string;
 };
 
 /**
@@ -107,13 +97,13 @@ export const ServeError = defineErrors({
 export type ServeError = InferErrors<typeof ServeError>;
 
 /**
- * Handle returned by {@link runServe}. The daemon body is exposed as a
+ * Handle returned by {@link runServe}. The server body is exposed as a
  * standalone async function (no `process.exit`) so unit tests can drive
  * startup, exercise the IPC handler in-process, and call `teardown()` to
  * release resources without spawning a child.
  *
  * - `server` is the bound `net.Server` (handler dispatches IPC frames).
- * - `entries` is every workspace the config exports; the daemon serves
+ * - `entries` is every workspace the config exports; the server hosts
  *   them all and routes IPC requests by name.
  * - `metadata` is what was written to disk.
  * - `teardown()` closes the server, asyncDisposes the config, and unlinks
@@ -130,7 +120,7 @@ export type ServeHandle = {
 
 /**
  * Surface for swapping out config/server construction in tests. The yargs
- * handler passes the production defaults; `up.test.ts` passes fakes.
+ * handler passes the production defaults; `serve.test.ts` passes fakes.
  */
 export type ServeDeps = {
 	loadConfig?: (
@@ -146,16 +136,16 @@ export type ServeDeps = {
 };
 
 /**
- * Daemon body. Idempotently sets up disk state, connects every workspace
+ * Server body. Idempotently sets up disk state, connects every workspace
  * the config exports, binds the IPC socket, and returns a handle. The
  * yargs `handler` calls this, prints the operator-facing banner, installs
  * SIGINT/SIGTERM, and parks the process; tests call it directly and
  * assert on the returned handle.
  *
- * If any workspace fails to connect within the timeout, the whole daemon
- * fails. Partial-up is muddy semantics ("which subset is online?") and we
- * already have a way to express "I want only this one online": split the
- * config.
+ * If any workspace fails to connect within the timeout, the whole server
+ * fails. Partial-startup is muddy semantics ("which subset is online?") and
+ * we already have a way to express "I want only this one online": split
+ * the config.
  */
 export async function runServe(
 	options: ServeOptions,
@@ -170,7 +160,7 @@ export async function runServe(
 	const config = loadResult.data;
 
 	// Wait for every workspace's "ready to accept RPC" gate concurrently.
-	// One bad workspace fails the whole daemon; see runServe's docstring.
+	// One bad workspace fails the whole server; see runServe's docstring.
 	const connectResult = await tryAsync({
 		try: () =>
 			Promise.all(
@@ -192,7 +182,7 @@ export async function runServe(
 	}
 
 	// Bind before writing our metadata. On AlreadyRunning the live
-	// daemon's sidecar must stay intact; on a stale-socket recovery
+	// server's sidecar must stay intact; on a stale-socket recovery
 	// `bindOrRecover` unlinks the orphan metadata internally before our
 	// successful retry, so the writeMetadata below records *our* pid.
 	const app = buildApp(config.entries);
@@ -203,13 +193,9 @@ export async function runServe(
 	}
 	const server = bindResult.data;
 
-	const configMtime = readConfigMtime(absDir);
 	const metadata: DaemonMetadata = {
 		pid: process.pid,
 		dir: absDir,
-		startedAt: new Date().toISOString(),
-		cliVersion: options.cliVersion ?? CLI_VERSION,
-		configMtime,
 	};
 	writeMetadata(absDir, metadata);
 
@@ -351,15 +337,6 @@ function connectFailedMessage(entry: WorkspaceEntry): string {
 		return `${entry.name}: 401 Unauthorized. Try \`epicenter auth login\`.`;
 	}
 	return `${entry.name}: timed out waiting for workspace ready`;
-}
-
-function readConfigMtime(absDir: string): number {
-	const p = join(absDir, CONFIG_FILENAME);
-	try {
-		return statSync(p).mtimeMs;
-	} catch {
-		return 0;
-	}
 }
 
 async function safeAsyncDispose(config: LoadConfigResult): Promise<void> {

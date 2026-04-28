@@ -57,7 +57,7 @@ beforeEach(() => {
 	process.env.HOME = homeRoot;
 
 	workDir = mkdtempSync(join(tmpdir(), 'ep-dir-'));
-	// Seed an empty config so readConfigMtime succeeds (the file exists path).
+	// Seed an empty config so the workDir looks like a real epicenter project.
 	writeFileSync(join(workDir, 'epicenter.config.ts'), 'export {};\n');
 });
 
@@ -181,9 +181,6 @@ describe('runServe: already running', () => {
 		writeMetadata(workDir, {
 			pid: process.pid,
 			dir: workDir,
-			startedAt: new Date().toISOString(),
-			cliVersion: '0.0.0',
-			configMtime: 0,
 		});
 
 		try {
@@ -217,9 +214,6 @@ describe('runServe: orphan path', () => {
 		writeMetadata(workDir, {
 			pid: 99999999,
 			dir: workDir,
-			startedAt: new Date().toISOString(),
-			cliVersion: '0.0.0',
-			configMtime: 0,
 		});
 
 		const workspace = makeFakeWorkspace();
