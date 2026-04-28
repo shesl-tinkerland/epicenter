@@ -6,8 +6,8 @@
  *
  * Cases:
  *   1. Happy path: bindUnixSocket is called, metadata is written, ping replies "pong".
- *   2. Stale-auth fast-fail: whenReady never resolves; runServe throws "connect failed: ..."
- *      within the connect-timeout window.
+ *   2. Stale-auth fast-fail: whenConnected rejects with a SyncFailedError-shaped
+ *      cause; runServe returns ConnectFailed with that cause.
  *   3. Already-running: pre-write metadata for `process.pid` + a real listening socket;
  *      runServe throws "server already running (pid=X)".
  *   4. Orphan: pre-write metadata for a dead pid + phantom socket; runServe proceeds
@@ -114,7 +114,6 @@ describe('runServe: happy path', () => {
 			},
 			{
 				loadConfig: async () => Ok(config),
-				connectTimeoutMs: 1000,
 			},
 		);
 		expect(error).toBeNull();
@@ -141,15 +140,22 @@ describe('runServe: happy path', () => {
 });
 
 describe('runServe: stale-auth fast-fail', () => {
-	test('returns ConnectFailed when whenReady exceeds the timeout', async () => {
-		// whenReady that never resolves; emulates a hung auth handshake.
-		const neverReady = new Promise<void>(() => {
-			/* never */
-		});
-		const workspace = makeFakeWorkspace({ readyPromise: neverReady });
+	test('returns ConnectFailed when whenConnected rejects with SyncFailedError', async () => {
+		// Shape matches `SyncFailedError.AuthRejected({ code }).error` from
+		// `@epicenter/workspace`: an Error-like with `name: 'AuthRejected'`
+		// and a `code` string. The yargs handler renders this via
+		// `formatStartupError`; here we assert the cause flows through unchanged.
+		const authRejected = Object.assign(
+			new Error('[attachSync] server rejected auth: invalid_token'),
+			{ name: 'AuthRejected', code: 'invalid_token' },
+		);
+		const rejecting = Promise.reject(authRejected);
+		// Pre-attach a swallow so the rejection isn't reported as unhandled
+		// before runServe awaits it.
+		rejecting.catch(() => {});
+		const workspace = makeFakeWorkspace({ readyPromise: rejecting });
 		const config = makeFakeConfig(workspace);
 
-		const start = Date.now();
 		const { error } = await runServe(
 			{
 				dir: workDir,
@@ -157,14 +163,15 @@ describe('runServe: stale-auth fast-fail', () => {
 			},
 			{
 				loadConfig: async () => Ok(config),
-				connectTimeoutMs: 50,
 			},
 		);
 		expect(error?.name).toBe('ConnectFailed');
-		expect(error?.message).toMatch(/^connect failed:/);
-		const elapsed = Date.now() - start;
-		// Sanity: we exited within a small multiple of the timeout, not "hung".
-		expect(elapsed).toBeLessThan(2000);
+		if (error?.name === 'ConnectFailed') {
+			expect(error.cause).toMatchObject({
+				name: 'AuthRejected',
+				code: 'invalid_token',
+			});
+		}
 	});
 });
 
@@ -191,7 +198,6 @@ describe('runServe: already running', () => {
 				},
 				{
 					loadConfig: async () => Ok(makeFakeConfig(makeFakeWorkspace())),
-					connectTimeoutMs: 1000,
 				},
 			);
 			expect(error?.name).toBe('AlreadyRunning');
@@ -226,7 +232,6 @@ describe('runServe: orphan path', () => {
 			},
 			{
 				loadConfig: async () => Ok(config),
-				connectTimeoutMs: 1000,
 			},
 		);
 		expect(error).toBeNull();

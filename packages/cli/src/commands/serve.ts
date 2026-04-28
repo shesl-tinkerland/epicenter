@@ -49,16 +49,6 @@ import {
 import { dirFromArgv, dirOption } from '../util/common-options.js';
 
 /**
- * Hardcoded ceiling on how long any single workspace's `whenConnected`
- * may hang before `serve` gives up on startup. The workspace package now
- * rejects `whenConnected` on permanent auth failures (`SyncFailedError`),
- * so this is a sanity bound for transient/flaky paths only: a network
- * that's degraded but not dead can keep retrying for arbitrary long, and
- * we'd rather fail startup with a clear timeout than hang.
- */
-const CONNECT_TIMEOUT_MS = 10000;
-
-/**
  * Sync-status / awareness lines write directly to stderr so they reach the
  * operator regardless of `--quiet`; the brief calls these out as "print
  * regardless of --quiet". `--quiet` only suppresses awareness join/leave
@@ -75,14 +65,15 @@ export type ServeOptions = {
 
 /**
  * `runServe`'s own failure variant: a workspace's `whenReady` /
- * `whenConnected` didn't resolve within the connect timeout. The cause
- * from `raceTimeout` already carries the entry name + reason.
+ * `whenConnected` rejected during startup. The cause is typically a
+ * `SyncFailedError` from `@epicenter/workspace` (e.g. `AuthRejected`
+ * when the relay closes the WS with code 4401); the yargs handler
+ * unwraps that shape via `formatStartupError` to produce an actionable
+ * message.
  *
  * Config-load failures come from {@link LoadError} (in `load-config.ts`)
  * and bind failures from {@link StartupError} (in `unix-socket.ts`); both
- * unioned into the return type rather than re-wrapped. The yargs handler
- * doesn't care which union it came from: `error.message` and exit-1
- * either way.
+ * unioned into the return type rather than re-wrapped.
  */
 export const ServeError = defineErrors({
 	ConnectFailed: ({ cause }: { cause: unknown }) => ({
@@ -122,13 +113,6 @@ export type ServeDeps = {
 	loadConfig?: (
 		dir: string,
 	) => Promise<Result<LoadConfigResult, LoadError>>;
-	/**
-	 * Test-only override for {@link CONNECT_TIMEOUT_MS}. Production has no
-	 * way to tune this; it's a stopgap until the workspace package's
-	 * sync layer rejects `whenConnected` on permanent auth failure (spec:
-	 * `20260427T120000-workspace-sync-failed-phase.md`).
-	 */
-	connectTimeoutMs?: number;
 };
 
 /**
@@ -138,10 +122,11 @@ export type ServeDeps = {
  * SIGINT/SIGTERM, and parks the process; tests call it directly and
  * assert on the returned handle.
  *
- * If any workspace fails to connect within the timeout, the whole server
- * fails. Partial-startup is muddy semantics ("which subset is online?") and
- * we already have a way to express "I want only this one online": split
- * the config.
+ * If any workspace fails to connect (the workspace's sync layer rejects
+ * `whenConnected` with a `SyncFailedError`, e.g. on permanent auth
+ * failure), the whole server fails. Partial-startup is muddy semantics
+ * ("which subset is online?") and we already have a way to express
+ * "I want only this one online": split the config.
  */
 export async function runServe(
 	options: ServeOptions,
@@ -157,17 +142,16 @@ export async function runServe(
 
 	// Wait for every workspace's "ready to accept RPC" gate concurrently.
 	// One bad workspace fails the whole server; see runServe's docstring.
+	// `whenConnected` rejects with `SyncFailedError` on permanent auth
+	// failure (close code 4401), so no wallclock timer is needed here.
 	const connectResult = await tryAsync({
 		try: () =>
 			Promise.all(
-				config.entries.map((entry) =>
-					raceTimeout(
+				config.entries.map(
+					(entry) =>
 						entry.workspace.whenReady ??
-							entry.workspace.sync?.whenConnected ??
-							Promise.resolve(),
-						deps.connectTimeoutMs ?? CONNECT_TIMEOUT_MS,
-						() => connectFailedMessage(entry),
-					),
+						entry.workspace.sync?.whenConnected ??
+						Promise.resolve(),
 				),
 			),
 		catch: (cause) => ServeError.ConnectFailed({ cause }),
@@ -261,7 +245,11 @@ export const serveCommand: CommandModule = {
 
 		const { data: handle, error } = await runServe(options);
 		if (error) {
-			process.stderr.write(`${error.message}\n`);
+			const msg =
+				error.name === 'ConnectFailed'
+					? formatStartupError(error.cause)
+					: error.message;
+			process.stderr.write(`${msg}\n`);
 			process.exit(1);
 		}
 
@@ -292,47 +280,26 @@ export const serveCommand: CommandModule = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function raceTimeout<T>(
-	promise: Promise<T>,
-	ms: number,
-	onTimeoutMessage: () => string,
-): Promise<T> {
-	return new Promise<T>((res, rej) => {
-		const t = setTimeout(() => {
-			rej(new Error(`connect failed: ${onTimeoutMessage()}`));
-		}, ms);
-		promise.then(
-			(v) => {
-				clearTimeout(t);
-				res(v);
-			},
-			(cause) => {
-				clearTimeout(t);
-				const msg = cause instanceof Error ? cause.message : String(cause);
-				rej(new Error(`connect failed: ${msg}`));
-			},
-		);
-	});
-}
-
 /**
- * Best-effort message synthesis when `whenReady` doesn't resolve. Today's
- * SyncAttachment exposes a `status` enum (`offline`/`connecting`/`connected`)
- * with a `lastError` tag (`auth` | `connection`); we promote `auth` to the
- * spec's `401 Unauthorized` phrasing so the acceptance criterion at least
- * matches the prefix. Once the workspace surfaces structured auth errors
- * through `whenReady` / `whenConnected`, this becomes precise.
+ * Render a startup-failure cause for stderr. Permanent auth rejections
+ * from the workspace sync layer (`SyncFailedError.AuthRejected`) carry a
+ * typed `code` string; surface that and point the operator at
+ * `epicenter auth login`. Everything else falls back to the cause's
+ * message.
  */
-function connectFailedMessage(entry: WorkspaceEntry): string {
-	const status = entry.workspace.sync?.status;
+function formatStartupError(cause: unknown): string {
 	if (
-		status &&
-		status.phase === 'connecting' &&
-		status.lastError?.type === 'auth'
+		cause &&
+		typeof cause === 'object' &&
+		'name' in cause &&
+		(cause as { name: unknown }).name === 'AuthRejected' &&
+		'code' in cause &&
+		typeof (cause as { code: unknown }).code === 'string'
 	) {
-		return `${entry.name}: 401 Unauthorized. Try \`epicenter auth login\`.`;
+		const code = (cause as { code: string }).code;
+		return `auth failed: ${code}. Try \`epicenter auth login\`.`;
 	}
-	return `${entry.name}: timed out waiting for workspace ready`;
+	return cause instanceof Error ? cause.message : String(cause);
 }
 
 async function safeAsyncDispose(config: LoadConfigResult): Promise<void> {
