@@ -50,10 +50,7 @@ export const authCommand: CommandModule = {
 							'Log in to a self-hosted instance',
 						),
 				handler: async (argv) => {
-					const serverUrl =
-						typeof argv.server === 'string' && argv.server.length > 0
-							? argv.server
-							: DEFAULT_SERVER;
+					const serverUrl = argv.server as string;
 					const api = createAuthApi(serverUrl);
 					const codeData = await api.requestDeviceCode();
 

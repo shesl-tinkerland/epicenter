@@ -76,7 +76,7 @@ function emit(
 	}
 
 	if (rows.length === 0) {
-		console.error('no peers connected');
+		outputError('no peers connected');
 		return;
 	}
 
