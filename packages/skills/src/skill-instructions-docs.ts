@@ -48,7 +48,7 @@ export function createSkillInstructionsDoc({
 		gc: false,
 	});
 	onLocalUpdate(ydoc, () =>
-		skillsTable.update(skillId, { updatedAt: Date.now() }),
+		skillsTable.update({ id: skillId, updatedAt: Date.now() }),
 	);
 	const persistence = attachPersistence?.(ydoc);
 	return {

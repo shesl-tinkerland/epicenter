@@ -409,7 +409,7 @@ export function attachFileSystemIndex(filesTable: Table<FileRow>) {
 					}
 				}
 				if (latestId !== null) {
-					filesTable.update(latestId, { parentId: null });
+					filesTable.update({ id: latestId, parentId: null });
 					mutated.add(latestId);
 				}
 				// Fall through to the cleanup loop so inStack/visited stay consistent.
@@ -419,7 +419,8 @@ export function attachFileSystemIndex(filesTable: Table<FileRow>) {
 			inStack.add(currentId);
 			path.push(currentId);
 
-			const { data: row, error } = filesTable.get(currentId);
+			const { data: row, error }: { data: FileRow | null; error: unknown } =
+				filesTable.get(currentId);
 			if (error || row === null) break;
 			currentId = row.parentId;
 		}
@@ -444,7 +445,7 @@ export function attachFileSystemIndex(filesTable: Table<FileRow>) {
 			if (row.parentId === null) continue;
 			if (activeIds.has(row.parentId)) continue;
 
-			filesTable.update(row.id, { parentId: null });
+			filesTable.update({ id: row.id, parentId: null });
 			mutated.add(row.id);
 			removeChild(row.parentId, row.id);
 			addChild(null, row.id);

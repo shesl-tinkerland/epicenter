@@ -66,7 +66,8 @@ function createAiChatState() {
 		conversationId: ConversationId,
 		patch: Partial<Omit<Conversation, 'id'>>,
 	) {
-		opensidian.tables.conversations.update(conversationId, {
+		opensidian.tables.conversations.update({
+			id: conversationId,
 			...patch,
 			updatedAt: Date.now(),
 		});

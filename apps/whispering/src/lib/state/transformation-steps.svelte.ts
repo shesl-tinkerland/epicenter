@@ -70,7 +70,7 @@ function createTransformationSteps() {
 			id: string,
 			partial: Partial<Omit<TransformationStep, 'id' | '_v'>>,
 		) {
-			return whispering.tables.transformationSteps.update(id, partial);
+			return whispering.tables.transformationSteps.update({ id, ...partial });
 		},
 
 		/**

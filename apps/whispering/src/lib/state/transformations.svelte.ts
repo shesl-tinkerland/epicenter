@@ -69,7 +69,7 @@ function createTransformations() {
 		 * Partially update a transformation by ID.
 		 */
 		update(id: string, partial: Partial<Omit<Transformation, 'id' | '_v'>>) {
-			return whispering.tables.transformations.update(id, partial);
+			return whispering.tables.transformations.update({ id, ...partial });
 		},
 
 		/**

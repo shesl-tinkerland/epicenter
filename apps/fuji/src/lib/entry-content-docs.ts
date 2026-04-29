@@ -61,7 +61,8 @@ export function createEntryContentDoc({
 	});
 
 	onLocalUpdate(ydoc, () => {
-		entriesTable.update(entryId, {
+		entriesTable.update({
+			id: entryId,
 			updatedAt: DateTimeString.now(),
 		});
 	});

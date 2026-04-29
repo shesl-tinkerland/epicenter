@@ -70,7 +70,7 @@ export function createFileContentDoc({
 		gc: false,
 	});
 	onLocalUpdate(ydoc, () =>
-		filesTable.update(fileId, { updatedAt: Date.now() }),
+		filesTable.update({ id: fileId, updatedAt: Date.now() }),
 	);
 	const persistence = attachPersistence?.(ydoc);
 	return {

@@ -170,14 +170,15 @@ export function attachFileTree(filesTable: Table<FileRow>) {
 
 		/** Soft-delete a file or folder by setting `trashedAt`. */
 		softDelete(id: FileId): void {
-			filesTable.update(id, { trashedAt: Date.now() });
+			filesTable.update({ id, trashedAt: Date.now() });
 		},
 
 		/** Move/rename a file or folder. Validates name and uniqueness. */
 		move(id: FileId, newParentId: FileId | null, newName: string): void {
 			validateName(newName);
 			assertUniqueName(filesTable, index.getChildIds(newParentId), newName, id);
-			filesTable.update(id, {
+			filesTable.update({
+				id,
 				name: newName,
 				parentId: newParentId,
 				updatedAt: Date.now(),
@@ -186,12 +187,12 @@ export function attachFileTree(filesTable: Table<FileRow>) {
 
 		/** Update size and `updatedAt` after a content write. */
 		touch(id: FileId, size: number): void {
-			filesTable.update(id, { size, updatedAt: Date.now() });
+			filesTable.update({ id, size, updatedAt: Date.now() });
 		},
 
 		/** Update `updatedAt` only (for utimes). */
 		setMtime(id: FileId, mtime: Date): void {
-			filesTable.update(id, { updatedAt: mtime.getTime() });
+			filesTable.update({ id, updatedAt: mtime.getTime() });
 		},
 
 		/** Tear down reactive indexes. */

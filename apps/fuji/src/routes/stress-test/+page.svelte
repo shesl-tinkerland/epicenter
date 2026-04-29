@@ -13,12 +13,6 @@
 
 	const COUNTS = [1_000, 10_000] as const;
 
-	/**
-	 * Small chunk size for bulkSet so the browser event loop yields between
-	 * chunks, giving Svelte a chance to re-render the progress bar.
-	 */
-	const INSERT_CHUNK_SIZE = 100;
-
 	const TITLES = [
 		'Morning Reflections',
 		'Project Update',
@@ -164,12 +158,8 @@
 			const rows = Array.from({ length: count }, (_, i) => generateEntryRow(i, now));
 
 			const insertStart = performance.now();
-			await fuji.tables.entries.bulkSet(rows, {
-				chunkSize: INSERT_CHUNK_SIZE,
-				onProgress: (p) => {
-					progress = p;
-				},
-			});
+			await fuji.tables.entries.bulkSet(rows);
+			progress = 1;
 			const insertTimeMs = performance.now() - insertStart;
 
 			// Read performance

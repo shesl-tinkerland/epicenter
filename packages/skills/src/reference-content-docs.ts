@@ -48,7 +48,7 @@ export function createReferenceContentDoc({
 		gc: false,
 	});
 	onLocalUpdate(ydoc, () =>
-		referencesTable.update(referenceId, { updatedAt: Date.now() }),
+		referencesTable.update({ id: referenceId, updatedAt: Date.now() }),
 	);
 	const persistence = attachPersistence?.(ydoc);
 	return {

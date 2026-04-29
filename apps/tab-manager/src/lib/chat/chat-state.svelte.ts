@@ -97,7 +97,8 @@ function createAiChatState() {
 		conversationId: ConversationId,
 		patch: Partial<Omit<Conversation, 'id'>>,
 	) {
-		tabManager.tables.conversations.update(conversationId, {
+		tabManager.tables.conversations.update({
+			id: conversationId,
 			...patch,
 			updatedAt: Date.now(),
 		});

@@ -117,7 +117,7 @@ function createSkillsState() {
 				Pick<Skill, 'name' | 'description' | 'license' | 'compatibility'>
 			>,
 		) {
-			tables.skills.update(id, { ...updates, updatedAt: Date.now() });
+			tables.skills.update({ id, ...updates, updatedAt: Date.now() });
 		},
 
 		/**

@@ -79,7 +79,7 @@ function createFoldersState() {
 		 * ```
 		 */
 		renameFolder(folderId: FolderId, name: string) {
-			honeycrisp.tables.folders.update(folderId, { name });
+			honeycrisp.tables.folders.update({ id: folderId, name });
 		},
 
 		/**

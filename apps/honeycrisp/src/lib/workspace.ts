@@ -148,7 +148,7 @@ export function createHoneycrispActions(tables: HoneycrispTables) {
 						.getAllValid()
 						.filter((n) => n.folderId === folderId);
 					for (const note of folderNotes) {
-						tables.notes.update(note.id, { folderId: undefined });
+						tables.notes.update({ id: note.id, folderId: undefined });
 					}
 					tables.folders.delete(folderId);
 				},

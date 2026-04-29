@@ -193,7 +193,8 @@ export function createFujiActions(tables: FujiTables) {
 					),
 				}),
 				handler: ({ id, ...fields }) => {
-					return tables.entries.update(id, {
+					return tables.entries.update({
+						id,
 						...fields,
 						updatedAt: DateTimeString.now(),
 					});
@@ -214,7 +215,8 @@ export function createFujiActions(tables: FujiTables) {
 					id: Type.String({ description: 'Entry ID to soft-delete' }),
 				}),
 				handler: ({ id }) => {
-					return tables.entries.update(id, {
+					return tables.entries.update({
+						id,
 						deletedAt: DateTimeString.now(),
 						updatedAt: DateTimeString.now(),
 					});
@@ -233,7 +235,8 @@ export function createFujiActions(tables: FujiTables) {
 					id: Type.String({ description: 'Entry ID to restore' }),
 				}),
 				handler: ({ id }) => {
-					return tables.entries.update(id, {
+					return tables.entries.update({
+						id,
 						deletedAt: undefined,
 						updatedAt: DateTimeString.now(),
 					});

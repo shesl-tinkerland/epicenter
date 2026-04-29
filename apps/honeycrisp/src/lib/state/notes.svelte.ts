@@ -121,7 +121,8 @@ function createNotesState() {
 		 * ```
 		 */
 		softDeleteNote(noteId: NoteId) {
-			honeycrisp.tables.notes.update(noteId, {
+			honeycrisp.tables.notes.update({
+				id: noteId,
 				deletedAt: DateTimeString.now(),
 			});
 			if (searchParams.note === noteId) {
@@ -147,7 +148,8 @@ function createNotesState() {
 			const folderExists = note.folderId
 				? foldersState.folders.some((f) => f.id === note.folderId)
 				: true;
-			honeycrisp.tables.notes.update(noteId, {
+			honeycrisp.tables.notes.update({
+				id: noteId,
 				deletedAt: undefined,
 				...(folderExists ? {} : { folderId: undefined }),
 			});
@@ -187,7 +189,8 @@ function createNotesState() {
 		pinNote(noteId: NoteId) {
 			const note = allNotesMap.get(noteId);
 			if (!note) return;
-			honeycrisp.tables.notes.update(noteId, {
+			honeycrisp.tables.notes.update({
+				id: noteId,
 				pinned: !note.pinned,
 			});
 		},
@@ -207,7 +210,7 @@ function createNotesState() {
 		 * ```
 		 */
 		moveNoteToFolder(noteId: NoteId, folderId: FolderId | undefined) {
-			honeycrisp.tables.notes.update(noteId, { folderId });
+			honeycrisp.tables.notes.update({ id: noteId, folderId });
 		},
 
 		/**
@@ -236,7 +239,8 @@ function createNotesState() {
 		}) {
 			const selectedNoteId = searchParams.note;
 			if (!selectedNoteId) return;
-			honeycrisp.tables.notes.update(selectedNoteId, {
+			honeycrisp.tables.notes.update({
+				id: selectedNoteId,
 				title,
 				preview,
 				wordCount,

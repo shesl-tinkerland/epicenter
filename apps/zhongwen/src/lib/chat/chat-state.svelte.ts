@@ -66,7 +66,8 @@ function createChatState() {
 		conversationId: ConversationId,
 		patch: Partial<Omit<Conversation, 'id'>>,
 	) {
-		zhongwen.tables.conversations.update(conversationId, {
+		zhongwen.tables.conversations.update({
+			id: conversationId,
 			...patch,
 			updatedAt: Date.now(),
 		});
@@ -127,7 +128,8 @@ function createChatState() {
 					createdAt: message.createdAt?.getTime() ?? Date.now(),
 					_v: 1,
 				});
-				zhongwen.tables.conversations.update(conversationId, {
+				zhongwen.tables.conversations.update({
+					id: conversationId,
 					updatedAt: Date.now(),
 				});
 			},

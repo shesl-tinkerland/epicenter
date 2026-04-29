@@ -197,7 +197,7 @@ describe('attachFileSystemIndex', () => {
 
 		expect(index.getIdByPath('/hello.txt')).toBe(fid('f1'));
 
-		files.update('f1', { trashedAt: Date.now() });
+		files.update({ id: fid('f1'), trashedAt: Date.now() });
 
 		expect(index.hasPath('/hello.txt')).toBe(false);
 
@@ -209,7 +209,7 @@ describe('attachFileSystemIndex', () => {
 		files.set(makeRow('f1', 'old.txt'));
 		const index = attachFileSystemIndex(files);
 
-		files.update('f1', { name: 'new.txt' });
+		files.update({ id: fid('f1'), name: 'new.txt' });
 
 		expect(index.hasPath('/old.txt')).toBe(false);
 		expect(index.getIdByPath('/new.txt')).toBe(fid('f1'));
@@ -226,7 +226,7 @@ describe('attachFileSystemIndex', () => {
 
 		expect(index.getIdByPath('/src/util.ts')).toBe(fid('f1'));
 
-		files.update('f1', { parentId: fid('d2') });
+		files.update({ id: fid('f1'), parentId: fid('d2') });
 
 		expect(index.hasPath('/src/util.ts')).toBe(false);
 		expect(index.getIdByPath('/lib/util.ts')).toBe(fid('f1'));
@@ -244,7 +244,7 @@ describe('attachFileSystemIndex', () => {
 
 		expect(index.getIdByPath('/folder/file.txt')).toBe(fid('f1'));
 
-		files.update('f1', { parentId: null });
+		files.update({ id: fid('f1'), parentId: null });
 
 		expect(index.hasPath('/folder/file.txt')).toBe(false);
 		expect(index.getIdByPath('/file.txt')).toBe(fid('f1'));
@@ -271,7 +271,7 @@ describe('attachFileSystemIndex', () => {
 		files.set(makeRow('f1', 'child.txt', 'd1'));
 		const index = attachFileSystemIndex(files);
 
-		files.update('d1', { name: 'new-name' });
+		files.update({ id: fid('d1'), name: 'new-name' });
 
 		expect(index.hasPath('/old-name')).toBe(false);
 		expect(index.hasPath('/old-name/child.txt')).toBe(false);
@@ -297,7 +297,7 @@ describe('attachFileSystemIndex', () => {
 		files.set(makeRow('f2', 'after.txt'));
 		expect(index.hasPath('/after.txt')).toBe(false);
 
-		files.update('f1', { name: 'renamed.txt' });
+		files.update({ id: fid('f1'), name: 'renamed.txt' });
 		// Still has old path since no rebuild happened
 		expect(index.getIdByPath('/before.txt')).toBe(fid('f1'));
 	});

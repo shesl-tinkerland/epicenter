@@ -61,7 +61,8 @@ export function createNoteBodyDoc({
 	});
 
 	onLocalUpdate(ydoc, () => {
-		notesTable.update(noteId, {
+		notesTable.update({
+			id: noteId,
 			updatedAt: DateTimeString.now(),
 		});
 	});

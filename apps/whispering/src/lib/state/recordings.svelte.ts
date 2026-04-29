@@ -90,7 +90,7 @@ function createRecordings() {
 		 * Returns the update result for error handling.
 		 */
 		update(id: string, partial: Partial<Omit<Recording, 'id' | '_v'>>) {
-			return whispering.tables.recordings.update(id, partial);
+			return whispering.tables.recordings.update({ id, ...partial });
 		},
 
 		/**
