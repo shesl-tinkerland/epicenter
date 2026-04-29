@@ -222,6 +222,8 @@ CLI behavior is unchanged. Tests pass without modification beyond import paths.
 
 ### Phase 2: introduce `createWorkspaceServer`
 
+> Done 2026-04-28: added `packages/workspace/src/daemon/server.ts` exposing `createWorkspaceServer({ absDir, workspaces }) -> { socketPath, listen, close }`. The factory builds the Hono app via `buildApp` and binds via `bindOrRecover` (stale-socket sweep preserved). Re-exported from `@epicenter/workspace`. `packages/cli/src/commands/serve.ts` now drops its inline `bindOrRecover` + `socketPathFor` + `unlinkSocketFile` calls and delegates to the factory; the lifecycle (config load, metadata write/unlink, `whenReady` gating, signal handlers, log routing, dispose orchestration) stays in `runServe`. Pragmatic deviation from the spec sketch: `workspaces` is `WorkspaceEntry[]` (the `{ name, workspace }` shape `buildApp` already accepts) rather than a bare `Workspace[]` keyed by `ws.ydoc.guid`. Keying by `ydoc.guid` would have churned the wire selector (`-w <name>`) and the route validators in this phase; deferred to a later spec when the wire moves to id-based dispatch. CLI typecheck clean, workspace typecheck clean, daemon tests 28/28 pass, CLI tests show only the pre-existing `cli.test.ts` yargs-message failure.
+
 Extract daemon startup from `up.ts` into a server factory:
 
 ```ts

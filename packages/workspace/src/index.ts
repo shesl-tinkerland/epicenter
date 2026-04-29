@@ -299,3 +299,8 @@ export {
 	type UnixSocketServer,
 	unlinkSocketFile,
 } from './daemon/unix-socket.js';
+export {
+	createWorkspaceServer,
+	type WorkspaceServer,
+	type WorkspaceServerOptions,
+} from './daemon/server.js';

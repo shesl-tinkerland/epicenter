@@ -27,15 +27,11 @@ import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 import type { Argv, CommandModule } from 'yargs';
 
 import {
-	bindOrRecover,
-	buildApp,
+	createWorkspaceServer,
 	type DaemonMetadata,
-	pingDaemon,
-	socketPathFor,
 	type StartupError,
 	type UnixSocketServer,
 	unlinkMetadata,
-	unlinkSocketFile,
 	writeMetadata,
 } from '@epicenter/workspace';
 import {
@@ -131,7 +127,6 @@ export async function runServe(
 	deps: ServeDeps = {},
 ): Promise<Result<ServeHandle, ServeError | LoadError | StartupError>> {
 	const absDir = resolve(options.dir);
-	const socketPath = socketPathFor(absDir);
 
 	const loader = deps.loadConfig ?? loadConfig;
 	const loadResult = await loader(absDir);
@@ -160,16 +155,21 @@ export async function runServe(
 	}
 
 	// Bind before writing our metadata. On AlreadyRunning the live
-	// server's sidecar must stay intact; on a stale-socket recovery
-	// `bindOrRecover` unlinks the orphan metadata internally before our
-	// successful retry, so the writeMetadata below records *our* pid.
-	const app = buildApp(config.entries);
-	const bindResult = await bindOrRecover(socketPath, absDir, app, pingDaemon);
+	// server's sidecar must stay intact; on a stale-socket recovery the
+	// factory's `listen()` (via `bindOrRecover`) unlinks the orphan
+	// metadata internally before our successful retry, so the
+	// writeMetadata below records *our* pid.
+	const wsServer = createWorkspaceServer({
+		absDir,
+		workspaces: config.entries,
+	});
+	const bindResult = await wsServer.listen();
 	if (bindResult.error) {
 		await safeAsyncDispose(config);
 		return bindResult;
 	}
 	const server = bindResult.data;
+	const socketPath = wsServer.socketPath;
 
 	const metadata: DaemonMetadata = {
 		pid: process.pid,
@@ -181,14 +181,9 @@ export async function runServe(
 	const teardown = (): Promise<void> => {
 		if (teardownPromise) return teardownPromise;
 		teardownPromise = (async () => {
-			try {
-				server.stop();
-			} catch {
-				// best-effort
-			}
+			await wsServer.close();
 			await safeAsyncDispose(config);
 			unlinkMetadata(absDir);
-			unlinkSocketFile(socketPath);
 		})();
 		return teardownPromise;
 	};
