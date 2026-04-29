@@ -31,7 +31,7 @@ import Type from 'typebox';
 import type { TUnsafe } from 'typebox';
 import { type } from 'arktype';
 import { defineMutation, defineQuery } from '../shared/actions.js';
-import { partialOf } from '../shared/schema-partial.js';
+import { partialUpdate } from '../shared/schema-partial.js';
 import type { BaseRow, Table } from '../document/attach-table.js';
 
 /**
@@ -54,7 +54,7 @@ export function buildTableActions<TRow extends BaseRow>(
 ) {
 	const rowSchema = table.definition.schema;
 	// Patch schema: `id` required, all other fields optional. Brand survives.
-	const patchSchema = partialOf(rowSchema as never, { keep: ['id'] });
+	const patchSchema = partialUpdate(rowSchema as never);
 
 	type Patch = { id: TRow['id'] } & Partial<Omit<TRow, 'id'>>;
 

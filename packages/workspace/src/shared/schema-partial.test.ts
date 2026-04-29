@@ -1,10 +1,11 @@
 /**
- * Unit tests for `partialOf`. Mirrors the assertions from the Phase 4 spike
- * (`__spikes__/schema-partial.spike.test.ts`) using `expect`.
+ * Unit tests for `partialUpdate`. Verifies arktype `.pick('id').and(...partial())`
+ * produces the right runtime + compile-time shape (id required, rest optional,
+ * brands preserved).
  */
 import { describe, expect, test } from 'bun:test';
 import { type } from 'arktype';
-import { partialOf } from './schema-partial.js';
+import { partialUpdate } from './schema-partial.js';
 
 type Brand<B extends string> = { readonly __brand: B };
 type EntryId = string & Brand<'EntryId'>;
@@ -18,9 +19,9 @@ const Entry = type({
 	tags: 'string[]',
 });
 
-describe('partialOf', () => {
+describe('partialUpdate', () => {
 	test('keeps `id` required and makes the rest optional', () => {
-		const Patch = partialOf(Entry, { keep: ['id'] });
+		const Patch = partialUpdate(Entry);
 
 		expect(Patch({ id: 'x', title: 'a' }) instanceof type.errors).toBe(false);
 		expect(Patch({ id: 'x', tags: ['t'] }) instanceof type.errors).toBe(false);
@@ -28,18 +29,18 @@ describe('partialOf', () => {
 	});
 
 	test('rejects missing `id`', () => {
-		const Patch = partialOf(Entry, { keep: ['id'] });
+		const Patch = partialUpdate(Entry);
 		expect(Patch({ title: 'no id' }) instanceof type.errors).toBe(true);
 	});
 
 	test('still validates wrong shape on optional fields', () => {
-		const Patch = partialOf(Entry, { keep: ['id'] });
+		const Patch = partialUpdate(Entry);
 		// `_v` is a literal `"1"`; `99` should still fail even though optional.
 		expect(Patch({ id: 'x', _v: 99 }) instanceof type.errors).toBe(true);
 	});
 
 	test('preserves the brand on the required field at the type level', () => {
-		const Patch = partialOf(Entry, { keep: ['id'] });
+		const Patch = partialUpdate(Entry);
 		type Out = typeof Patch.infer;
 
 		const _branded: EntryId = 'x' as EntryId;
