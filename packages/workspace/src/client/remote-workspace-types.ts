@@ -24,7 +24,7 @@
 import type { Result } from 'wellcrafted/result';
 
 import type { BaseRow, Table } from '../document/attach-table.js';
-import type { Action, Actions, RemoteActions } from '../shared/actions.js';
+import type { Actions, RemoteActions } from '../shared/actions.js';
 import type { TableParseError } from '../document/attach-table.js';
 import type { DaemonError } from '../daemon/client.js';
 import type { ResolveError } from '../daemon/resolve-entry.js';
@@ -33,11 +33,10 @@ import type { PeerSnapshot } from '../daemon/app.js';
 
 /**
  * Domain errors any remote workspace call can fail with, in addition to
- * the per-action error type. Surfaces transport failures (`DaemonError`),
- * `-w` resolution misses (`ResolveError`), and the `/run` route's domain
- * envelope (`RunError`).
+ * the per-action error type. Internal: surfaces in `RemoteTable<TRow>`
+ * method signatures.
  */
-export type RemoteCallError =
+type RemoteCallError =
 	| DaemonError
 	| ResolveError
 	| RunError
@@ -64,16 +63,6 @@ export type RemoteTable<TRow extends BaseRow> = {
 	bulkSet(input: { rows: TRow[] }): Promise<Result<void, RemoteCallError>>;
 };
 
-/**
- * Per the remote-action wire shape, single-leaf transformation: the
- * cross-peer machinery in `shared/actions.ts` already exposes
- * `RemoteActions<A>` for tree mapping. We re-expose `RemoteAction<A>`
- * for callers that want the leaf shape (e.g. typing a single RPC stub).
- */
-export type RemoteAction<A extends Action> = A extends Action
-	? RemoteActions<{ __leaf: A }>['__leaf']
-	: never;
-
 /** Recursively map a `Tables` map (in-process) to remote tables. */
 type RemoteTablesOf<TS> = {
 	[K in keyof TS]: TS[K] extends Table<infer TRow>
@@ -94,7 +83,4 @@ export type RemoteWorkspace<T> = {
 	sync: {
 		peers(): Promise<Result<PeerSnapshot[], DaemonError>>;
 	};
-	whenReady: Promise<void>;
-	[Symbol.dispose](): void;
-	[Symbol.asyncDispose](): Promise<void>;
 };

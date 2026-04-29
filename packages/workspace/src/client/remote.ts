@@ -130,9 +130,6 @@ function buildRemoteActions(
  * Compose the remote workspace facade. Generic `T` is the type of the
  * in-process workspace (typically `ReturnType<typeof openFuji>`); the
  * mapped type `RemoteWorkspace<T>` rewrites it into its wire equivalent.
- *
- * `whenReady` is a one-shot ping at construction. It does not enforce
- * the daemon's own `whenReady`; it's a transport-liveness check.
  */
 export function buildRemoteWorkspace<T>(
 	client: DaemonClient,
@@ -147,16 +144,6 @@ export function buildRemoteWorkspace<T>(
 		actions: buildRemoteActions(client, workspaceName),
 		sync: {
 			peers: () => client.peers(),
-		},
-		whenReady: Promise.resolve(),
-		[Symbol.dispose]() {
-			// `daemonClient` does not hold persistent connections (each
-			// call is a fresh fetch), so dispose is a no-op today. Kept
-			// for forward compatibility with a pooled-connection
-			// transport.
-		},
-		async [Symbol.asyncDispose]() {
-			// See `[Symbol.dispose]` above.
 		},
 	} as unknown as RemoteWorkspace<T>;
 }

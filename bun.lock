@@ -533,9 +533,7 @@
       },
       "dependencies": {
         "@epicenter/workspace": "workspace:*",
-        "@hono/standard-validator": "catalog:",
         "arktype": "catalog:",
-        "hono": "catalog:",
         "picocolors": "^1.1.1",
         "typebox": "catalog:",
         "wellcrafted": "catalog:",

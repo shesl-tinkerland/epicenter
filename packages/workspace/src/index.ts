@@ -315,8 +315,6 @@ export { connectDaemon } from './client/connect-daemon.js';
 export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export { RemoteNotSupported } from './client/remote-not-supported.js';
 export type {
-	RemoteAction,
-	RemoteCallError,
 	RemoteTable,
 	RemoteWorkspace,
 } from './client/remote-workspace-types.js';
@@ -325,7 +323,7 @@ export type {
 // SCHEMA HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 
-export { partialOf, type PartialOf } from './shared/schema-partial.js';
+export { partialOf } from './shared/schema-partial.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATHS

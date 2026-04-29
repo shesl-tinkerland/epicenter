@@ -164,25 +164,3 @@ describe('buildRemoteWorkspace sync.peers', () => {
 	});
 });
 
-describe('buildRemoteWorkspace lifecycle', () => {
-	test('whenReady resolves', async () => {
-		const { client } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-		await ws.whenReady;
-	});
-
-	test('Symbol.dispose is callable', () => {
-		const { client } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-		ws[Symbol.dispose]();
-	});
-
-	test('Symbol.asyncDispose is awaitable', async () => {
-		const { client } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-		await ws[Symbol.asyncDispose]();
-	});
-});

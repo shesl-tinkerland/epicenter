@@ -7,9 +7,8 @@
  * persistence + unlock + sync ceremony. Workspace-specific concerns
  * (tables, kv, materializers, actions, per-row caches) stay caller-owned.
  *
- * Persistence path resolution: `<absDir>/.epicenter/persistence/<ydoc.guid>.db`,
- * where `absDir` defaults to `process.cwd()`. Pass `persistencePath` explicitly
- * to override.
+ * Persistence path: `<absDir>/.epicenter/persistence/<ydoc.guid>.db`,
+ * where `absDir` defaults to `process.cwd()`.
  *
  * Requires a prior `epicenter auth login` so a session exists at
  * `~/.epicenter/auth/sessions.json`. Without one, the chain still wires up
@@ -65,16 +64,11 @@ export type ConnectWorkspaceOptions = {
 	/** Server URL. Defaults to `process.env.EPICENTER_SERVER` then `'https://api.epicenter.so'`. */
 	serverUrl?: string;
 	/**
-	 * The project root that owns this workspace. The default persistence path
-	 * is `<absDir>/.epicenter/persistence/<ydoc.guid>.db`. Defaults to
+	 * The project root that owns this workspace. Persistence resolves to
+	 * `<absDir>/.epicenter/persistence/<ydoc.guid>.db`. Defaults to
 	 * `process.cwd()`.
 	 */
 	absDir?: string;
-	/**
-	 * Override the local SQLite persistence path. Defaults to
-	 * `<absDir>/.epicenter/persistence/<ydoc.guid>.db`.
-	 */
-	persistencePath?: string;
 };
 
 export type ConnectedWorkspace = {
@@ -90,12 +84,11 @@ export function connectWorkspace({
 	encryption,
 	serverUrl = process.env.EPICENTER_SERVER ?? DEFAULT_SERVER_URL,
 	absDir = process.cwd(),
-	persistencePath: persistencePathOverride,
 }: ConnectWorkspaceOptions): ConnectedWorkspace {
 	const sessions = createSessionStore();
 
 	const persistence = attachSqlite(ydoc, {
-		filePath: persistencePathOverride ?? persistencePath(absDir, ydoc.guid),
+		filePath: persistencePath(absDir, ydoc.guid),
 	});
 
 	const unlock = attachSessionUnlock(encryption, {
