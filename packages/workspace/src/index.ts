@@ -304,3 +304,9 @@ export {
 	type WorkspaceServer,
 	type WorkspaceServerOptions,
 } from './daemon/server.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// PATHS
+// ════════════════════════════════════════════════════════════════════════════
+
+export { persistencePath } from './paths/persistence.js';

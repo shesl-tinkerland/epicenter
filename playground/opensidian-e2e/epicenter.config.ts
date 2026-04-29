@@ -60,6 +60,7 @@ const kv = encryption.attachKv(ydoc, {});
 const { persistence, sync, whenReady } = connectWorkspace({
 	ydoc,
 	encryption,
+	absDir: import.meta.dir,
 });
 
 /**

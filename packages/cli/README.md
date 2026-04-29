@@ -250,7 +250,7 @@ import {
     loadConfig,             // { entries: [{ name, handle }], dispose() }
     createSessionStore,     // device-code session persistence
     createAuthApi,          // typed Better Auth client
-    epicenterPaths,         // home, authSessions, persistence(id)
+    epicenterPaths,         // home, authSessions
     attachSessionUnlock,    // apply stored encryption keys to an EncryptionAttachment
 } from '@epicenter/cli';
 ```

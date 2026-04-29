@@ -243,6 +243,8 @@ Internally, `createWorkspaceServer` builds a `Map<workspaceId, Workspace>` keyed
 
 ### Phase 3: switch persistence path to local
 
+> Done 2026-04-28: added `packages/workspace/src/paths/persistence.ts` (`persistencePath(absDir, workspaceId)`) and re-exported from `@epicenter/workspace`. `packages/cli/src/connect.ts` (the bundle helper) now defaults persistence to `<absDir>/.epicenter/persistence/<id>.db` (absDir defaulting to `process.cwd()`); `EPICENTER_PERSISTENCE_DIR` env var available as a global override; explicit `persistencePath` option still wins. Removed `epicenterPaths.persistence` from `packages/cli/src/auth/paths.ts` (auth/sessions stays global; per-workspace persistence is now a workspace-package concern). Updated playground configs (`opensidian-e2e` passes `absDir: import.meta.dir`; `tab-manager-e2e` calls `persistencePath(import.meta.dir, ...)` directly). Added one-time migration script at `packages/cli/scripts/migrate-persistence-to-local.ts` (interactive by default; `--from <id> --to <absDir>` for non-interactive single-file moves; refuses to overwrite). Pragmatic deviation from spec sketch: kept the migration script standalone (run with `bun packages/cli/scripts/migrate-persistence-to-local.ts`) rather than wiring it into the yargs CLI; the spec permits this. Grep gate: `EPICENTER_PATHS.persistence` / `epicenterPaths.persistence` produce zero hits in code (only historical specs remain). Workspace + CLI typecheck clean; no new test failures (pre-existing `system.describe`, `describePeer`, and `cli.test.ts` yargs-message failures unchanged).
+
 Add `paths/persistence.ts`:
 
 ```ts

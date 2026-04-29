@@ -2,8 +2,9 @@
  * Centralized path constants for the Epicenter CLI.
  *
  * Single source of truth for every file location under `~/.epicenter/`.
- * Auth and persistence are global (under `$EPICENTER_HOME`).
- * Materialization is always project-local, handled by each config, not here.
+ * Auth lives globally (under `$EPICENTER_HOME`). Per-workspace persistence
+ * is project-local now (see `persistencePath` from `@epicenter/workspace`);
+ * materialization has always been project-local.
  *
  * Override the home directory by setting `$EPICENTER_HOME`.
  *
@@ -16,9 +17,6 @@
  *
  * epicenterPaths.authSessions()
  * // → '/Users/braden/.epicenter/auth/sessions.json'
- *
- * epicenterPaths.persistence('epicenter.fuji')
- * // → '/Users/braden/.epicenter/persistence/epicenter.fuji.db'
  * ```
  */
 
@@ -67,26 +65,5 @@ export const epicenterPaths = {
 	 */
 	authSessions() {
 		return join(resolveHome(), 'auth', 'sessions.json');
-	},
-
-	/**
-	 * Path to the persistence SQLite database for a workspace.
-	 *
-	 * Persistence is a cache of the Yjs workspace state; safe to delete,
-	 * rebuilds from server sync on next connect. Every consumer of the same
-	 * workspace ID shares the same cache file.
-	 *
-	 * @param workspaceId - The workspace's stable ID (e.g. `epicenter.fuji`).
-	 *
-	 * @example
-	 * ```typescript
-	 * import { sqlitePersistence } from '@epicenter/workspace/extensions/persistence/sqlite';
-	 *
-	 * sqlitePersistence({ filePath: epicenterPaths.persistence('epicenter.fuji') })
-	 * // → '~/.epicenter/persistence/epicenter.fuji.db'
-	 * ```
-	 */
-	persistence(workspaceId: string) {
-		return join(resolveHome(), 'persistence', `${workspaceId}.db`);
 	},
 } as const;

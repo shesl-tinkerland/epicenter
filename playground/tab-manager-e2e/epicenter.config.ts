@@ -24,7 +24,6 @@ import { join } from 'node:path';
 import {
 	attachSessionUnlock,
 	createSessionStore,
-	epicenterPaths,
 } from '@epicenter/cli';
 import {
 	tabManagerAwarenessDefs,
@@ -34,6 +33,7 @@ import {
 	attachEncryption,
 	attachSqlite,
 	attachSync,
+	persistencePath,
 } from '@epicenter/workspace';
 import {
 	attachMarkdownMaterializer,
@@ -56,7 +56,7 @@ const tables = encryption.attachTables(ydoc, tabManagerTables);
 const kv = encryption.attachKv(ydoc, {});
 
 const persistence = attachSqlite(ydoc, {
-	filePath: epicenterPaths.persistence(WORKSPACE_ID),
+	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
 });
 
 const unlock = attachSessionUnlock(encryption, {
