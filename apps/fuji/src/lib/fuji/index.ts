@@ -1,6 +1,6 @@
 import { attachEncryption } from '@epicenter/workspace';
 import * as Y from 'yjs';
-import { createFujiActions, fujiTables } from '$lib/workspace';
+import { createFujiActions, fujiTables } from '../workspace.js';
 
 export function openFuji() {
 	const ydoc = new Y.Doc({ guid: 'epicenter.fuji', gc: false });
