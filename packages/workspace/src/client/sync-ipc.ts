@@ -15,6 +15,11 @@
  * The default transport opens a unix-socket connection via `Bun.connect`.
  * Tests inject a `connect` function that returns an in-memory channel pair,
  * which keeps the supervisor logic exercisable without a real socket.
+ *
+ * Lifecycle uses one `AbortController`. `close()` aborts; `runLoop` exits
+ * cleanly on the next await; the active session's listeners detach in their
+ * own `finally`. No global mutable doc/awareness listeners; each session
+ * registers its own and removes them when the session ends.
  */
 
 import * as decoding from 'lib0/decoding';
@@ -138,6 +143,8 @@ const MAX_DELAY_MS = 10_000;
 // Public API
 // ============================================================================
 
+let sessionSeq = 0;
+
 export function attachIpcSyncClient(
 	ydoc: Y.Doc,
 	opts: {
@@ -173,6 +180,7 @@ export function attachIpcSyncClient(
 	const status = createStatusEmitter<IpcSyncStatus>({ phase: 'offline' });
 	const observers = new Set<() => void>();
 	const backoff = createBackoff();
+	const controller = new AbortController();
 	const { promise: whenSynced, resolve: resolveSynced, reject: rejectSynced } =
 		Promise.withResolvers<void>();
 	let syncedSettled = false;
@@ -181,15 +189,11 @@ export function attachIpcSyncClient(
 		syncedSettled = true;
 		op();
 	};
+	// Avoid an unhandled rejection if no consumer awaits whenSynced.
+	whenSynced.catch(() => {});
+
 	const { promise: whenDisposed, resolve: resolveDisposed } =
 		Promise.withResolvers<void>();
-
-	let desired: 'online' | 'offline' = 'online';
-	let runId = 0;
-	let isClosed = false;
-	let activeChannel: IpcChannel | null = null;
-	let activeOrigin: symbol | null = null;
-	let supervisorPromise: Promise<void> | null = null;
 
 	function notifyObservers() {
 		for (const cb of observers) {
@@ -199,16 +203,6 @@ export function attachIpcSyncClient(
 				log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
 			}
 		}
-	}
-
-	function dial(): Promise<IpcDialResult> {
-		if (opts.connect) return opts.connect();
-		if (!opts.socket) {
-			throw new Error(
-				'[attachIpcSyncClient] either `socket` or `connect` must be provided',
-			);
-		}
-		return defaultBunDial(opts.socket, buildPreamble());
 	}
 
 	function buildPreamble(): IpcPreamble {
@@ -221,61 +215,72 @@ export function attachIpcSyncClient(
 		};
 	}
 
-	// ── Doc + awareness handlers (per-session) ──
-	//
-	// We register/unregister these per session so the origin filter tracks
-	// the active session's origin symbol. Using a single shared origin would
-	// either echo writes back (wrong receiver) or block fanouts in tests
-	// that drive multiple sessions through the same client object over time.
-
-	function onDocUpdate(update: Uint8Array, origin: unknown) {
-		if (origin === activeOrigin) return;
-		if (!activeChannel) return;
-		try {
-			activeChannel.sendFrame(encodeSyncUpdate({ update }));
-		} catch (cause) {
-			log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
-		}
-	}
-
-	function onAwarenessUpdate(
-		{
-			added,
-			updated,
-			removed,
-		}: { added: number[]; updated: number[]; removed: number[] },
-		origin: unknown,
-	) {
-		if (origin === activeOrigin) return;
-		if (!activeChannel) return;
-		if (!opts.awareness) return;
-		const changedClients = added.concat(updated).concat(removed);
-		try {
-			activeChannel.sendFrame(
-				encodeAwareness({
-					update: encodeAwarenessUpdate(opts.awareness, changedClients),
-				}),
+	function dial(): Promise<IpcDialResult> {
+		if (opts.connect) return opts.connect();
+		if (!opts.socket) {
+			throw new Error(
+				'[attachIpcSyncClient] either `socket` or `connect` must be provided',
 			);
+		}
+		return defaultBunDial(opts.socket, buildPreamble());
+	}
+
+	async function safeDial(): Promise<IpcDialResult> {
+		try {
+			return await dial();
 		} catch (cause) {
-			log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
+			return Err(IpcSyncClientError.ConnectFailed({ cause }).error);
 		}
 	}
 
-	ydoc.on('updateV2', onDocUpdate);
-	if (opts.awareness) opts.awareness.on('update', onAwarenessUpdate);
-
-	// ── Supervisor loop ──
-
+	// ── Per-session unit-of-work ──────────────────────────────────────────
+	//
+	// Every session installs its own doc/awareness listeners and removes them
+	// in its `finally`. There is no "active channel" singleton outside the
+	// session: between sessions, the doc is unobserved, so writes during
+	// reconnect simply queue up in the local Y.Doc and ride the next
+	// handshake's STEP1/STEP2 exchange.
 	async function runSession(
 		channel: IpcChannel,
-		myRunId: number,
+		signal: AbortSignal,
 	): Promise<'closed' | 'lost'> {
-		const sessionOrigin = Symbol(`ipc-client:${myRunId}`);
-		activeChannel = channel;
-		activeOrigin = sessionOrigin;
+		const sessionOrigin = Symbol(`ipc-client:${++sessionSeq}`);
 		let handshakeComplete = false;
 		const { promise: closedPromise, resolve: resolveClosed } =
 			Promise.withResolvers<'closed' | 'lost'>();
+
+		const onDocUpdate = (update: Uint8Array, origin: unknown) => {
+			if (origin === sessionOrigin) return;
+			try {
+				channel.sendFrame(encodeSyncUpdate({ update }));
+			} catch (cause) {
+				log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
+			}
+		};
+		const onAwarenessUpdate = (
+			{
+				added,
+				updated,
+				removed,
+			}: { added: number[]; updated: number[]; removed: number[] },
+			origin: unknown,
+		) => {
+			if (origin === sessionOrigin) return;
+			if (!opts.awareness) return;
+			const changedClients = added.concat(updated).concat(removed);
+			try {
+				channel.sendFrame(
+					encodeAwareness({
+						update: encodeAwarenessUpdate(opts.awareness, changedClients),
+					}),
+				);
+			} catch (cause) {
+				log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
+			}
+		};
+
+		ydoc.on('updateV2', onDocUpdate);
+		if (opts.awareness) opts.awareness.on('update', onAwarenessUpdate);
 
 		const offFrame = channel.onFrame((bytes) => {
 			try {
@@ -283,9 +288,7 @@ export function attachIpcSyncClient(
 				const messageType = decoding.readVarUint(decoder);
 				switch (messageType) {
 					case MESSAGE_TYPE.SYNC: {
-						const syncType = decoding.readVarUint(
-							decoder,
-						) as SyncMessageType;
+						const syncType = decoding.readVarUint(decoder) as SyncMessageType;
 						const payload = decoding.readVarUint8Array(decoder);
 						const response = handleSyncPayload({
 							syncType,
@@ -301,7 +304,7 @@ export function attachIpcSyncClient(
 						) {
 							handshakeComplete = true;
 							status.set({ phase: 'connected' });
-							settleSynced(() => resolveSynced());
+							settleSynced(resolveSynced);
 						}
 						notifyObservers();
 						break;
@@ -321,13 +324,15 @@ export function attachIpcSyncClient(
 				log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
 			}
 		});
+
 		const offClose = channel.onClose(() => {
-			resolveClosed(desired === 'offline' || isClosed ? 'closed' : 'lost');
+			resolveClosed(signal.aborted ? 'closed' : 'lost');
 		});
 
-		// Fire our own STEP1 so the daemon can send any updates we're missing.
-		// The daemon also sends its STEP1 (and any awareness states) on accept,
-		// so the two STEP1/STEP2 exchanges happen in parallel.
+		const onAbort = () => channel.close();
+		signal.addEventListener('abort', onAbort);
+
+		// Send our STEP1 in parallel with whatever the daemon sent on accept.
 		try {
 			channel.sendFrame(encodeSyncStep1({ doc: ydoc }));
 			if (opts.awareness && opts.awareness.getLocalState() !== null) {
@@ -343,40 +348,41 @@ export function attachIpcSyncClient(
 			channel.close();
 		}
 
-		const outcome = await closedPromise;
-		offFrame();
-		offClose();
-		if (opts.awareness) {
-			// Drop any peer-published states the awareness picked up on this
-			// session so they don't leak into the next session's view.
-			const others = Array.from(opts.awareness.getStates().keys()).filter(
-				(client) => client !== ydoc.clientID,
-			);
-			if (others.length > 0) {
-				removeAwarenessStates(opts.awareness, others, sessionOrigin);
+		try {
+			return await closedPromise;
+		} finally {
+			ydoc.off('updateV2', onDocUpdate);
+			if (opts.awareness) opts.awareness.off('update', onAwarenessUpdate);
+			offFrame();
+			offClose();
+			signal.removeEventListener('abort', onAbort);
+			if (opts.awareness) {
+				const others = Array.from(opts.awareness.getStates().keys()).filter(
+					(client) => client !== ydoc.clientID,
+				);
+				if (others.length > 0) {
+					removeAwarenessStates(opts.awareness, others, sessionOrigin);
+				}
 			}
 		}
-		activeChannel = null;
-		activeOrigin = null;
-		return outcome;
 	}
 
-	async function runLoop() {
-		while (desired === 'online' && !isClosed) {
-			const myRunId = ++runId;
-			status.set({
-				phase: 'connecting',
-				retries: backoff.retries,
-			});
+	// ── Supervisor loop ──────────────────────────────────────────────────
+	//
+	// Dial → run session → on loss, sleep → repeat. One cancellation source
+	// (controller.signal) drives the whole thing. A fatal handshake error
+	// (e.g. NoSuchWorkspace) settles `whenSynced` as a rejection and exits.
 
+	async function runLoop(signal: AbortSignal): Promise<void> {
+		while (!signal.aborted) {
+			status.set({ phase: 'connecting', retries: backoff.retries });
 			const dialed = await safeDial();
-			if (myRunId !== runId) continue;
+			if (signal.aborted) break;
+
 			if (dialed.error !== null) {
-				const isFatal = dialed.error.name === 'HandshakeRejected';
-				if (isFatal) {
+				if (dialed.error.name === 'HandshakeRejected') {
 					status.set({ phase: 'failed', reason: dialed.error.message });
 					settleSynced(() => rejectSynced(dialed.error));
-					desired = 'offline';
 					break;
 				}
 				status.set({
@@ -384,71 +390,43 @@ export function attachIpcSyncClient(
 					retries: backoff.retries,
 					lastError: dialed.error.message,
 				});
-				if (desired === 'online') await backoff.sleep();
+				await sleepWithSignal(backoff.next(), signal);
 				continue;
 			}
 
-			const { channel, reply } = dialed.data;
 			try {
-				await opts.onPreambleReply?.(reply);
+				await opts.onPreambleReply?.(dialed.data.reply);
 			} catch (cause) {
 				log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
 			}
 
-			const outcome = await runSession(channel, myRunId);
+			const outcome = await runSession(dialed.data.channel, signal);
 			if (outcome === 'closed') break;
-			// 'lost': back off and retry
-			backoff.bumpForLoss();
-			if (desired === 'online') await backoff.sleep();
+			await sleepWithSignal(backoff.next(), signal);
 		}
-		// Preserve a terminal `failed` status; otherwise transition to offline.
+
+		// Preserve a terminal `failed` status; otherwise settle to offline.
 		if (status.get().phase !== 'failed') status.set({ phase: 'offline' });
 	}
 
-	async function safeDial(): Promise<IpcDialResult> {
-		try {
-			return await dial();
-		} catch (cause) {
-			return Err(IpcSyncClientError.ConnectFailed({ cause }).error);
-		}
-	}
-
-	// Start the supervisor immediately (no waitFor analog: scripts have no
-	// local persistence layer to gate on).
-	supervisorPromise = runLoop().catch((cause) => {
+	const supervisor = runLoop(controller.signal).catch((cause) => {
 		log.warn(IpcSyncClientError.FrameHandlingFailed({ cause }));
 	});
 
-	// ── Teardown ──
+	// ── Teardown ─────────────────────────────────────────────────────────
 
 	async function close(): Promise<void> {
-		if (isClosed) {
+		if (controller.signal.aborted) {
 			await whenDisposed;
 			return;
 		}
-		isClosed = true;
-		desired = 'offline';
-		runId++;
-		const channel = activeChannel;
-		ydoc.off('updateV2', onDocUpdate);
-		if (opts.awareness) opts.awareness.off('update', onAwarenessUpdate);
-		try {
-			channel?.close();
-		} catch {
-			// best-effort
-		}
-		backoff.wake();
-		const running = supervisorPromise;
-		supervisorPromise = null;
+		controller.abort();
 		settleSynced(() => {
 			rejectSynced(
 				new Error('[attachIpcSyncClient] disposed before first handshake'),
 			);
 		});
-		// Avoid leaving an unhandled rejection for the dispose-before-handshake
-		// case if no one awaited whenSynced.
-		whenSynced.catch(() => {});
-		if (running) await running;
+		await supervisor;
 		if (status.get().phase !== 'failed') status.set({ phase: 'offline' });
 		status.clear();
 		resolveDisposed();
@@ -478,6 +456,20 @@ export function attachIpcSyncClient(
 // ============================================================================
 // Default Bun unix-socket dialer
 // ============================================================================
+//
+// `Bun.connect({ unix, socket: { open, data, ... } })` is callback-based:
+// `open(socket)` fires once with the live socket; `data(socket, chunk)`
+// fires per byte chunk. We:
+//   1. Build the framer + channel object up front.
+//   2. Call Bun.connect; in `open()` we capture the live socket and write
+//      the preamble as the first framed message.
+//   3. Wait for the framer to emit one frame (the daemon's preamble reply).
+//   4. Parse that frame as a serialized wellcrafted Result envelope.
+//   5. Return the channel for the supervisor to drive.
+//
+// The channel cannot be used by anyone until step 5 returns, so we do not
+// need a pending-write buffer for "what if sendFrame is called before the
+// socket is open?": it isn't.
 
 type BunIpcSocket = {
 	write: (data: Uint8Array) => number | void;
@@ -488,33 +480,22 @@ async function defaultBunDial(
 	socketPath: string,
 	preamble: IpcPreamble,
 ): Promise<IpcDialResult> {
-	const socketRef: { current: BunIpcSocket | null } = { current: null };
-	const pendingWrites: Uint8Array[] = [];
+	let socket: BunIpcSocket | null = null;
+	let closed = false;
 	const frameListeners = new Set<(b: Uint8Array) => void>();
 	const closeListeners = new Set<() => void>();
-	let firstReplyConsumed = false;
-	let closed = false;
-
+	let firstFrameConsumed = false;
 	const { promise: replyPromise, resolve: resolveReply } =
 		Promise.withResolvers<Uint8Array>();
 
 	const reader = createFrameReader((frame) => {
-		if (!firstReplyConsumed) {
-			firstReplyConsumed = true;
+		if (!firstFrameConsumed) {
+			firstFrameConsumed = true;
 			resolveReply(frame);
 			return;
 		}
 		for (const cb of frameListeners) cb(frame);
 	});
-
-	function flushPending() {
-		const sock = socketRef.current;
-		if (!sock) return;
-		while (pendingWrites.length > 0) {
-			const buf = pendingWrites.shift()!;
-			sock.write(buf);
-		}
-	}
 
 	function fireClose() {
 		if (closed) return;
@@ -524,14 +505,8 @@ async function defaultBunDial(
 
 	const channel: IpcChannel = {
 		sendFrame(bytes) {
-			if (closed) return;
-			const framed = encodeFrame(bytes);
-			const sock = socketRef.current;
-			if (sock) {
-				sock.write(framed);
-			} else {
-				pendingWrites.push(framed);
-			}
+			if (closed || !socket) return;
+			socket.write(encodeFrame(bytes));
 		},
 		onFrame(cb) {
 			frameListeners.add(cb);
@@ -539,13 +514,12 @@ async function defaultBunDial(
 		},
 		close() {
 			if (closed) return;
-			closed = true;
 			try {
-				socketRef.current?.end();
+				socket?.end();
 			} catch {
 				// best-effort
 			}
-			for (const cb of closeListeners) cb();
+			fireClose();
 		},
 		onClose(cb) {
 			closeListeners.add(cb);
@@ -555,19 +529,17 @@ async function defaultBunDial(
 
 	const connectResult = await tryAsync({
 		try: async () => {
-			// biome-ignore lint/suspicious/noExplicitAny: Bun.connect socket-handler shape varies by environment
-			const sock = await (Bun as any).connect({
+			// biome-ignore lint/suspicious/noExplicitAny: Bun socket-handler types vary
+			return (await (Bun as any).connect({
 				unix: socketPath,
 				socket: {
-					data(_socket: unknown, chunk: Uint8Array) {
+					data(_s: unknown, chunk: Uint8Array) {
 						reader.push(chunk);
 					},
-					open(socket: BunIpcSocket) {
-						socketRef.current = socket;
+					open(s: BunIpcSocket) {
+						socket = s;
 						const json = JSON.stringify(preamble);
-						const payload = new TextEncoder().encode(json);
-						socket.write(encodeFrame(payload));
-						flushPending();
+						s.write(encodeFrame(new TextEncoder().encode(json)));
 					},
 					close() {
 						fireClose();
@@ -575,12 +547,11 @@ async function defaultBunDial(
 					end() {
 						fireClose();
 					},
-					error(_socket: unknown, _err: Error) {
+					error(_s: unknown, _err: Error) {
 						fireClose();
 					},
 				},
-			});
-			return sock as BunIpcSocket;
+			})) as BunIpcSocket;
 		},
 		catch: (cause) => IpcSyncClientError.ConnectFailed({ cause }),
 	});
@@ -638,40 +609,42 @@ function createStatusEmitter<T>(initial: T) {
 	};
 }
 
+/**
+ * Exponential backoff with jitter. `next()` returns the ms to sleep for the
+ * upcoming attempt and increments the retry counter. Never resets: we accept
+ * "lose connection right after success → retry instantly" as a simpler
+ * contract than tracking last-success-time and conditionally resetting.
+ */
 function createBackoff() {
 	let retries = 0;
-	let sleeper: { promise: Promise<void>; wake(): void } | null = null;
-
 	return {
-		async sleep() {
+		next(): number {
 			const exponential = Math.min(BASE_DELAY_MS * 2 ** retries, MAX_DELAY_MS);
 			const ms = exponential * (0.5 + Math.random() * 0.5);
 			retries += 1;
-			const { promise, resolve } = Promise.withResolvers<void>();
-			const handle = setTimeout(resolve, ms);
-			sleeper = {
-				promise,
-				wake() {
-					clearTimeout(handle);
-					resolve();
-				},
-			};
-			await promise;
-			sleeper = null;
-		},
-		wake() {
-			sleeper?.wake();
-		},
-		bumpForLoss() {
-			// Connection loss after a successful session: keep retries counter
-			// monotonic so the next sleep already backs off rather than spinning.
-			if (retries === 0) retries = 1;
-		},
-		reset() {
-			retries = 0;
+			return ms;
 		},
 		get retries() {
 			return retries;
 		},
 	};
+}
+
+/**
+ * `setTimeout` that resolves early on abort. Replacement for Bun.sleep when
+ * we want the supervisor to wake up immediately on `close()`.
+ */
+function sleepWithSignal(ms: number, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.resolve();
+	return new Promise<void>((resolve) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+	});
 }

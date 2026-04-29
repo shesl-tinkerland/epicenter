@@ -253,37 +253,90 @@ export function attachIpcSyncServer(
 		session.resolveClosed();
 	}
 
-	async function acceptSession(args: {
-		channel: IpcChannel;
-		preamble: IpcPreamble;
-	}): Promise<void> {
-		const { channel, preamble } = args;
-		if (isClosed) {
-			channel.close();
-			return;
+	/**
+	 * Decode and dispatch one inbound frame on a session's channel. SYNC and
+	 * AWARENESS only; everything else is a no-op (the IPC wire deliberately
+	 * omits SYNC_STATUS and RPC).
+	 */
+	function dispatchInboundFrame(
+		session: SessionState,
+		bytes: Uint8Array,
+	) {
+		try {
+			const decoder = decoding.createDecoder(bytes);
+			const messageType = decoding.readVarUint(decoder);
+			switch (messageType) {
+				case MESSAGE_TYPE.SYNC: {
+					const syncType = decoding.readVarUint(decoder) as SyncMessageType;
+					const payload = decoding.readVarUint8Array(decoder);
+					const response = handleSyncPayload({
+						syncType,
+						payload,
+						doc: ydoc,
+						origin: session.origin,
+					});
+					if (response) session.channel.sendFrame(response);
+					break;
+				}
+				case MESSAGE_TYPE.AWARENESS: {
+					if (!opts.awareness) break;
+					const update = decoding.readVarUint8Array(decoder);
+					applyAwarenessUpdate(opts.awareness, update, session.origin);
+					break;
+				}
+				default:
+					break;
+			}
+		} catch (cause) {
+			log.warn(
+				IpcSyncServerError.FrameHandlingFailed({
+					sessionId: session.id,
+					cause,
+				}),
+			);
 		}
+	}
 
+	/**
+	 * Server-initiated half of the handshake: send STEP1 so the peer can
+	 * reply with STEP2 carrying any updates the daemon is missing. The peer's
+	 * own STEP1 (sent in parallel) drives the inverse direction. Returns true
+	 * on success; false means the channel write failed and the session has
+	 * been torn down.
+	 */
+	function sendInitialHandshake(session: SessionState): boolean {
+		try {
+			session.channel.sendFrame(encodeSyncStep1({ doc: ydoc }));
+			if (opts.awareness && opts.awareness.getStates().size > 0) {
+				session.channel.sendFrame(
+					encodeAwarenessStates({
+						awareness: opts.awareness,
+						clients: Array.from(opts.awareness.getStates().keys()),
+					}),
+				);
+			}
+			return true;
+		} catch (cause) {
+			log.warn(
+				IpcSyncServerError.FrameHandlingFailed({
+					sessionId: session.id,
+					cause,
+				}),
+			);
+			teardownSession(session);
+			return false;
+		}
+	}
+
+	function registerSession(
+		channel: IpcChannel,
+		preamble: IpcPreamble,
+	): SessionState {
 		const sessionId = nextSessionId(opts.workspace);
 		const sessionOrigin = Symbol(`hub:${sessionId}`);
 		const { promise: whenClosed, resolve: resolveClosed } =
 			Promise.withResolvers<void>();
-
-		// Reconnect dedup: kick prior session for the same clientId before we
-		// announce the new one. Same-clientId twice means the previous peer
-		// crashed without closing; without dedup the prior awareness state
-		// lingers and the updateV2 broadcast loop would echo to the dead session.
-		const prior = sessionsByClientId.get(preamble.clientId);
-		if (prior) {
-			log.info('kicking prior session for clientId reuse', {
-				clientId: preamble.clientId,
-				oldSessionId: prior.id,
-				newSessionId: sessionId,
-			});
-			teardownSession(prior);
-		}
-
 		const unsubscribers: Array<() => void> = [];
-
 		const session: SessionState = {
 			id: sessionId,
 			origin: sessionOrigin,
@@ -306,78 +359,38 @@ export function attachIpcSyncServer(
 		};
 		sessions.set(sessionId, session);
 		sessionsByClientId.set(preamble.clientId, session);
-
-		// Inbound frame router. SYNC and AWARENESS only; everything else is a
-		// no-op (the IPC wire deliberately omits SYNC_STATUS and RPC).
-		function onInbound(bytes: Uint8Array) {
-			try {
-				const decoder = decoding.createDecoder(bytes);
-				const messageType = decoding.readVarUint(decoder);
-				switch (messageType) {
-					case MESSAGE_TYPE.SYNC: {
-						const syncType = decoding.readVarUint(decoder) as SyncMessageType;
-						const payload = decoding.readVarUint8Array(decoder);
-						const response = handleSyncPayload({
-							syncType,
-							payload,
-							doc: ydoc,
-							origin: sessionOrigin,
-						});
-						if (response) channel.sendFrame(response);
-						break;
-					}
-					case MESSAGE_TYPE.AWARENESS: {
-						if (!opts.awareness) break;
-						const update = decoding.readVarUint8Array(decoder);
-						applyAwarenessUpdate(opts.awareness, update, sessionOrigin);
-						break;
-					}
-					default:
-						// Unknown / disallowed message types are ignored on the IPC wire.
-						break;
-				}
-			} catch (cause) {
-				log.warn(
-					IpcSyncServerError.FrameHandlingFailed({
-						sessionId,
-						cause,
-					}),
-				);
-			}
-		}
-
-		unsubscribers.push(channel.onFrame(onInbound));
 		unsubscribers.push(
-			channel.onClose(() => {
-				teardownSession(session);
-			}),
+			channel.onFrame((bytes) => dispatchInboundFrame(session, bytes)),
 		);
+		unsubscribers.push(channel.onClose(() => teardownSession(session)));
+		return session;
+	}
 
-		// Server-initiated half of the handshake: send STEP1 so the peer can
-		// reply with STEP2 carrying any updates the daemon is missing. The
-		// peer's own STEP1 (sent in parallel) drives the inverse direction.
-		try {
-			channel.sendFrame(encodeSyncStep1({ doc: ydoc }));
-			if (opts.awareness && opts.awareness.getStates().size > 0) {
-				channel.sendFrame(
-					encodeAwarenessStates({
-						awareness: opts.awareness,
-						clients: Array.from(opts.awareness.getStates().keys()),
-					}),
-				);
-			}
-		} catch (cause) {
-			log.warn(
-				IpcSyncServerError.FrameHandlingFailed({
-					sessionId,
-					cause,
-				}),
-			);
-			teardownSession(session);
+	async function acceptSession(args: {
+		channel: IpcChannel;
+		preamble: IpcPreamble;
+	}): Promise<void> {
+		const { channel, preamble } = args;
+		if (isClosed) {
+			channel.close();
 			return;
 		}
 
-		await whenClosed;
+		// Reconnect dedup: same-clientId twice means the previous peer crashed
+		// without closing; the prior awareness state would linger and the
+		// updateV2 broadcast loop would echo to the dead session.
+		const prior = sessionsByClientId.get(preamble.clientId);
+		if (prior) {
+			log.info('kicking prior session for clientId reuse', {
+				clientId: preamble.clientId,
+				oldSessionId: prior.id,
+			});
+			teardownSession(prior);
+		}
+
+		const session = registerSession(channel, preamble);
+		if (!sendInitialHandshake(session)) return;
+		await session.whenClosed;
 	}
 
 	function peers(): SessionSnapshot[] {
