@@ -28,14 +28,17 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-import { connectWorkspace } from '@epicenter/cli';
+import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
 import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
 import {
 	attachEncryption,
 	attachSqlite,
+	attachSync,
 	createDisposableCache,
 	defineMutation,
+	persistencePath,
+	toWsUrl,
 } from '@epicenter/workspace';
 import {
 	attachMarkdownMaterializer,
@@ -46,22 +49,43 @@ import { attachSqliteMaterializer } from '@epicenter/workspace/document/material
 import Type from 'typebox';
 import * as Y from 'yjs';
 
+const SERVER_URL = 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
 const MATERIALIZER_DIR = join(import.meta.dir, '.epicenter', 'materializer');
 mkdirSync(MATERIALIZER_DIR, { recursive: true });
 
 const WORKSPACE_ID = 'opensidian';
 
+const sessions = createSessionStore();
+
 const ydoc = new Y.Doc({ guid: WORKSPACE_ID, gc: false });
 const encryption = attachEncryption(ydoc);
 const tables = encryption.attachTables(ydoc, opensidianTables);
 const kv = encryption.attachKv(ydoc, {});
 
-const { persistence, sync, whenReady } = connectWorkspace({
-	ydoc,
-	encryption,
-	absDir: import.meta.dir,
+const persistence = attachSqlite(ydoc, {
+	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
 });
+
+const unlock = attachSessionUnlock(encryption, {
+	sessions,
+	serverUrl: SERVER_URL,
+	waitFor: persistence.whenLoaded,
+});
+
+// Gate the first connection on local hydrate + unlock so the handshake
+// only exchanges the delta, not the whole document.
+const sync = attachSync(ydoc, {
+	url: toWsUrl(`${SERVER_URL}/workspaces/${WORKSPACE_ID}`),
+	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
+	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+});
+
+const whenReady = Promise.all([
+	persistence.whenLoaded,
+	unlock.whenChecked,
+	sync.whenConnected,
+]);
 
 /**
  * Per-file content persistence via `attachSqlite`. Each content Y.Doc writes
