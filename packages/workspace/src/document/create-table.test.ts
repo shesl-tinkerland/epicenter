@@ -32,30 +32,22 @@ describe('createTable', () => {
 			expect(data).toEqual({ id: '1', name: 'Alice', _v: 1 });
 		});
 
-		test('bulkSet stores rows in chunks and reports progress', async () => {
+		test('bulkSet stores rows in chunked transactions', async () => {
 			const { ykv } = setup();
 			const definition = defineTable(
 				type({ id: 'string', name: 'string', _v: '1' }),
 			);
 			const helper = createTable(ykv, definition, 'test');
-			const progress: number[] = [];
 
-			await helper.bulkSet(
-				[
-					{ id: '1', name: 'Alice', _v: 1 },
-					{ id: '2', name: 'Bob', _v: 1 },
-					{ id: '3', name: 'Charlie', _v: 1 },
-					{ id: '4', name: 'Dora', _v: 1 },
-					{ id: '5', name: 'Eve', _v: 1 },
-				],
-				{
-					chunkSize: 2,
-					onProgress: (percent) => progress.push(percent),
-				},
-			);
+			await helper.bulkSet([
+				{ id: '1', name: 'Alice', _v: 1 },
+				{ id: '2', name: 'Bob', _v: 1 },
+				{ id: '3', name: 'Charlie', _v: 1 },
+				{ id: '4', name: 'Dora', _v: 1 },
+				{ id: '5', name: 'Eve', _v: 1 },
+			]);
 
 			expect(helper.getAllValid()).toHaveLength(5);
-			expect(progress).toEqual([0.4, 0.8, 1]);
 		});
 	});
 
@@ -221,7 +213,7 @@ describe('createTable', () => {
 			const helper = createTable(ykv, definition, 'test');
 
 			helper.set({ id: '1', name: 'Alice', age: 25, _v: 1 });
-			const { data, error } = helper.update('1', { age: 30 });
+			const { data, error } = helper.update({ id: '1', age: 30 });
 
 			expect(error).toBeNull();
 			expect(data).toEqual({ id: '1', name: 'Alice', age: 30, _v: 1 });
@@ -238,7 +230,7 @@ describe('createTable', () => {
 			);
 			const helper = createTable(ykv, definition, 'test');
 
-			const { data, error } = helper.update('nonexistent', { name: 'Bob' });
+			const { data, error } = helper.update({ id: 'nonexistent', name: 'Bob' });
 
 			expect(error).toBeNull();
 			expect(data).toBeNull();
@@ -254,7 +246,7 @@ describe('createTable', () => {
 			// Insert invalid data directly
 			yarray.push([{ key: '1', val: { id: '1', name: 123, _v: 1 }, ts: 0 }]); // name should be string
 
-			const { data, error } = helper.update('1', { name: 'Valid' });
+			const { data, error } = helper.update({ id: '1', name: 'Valid' });
 
 			expect(data).toBeNull();
 			expect(error?.name).toBe('ValidationFailed');
@@ -273,7 +265,7 @@ describe('createTable', () => {
 			const helper = createTable(ykv, definition, 'test');
 
 			helper.set({ id: '1', name: 'Alice', _v: 1 });
-			const { data } = helper.update('1', { name: 'Bob' });
+			const { data } = helper.update({ id: '1', name: 'Bob' });
 
 			expect(data?.id).toBe('1');
 			expect(data?.name).toBe('Bob');
@@ -631,9 +623,10 @@ describe('createTable', () => {
 			helper.set({ id: '1', name: 'Alice', age: 25, _v: 1 });
 
 			// Current row is valid; the partial update violates age>0.
-			const { data, error } = helper.update('1', {
+			const { data, error } = helper.update({
+				id: '1',
 				age: -5,
-			} as unknown as Partial<{ name: string; age: number }>);
+			} as unknown as { id: string; age: number });
 
 			expect(data).toBeNull();
 			expect(error?.name).toBe('ValidationFailed');

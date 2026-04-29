@@ -8,6 +8,13 @@
  * For encrypted storage, call `encryption.attachTable` / `encryption.attachKv`
  * on the coordinator returned by `attachEncryption(ydoc)`.
  *
+ * The CRUD methods (`get`, `getAllValid`, `set`, `update`, `delete`,
+ * `bulkSet`) are constructed as `defineQuery` / `defineMutation` instances
+ * directly, so they are callable in-process and crossable over the wire
+ * without a separate wrapper layer. Plain methods (`filter`, `observe`,
+ * `find`, `count`, `has`, `getAll`, `getAllInvalid`, `bulkDelete`, `clear`,
+ * `parse`) stay unbranded and only exist locally.
+ *
  * @example
  * ```typescript
  * import * as Y from 'yjs';
@@ -22,10 +29,20 @@
  */
 
 import type { StandardSchemaV1 } from '@standard-schema/spec';
+import Type from 'typebox';
+import type { TUnsafe } from 'typebox';
 import { defineErrors, extractErrorMessage, type InferErrors } from 'wellcrafted/error';
 import type { JsonObject } from 'wellcrafted/json';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type * as Y from 'yjs';
+import {
+	defineMutation,
+	defineQuery,
+	type Mutation,
+	type Query,
+} from '../shared/actions.js';
+import { partialUpdate } from '../shared/schema-partial.js';
+import { standardSchemaToJsonSchema } from '../shared/standard-schema.js';
 import { TableKey } from './keys.js';
 import type { CombinedStandardSchema } from './standard-schema.js';
 import {
@@ -43,7 +60,7 @@ import {
  * Errors produced when parsing unknown input against a table's schema.
  *
  * Surfaced by `parse()`, `get()`, `getAll()`, and `update()`. "Not found" on
- * `get()` / `update()` is *not* an error — it's a legitimate absence and is
+ * `get()` / `update()` is *not* an error: it's a legitimate absence and is
  * returned as `data: null` instead.
  */
 export const TableParseError = defineErrors({
@@ -62,7 +79,7 @@ export const TableParseError = defineErrors({
 		issues,
 		row,
 	}),
-	/** The table's schema returned a `Promise` from `validate()` — not supported. */
+	/** The table's schema returned a `Promise` from `validate()`: not supported. */
 	AsyncSchemaNotSupported: ({ id }: { id: string }) => ({
 		message: `Row '${id}' could not be parsed: async Standard Schema validate() is not supported`,
 		id,
@@ -109,7 +126,7 @@ export type LastSchema<T extends readonly CombinedStandardSchema[]> =
  * For per-row content (rich text, long-form body), keep the row lean (ids,
  * metadata, a content-doc guid) and pair the table with a separate
  * `createDisposableCache(builder)` keyed on that content guid. Opening a row
- * then becomes `contentDocs.open(row.contentGuid)` — the list doesn't load
+ * then becomes `contentDocs.open(row.contentGuid)`: the list doesn't load
  * every content doc, and the editor doesn't contend with the table.
  *
  * @typeParam TVersions - Tuple of schema versions (each must include `{ id: string }`)
@@ -144,10 +161,20 @@ export type TableDefinitions = Record<
 // TABLE HELPER TYPE
 // ════════════════════════════════════════════════════════════════════════════
 
+/** Patch shape for `update`: `id` required, every other field optional. */
+export type TablePatch<TRow extends BaseRow> = { id: TRow['id'] } & Partial<
+	Omit<TRow, 'id'>
+>;
+
 /**
  * Type-safe runtime handle for a single workspace table.
  *
  * Provides CRUD operations with schema validation and migration on read.
+ *
+ * The CRUD methods (`get`, `getAllValid`, `set`, `update`, `delete`,
+ * `bulkSet`) are branded `Query` / `Mutation` instances. The brand is the
+ * cut-line for what crosses the wire to a remote workspace; plain methods
+ * stay local.
  *
  * @typeParam TRow - The fully-typed row shape for this table (extends `{ id: string }`)
  */
@@ -157,7 +184,7 @@ export type Table<TRow extends BaseRow> = {
 
 	/**
 	 * The underlying `TableDefinition` (schema + migration) this Table was
-	 * attached with. Exposed for consumers that need the raw schema — e.g.,
+	 * attached with. Exposed for consumers that need the raw schema, e.g.,
 	 * the sqlite materializer generating DDL.
 	 */
 	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
@@ -168,68 +195,68 @@ export type Table<TRow extends BaseRow> = {
 	 * version.
 	 *
 	 * Injects `id` into the input before validation. Does not write to storage.
-	 *
-	 * @returns `Result<TRow, TableParseError>`:
-	 *   - `data: TRow` when the input validates and migrates
-	 *   - `error: TableParseError` on validation / migration failure
 	 */
 	parse(id: string, input: unknown): Result<TRow, TableParseError>;
-
-	/** Set a row (insert or replace). Always writes the full row. */
-	set(row: TRow): void;
-
-	/** Insert or replace many rows with chunked transactions and progress reporting. */
-	bulkSet(
-		rows: TRow[],
-		options?: {
-			chunkSize?: number;
-			onProgress?: (percent: number) => void;
-		},
-	): Promise<void>;
 
 	/**
 	 * Get a single row by ID.
 	 *
-	 * @returns `Result<TRow | null, TableParseError>`:
-	 *   - `data: TRow` when the row exists and validates
-	 *   - `data: null` when no row exists at that id (not an error — legitimate absence)
-	 *   - `error: TableParseError` when the stored row failed schema validation
+	 * Branded: addressable over the wire as `tables.<name>.get(id)`.
 	 */
-	get(id: string): Result<TRow | null, TableParseError>;
+	get: Query<TUnsafe<string>, Result<TRow | null, TableParseError>>;
 
-	/** Get all rows with their validation outcome. */
-	getAll(): Array<Result<TRow, TableParseError>>;
+	/**
+	 * Get all rows that pass schema validation.
+	 *
+	 * Branded: addressable over the wire as `tables.<name>.getAllValid()`.
+	 */
+	getAllValid: Query<undefined, TRow[]>;
 
-	/** Get all rows that pass schema validation. */
-	getAllValid(): TRow[];
+	/**
+	 * Set a row (insert or replace). Always writes the full row.
+	 *
+	 * Branded: addressable over the wire as `tables.<name>.set(row)`.
+	 */
+	set: Mutation<TUnsafe<TRow>, void>;
 
-	/** Get all rows that fail schema validation. */
-	getAllInvalid(): TableParseError[];
-
-	/** Filter valid rows by predicate. */
-	filter(predicate: (row: TRow) => boolean): TRow[];
-
-	/** Find the first valid row matching a predicate. */
-	find(predicate: (row: TRow) => boolean): TRow | undefined;
+	/**
+	 * Insert or replace many rows in chunked transactions.
+	 *
+	 * Branded: addressable over the wire as `tables.<name>.bulkSet(rows)`.
+	 */
+	bulkSet: Mutation<TUnsafe<TRow[]>, Promise<void>>;
 
 	/**
 	 * Partial update a row by ID.
 	 *
-	 * @returns `Result<TRow | null, TableParseError>`:
-	 *   - `data: TRow` when the row existed, merged, and validated
-	 *   - `data: null` when no row exists at that id (nothing to update)
-	 *   - `error: TableParseError` when the current row is invalid, or the merged
-	 *     row fails validation
+	 * Branded: addressable over the wire as `tables.<name>.update({ id, ...patch })`.
+	 * Returns `data: null` when no row exists at that id (not an error).
 	 */
-	update(
-		id: string,
-		partial: Partial<Omit<TRow, 'id'>>,
-	): Result<TRow | null, TableParseError>;
+	update: Mutation<
+		TUnsafe<TablePatch<TRow>>,
+		Result<TRow | null, TableParseError>
+	>;
 
-	/** Delete a single row by ID. */
-	delete(id: string): void;
+	/**
+	 * Delete a single row by ID.
+	 *
+	 * Branded: addressable over the wire as `tables.<name>.delete(id)`.
+	 */
+	delete: Mutation<TUnsafe<string>, void>;
 
-	/** Delete many rows by ID with chunked operations and progress reporting. */
+	/** Get all rows with their validation outcome. Local only. */
+	getAll(): Array<Result<TRow, TableParseError>>;
+
+	/** Get all rows that fail schema validation. Local only. */
+	getAllInvalid(): TableParseError[];
+
+	/** Filter valid rows by predicate. Local only (closure). */
+	filter(predicate: (row: TRow) => boolean): TRow[];
+
+	/** Find the first valid row matching a predicate. Local only (closure). */
+	find(predicate: (row: TRow) => boolean): TRow | undefined;
+
+	/** Delete many rows by ID with chunked operations and progress reporting. Local only (callback closure). */
 	bulkDelete(
 		ids: string[],
 		options?: {
@@ -238,18 +265,18 @@ export type Table<TRow extends BaseRow> = {
 		},
 	): Promise<void>;
 
-	/** Delete all rows from the table. */
+	/** Delete all rows from the table. Local only. */
 	clear(): void;
 
-	/** Watch for row changes. */
+	/** Watch for row changes. Local only (closure). */
 	observe(
 		callback: (changedIds: ReadonlySet<TRow['id']>, origin?: unknown) => void,
 	): () => void;
 
-	/** Get the total number of rows in the table. */
+	/** Get the total number of rows in the table. Local only. */
 	count(): number;
 
-	/** Check if a row exists by ID. */
+	/** Check if a row exists by ID. Local only. */
 	has(id: string): boolean;
 };
 
@@ -284,7 +311,7 @@ export function attachTable<
 
 /**
  * Bind a record of plaintext `TableDefinition`s to a Y.Doc. Sugar over
- * `attachTable` — calls it for each entry and returns the helpers keyed by
+ * `attachTable`: calls it for each entry and returns the helpers keyed by
  * table name.
  *
  * For encrypted storage, call `encryption.attachTables` on the coordinator
@@ -303,6 +330,21 @@ export function attachTables<T extends TableDefinitions>(
 }
 
 /**
+ * Convert a Standard Schema (arktype, zod 4.2+, valibot 1.2+) into a typebox
+ * `TUnsafe<T>` by routing through the `~standard.jsonSchema.input` emitter.
+ * The result is a draft-2020-12 JSON Schema document with `T` carried as the
+ * inferred static type.
+ *
+ * `T` is explicit: the schema's structural inference may differ from the
+ * branded handler-input type (e.g. `partialUpdate` widens optionality, the ID
+ * slot may carry a brand). The static parameter overrides inference at the
+ * call site without changing the runtime JSON Schema.
+ */
+function toTSchema<T>(schema: CombinedStandardSchema): TUnsafe<T> {
+	return Type.Unsafe<T>(standardSchemaToJsonSchema(schema));
+}
+
+/**
  * Construct a Table from any `ObservableKvStore` and a TableDefinition.
  *
  * Exported so `@epicenter/workspace` can reuse the exact same helper logic
@@ -318,10 +360,28 @@ export function createTable<
 ): Table<InferTableRow<TTableDefinition>> {
 	type TRow = InferTableRow<TTableDefinition>;
 
-	/**
-	 * Parse and migrate a raw row value. Injects `id` into the input before
-	 * validation. Returns `Result<TRow, TableParseError>`.
-	 */
+	const rowSchema = definition.schema as CombinedStandardSchema;
+
+	const idTSchema = Type.Unsafe<string>({ type: 'string' });
+	const rowTSchema = toTSchema<TRow>(rowSchema);
+	// `partialUpdate` is arktype-specific (uses `.pick`/`.omit`/`.partial`).
+	// Multi-version tables compose a non-arktype union schema, so fall back to
+	// a permissive JSON Schema for the manifest. Runtime validation happens at
+	// the daemon envelope only, not on the action's `input` slot.
+	let patchTSchema: TUnsafe<TablePatch<TRow>>;
+	try {
+		const patchSchema = partialUpdate(rowSchema as never);
+		patchTSchema = toTSchema<TablePatch<TRow>>(
+			patchSchema as unknown as CombinedStandardSchema,
+		);
+	} catch {
+		patchTSchema = Type.Unsafe<TablePatch<TRow>>({ type: 'object' });
+	}
+	const rowsTSchema = Type.Unsafe<TRow[]>({
+		type: 'array',
+		items: standardSchemaToJsonSchema(rowSchema),
+	});
+
 	function parseRow(id: string, input: unknown): Result<TRow, TableParseError> {
 		const row = { ...(input as Record<string, unknown>), id };
 		const result = definition.schema['~standard'].validate(row);
@@ -343,57 +403,90 @@ export function createTable<
 		}
 	}
 
+	function getRow(id: string): Result<TRow | null, TableParseError> {
+		const raw = ykv.get(id);
+		if (raw === undefined) return Ok(null);
+		return parseRow(id, raw);
+	}
+
+	function setRow(row: TRow): void {
+		ykv.set(row.id, row);
+	}
+
 	return {
 		name,
 		definition,
 
-		parse(id: string, input: unknown): Result<TRow, TableParseError> {
-			return parseRow(id, input);
-		},
+		parse: parseRow,
 
-		set(row: TRow): void {
-			ykv.set(row.id, row);
-		},
+		get: defineQuery({
+			title: `Get ${name}`,
+			description: `Get a single row from \`${name}\` by id.`,
+			input: idTSchema,
+			handler: getRow,
+		}),
 
-		async bulkSet(
-			rows: TRow[],
-			options?: {
-				chunkSize?: number;
-				onProgress?: (percent: number) => void;
+		getAllValid: defineQuery({
+			title: `Get all ${name}`,
+			description: `Get every row from \`${name}\` that passes schema validation.`,
+			handler: (): TRow[] => {
+				const rows: TRow[] = [];
+				for (const [key, entry] of ykv.entries()) {
+					const { data, error } = parseRow(key, entry.val);
+					if (!error) rows.push(data);
+				}
+				return rows;
 			},
-		): Promise<void> {
-			const { chunkSize = 1000, onProgress } = options ?? {};
-			const total = rows.length;
+		}),
 
-			for (let i = 0; i < total; i += chunkSize) {
-				const chunk = rows.slice(i, i + chunkSize);
-				ykv.bulkSet(chunk.map((row) => ({ key: row.id, val: row })));
-				onProgress?.(Math.min((i + chunkSize) / total, 1));
-				await new Promise((resolve) => setTimeout(resolve, 0));
-			}
-		},
+		set: defineMutation({
+			title: `Set ${name}`,
+			description: `Insert or replace a single row in \`${name}\`.`,
+			input: rowTSchema,
+			handler: setRow,
+		}),
 
-		update(
-			id: string,
-			partial: Partial<Omit<TRow, 'id'>>,
-		): Result<TRow | null, TableParseError> {
-			const { data: current, error: currentError } = this.get(id);
-			if (currentError) return Err(currentError);
-			if (current === null) return Ok(null);
+		bulkSet: defineMutation({
+			title: `Bulk set ${name}`,
+			description: `Insert or replace many rows in \`${name}\`.`,
+			input: rowsTSchema,
+			handler: async (rows: TRow[]) => {
+				const chunkSize = 1000;
+				for (let i = 0; i < rows.length; i += chunkSize) {
+					const chunk = rows.slice(i, i + chunkSize);
+					ykv.bulkSet(chunk.map((row) => ({ key: row.id, val: row })));
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				}
+			},
+		}),
 
-			const merged = { ...current, ...partial, id };
-			const { data: validated, error: mergedError } = parseRow(id, merged);
-			if (mergedError) return Err(mergedError);
+		update: defineMutation({
+			title: `Update ${name}`,
+			description: `Patch a single row in \`${name}\` by id.`,
+			input: patchTSchema,
+			handler: (input: TablePatch<TRow>): Result<TRow | null, TableParseError> => {
+				const { id, ...partial } = input;
+				const { data: current, error: currentError } = getRow(id);
+				if (currentError) return Err(currentError);
+				if (current === null) return Ok(null);
 
-			this.set(validated);
-			return Ok(validated);
-		},
+				const merged = { ...current, ...partial, id };
+				const { data: validated, error: mergedError } = parseRow(id, merged);
+				if (mergedError) return Err(mergedError);
 
-		get(id: string): Result<TRow | null, TableParseError> {
-			const raw = ykv.get(id);
-			if (raw === undefined) return Ok(null);
-			return parseRow(id, raw);
-		},
+				setRow(validated);
+				return Ok(validated);
+			},
+		}),
+
+		delete: defineMutation({
+			title: `Delete ${name}`,
+			description: `Hard-delete a row from \`${name}\` by id.`,
+			input: idTSchema,
+			handler: (id: string) => {
+				ykv.delete(id);
+			},
+		}),
 
 		getAll(): Array<Result<TRow, TableParseError>> {
 			const results: Array<Result<TRow, TableParseError>> = [];
@@ -401,15 +494,6 @@ export function createTable<
 				results.push(parseRow(key, entry.val));
 			}
 			return results;
-		},
-
-		getAllValid(): TRow[] {
-			const rows: TRow[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const { data, error } = parseRow(key, entry.val);
-				if (!error) rows.push(data);
-			}
-			return rows;
 		},
 
 		getAllInvalid(): TableParseError[] {
@@ -436,10 +520,6 @@ export function createTable<
 				if (!error && predicate(data)) return data;
 			}
 			return undefined;
-		},
-
-		delete(id: string): void {
-			ykv.delete(id);
 		},
 
 		async bulkDelete(

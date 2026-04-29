@@ -327,7 +327,8 @@ describe('attachSqliteMaterializer', () => {
 				});
 
 				await testSetup.workspace.sqlite.whenFlushed;
-				testSetup.workspace.tables.posts.update('post-1', {
+				testSetup.workspace.tables.posts.update({
+					id: 'post-1',
 					title: 'After update',
 					published: false,
 				});

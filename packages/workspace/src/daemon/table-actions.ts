@@ -97,8 +97,7 @@ export function buildTableActions<TRow extends BaseRow>(
 			title: `Update ${tableName}`,
 			description: `Patch a single row in \`${tableName}\` by id.`,
 			input: patchInput,
-			handler: ({ id, ...patch }) =>
-				table.update(id, patch as Partial<Omit<TRow, 'id'>>),
+			handler: (input) => table.update(input as Patch),
 		}),
 
 		delete: defineMutation({
