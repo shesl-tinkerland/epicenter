@@ -55,7 +55,7 @@ The daemon stops dispatching JSON envelopes. It runs a Yjs sync state machine on
 
 ## Topology
 
-Two diagrams. The first shows the processes and which IO each attaches. The second shows the three transports a script peer uses to talk to the daemon.
+Two diagrams. The first shows the processes and which IO each attaches. The second shows the two transports a script peer uses to talk to the daemon.
 
 ### Process roles and attachments
 
@@ -470,11 +470,11 @@ epicenter rebuild <workspace>    # daemon's materializer.rebuild()
 
 These don't need a script-facing namespace because scripts shouldn't be doing them. They are administrative; they belong on the CLI.
 
-If a real "scripts need synchronous RPC dispatch to the daemon for X" use case shows up later, we add it then via `peer<DaemonExtras>(fuji.ipc.sync, ipc.daemonDeviceId)` (the cross-device mailbox machinery, retargeted at the local daemon). Not preemptive; only if proven necessary.
+If a real "scripts need synchronous RPC dispatch to the daemon for X" use case shows up later, the additive option is to extend `attachSyncHub` and `attachSyncIpc` to carry `MESSAGE_TYPE.RPC` frames (mirroring `attachSync`'s existing cross-device routing) and expose a `SyncAttachment` surface on the IPC client so `peer<T>(syncIpc, daemonDeviceId)` works. Not preemptive; only if proven necessary. The current spec deliberately keeps the IPC wire to pure Yjs sync.
 
 ## CLI as a peer of `system`
 
-The CLI has no special protocol. It is a peer of the synthetic `system` workspace, with the same three-namespace shape:
+The CLI has no special protocol. It is a peer of the synthetic `system` workspace, with the same two-namespace shape:
 
 ```ts
 const daemon = await openDaemon();   // wraps openSystemPeer() under the hood
@@ -514,16 +514,17 @@ DELETE  packages/workspace/src/daemon/list-route.test.ts
 ## What gets added
 
 ```
-ADD  packages/workspace/src/daemon/sync-hub.ts                ~200 LOC
+ADD  packages/workspace/src/daemon/sync-hub.ts                ~120 LOC
        attachSyncHub(ydoc, opts). Multiplexes sessions on daemon.sock.
-       Handles MESSAGE_TYPE.{SYNC,AWARENESS,SYNC_STATUS,RPC}.
-       Per-session origin symbols. Reconnect dedup by clientId.
+       Handles MESSAGE_TYPE.{SYNC,AWARENESS,SYNC_STATUS}. NO RPC frames
+       over the IPC socket; cross-device peer<T> RPC is unchanged on
+       cloud sync. Per-session origin symbols. Reconnect dedup by clientId.
 
-ADD  packages/workspace/src/client/sync-ipc.ts                ~150 LOC
+ADD  packages/workspace/src/client/sync-ipc.ts                ~90 LOC
        attachSyncIpc(ydoc, opts). Peer side of the unix-socket sync.
-       Exposes a SyncAttachment-shaped surface (.rpc, .find, .observe,
-       .peers) so peer<T> works against it the same way it does over
-       cloud sync.
+       Pure Yjs sync state machine. Exposes { whenSynced, status,
+       observe, close, whenDisposed, flush }. Does NOT expose .rpc /
+       .find / .peers; it isn't a SyncAttachment, just a hub client.
 
 ADD  packages/workspace/src/client/sqlite-mirror.ts           ~80 LOC
        attachSqliteMirror({ filePath }). Opens the daemon's mirror.db
@@ -531,10 +532,10 @@ ADD  packages/workspace/src/client/sqlite-mirror.ts           ~80 LOC
        { db, search(table, query, opts), [Symbol.dispose] }.
        drizzle(db, { schema }) is wrapped at the per-app peer.ts layer.
 
-ADD  packages/workspace/src/client/markdown-mirror.ts         ~60 LOC
+ADD  packages/workspace/src/client/markdown-mirror.ts         ~40 LOC
        attachMarkdownMirror({ rootPath }). Returns
-       { rootPath, list(prefix), read(id), watch(cb), [Symbol.dispose] }.
-       chokidar for watch (cross-platform fs.watch is too brittle).
+       { rootPath, list(prefix), read(id), [Symbol.dispose] }.
+       Read-only file walks; no watch surface in v3 (chokidar deferred).
 
 ADD  packages/workspace/src/shared/paths.ts                   ~40 LOC
        socketPathFor(absDir)            (already exists)
@@ -667,6 +668,8 @@ The `system.workspaces` Y.Map carries `{ id, name, guid, _v }` — the stable id
 
 15. **Composable attach surface.** `openFujiPeer({ attach: ['tables', 'sqlite'] })` opens the IPC sync and the SQLite mirror but skips the markdown mirror. Each piece is independent; scripts pay only for what they use. The IPC sync is always attached because it is the daemon's liveness contract.
 
+16. **No RPC over the IPC socket (Revelation 2).** The unix socket carries Yjs sync only (`SYNC`, `AWARENESS`, `SYNC_STATUS`). No `MESSAGE_TYPE.RPC` frames; no `peer<T>(syncIpc, deviceId)` proxy; no `fuji.daemon.X` namespace. The cross-device peer RPC mailbox in `attachSync` (cloud) is unchanged: `peer<T>(workspace.sync, 'phone')` works the same way it does today. For local server-only effects, scripts use Y.Map request entries (Path A) or daemon-internal CLI commands (Path B); for cross-device action invocation, scripts use cloud `peer<T>` as today. One form of RPC remains in the system (cloud-side, unchanged); the IPC socket has none.
+
 ## Implementation plan
 
 Nine commits, in order. Each commit compiles and passes tests independently. Steps 1-6 are additive (no deletions). Step 7 is the cliff. Steps 8-9 are validation.
@@ -676,13 +679,12 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 - New: `packages/workspace/src/daemon/sync-hub.ts` exposing `attachSyncHub(ydoc, opts)`.
 - Listens for new connections on the socket; for each, reads the JSON preamble (`{ workspace, deviceId, clientId, isEphemeral, schemaManifest }`), routes to the sync-session handler.
 - Runs the sync state machine using `@epicenter/sync`'s existing exports (`encodeSyncStep1`, `encodeSyncUpdate`, `handleSyncPayload`).
-- Multiplexes message types via the existing outer-type byte: `SYNC`, `AWARENESS`, `SYNC_STATUS`, **`RPC`**.
-- For `RPC` frames: route by target clientId. If target is the daemon's clientId for that workspace, invoke locally via the existing `handleRpcRequest` from `attach-sync.ts`. Otherwise forward the frame to the target peer's session.
+- Multiplexes message types via the existing outer-type byte: `SYNC`, `AWARENESS`, `SYNC_STATUS`. **No `RPC` frames over IPC**; the cross-device peer RPC mailbox in `attachSync` is unchanged on cloud sync.
 - Tracks connected sessions in a `Map<sessionId, SessionState>`; uses `awarenessProtocol.removeAwarenessStates` on disconnect.
 - Per-session origin symbols (`Symbol(`hub:${sessionId}`)`) so outbound listeners filter their own origin.
 - Reconnect dedup: same `clientId` reconnecting kicks the prior session.
 - Returns `{ peers(): SessionSnapshot[]; close(): Promise<void>; whenDisposed }`.
-- Tests: a unit test that attaches a fake socket pair, drives a SyncStep1 → SyncStep2 exchange, asserts state convergence; a separate test that drives an RPC frame round-trip.
+- Tests: a unit test that attaches a fake socket pair, drives a SyncStep1 → SyncStep2 exchange, asserts state convergence.
 - No callers yet; daemon still binds the existing Hono app.
 
 ### 2. Add `attachSyncIpc` (peer side)
@@ -690,11 +692,10 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 - New: `packages/workspace/src/client/sync-ipc.ts` exposing `attachSyncIpc(ydoc, opts)`.
 - Connects to the socket via `Bun.connect({ unix })`; sends the preamble; awaits the preamble reply (with encryption keys).
 - Calls `opts.encryption.applyKeys(keys)` to seed the script's keyring before any sync frame is processed.
-- Drives the peer side of the sync state machine using the same `@epicenter/sync` exports.
-- Exposes a `SyncAttachment`-shaped surface so `peer<T>(syncIpc, deviceId)` works against it: `.rpc(target, action, input)`, `.peers()`, `.find(deviceId)`, `.observe(cb)`, plus `daemonDeviceId` and `daemonClientId` from the preamble reply.
+- Drives the peer side of the sync state machine using the same `@epicenter/sync` exports. **No SyncAttachment surface**; the IPC client is not a `peer<T>` target. Cross-device action dispatch stays on cloud sync.
 - Reconnect supervisor: exponential backoff mirroring `attachSync`'s `runLoop`. On reconnect, fresh `STEP1`.
-- Returns `{ whenSynced; status; sync; daemonDeviceId; daemonClientId; close(); whenDisposed; flush() }`.
-- Tests: fake socket pair drives SyncStep1/Step2 round trip; RPC frame round trip; reconnect recovers; `flush()` resolves when `localVersion === ackedVersion`.
+- Returns `{ whenSynced; status; observe; close; whenDisposed; flush() }`.
+- Tests: fake socket pair drives SyncStep1/Step2 round trip; reconnect recovers; `flush()` resolves when `localVersion === ackedVersion`.
 
 ### 3. Wire `attachSyncHub` into `createWorkspaceServer`; drop Hono; add WAL pragma
 
@@ -710,7 +711,7 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 ### 4. Add `attachSqliteMirror` and `attachMarkdownMirror` (peer side, read-only)
 
 - New: `packages/workspace/src/client/sqlite-mirror.ts`. Opens `<filePath>` with `{ readonly: true }`; runs `PRAGMA query_only`. Returns `{ db, search(table, query, opts), [Symbol.dispose]() }`. The `search` helper wraps the same FTS5 SELECT used by `attachSqliteMaterializer.search` so the surface is symmetric across writer and reader.
-- New: `packages/workspace/src/client/markdown-mirror.ts`. Returns `{ rootPath, list(prefix?), read(id), watch(cb), [Symbol.dispose]() }`. `watch` wraps chokidar (cross-platform `fs.watch` is too brittle); `list` and `read` are flat fs walks.
+- New: `packages/workspace/src/client/markdown-mirror.ts`. Returns `{ rootPath, list(prefix?), read(id), [Symbol.dispose]() }`. `list` and `read` are flat fs walks. No `watch` surface in v3 (chokidar deferred to v4 if a real consumer needs it).
 - New: `packages/workspace/src/shared/paths.ts` adds `mirrorPathFor(absDir, guid)` and `markdownPathFor(absDir, guid)` helpers (alongside the existing `socketPathFor`).
 - Tests: hand-write a SQLite file via `attachSqliteMaterializer` (with WAL), open it with `attachSqliteMirror` from a sibling process, assert FTS5 query returns the right rows. Same for markdown: write tree, open mirror, assert `list` and `read` work.
 
@@ -737,7 +738,7 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 
 ### 8. Documentation pass
 
-- Rewrite `packages/workspace/docs/architecture/process-topology.md` to describe the three-namespace + writer/reader-split model.
+- Rewrite `packages/workspace/docs/architecture/process-topology.md` to describe the two-namespace + writer/reader-split model.
 - Update `packages/workspace/README.md` (Multi-Device Sync Topology and Client vs Server sections) and `packages/workspace/docs/architecture/action-dispatch.md` (cross-references).
 - Update `packages/workspace/CLAUDE.md` and `apps/*/CLAUDE.md` to reference the new factories.
 - Add `peer.ts` and `db-schema.ts` rows to the `workspace-app-layout` skill description (the three-file pattern grows to five for apps with a daemon).
@@ -760,7 +761,7 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
   console.log('tagged:', tagged.length);
   ```
   Verify writes appear in the daemon's materializer output, the daemon's SQLite log, the cloud sync server, AND the script's read of the mirror.
-- Performance check: measure cold-start latency of `openFujiPeer` against a daemon with 10k entries loaded. Target: < 50 ms wall-clock from `openFujiPeer()` to `whenSynced` resolved. Mirror open is essentially free (file open + PRAGMA).
+- Performance check: measure cold-start latency of `openFujiPeer` against a daemon with 10k entries loaded. Target: `<100ms` wall-clock from `openFujiPeer()` to `whenSynced` resolved. Mirror open is essentially free (file open + PRAGMA). If actual is significantly higher, profile encode/apply path before commit 7.
 - Multi-script soak: invoke 1000 ephemeral scripts that each write one row; verify daemon state-vector growth matches "one entry per distinct script identity," not "one per invocation."
 - Concurrency soak: run 10 long-running scripts each issuing 100 random `sqlite.search(...)` queries against the mirror while the daemon writes 100 new rows. Verify no SQLITE_BUSY, no read errors, all queries complete.
 
@@ -782,8 +783,8 @@ This is **not a code-reduction refactor**. The honest LOC math:
 ```
 DELETIONS                                              ADDITIONS
 ─────────                                              ─────────
-client/remote.ts                       70             daemon/sync-hub.ts                ~200
-client/remote-workspace-types.ts       89             client/sync-ipc.ts                ~150
+client/remote.ts                       70             daemon/sync-hub.ts                ~120
+client/remote-workspace-types.ts       89             client/sync-ipc.ts                 ~90
 client/connect-daemon.ts               65             client/sqlite-mirror.ts            ~80
 daemon/run-handler.ts                 121             client/markdown-mirror.ts          ~60
 daemon/run-errors.ts                   73             shared/ipc-framing.ts              ~30
@@ -793,18 +794,19 @@ client/connect-daemon.test.ts        ~100             3 × peer.ts (apps)       
 daemon/list-route.test.ts            ~120             3 × db-schema.ts (apps)             ~90
                                                       server.ts sync-socket bind          ~30
                                                       materializer WAL pragma              ~1
-                                                      sync-hub.test.ts                   ~150
-                                                      sync-ipc.test.ts                   ~150
+                                                      sync-hub.test.ts                   ~120
+                                                      sync-ipc.test.ts                   ~120
                                                       sqlite-mirror.test.ts              ~150
-                                                      markdown-mirror.test.ts            ~120
+                                                      markdown-mirror.test.ts             ~80
                                                       peer.test.ts × 3                   ~150
                                     ─────                                              ─────
-                                     ~894                                              ~1511
+                                     ~894                                              ~1271
 
-Net LOC: roughly +617. Notably positive.
+Net LOC: roughly +377. Slightly positive. The IPC RPC plumbing (~140 LOC + tests)
+and the markdown watcher (~40 LOC + tests) came out as deliberate simplifications.
 ```
 
-Two deps come out (`hono`, `@hono/standard-validator`); `chokidar` and `drizzle-orm` may go in if not already present (chokidar is the markdown watcher; drizzle is consumer-side, so its inclusion lives in app `package.json`s, not the workspace package).
+Two deps come out (`hono`, `@hono/standard-validator`); no new deps go into `@epicenter/workspace`. `drizzle-orm` may appear in consumer `apps/*/package.json` for the per-app `db-schema.ts` and the `peer.ts` Drizzle wrapper, but it stays out of the workspace package itself.
 
 The win is not LOC. The win is in four dimensions:
 
@@ -845,41 +847,29 @@ The earlier questions either resolved or got promoted to invariants. The remaini
 - ~~Awareness on the script side~~: promoted to invariant (`isEphemeral: true` default, awareness off unless opted in).
 - ~~Two modes on the unix socket~~: collapsed to one. Every connection is a sync session; `system` is a synthetic workspace, not a separate protocol.
 - ~~Action mailbox routing for a script-facing `fuji.daemon.X` namespace~~: dropped. The namespace itself is gone in favor of composability; server-only side effects use Y.Doc-mediated request entries (Path A) or daemon-internal CLI commands (Path B). The cross-device peer RPC mailbox in `attachSync` is unchanged.
+- ~~`KEYRING_UPDATE` frame semantics~~: defer. Long-running peers are not a real workload yet; rotation is yearly-ish. Ephemeral peers reconnect every invocation and pick up keys fresh. We accept "ValidationFailed until reconnect" for the rare long-running peer case. Additive to add the push frame later.
+- ~~Awareness payload shape~~: lock to `{ clientId, deviceId, workspace, connectedAt }` only. No `processInfo`, no extensible `meta` slot. Long-running peers are rare; we don't need the richness yet. Additive to extend later.
+- ~~`epicenter run` deletion vs survival~~: keep. ~30 LOC of CLI plumbing on top of `openFujiPeer()`. Pays for itself in shell ergonomics and tab completion.
+- ~~Embedded CLI use case~~: defer to a future spec. Consumers import the full workspace package.
+- ~~Hot-reload of `epicenter.config.ts`~~: restart-only. Not in scope; the dev workflow already involves editing a TS file at the terminal.
+- ~~Multiple-daemons-same-machine convergence~~: accept current behavior (B). Cloud sync handles convergence between two daemons sharing a workspace ID; awareness shows them as same-`deviceId` siblings; `peer<T>` resolution picks lowest `clientId`. If a real complaint emerges, add `absDir` to awareness payload for disambiguation; additive.
+- ~~Failed-workspace recovery~~: stay-failed-until-restart. Failed hydration is rare; auto-retry can mask real bugs; manual recovery is its own design concern.
+- ~~Mirror staleness contract (Q9 from earlier draft)~~: documented as Rule 1 below; no `flush()` primitive shipped.
+- ~~Script attaches its own materializer~~: supported but discouraged. JSDoc warning on `attachSqliteMaterializer` notes the cold-start cost and that the file path must NOT collide with the daemon's mirror.
+- ~~Mirror schema versioning~~: skip. Vault is built from the same commit as the daemon. Published-consumer version check is deferred until there's a published consumer.
+- ~~chokidar / `attachMarkdownMirror.watch`~~: skip. Ship `list` and `read` only in v3. Add `watch` later if a real consumer wants it.
+- ~~Mirror file lifecycle on daemon restart~~: no retry policy in the mirror primitive. Document the contract: scripts that survive a daemon restart catch `SQLITE_BUSY` themselves with a small try/catch.
 
-### Still open
+### Still open (decisions remaining)
 
-1. **`KEYRING_UPDATE` frame semantics.** The daemon rotates encryption keys; in-flight script peers received keys at handshake. Two options: push a `KEYRING_UPDATE` frame and have peers call `encryption.applyKeys(newKeys)` (graceful for long-running peers); or don't push, peers degrade to `unreadableEntryCount > 0` until they reconnect (simpler, ephemeral peers don't care). The right call depends on how often keys rotate during long-running sessions. Probably push, but frame format and in-flight ordering need spec language.
+1. **Cold-start performance target.** Original target: `<50ms wall-clock from openFujiPeer() to whenSynced` for 10k entries. Verbal alignment from review: a longer opening time is acceptable; aim `<100ms` for 10k entries, `<500ms` for 100k. Spike step 1+2 on real fuji data before commit 7 to confirm. If it blows the budget, profile encode/apply path before shipping.
 
-2. **Long-running peer awareness payload shape.** A long-running script (opted in via `isEphemeral: false`) appears in `daemon.peers`. Awareness state schema: at minimum `clientId`, `deviceId`, `connectedAt`, `workspace`; maybe `processInfo` (cmdline, pid). Open `meta` slot for app-specific extension?
+2. **Read-after-write coherence: pattern, not primitive.** Documented contract:
 
-3. **`epicenter run` deletion vs survival.** If `epicenter run <path> <input>` opens an ephemeral peer, invokes a method, and exits, it duplicates what a tiny TS script does. Keep for shell ergonomics, or delete in favor of `bun run`? Lean: keep, because shell ergonomics matter; the implementation is now thin enough that this is a UX decision.
+   **Rule (default):** for "did the value I just wrote land?" — read through `fuji.tables.X.get(id)`, not through `fuji.sqlite`. The Y.Doc is synchronous and coherent with your own writes; the SQLite mirror lags by up to one materializer debounce window (~100ms). The Y.Doc is the source of truth; SQLite is one derived view. Use the right tool.
 
-4. **Embedded CLI use case.** Out of scope; flagged for future spec if a consumer needs a thin client that doesn't import the full workspace builder.
+   **Rare case:** scripts that need read-after-write through SQLite must call `await fuji.ipc.flush()` (resolves when daemon acked) and then either poll the mirror briefly or `await new Promise(r => setTimeout(r, MATERIALIZER_DEBOUNCE_MS + 20))`. No formal `whenFlushed` primitive in v3; if read-after-write becomes common, add the primitive then.
 
-5. **Hot-reload of `epicenter.config.ts`.** The `system.workspaces` Y.Map updates when config loads. If config changes (new workspace added), existing CLI peers observing `system.workspaces` will see it; existing per-workspace peers (e.g. fuji) are unaffected because fuji's Y.Doc didn't change. Confirm whether config hot-reload is in scope or "restart the daemon."
+   Why we're fine: tagging scripts, pipeline scripts, and observation scripts are the common workloads, none need read-after-write through SQLite. Interactive REPLs and tests are the cases where it matters; both can afford the explicit wait.
 
-6. **Multiple-daemons-same-machine convergence path.** Two daemons in different folders for the same workspace ID converge through the cloud (~50-300ms RTT for what is effectively LAN). Suboptimal but not pathological. If it becomes a complaint, daemon-to-daemon discovery on the same host could repurpose `attachSyncHub` (each daemon as a peer of the other's hub). Out of scope.
-
-7. **Cold-start performance target.** "<50ms wall-clock from `openFujiPeer()` to `whenSynced` resolved" for 10k entries. Per-session origin filtering adds nanoseconds per fanout (negligible). Schema manifest exchange adds one frame each direction (~1ms localhost). Mirror open is a file open + PRAGMA (~1ms). Verify the budget holds.
-
-8. **Failed-workspace recovery.** A workspace enters `failed` phase due to SQLite hydration error. Auto-retry on a timer, manual `epicenter recover <workspace>` command, or stay failed until daemon restart? Lean: stay failed until restart; rare enough that automatic recovery isn't worth the complexity.
-
-### New (writer/reader split)
-
-9. **Read-write coherence: the recommended pattern.** Decided, not really open. Two rules, both documentable:
-
-   **Rule 1 (default):** for "did the value I just wrote land?" — read through `fuji.tables.X.get(id)`, not through `fuji.sqlite`. The Y.Doc is synchronous and coherent with your own writes; the SQLite mirror lags by up to one materializer debounce window (~100ms). The Y.Doc is the source of truth; SQLite is one derived view. Use the right tool.
-
-   **Rule 2 (escape hatch for the rare case):** for "I genuinely need SQLite to reflect my recent write before I run a complex query" — `await fuji.flush()` waits until (a) the daemon has acked the script's pending writes via SYNC_STATUS, and (b) the daemon's materializer has flushed its debounced batch to the mirror file. Implemented by lifting `attachSync`'s SYNC_STATUS counter into the IPC variant, plus a single `mirror.flush()` primitive on `attachSqliteMaterializer` exposed over the IPC sync as a small RPC frame.
-
-   Why this is fine, not a wart: the read-then-write-then-read-immediately workflow is rare in practice. Tagging scripts ("read all untagged, mark them tagged, exit") don't need it. Pipeline scripts ("read state, mutate, exit") don't need it. The cases where it matters are interactive REPLs and tests, both of which can afford to call `flush()` explicitly.
-
-10. **Could the materializer skip debouncing entirely?** If `attachSqliteMaterializer` committed each Y.Doc update to SQLite synchronously (no debounce), the coherence window would shrink to "IPC sync RTT + apply" — sub-millisecond on local IPC, effectively coherent. The cost is more SQLite write transactions per second; SQLite handles thousands per second so probably fine for typical write rates, but a 10k-entry bulk import would now be 10k transactions. Spike: measure the throughput cost of debounce-off in a realistic workload. If it's small, drop debounce entirely and the coherence window goes away. If it's significant, keep debounce + `flush()` per Rule 2.
-
-11. **Script attaches its own materializer.** Some scripts will want their own `attachSqliteMaterializer` (option 2 from the design conversation): different FTS columns than the daemon, no daemon dependency, raw SQL on a script-private mirror. Should we document this as a supported pattern? Lean: yes, with a "use only when you have a real reason" warning. The cold-start cost is real.
-
-12. **Mirror schema versioning.** Daemon and script both import `db-schema.ts`. If the script's bundle ships a stale schema (vault checked in at a fixed revision, daemon updated), Drizzle types will lie and queries may fail. Probably fine within a single monorepo (build pins both); for published consumers, a runtime version check at peer init.
-
-13. **`attachMarkdownMirror.watch` adds a chokidar dependency.** chokidar is ~50KB + dependencies, but cross-platform `fs.watch` is too brittle to rely on (rename semantics differ across macOS/Linux/Windows). Acceptable cost? Lean: yes, but flag for review.
-
-14. **Mirror file lifecycle.** What happens if the daemon is restarted while a script is mid-read of `mirror.db`? WAL handles concurrent reads/writes during normal operation, but daemon restart involves closing the WAL. Worst case the script gets a `SQLITE_NOTADB` or stale snapshot. Solution: scripts retry on transient SQLite errors with a small backoff. Document this as a `attachSqliteMirror` invariant.
+3. **Could the materializer skip debouncing entirely?** Spike: if `attachSqliteMaterializer` committed each Y.Doc update synchronously (no debounce), the coherence window shrinks to sub-millisecond. Cost: more SQLite transactions per second. SQLite handles thousands per second easily, but a 10k-entry bulk import would become 10k transactions instead of one. Worth measuring on realistic workloads before commit 7. If throughput is acceptable, drop debounce entirely and Rule from #2 collapses ("just read the mirror, it's already current"). If not, keep debounce and the documented contract stands.
