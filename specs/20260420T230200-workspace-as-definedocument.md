@@ -1,10 +1,13 @@
 # Workspace as `defineDocument` — collapse the last asymmetry
 
 **Date**: 2026-04-20
-**Status**: Partial — architectural core landed, consumer migration deferred to successor
+**Status**: Closed (2026-04-28). Architectural core landed: `attachEncryption`, `attachTables`, `attachKv` extracted and shipped; the seven consumer apps moved to inline `attach*` composition through the work captured in `20260421T010000` and `20260421T170000`. The factory-of-factories conclusion this spec landed (a `defineWorkspace` returning a `DocumentFactory<Id, WorkspaceBundle>`) was subsequently *superseded*: `defineWorkspace` was deleted and apps now use shared "open" helpers (e.g. `openFuji()` in `apps/fuji/src/lib/fuji/index.ts`) plus per-consumer wrappers. The extractions stand; the factory framing does not.
 **Depends on**: `specs/20260420T230100-collapse-document-framework.md`
 **Follows**: `specs/20260420T220000-simplify-definedocument-primitive.md`, `specs/20260420T152026-definedocument-primitive.md`
-**Followed by**: `specs/20260420T234500-consumer-migration-to-defineworkspace.md`
+**Followed by**: `specs/20260420T234500-consumer-migration-to-defineworkspace.md` (also superseded), `specs/20260421T010000-collapse-defineworkspace-into-definedocument.md` (delivered the deletion), `specs/20260421T170000-collapse-document-and-workspace-primitives.md` (deleted `createWorkspace` and codified the manual composition pattern), `specs/20260429T004302-workspace-as-daemon-transport.md` rev 2 (depends on the post-deletion shape).
+
+> **Closure note (2026-04-28):**
+> Read this spec for context on why the `attach*` extractions exist. Do **not** read it as the current API surface. There is no `defineWorkspace`, no `WorkspaceBundle` cached by a `DocumentFactory`, no `factory.open(id)` style. Apps construct workspaces by calling a shared "open" helper that returns `{ ydoc, tables, kv, encryption, actions, [Symbol.dispose] }`, then per-consumer wrappers (browser app, daemon, tests) compose IO around that core. See `apps/fuji/src/lib/fuji/{index.ts,browser.ts,client.ts}` for the canonical pattern.
 
 ## TL;DR
 

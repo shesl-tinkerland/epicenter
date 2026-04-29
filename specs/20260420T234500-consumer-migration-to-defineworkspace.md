@@ -1,8 +1,12 @@
 # Consumer migration to `defineWorkspace` — unblock, redesign, execute
 
 **Date**: 2026-04-20
-**Status**: Draft
-**Follows**: `specs/20260420T230200-workspace-as-definedocument.md` (partial)
+**Status**: **Superseded** (2026-04-28). The consumer migration this spec planned no longer applies: there is no `defineWorkspace` to migrate to. `20260421T010000` and `20260421T170000` deleted both `defineWorkspace` and `createWorkspace`; the seven consumer apps moved to inline `attach*` composition with shared "open" helpers (e.g. `openFuji()`). The two blockers this spec identified remain real concerns but live as their own problems, no longer gated on a workspace primitive migration:
+> - **Blocker 1 (`hasLocalChanges` on `attachSync.SyncStatus`)**: still missing from `@epicenter/document`'s `attachSync`. Worth its own spec; affects safe-sign-out across every app that uses `SyncStatusPopover`.
+> - **Blocker 2 (`SyncStatusPopover` shape coupling)**: redesign around a `SyncView`-bag prop is still the right answer; the spec text below remains a useful design starting point.
+>
+> Read this spec only as historical context for the popover/`hasLocalChanges` design discussion. The migration sequencing it proposes is no longer load-bearing.
+**Follows**: `specs/20260420T230200-workspace-as-definedocument.md` (partial; also closed)
 
 ## TL;DR
 
