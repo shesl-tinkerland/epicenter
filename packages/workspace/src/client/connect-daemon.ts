@@ -20,6 +20,11 @@
  * });
  * await fuji.tables.entries.update({ id, tags: ['untagged'] });
  * ```
+ *
+ * Daemon-scope calls (peers, list across workspaces) live on `DaemonClient`
+ * directly — construct one with `daemonClient(socketPathFor(absDir))` and
+ * call `.peers()` / `.list()` against the same socket. They are not
+ * reachable through this workspace handle.
  */
 
 import { DaemonError, daemonClient, pingDaemon } from '../daemon/client.js';
