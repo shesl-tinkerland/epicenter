@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
@@ -24,6 +25,23 @@ export const AttachSqliteError = defineErrors({
 		message: '[attachSqlite] PRAGMA journal_mode = WAL failed',
 		cause,
 	}),
+	/**
+	 * Readonly mode requires the SQLite file to already exist. Opening a
+	 * missing file `{ readonly: true }` would either succeed silently with
+	 * no tables or surface as an opaque driver error; the typed variant
+	 * lets callers distinguish "no daemon ever ran" from a real failure.
+	 */
+	ReadonlyMissingFile: ({ filePath }: { filePath: string }) => ({
+		message: `[attachSqlite] readonly mode requires existing file: ${filePath}`,
+		filePath,
+	}),
+	/**
+	 * `clearLocal()` was called on a readonly attachment. Programmer error,
+	 * not a recoverable runtime condition.
+	 */
+	ClearLocalDisabledInReadonly: () => ({
+		message: '[attachSqlite] clearLocal disabled in readonly mode',
+	}),
 });
 export type AttachSqliteError = InferErrors<typeof AttachSqliteError>;
 
@@ -45,8 +63,15 @@ export type SqliteAttachment = {
 
 export function attachSqlite(
 	ydoc: Y.Doc,
-	{ filePath }: { filePath: string },
+	{
+		filePath,
+		readonly,
+	}: { filePath: string; readonly?: boolean },
 ): SqliteAttachment {
+	if (readonly && !existsSync(filePath)) {
+		throw AttachSqliteError.ReadonlyMissingFile({ filePath }).error;
+	}
+
 	let db: Database | null = null;
 	let bytesSinceCompaction = 0;
 	let compactionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -73,6 +98,20 @@ export function attachSqlite(
 	};
 
 	const whenLoaded = (async () => {
+		if (readonly) {
+			db = new Database(filePath, { readonly: true });
+			// File is owned by the writer; existence was checked synchronously
+			// above. No CREATE TABLE, no WAL pragma (the writer set it), no
+			// updateV2 listener, no compaction timer: pure snapshot consumer.
+			const rows = db.query('SELECT data FROM updates ORDER BY id').all() as {
+				data: Buffer;
+			}[];
+			for (const row of rows) {
+				Y.applyUpdateV2(ydoc, new Uint8Array(row.data));
+			}
+			return;
+		}
+
 		await mkdir(path.dirname(filePath), { recursive: true });
 
 		db = new Database(filePath);
@@ -106,6 +145,13 @@ export function attachSqlite(
 
 	ydoc.once('destroy', () => {
 		try {
+			if (readonly) {
+				if (db) {
+					db.close();
+					db = null;
+				}
+				return;
+			}
 			resetCompactionTimer();
 			ydoc.off('updateV2', updateHandler);
 			if (db) {
@@ -122,6 +168,9 @@ export function attachSqlite(
 		whenLoaded,
 		clearLocal: () =>
 			Promise.resolve().then(() => {
+				if (readonly) {
+					throw AttachSqliteError.ClearLocalDisabledInReadonly().error;
+				}
 				db?.run('DELETE FROM updates');
 			}),
 		whenDisposed,
