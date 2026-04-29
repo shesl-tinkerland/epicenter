@@ -28,7 +28,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-import { connectWorkspace, epicenterPaths } from '@epicenter/cli';
+import { connectWorkspace } from '@epicenter/cli';
 import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
 import {
@@ -65,10 +65,16 @@ const { persistence, sync, whenReady } = connectWorkspace({
 
 /**
  * Per-file content persistence via `attachSqlite`. Each content Y.Doc writes
- * its own `{guid}.db` under `~/.epicenter/persistence/{workspaceId}/content/`.
- * Survives restarts without relying on sync hydration.
+ * its own `{guid}.db` under `<absDir>/.epicenter/persistence/{workspaceId}/content/`,
+ * matching the per-workspace SQLite convention from the workspace package.
  */
-const CONTENT_DIR = join(epicenterPaths.home(), 'persistence', WORKSPACE_ID, 'content');
+const CONTENT_DIR = join(
+	import.meta.dir,
+	'.epicenter',
+	'persistence',
+	WORKSPACE_ID,
+	'content',
+);
 const fileContentDocs = createDisposableCache(
 	(fileId: string) =>
 		createFileContentDoc({
