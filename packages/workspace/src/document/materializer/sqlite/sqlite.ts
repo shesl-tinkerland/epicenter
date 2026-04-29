@@ -17,6 +17,7 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
+import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '../../../shared/actions.js';
 import { createLogger, type Logger } from 'wellcrafted/logger';
@@ -34,6 +35,17 @@ export const SqliteMaterializerError = defineErrors({
 	/** Debounced flush of pending row writes to the mirror database failed. */
 	SyncFailed: ({ cause }: { cause: unknown }) => ({
 		message: `[attachSqliteMaterializer] Failed to sync SQLite materializer: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
+	/**
+	 * Setting `PRAGMA journal_mode = WAL` failed. Non-fatal: in-memory drivers
+	 * (`:memory:`) and some test fakes do not honor the pragma. The
+	 * materializer proceeds with the driver default. Production daemons
+	 * should always run on a real on-disk file where WAL is supported, since
+	 * peer-side `attachSqliteMirror` relies on WAL for concurrent reads.
+	 */
+	WalPragmaFailed: ({ cause }: { cause: unknown }) => ({
+		message: `[attachSqliteMaterializer] Failed to enable WAL journal mode: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
 	/** An FTS5 MATCH query raised inside the mirror database. */
@@ -300,6 +312,19 @@ export function attachSqliteMaterializer(
 		// Close the registration window: any further `.table()` call throws,
 		// even if init errors or disposes mid-flight below.
 		isRegistrationOpen = false;
+		if (isDisposed) return;
+
+		// Enable WAL so the script-side `attachSqliteMirror` can open the
+		// same file `{ readonly: true }` and run concurrent reads against
+		// snapshot pages while the daemon writes. Sequenced BEFORE DDL so
+		// the journal mode is set on the file header before any CREATE TABLE
+		// touches it. Failure is logged (typically `:memory:` in tests) and
+		// the materializer proceeds with the driver default.
+		const walResult = await tryAsync({
+			try: async () => db.run('PRAGMA journal_mode = WAL'),
+			catch: (cause) => SqliteMaterializerError.WalPragmaFailed({ cause }),
+		});
+		if (walResult.error !== null) log.warn(walResult.error);
 		if (isDisposed) return;
 
 		for (const [tableName, entry] of registered) {

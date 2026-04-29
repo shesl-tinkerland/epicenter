@@ -12,7 +12,6 @@ import {
 	type IpcDialResult,
 } from './sync-ipc.js';
 import { Err, Ok } from 'wellcrafted/result';
-import { defineErrors } from 'wellcrafted/error';
 
 // In-memory channel pair (mirrors the helper in sync-hub.test.ts but kept
 // local so each test file is independently readable).
@@ -218,19 +217,13 @@ describe('attachIpcSyncClient', () => {
 	});
 
 	it('treats a HandshakeRejected reply as a fatal failure (no infinite retry)', async () => {
-		const FakeError = defineErrors({
-			SchemaMismatch: ({ field }: { field: string }) => ({
-				message: `schema fingerprint mismatch on ${field}`,
-				field,
-			}),
-		});
 		let dialCount = 0;
 		const connect = async (): Promise<IpcDialResult> => {
 			dialCount += 1;
 			return Err({
 				name: 'HandshakeRejected',
 				message: 'rejected: SchemaMismatch',
-				tag: 'SchemaMismatch',
+				daemonErrorName: 'SchemaMismatch',
 			} as never);
 		};
 
@@ -247,7 +240,6 @@ describe('attachIpcSyncClient', () => {
 
 		await ipc.close();
 		clientDoc.destroy();
-		void FakeError; // referenced for the tag shape parity with daemon side
 	});
 
 	it('exchanges awareness state with the server', async () => {

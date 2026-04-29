@@ -70,16 +70,21 @@ export type IpcPreambleReply = {
 };
 
 export const IpcSyncClientError = defineErrors({
-	/** The handshake's preamble reply carried a typed error from the daemon. */
+	/**
+	 * The handshake's preamble reply carried a typed error from the daemon.
+	 * `daemonErrorName` echoes the wellcrafted variant `name` from the wire
+	 * (`'NoSuchWorkspace' | 'BadPreamble' | 'PreambleSchemaMismatch' | ...`)
+	 * so callers can switch on it without a separate string vocabulary.
+	 */
 	HandshakeRejected: ({
-		tag,
+		daemonErrorName,
 		message,
 	}: {
-		tag: string;
+		daemonErrorName: string;
 		message: string;
 	}) => ({
-		message: `[attachIpcSyncClient] daemon rejected handshake: ${tag}: ${message}`,
-		tag,
+		message: `[attachIpcSyncClient] daemon rejected handshake (${daemonErrorName}): ${message}`,
+		daemonErrorName,
 	}),
 	/** A connect attempt threw before a session could start. */
 	ConnectFailed: ({ cause }: { cause: unknown }) => ({
@@ -590,14 +595,16 @@ async function defaultBunDial(
 		channel.close();
 		return Err(IpcSyncClientError.ConnectFailed({ cause }).error);
 	}
-	const envelope = parsed as { data: IpcPreambleReply | null; error: unknown };
+	const envelope = parsed as {
+		data: IpcPreambleReply | null;
+		error: { name?: string; message?: string } | null;
+	};
 	if (envelope.error) {
 		channel.close();
-		const err = envelope.error as { _tag?: string; message?: string };
 		return Err(
 			IpcSyncClientError.HandshakeRejected({
-				tag: err._tag ?? 'Unknown',
-				message: err.message ?? 'no message',
+				daemonErrorName: envelope.error.name ?? 'Unknown',
+				message: envelope.error.message ?? 'no message',
 			}).error,
 		);
 	}
