@@ -1,12 +1,31 @@
 import { Database } from 'bun:sqlite';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { defineErrors, type InferErrors } from 'wellcrafted/error';
+import { createLogger } from 'wellcrafted/logger';
 import * as Y from 'yjs';
 import {
 	COMPACTION_BYTE_THRESHOLD,
 	COMPACTION_DEBOUNCE_MS,
 	compactUpdateLog,
 } from './sqlite-update-log.js';
+
+const logger = createLogger('attachSqlite');
+
+/** Errors surfaced by `attachSqlite`, both at the boundary and via the logger. */
+export const AttachSqliteError = defineErrors({
+	/**
+	 * `PRAGMA journal_mode = WAL` failed. Logged, not thrown: drivers like
+	 * `:memory:` legitimately reject WAL, and the writer can proceed with
+	 * the default journal mode (concurrent readers just lose snapshot
+	 * isolation). Mirrors the materializer's `WalPragmaFailed`.
+	 */
+	WalPragmaFailed: ({ cause }: { cause: unknown }) => ({
+		message: '[attachSqlite] PRAGMA journal_mode = WAL failed',
+		cause,
+	}),
+});
+export type AttachSqliteError = InferErrors<typeof AttachSqliteError>;
 
 export type SqliteAttachment = {
 	/**
@@ -57,6 +76,16 @@ export function attachSqlite(
 		await mkdir(path.dirname(filePath), { recursive: true });
 
 		db = new Database(filePath);
+		// Enable WAL so a future reader can open the same file
+		// `{ readonly: true }` and run snapshot reads concurrently with this
+		// writer. Some drivers (`:memory:`, certain test setups) reject WAL:
+		// log and continue with the driver default rather than failing the
+		// attachment. Mirrors the materializer's WAL pragma.
+		try {
+			db.run('PRAGMA journal_mode = WAL');
+		} catch (cause) {
+			logger.warn(AttachSqliteError.WalPragmaFailed({ cause }));
+		}
 		db.run(
 			'CREATE TABLE IF NOT EXISTS updates (id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL)',
 		);
