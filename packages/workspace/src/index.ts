@@ -311,6 +311,8 @@ export { buildTableActions } from './daemon/table-actions.js';
 // ════════════════════════════════════════════════════════════════════════════
 
 export { buildRemoteWorkspace } from './client/remote.js';
+export { connectDaemon } from './client/connect-daemon.js';
+export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export { RemoteNotSupported } from './client/remote-not-supported.js';
 export type {
 	RemoteAction,

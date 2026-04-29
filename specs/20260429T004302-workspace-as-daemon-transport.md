@@ -358,6 +358,8 @@ export function buildRemoteWorkspace<T>(
 
 ### Phase 6: add `connectDaemon`
 
+> Done 2026-04-28: added `packages/workspace/src/client/connect-daemon.ts` (`connectDaemon<T>({ id, absDir? })` -> `Promise<RemoteWorkspace<ReturnType<T>>>`) and `packages/workspace/src/client/find-epicenter-dir.ts` (upward walk from cwd looking for `epicenter.config.ts` or a `.epicenter/` directory; throws on miss). Extended `DaemonError.Required` to take an optional `id` so the thrown error carries the workspace selector for the renderer; `getDaemon` callers continue to pass `{ absDir }` only and read the same name. Re-exported `connectDaemon` and `findEpicenterDir` from `@epicenter/workspace`. Pragmatic deviation from the spec: `connectDaemon` passes `id` straight through to `buildRemoteWorkspace` as the wire selector (today: human-facing `name`, per Phase 2; long-term: `ydoc.guid`). 5 unit tests cover `findEpicenterDir` (config marker, .epicenter dir marker, nested walk-up, root miss) and `connectDaemon` no-daemon failure (throws `DaemonError.Required` with `absDir` and `id` populated). Workspace + CLI typechecks clean; client tests 18/18 pass; full workspace suite shows only the pre-existing `system.describe` / `describePeer` failures unrelated to this phase.
+
 ```ts
 // packages/workspace/src/client/connect-daemon.ts
 export async function connectDaemon<T extends (...args: any[]) => any>(

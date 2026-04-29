@@ -69,9 +69,13 @@ export const DaemonError = defineErrors({
 		message: `No ${CONFIG_FILENAME} found in ${absDir}`,
 		absDir,
 	}),
-	Required: ({ absDir }: { absDir: string }) => ({
-		message: `no server running for ${absDir}; start one with \`epicenter serve\` first`,
+	Required: ({ absDir, id }: { absDir: string; id?: string }) => ({
+		message:
+			id !== undefined
+				? `no daemon running for ${absDir} (workspace ${id}); start one with \`epicenter serve\` first`
+				: `no server running for ${absDir}; start one with \`epicenter serve\` first`,
 		absDir,
+		id,
 	}),
 	Timeout: ({
 		socketPath,
