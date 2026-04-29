@@ -24,6 +24,7 @@
 
 import { DaemonError, daemonClient, pingDaemon } from '../daemon/client.js';
 import { socketPathFor } from '../daemon/paths.js';
+import type { Actions } from '../shared/actions.js';
 import { findEpicenterDir } from './find-epicenter-dir.js';
 import { buildRemoteWorkspace } from './remote.js';
 import type { RemoteWorkspace } from './remote-workspace-types.js';
@@ -44,7 +45,9 @@ import type { RemoteWorkspace } from './remote-workspace-types.js';
  * resolved socket. Start one with `epicenter serve`. There is no
  * auto-spawn: explicit lifecycle is the contract.
  */
-export async function connectDaemon<W>({
+export async function connectDaemon<
+	W extends { tables: unknown; actions: Actions },
+>({
 	id,
 	absDir = findEpicenterDir(process.cwd()),
 }: {

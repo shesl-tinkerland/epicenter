@@ -256,6 +256,12 @@ export {
 // ════════════════════════════════════════════════════════════════════════════
 // DAEMON (unix socket transport)
 // ════════════════════════════════════════════════════════════════════════════
+//
+// Mixed audience:
+//   * createWorkspaceServer, buildTableActions, persistencePath are
+//     consumer surface (epicenter.config.ts authors call these).
+//   * Everything else (buildApp, bindUnixSocket, sockets/metadata path
+//     helpers, RunInput/ListInput) is CLI-lifecycle plumbing.
 
 export type { LoadedWorkspace, WorkspaceEntry } from './daemon/types.js';
 export {
@@ -270,7 +276,6 @@ export {
 	daemonClient,
 	getDaemon,
 	pingDaemon,
-	type ResolvedTarget,
 } from './daemon/client.js';
 export {
 	dirHash,
@@ -310,6 +315,10 @@ export { buildTableActions } from './daemon/table-actions.js';
 // ════════════════════════════════════════════════════════════════════════════
 // CLIENT (remote workspace proxy)
 // ════════════════════════════════════════════════════════════════════════════
+//
+// connectDaemon is the script-author entry point for talking to a
+// running daemon. The proxy guts (buildRemoteWorkspace) and helpers
+// are exported for tests and tooling.
 
 export { buildRemoteWorkspace } from './client/remote.js';
 export { connectDaemon } from './client/connect-daemon.js';

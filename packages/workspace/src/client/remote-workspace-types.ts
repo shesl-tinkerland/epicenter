@@ -70,16 +70,19 @@ type RemoteTablesOf<TS> = {
 		: never;
 };
 
-/** Remote workspace shape derived from the in-process workspace `T`. */
-export type RemoteWorkspace<T> = {
-	tables: T extends { tables: infer TS }
-		? RemoteTablesOf<TS>
-		: Record<string, never>;
-	actions: T extends { actions: infer AS }
-		? AS extends Actions
-			? RemoteActions<AS>
-			: Record<string, never>
-		: Record<string, never>;
+/**
+ * Remote workspace shape derived from the in-process workspace `W`.
+ *
+ * `W` is constrained to require `tables` and `actions` slots so that a
+ * miswired generic produces a clear compile error rather than silently
+ * degrading to an empty index signature. Pass
+ * `ReturnType<typeof openFuji>` (or any opener that exposes both slots).
+ */
+export type RemoteWorkspace<
+	W extends { tables: unknown; actions: Actions },
+> = {
+	tables: RemoteTablesOf<W['tables']>;
+	actions: RemoteActions<W['actions']>;
 	sync: {
 		peers(): Promise<Result<PeerSnapshot[], DaemonError>>;
 	};

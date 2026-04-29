@@ -25,6 +25,7 @@
  */
 
 import type { DaemonClient } from '../daemon/client.js';
+import type { Actions } from '../shared/actions.js';
 import { RemoteNotSupported } from './remote-not-supported.js';
 import type { RemoteWorkspace } from './remote-workspace-types.js';
 
@@ -127,14 +128,13 @@ function buildRemoteActions(
 }
 
 /**
- * Compose the remote workspace facade. Generic `T` is the type of the
+ * Compose the remote workspace facade. Generic `W` is the type of the
  * in-process workspace (typically `ReturnType<typeof openFuji>`); the
- * mapped type `RemoteWorkspace<T>` rewrites it into its wire equivalent.
+ * mapped type `RemoteWorkspace<W>` rewrites it into its wire equivalent.
  */
-export function buildRemoteWorkspace<T>(
-	client: DaemonClient,
-	workspaceName: string,
-): RemoteWorkspace<T> {
+export function buildRemoteWorkspace<
+	W extends { tables: unknown; actions: Actions },
+>(client: DaemonClient, workspaceName: string): RemoteWorkspace<W> {
 	// `tables` and `actions` are runtime Proxy values; we cast through
 	// `unknown` to let the public mapped type narrow them on the consumer
 	// side. The Proxy machinery synthesizes the in-process shape on
@@ -145,5 +145,5 @@ export function buildRemoteWorkspace<T>(
 		sync: {
 			peers: () => client.peers(),
 		},
-	} as unknown as RemoteWorkspace<T>;
+	} as unknown as RemoteWorkspace<W>;
 }
