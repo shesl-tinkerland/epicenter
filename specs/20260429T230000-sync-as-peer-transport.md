@@ -33,7 +33,7 @@ fuji.ydoc.getText('readme').insert(0, '#');
 //    materialized files. Full Drizzle, raw SQL, FTS5, file walks. No RPC.
 const recent = await fuji.sqlite.drizzle
   .select().from(entries)
-  .where(eq(entries.tagged, false))
+  .where(gt(entries.createdAt, weekAgo))
   .orderBy(desc(entries.createdAt))
   .limit(50);
 const hits = await fuji.sqlite.search('entries', 'hello world');
@@ -47,7 +47,7 @@ Each namespace exists because the others can't do its job:
 
 There is no third namespace for "dispatch a server-only action to the daemon." Server-only side effects (Stripe calls, kicking peers, reloading config) flow through one of two paths that already exist: (a) the daemon's own observer reacts to a Y.Doc state change the script wrote, or (b) a CLI command runs in the daemon's own process (e.g. `epicenter kick <peerId>`). See "Server-only side effects" below. Adding a third script-facing namespace for these turned out to be over-engineering.
 
-**Composability lives at the per-app factory level.** `openFujiPeer()` returns the full bundle for fuji (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition: a new daemon-side materializer adds a new field on the peer return type; TypeScript catches consumer breakage at call sites. There is no runtime feature flag, no string literal in the API, no optional fields. If a script genuinely wants a different shape, it bypasses the per-app factory and composes primitives directly: `openFuji()` + `attachSyncIpc(...)` + whichever mirrors it wants.
+**Composability lives at the per-app factory level.** `openFujiPeer()` returns the full bundle for fuji (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition: a new daemon-side materializer adds a new field on the peer return type; TypeScript catches consumer breakage at call sites. There is no runtime feature flag, no string literal in the API, no optional fields. If a script genuinely wants a different shape, it bypasses the per-app factory and composes primitives directly: `openFuji()` + `attachIpcSyncClient(...)` + whichever mirrors it wants.
 
 Three env factories per app (`browser.ts`, `daemon.ts`, `peer.ts`), one underlying type (`Fuji = ReturnType<typeof openFuji>`), differing only in attached IO handles. The script's `fuji` is structurally a peer of the browser's `fuji`. They differ in lifetime and in which `attach*` primitives carry the bytes, not in the API surface.
 
@@ -81,7 +81,7 @@ Two diagrams. The first shows the processes and which IO each attaches. The seco
                                           │  │       (PRAGMA WAL)       │
                                           │  ├─ attachMarkdownMaterializer
                                           │  │     ↓ writes md/ tree    │
-                                          │  └─ attachSyncHub           │
+                                          │  └─ attachIpcSyncServer           │
                                           │        ↓ on daemon.sock     │
                                           └────────────┬────────────────┘
                                                        │
@@ -112,7 +112,7 @@ Three Y.Docs hosted by the daemon (two user workspaces plus one synthetic system
                                               │                                     │
 (1) Yjs sync over daemon.sock                 │  ◀─── CRDT writes/reads ────▶      │
     binary frames, length-prefix              │       observe, awareness,           │
-    MESSAGE_TYPE.{SYNC,AWARENESS,SYNC_STATUS} │       Y.Text bind, batch            │
+    MESSAGE_TYPE.{SYNC,AWARENESS}             │       Y.Text bind, batch            │
                                               │                                     │
 (2) Shared filesystem (no socket)             │                                     │
     daemon writes mirror.db (WAL)             ─────► reads mirror.db { readonly }   │
@@ -148,11 +148,11 @@ Process topology, restated honestly:
 | Process | Owns a real workspace | IO it attaches |
 |---|---|---|
 | Browser tab | Yes | `attachIndexedDb`, `attachSync` (cloud WS) |
-| Daemon | Yes | `attachSqlite`, `attachSync` (cloud WS), `attachSyncHub` (local IPC) |
-| Script | Yes | `attachSyncIpc` (local IPC) only |
+| Daemon | Yes | `attachSqlite`, `attachSync` (cloud WS), `attachIpcSyncServer` (local IPC) |
+| Script | Yes | `attachIpcSyncClient` (local IPC) only |
 | Test fixture | Yes | none, or `attachSqlite` over a tmpdir |
 
-Every process holds a real workspace. The differences are entirely in what `attach*` calls fire. The script attaches `attachSyncIpc` instead of `attachSqlite + attachSync`, which means: persistence and cloud sync are *delegated to the daemon* through the IPC sync session. The script is in-memory and ephemeral; the daemon is durable and cloud-connected.
+Every process holds a real workspace. The differences are entirely in what `attach*` calls fire. The script attaches `attachIpcSyncClient` instead of `attachSqlite + attachSync`, which means: persistence and cloud sync are *delegated to the daemon* through the IPC sync session. The script is in-memory and ephemeral; the daemon is durable and cloud-connected.
 
 There is no second contract. There is no remote shape. The script imports `openFuji` for runtime, not just type, and the function body actually runs.
 
@@ -172,22 +172,22 @@ The honest design: **every connection is a sync session.** The daemon hosts user
 const fuji   = openFujiDaemon({ ... });           // user workspace
 const system = openSystem({ daemonState });       // synthetic; tracks peers, workspaces, version
 
-attachSyncHub({
+attachIpcSyncServer({
   socket: socketPathFor(absDir),
   workspaces: [fuji, system],                     // hub multiplexes by workspace selector
 });
 
 // CLI side. Peer of 'system'.
-await using daemon = await openDaemon();          // attachSyncIpc against 'system'
+await using daemon = await openDaemon();          // attachIpcSyncClient against 'system'
 const peers = daemon.peers.getAll();              // Y.Map read, local
 daemon.peers.observe(cb);                         // free: subscribe to live changes
 
 // Script side. Peer of 'fuji'.
-await using fuji = await openFujiPeer();          // attachSyncIpc against 'fuji'
+await using fuji = await openFujiPeer();          // attachIpcSyncClient against 'fuji'
 fuji.tables.entries.observe(cb);
 ```
 
-Wire framing is **u32 LE length-prefix + payload**: read 4 bytes, parse as little-endian unsigned int N, read exactly N more bytes, that is one message. ~30 lines of framing code shared between hub and ipc. Outer message-type discrimination inside the framed payload matches the existing cloud convention (`SYNC`, `AWARENESS`, `SYNC_STATUS`).
+Wire framing is **u32 LE length-prefix + payload**: read 4 bytes, parse as little-endian unsigned int N, read exactly N more bytes, that is one message. ~30 lines of framing code shared between server and client. Outer message-type discrimination inside the framed payload uses the cloud convention's two relevant entries: `SYNC` and `AWARENESS`. The IPC wire deliberately omits `SYNC_STATUS` (no flush primitive in v3) and `RPC` (no IPC mailbox; cross-device peer<T> stays on cloud sync).
 
 Hono is dropped from the daemon entirely (`hono` and `@hono/standard-validator` come out of `@epicenter/workspace`'s dependencies). The replaced surface — `/ping`, `/peers`, `/list` — wasn't a framework's worth of work; it was three operations that map cleanly onto reads/observations of the system workspace. `ping` deletes outright (a successful connect *is* the liveness signal). `peers` is `system.peers.getAll()`. `list` is `system.workspaces.getAll()`. Operations that genuinely need server-side authority (e.g. "kick a peer") become `defineMutation` instances on the system workspace, dispatched through the cross-device action mailbox the codebase already has.
 
@@ -249,7 +249,7 @@ The `workspaces` table is correctly a `Y.Map`: it is stable, config-derived, sin
 
 Why this shape is good:
 
-- One transport, one mode, one client primitive (`attachSyncIpc`).
+- One transport, one mode, one client primitive (`attachIpcSyncClient`).
 - Live observability for free (`awareness.on('change', cb)` for peers; `workspaces.observe(cb)` for hosted workspaces).
 - Each surface uses the right Yjs primitive for its data shape: ephemeral state in awareness, durable single-writer metadata in Y.Map.
 - The CLI and vault scripts share machinery: each is a peer of one of the daemon's hosted workspaces.
@@ -271,7 +271,7 @@ Yjs's `clientID` is a 53-bit per-`Y.Doc` random identifier. Every operation a Y.
 
 ```ts
 await using fuji = await openFujiPeer({
-  clientId: stableClientIdFromArgv0(),   // e.g. hash('vault/scripts/tag-untagged.ts')
+  clientId: stableClientIdFromArgv0(),   // e.g. hash('vault/scripts/import-feed.ts')
 });
 ```
 
@@ -317,7 +317,7 @@ await using fuji = await openFujiPeer();
 // Reads through the daemon's warm SQLite mirror. Full Drizzle. No RPC.
 const recent = await fuji.sqlite.drizzle
   .select().from(entries)
-  .where(eq(entries.tagged, false))
+  .where(gt(entries.createdAt, weekAgo))
   .orderBy(desc(entries.createdAt))
   .limit(50);
 
@@ -329,9 +329,13 @@ for await (const file of fuji.markdown.list({ prefix: 'entries/' })) {
   console.log(file.id, await fuji.markdown.read(file.id));
 }
 
-// Writes still flow through Y.Doc (CRDT is the source of truth):
+// Writes flow through Y.Doc (CRDT is the source of truth). Bulk
+// import wrapped in fuji.batch produces one updateV2 event for the
+// materializer, which commits one SQL transaction:
 fuji.batch(() => {
-  for (const e of recent) fuji.tables.entries.update(e.id, { tagged: true });
+  for (const url of inputUrls) {
+    fuji.tables.entries.set({ id: crypto.randomUUID(), url });
+  }
 });
 ```
 
@@ -354,7 +358,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { openFuji } from './index.js';
 import * as schema from './db-schema.js';
 import {
-  attachSyncIpc, attachSqliteMirror, attachMarkdownMirror,
+  attachIpcSyncClient, attachSqliteMirror, attachMarkdownMirror,
   findEpicenterDir, socketPathFor, mirrorPathFor, markdownPathFor,
   hashClientId,
 } from '@epicenter/workspace';
@@ -368,7 +372,7 @@ export async function openFujiPeer(opts: {
   const fuji = openFuji({ clientId: opts.clientId ?? hashClientId(Bun.main) });
 
   // Local Y.Doc, synced over the unix socket.
-  const ipc = await attachSyncIpc(fuji.ydoc, {
+  const ipc = await attachIpcSyncClient(fuji.ydoc, {
     socket: socketPathFor(absDir),
     workspace: 'fuji',
     encryption: fuji.encryption,
@@ -416,7 +420,7 @@ export function openFujiDaemon(opts) {
     rootPath: markdownPathFor(opts.absDir, fuji.ydoc.guid),
   }).table(fuji.tables.entries);
   // Local IPC sync hub:
-  attachSyncHub(fuji.ydoc, { socket: socketPathFor(opts.absDir) });
+  attachIpcSyncServer(fuji.ydoc, { socket: socketPathFor(opts.absDir) });
   return fuji;
 }
 ```
@@ -457,7 +461,7 @@ epicenter rebuild <workspace>    # daemon's materializer.rebuild()
 
 These don't need a script-facing namespace because scripts shouldn't be doing them. They are administrative; they belong on the CLI.
 
-If a real "scripts need synchronous RPC dispatch to the daemon for X" use case shows up later, the additive option is to extend `attachSyncHub` and `attachSyncIpc` to carry `MESSAGE_TYPE.RPC` frames (mirroring `attachSync`'s existing cross-device routing) and expose a `SyncAttachment` surface on the IPC client so `peer<T>(syncIpc, daemonDeviceId)` works. Not preemptive; only if proven necessary. The current spec deliberately keeps the IPC wire to pure Yjs sync.
+If a real "scripts need synchronous RPC dispatch to the daemon for X" use case shows up later, the additive option is to extend `attachIpcSyncServer` and `attachIpcSyncClient` to carry `MESSAGE_TYPE.RPC` frames (mirroring `attachSync`'s existing cross-device routing) and expose a `SyncAttachment` surface on the IPC client so `peer<T>(syncIpc, daemonDeviceId)` works. Not preemptive; only if proven necessary. The current spec deliberately keeps the IPC wire to pure Yjs sync.
 
 ## CLI as a peer of `system`
 
@@ -502,15 +506,15 @@ DELETE  packages/workspace/src/daemon/list-route.test.ts
 
 ```
 ADD  packages/workspace/src/daemon/sync-hub.ts                ~120 LOC
-       attachSyncHub(ydoc, opts). Multiplexes sessions on daemon.sock.
-       Handles MESSAGE_TYPE.{SYNC,AWARENESS,SYNC_STATUS}. NO RPC frames
+       attachIpcSyncServer(ydoc, opts). Multiplexes sessions on daemon.sock.
+       Handles MESSAGE_TYPE.{SYNC,AWARENESS}. NO SYNC_STATUS frames
        over the IPC socket; cross-device peer<T> RPC is unchanged on
        cloud sync. Per-session origin symbols. Reconnect dedup by clientId.
 
 ADD  packages/workspace/src/client/sync-ipc.ts                ~90 LOC
-       attachSyncIpc(ydoc, opts). Peer side of the unix-socket sync.
+       attachIpcSyncClient(ydoc, opts). Peer side of the unix-socket sync.
        Pure Yjs sync state machine. Exposes { whenSynced, status,
-       observe, close, whenDisposed, flush }. Does NOT expose .rpc /
+       observe, close, whenDisposed }. Does NOT expose .rpc /
        .find / .peers; it isn't a SyncAttachment, just a hub client.
 
 ADD  packages/workspace/src/client/sqlite-mirror.ts           ~80 LOC
@@ -538,7 +542,7 @@ MODIFY packages/workspace/src/document/materializer/sqlite/sqlite.ts
        handle is opened. Idempotent if already set.
 
 ADD  apps/{fuji,tab-manager,opensidian-e2e}/src/lib/<app>/peer.ts   ~40 LOC each
-       openXxxPeer(opts?): composes attachSyncIpc + attachSqliteMirror
+       openXxxPeer(opts?): composes attachIpcSyncClient + attachSqliteMirror
        + attachMarkdownMirror. Composable via opts.attach.
 
 ADD  apps/{fuji,tab-manager,opensidian-e2e}/src/lib/<app>/db-schema.ts  ~30 LOC each
@@ -561,10 +565,10 @@ ADD  per-app peer.test.ts × 3                                 ~150 LOC total
 
 | File | Change |
 |---|---|
-| `packages/workspace/src/daemon/server.ts` | `createWorkspaceServer` replaces `bindOrRecover(socketPath, absDir, app, ping)` (Hono-based) with `Bun.listen({ unix })` driving `attachSyncHub`'s session handler. Hono dies entirely. The `bindOrRecover` stale-socket recovery logic survives, just wrapping `Bun.listen` instead of `Bun.serve`. |
+| `packages/workspace/src/daemon/server.ts` | `createWorkspaceServer` replaces `bindOrRecover(socketPath, absDir, app, ping)` (Hono-based) with `Bun.listen({ unix })` driving `attachIpcSyncServer`'s session handler. Hono dies entirely. The `bindOrRecover` stale-socket recovery logic survives, just wrapping `Bun.listen` instead of `Bun.serve`. |
 | `packages/workspace/src/daemon/client.ts` | `DaemonClient` becomes a thin wrapper: `await openDaemon()` is `openSystemPeer()` under the hood. `peers()`, `list()`, `ping` are reads against the system Y.Doc / awareness, not bespoke RPC routes. ~80 of 238 lines remain. |
 | `packages/workspace/src/document/materializer/sqlite/sqlite.ts` | One-line addition: `db.exec('PRAGMA journal_mode = WAL')` to enable concurrent readers. |
-| `packages/workspace/src/index.ts` | Re-exports adjust: drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`. Add `attachSyncHub`, `attachSyncIpc`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`. |
+| `packages/workspace/src/index.ts` | Re-exports adjust: drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`. Add `attachIpcSyncServer`, `attachIpcSyncClient`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`. |
 
 ## What stays unchanged
 
@@ -589,9 +593,9 @@ Origins on the daemon-side Y.Doc:
 - `Symbol(`hub:${sessionId}`)` — per-session, used when applying inbound peer updates
 - `attachSqlite` — does not need its own origin; persists every update (it's a sink, not a wire)
 
-### Reconnect supervisor in `attachSyncIpc`
+### Reconnect supervisor in `attachIpcSyncClient`
 
-The unix socket can break. `attachSyncIpc` must run an exponential-backoff supervisor mirroring `attachSync`'s `runLoop` (minus the auth path). On reconnect, run a fresh `STEP1`; Yjs's state-vector handshake is the resync queue. No application-level write queue is needed.
+The unix socket can break. `attachIpcSyncClient` must run an exponential-backoff supervisor mirroring `attachSync`'s `runLoop` (minus the auth path). On reconnect, run a fresh `STEP1`; Yjs's state-vector handshake is the resync queue. No application-level write queue is needed.
 
 ### Reconnect dedup on the daemon
 
@@ -633,13 +637,13 @@ The `system.workspaces` Y.Map carries `{ id, name, guid, _v }` — the stable id
 
 4. **One unix socket, one mode, one protocol.** `daemon.sock` is the only socket. Every connection is a Yjs sync session against one of the daemon's hosted workspaces (selected by the preamble's `workspace` field). There is no separate "control" mode; daemon-wide queries (peers, hosted workspaces) are reads against a synthetic `system` workspace the daemon hosts alongside user workspaces. Hono is dropped from the daemon entirely; `hono` and `@hono/standard-validator` come out of the workspace package's dependencies.
 
-5. **Length-prefix framing.** `u32 LE length` + `payload`. Bun's `Bun.listen({ unix })` and `Bun.connect({ unix })` give byte-oriented streams (SOCK_STREAM); the preamble JSON and Yjs sync frames are both message-oriented. Length prefix is the simplest universal answer (~30 lines, shared by hub and ipc). Outer message-type byte (already in `@epicenter/sync`) discriminates `SYNC` vs `AWARENESS` vs `SYNC_STATUS` inside the framed payload.
+5. **Length-prefix framing.** `u32 LE length` + `payload`. Bun's `Bun.listen({ unix })` and `Bun.connect({ unix })` give byte-oriented streams (SOCK_STREAM); the preamble JSON and Yjs sync frames are both message-oriented. Length prefix is the simplest universal answer (~30 lines, shared by server and client). Outer message-type byte (already in `@epicenter/sync`) discriminates `SYNC` vs `AWARENESS` inside the framed payload. The IPC wire omits `SYNC_STATUS` (no flush in v3) and `RPC` (no IPC mailbox).
 
 6. **Wire responses serialize the existing `wellcrafted` Result type.** `{ data, error }` shape, not a bespoke `{ ok: true }` envelope. No translation layer between the daemon's internal `Result<T, E>` and what travels.
 
 7. **The daemon hosts a `system` synthetic workspace.** Used by the CLI and any other consumer that wants daemon-wide observability. It carries peers (Awareness), hosted workspaces (Y.Map), version, and any imperative `defineMutation` instances ("kick this peer", "reload config"). It is unencrypted, not persisted, not cloud-synced. Reconstructed on daemon start.
 
-8. **`attachSyncIpc` blocks on first-sync by default.** Returns a handle whose construction awaits `whenSynced` (one round trip on a fresh peer). Scripts can opt out with `awaitFirstSync: false` for advanced use cases where the script wants to race or short-circuit.
+8. **`attachIpcSyncClient` blocks on first-sync by default.** Returns a handle whose construction awaits `whenSynced` (one round trip on a fresh peer). Scripts can opt out with `awaitFirstSync: false` for advanced use cases where the script wants to race or short-circuit.
 
 9. **The daemon does not decrypt on behalf of peers.** Y.Doc stores ciphertext; sync ships ciphertext; peers decrypt locally with the keys received at handshake. Symmetric with how the browser tab works against the cloud sync server today.
 
@@ -653,22 +657,24 @@ The `system.workspaces` Y.Map carries `{ id, name, guid, _v }` — the stable id
 
 14. **The script's workspace handle has two honest namespaces.** `tables.X` for pure CRDT (local Y.Doc, freshness-coherent), `sqlite` / `markdown` for materialized reads (shared files via WAL or filesystem). Each surface uses the right primitive for its job; no namespace is reachable two ways. Server-only side effects use Y.Doc-mediated request entries (Path A) or daemon-internal CLI commands (Path B); they are not script-facing namespaces.
 
-15. **Per-app factories own composition; no runtime feature flag.** `openFujiPeer()` always returns the full bundle (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition. No `attach: [...]` option, no string literals, no optional fields on the return type. Scripts wanting a different shape compose primitives directly (`openFuji()` + `attachSyncIpc(...)`).
+15. **Per-app factories own composition; no runtime feature flag.** `openFujiPeer()` always returns the full bundle (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition. No `attach: [...]` option, no string literals, no optional fields on the return type. Scripts wanting a different shape compose primitives directly (`openFuji()` + `attachIpcSyncClient(...)`).
 
-17. **Materializer commits synchronously, no debouncing.** `attachSqliteMaterializer` reacts to the daemon Y.Doc's `updateV2` event by committing changed rows to SQLite **in the same tick**, not on a debounce timer. Yjs's `transact()` already provides batching: a 1000-write loop wrapped in `fuji.batch(() => {...})` produces ONE `updateV2` event with 1000 row changes inside, which the materializer commits as ONE SQL transaction. The natural batching unit is the Yjs transaction, not a wall-clock window. Consequence: the SQLite mirror is coherent with the daemon's Y.Doc within microseconds of the daemon applying an update; the only remaining lag for a script reading SQLite is the IPC RTT for the daemon to RECEIVE the script's update (sub-millisecond on local IPC). This makes `flush()` (when added) reduce to a single SYNC_STATUS ack with no separate "materializer-flushed" wait. Spike before commit 7: confirm SQLite throughput is fine for a realistic 10k-bulk-import workload via `fuji.batch`.
+16. **Materializer commits synchronously, no debouncing.** `attachSqliteMaterializer` reacts to the daemon Y.Doc's `updateV2` event by committing changed rows to SQLite **in the same tick**, not on a debounce timer. Yjs's `transact()` already provides batching: a 1000-write loop wrapped in `fuji.batch(() => {...})` produces ONE `updateV2` event with 1000 row changes inside, which the materializer commits as ONE SQL transaction. The natural batching unit is the Yjs transaction, not a wall-clock window. Consequence: the SQLite mirror is coherent with the daemon's Y.Doc within microseconds of the daemon applying an update; the only remaining lag for a script reading SQLite is the IPC RTT for the daemon to RECEIVE the script's update (sub-millisecond on local IPC). Spike before commit 7: confirm SQLite throughput is fine for a realistic 10k-bulk-import workload via `fuji.batch`.
 
-16. **No RPC over the IPC socket (Revelation 2).** The unix socket carries Yjs sync only (`SYNC`, `AWARENESS`, `SYNC_STATUS`). No `MESSAGE_TYPE.RPC` frames; no `peer<T>(syncIpc, deviceId)` proxy; no `fuji.daemon.X` namespace. The cross-device peer RPC mailbox in `attachSync` (cloud) is unchanged: `peer<T>(workspace.sync, 'phone')` works the same way it does today. For local server-only effects, scripts use Y.Map request entries (Path A) or daemon-internal CLI commands (Path B); for cross-device action invocation, scripts use cloud `peer<T>` as today. One form of RPC remains in the system (cloud-side, unchanged); the IPC socket has none.
+17. **No RPC, no `SYNC_STATUS` over the IPC socket.** The unix socket carries pure Yjs sync only (`SYNC`, `AWARENESS`). No `MESSAGE_TYPE.RPC` frames (no IPC mailbox); no `MESSAGE_TYPE.SYNC_STATUS` frames (no flush primitive). No `peer<T>(syncIpc, deviceId)` proxy; no `fuji.daemon.X` namespace; no `fuji.flush()` method. The cross-device peer RPC mailbox in `attachSync` (cloud) is unchanged: `peer<T>(workspace.sync, 'phone')` works the same way it does today. For local server-only effects, scripts use Y.Map request entries (Path A) or daemon-internal CLI commands (Path B); for cross-device action invocation, scripts use cloud `peer<T>` as today. For "did my write land?", scripts read from `fuji.tables.X.get(id)` (the local Y.Doc, synchronously coherent with own writes). One form of RPC remains in the system (cloud-side, unchanged); the IPC socket has none.
+
+18. **No `flush()` primitive in v3.** Production scripts don't need read-after-write through SQLite (write-and-exit is the dominant pattern; the next invocation reads up-to-date state). If a real demand emerges later, flush is strictly additive: ~65 LOC for a flush controller plus restoring `MESSAGE_TYPE.SYNC_STATUS` to the IPC wire. No breaking change to v3 consumers.
 
 ## Implementation plan
 
 Nine commits, in order. Each commit compiles and passes tests independently. Steps 1-6 are additive (no deletions). Step 7 is the cliff. Steps 8-9 are validation.
 
-### 1. Add `attachSyncHub` (daemon side)
+### 1. Add `attachIpcSyncServer` (daemon side)
 
-- New: `packages/workspace/src/daemon/sync-hub.ts` exposing `attachSyncHub(ydoc, opts)`.
+- New: `packages/workspace/src/daemon/sync-hub.ts` exposing `attachIpcSyncServer(ydoc, opts)`.
 - Listens for new connections on the socket; for each, reads the JSON preamble (`{ workspace, deviceId, clientId, isEphemeral, schemaManifest }`), routes to the sync-session handler.
 - Runs the sync state machine using `@epicenter/sync`'s existing exports (`encodeSyncStep1`, `encodeSyncUpdate`, `handleSyncPayload`).
-- Multiplexes message types via the existing outer-type byte: `SYNC`, `AWARENESS`, `SYNC_STATUS`. **No `RPC` frames over IPC**; the cross-device peer RPC mailbox in `attachSync` is unchanged on cloud sync.
+- Multiplexes message types via the existing outer-type byte: `SYNC`, `AWARENESS`. **No `RPC` frames** (no IPC mailbox) and **no `SYNC_STATUS` frames** (no flush primitive in v3). The cross-device peer RPC mailbox in `attachSync` is unchanged on cloud sync.
 - Tracks connected sessions in a `Map<sessionId, SessionState>`; uses `awarenessProtocol.removeAwarenessStates` on disconnect.
 - Per-session origin symbols (`Symbol(`hub:${sessionId}`)`) so outbound listeners filter their own origin.
 - Reconnect dedup: same `clientId` reconnecting kicks the prior session.
@@ -676,21 +682,21 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 - Tests: a unit test that attaches a fake socket pair, drives a SyncStep1 → SyncStep2 exchange, asserts state convergence.
 - No callers yet; daemon still binds the existing Hono app.
 
-### 2. Add `attachSyncIpc` (peer side)
+### 2. Add `attachIpcSyncClient` (peer side)
 
-- New: `packages/workspace/src/client/sync-ipc.ts` exposing `attachSyncIpc(ydoc, opts)`.
+- New: `packages/workspace/src/client/sync-ipc.ts` exposing `attachIpcSyncClient(ydoc, opts)`.
 - Connects to the socket via `Bun.connect({ unix })`; sends the preamble; awaits the preamble reply (with encryption keys).
 - Calls `opts.encryption.applyKeys(keys)` to seed the script's keyring before any sync frame is processed.
 - Drives the peer side of the sync state machine using the same `@epicenter/sync` exports. **No SyncAttachment surface**; the IPC client is not a `peer<T>` target. Cross-device action dispatch stays on cloud sync.
 - Reconnect supervisor: exponential backoff mirroring `attachSync`'s `runLoop`. On reconnect, fresh `STEP1`.
-- Returns `{ whenSynced; status; observe; close; whenDisposed; flush() }`.
-- Tests: fake socket pair drives SyncStep1/Step2 round trip; reconnect recovers; `flush()` resolves when `localVersion === ackedVersion`.
+- Returns `{ whenSynced; status; observe; close; whenDisposed }`. No `flush()` (no `SYNC_STATUS` on the wire).
+- Tests: fake socket pair drives SyncStep1/Step2 round trip; reconnect recovers; awareness exchange works.
 
-### 3. Wire `attachSyncHub` into `createWorkspaceServer`; drop Hono; add WAL pragma
+### 3. Wire `attachIpcSyncServer` into `createWorkspaceServer`; drop Hono; add WAL pragma
 
 - File: `packages/workspace/src/daemon/server.ts`.
 - Replace the existing `bindOrRecover(socketPath, absDir, app, ping)` call (Hono-based) with `Bun.listen({ unix: socketPathFor(absDir), socket: { data, open, close, error } })`.
-- The `data` handler frames bytes via the shared length-prefix module and dispatches to `attachSyncHub`'s session handler. **No `kind` discriminator. No second mode.** The preamble's `workspace` selector does all routing; `peers` and `list` are reads against the synthetic `system` workspace, not bespoke endpoints.
+- The `data` handler frames bytes via the shared length-prefix module and dispatches to `attachIpcSyncServer`'s session handler. **No `kind` discriminator. No second mode.** The preamble's `workspace` selector does all routing; `peers` and `list` are reads against the synthetic `system` workspace, not bespoke endpoints.
 - Delete `packages/workspace/src/daemon/app.ts` (the Hono app), `packages/workspace/src/daemon/build-app.ts` if present, and the `hono` + `@hono/standard-validator` entries from `packages/workspace/package.json`.
 - One-line addition to `packages/workspace/src/document/materializer/sqlite/sqlite.ts`: `db.exec('PRAGMA journal_mode = WAL')` after the Database handle is opened. Idempotent if already set; required so script-side `attachSqliteMirror` can open the same file concurrently.
 - The `bindOrRecover` stale-socket recovery logic survives, just wrapping `Bun.listen` instead of `Bun.serve`.
@@ -707,10 +713,10 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 ### 5. Add `peer.ts` env factory per app + per-app `db-schema.ts`
 
 - New: `apps/{fuji,tab-manager,opensidian-e2e}/src/lib/<app>/peer.ts`.
-- Each exports `openXxxPeer(opts?)` composing `openXxx()` + `attachSyncIpc` + (optional) `attachSqliteMirror` + (optional) `attachMarkdownMirror`. Returned bundle has the two honest namespaces: `tables.X` (CRDT) and `sqlite` / `markdown` (materialized reads). The `attach` option lets scripts opt into just what they need.
+- Each exports `openXxxPeer(opts?)` composing `openXxx()` + `attachIpcSyncClient` + (optional) `attachSqliteMirror` + (optional) `attachMarkdownMirror`. Returned bundle has the two honest namespaces: `tables.X` (CRDT) and `sqlite` / `markdown` (materialized reads). The `attach` option lets scripts opt into just what they need.
 - New: `apps/<app>/src/lib/<app>/db-schema.ts` shared between `daemon.ts` and `peer.ts`. Drizzle schema definitions; single source of column types.
 - Each derives a default `clientId` from `Bun.main` via the shared `hashClientId(path: string): number` utility (already added in step 1).
-- Tests: each app's `peer.test.ts` smoke-tests construction against an in-process `attachSyncHub` + tmpdir socket + tmpdir mirror file. Asserts: tables CRUD works locally; `sqlite.search(...)` against the warm mirror returns the right rows; `sqlite.drizzle.select()...` returns typed rows.
+- Tests: each app's `peer.test.ts` smoke-tests construction against an in-process `attachIpcSyncServer` + tmpdir socket + tmpdir mirror file. Asserts: tables CRUD works locally; `sqlite.search(...)` against the warm mirror returns the right rows; `sqlite.drizzle.select()...` returns typed rows.
 
 ### 6. Migrate `Object.assign` to spread across env factories
 
@@ -721,7 +727,7 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 
 - Delete `client/remote.ts`, `client/remote-workspace-types.ts`, `client/connect-daemon.ts`, `daemon/run-handler.ts`, `daemon/run-errors.ts`, plus their test files.
 - Shrink `daemon/client.ts`: `DaemonClient` becomes `openDaemon()` returning `openSystemPeer()` under the hood. Methods: `peers` (awareness snapshot), `list` (system.workspaces read), `ping` (no-op; successful sync handshake is liveness). Drop `.run()`, `RunInput`, `ListInput`, `RpcError`. ~80 of 238 lines remain.
-- Update `packages/workspace/src/index.ts` re-exports: drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`. Add `attachSyncHub`, `attachSyncIpc`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`.
+- Update `packages/workspace/src/index.ts` re-exports: drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`. Add `attachIpcSyncServer`, `attachIpcSyncClient`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`.
 - Update `packages/cli/src/commands/run.ts` and `packages/cli/src/commands/list.ts`: rewrite to use `openSystemPeer()` (for `list`) or `openXxxPeer(...)` (for `run`). **Decision pending in this commit**: keep `epicenter run` for shell ergonomics, opening an ephemeral peer per invocation; or delete in favor of direct `bun run script.ts`. Default: keep.
 - All workspace tests pass. CLI tests adjusted for the new transport.
 
@@ -734,22 +740,34 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 
 ### 9. Operational sanity checks
 
-- Hand-test from a vault script:
+- Hand-test the three honest production patterns from a vault script:
   ```ts
+  // Pattern 1: bulk import (write-and-exit; daemon materializes after).
   await using fuji = await openFujiPeer();
-  fuji.tables.entries.observe(ids => console.log('changed', ids));
   fuji.batch(() => {
-    for (const e of fuji.tables.entries.filter(x => !x.tagged)) {
-      fuji.tables.entries.update(e.id, { tagged: true });
+    for (const url of inputUrls) {
+      fuji.tables.entries.set({ id: crypto.randomUUID(), url });
     }
   });
-  // Wait for daemon to materialize:
-  await fuji.ipc.flush();
-  // Read through the warm mirror:
-  const tagged = await fuji.sqlite.drizzle.select().from(entries).where(eq(entries.tagged, true));
-  console.log('tagged:', tagged.length);
+  // Script exits. Next invocation reads the up-to-date state.
   ```
-  Verify writes appear in the daemon's materializer output, the daemon's SQLite log, the cloud sync server, AND the script's read of the mirror.
+  ```ts
+  // Pattern 2: query and report (pure read; no writes).
+  await using fuji = await openFujiPeer();
+  const recent = await fuji.sqlite.drizzle
+    .select().from(entries)
+    .orderBy(desc(entries.createdAt))
+    .limit(50);
+  console.log(recent);
+  ```
+  ```ts
+  // Pattern 3: observe and react (long-lived; awareness off).
+  await using fuji = await openFujiPeer();
+  fuji.tables.entries.observe(ids => console.log('changed:', ids));
+  fuji.ydoc.getText('readme').observe(() => console.log('readme edited'));
+  await new Promise(() => {});  // park
+  ```
+  Verify each pattern: writes from pattern 1 appear in the daemon's materializer output (mirror.db), the daemon's SQLite blob log, and the cloud sync server. Pattern 2's read latency stays sub-50ms for 10k mirror rows. Pattern 3's observers fire when other peers edit.
 - Performance check: measure cold-start latency of `openFujiPeer` against a daemon with 10k entries loaded. Target: `<100ms` wall-clock from `openFujiPeer()` to `whenSynced` resolved. Mirror open is essentially free (file open + PRAGMA). If actual is significantly higher, profile encode/apply path before commit 7.
 - Multi-script soak: invoke 1000 ephemeral scripts that each write one row; verify daemon state-vector growth matches "one entry per distinct script identity," not "one per invocation."
 - Concurrency soak: run 10 long-running scripts each issuing 100 random `sqlite.search(...)` queries against the mirror while the daemon writes 100 new rows. Verify no SQLITE_BUSY, no read errors, all queries complete.
@@ -762,7 +780,7 @@ After step 9:
 - `grep -r 'connectDaemon\|Remote<\|buildRemoteWorkspace' --include='*.ts'` returns zero hits outside this spec and the deletion-commit message.
 - A vault script can bind a `Y.Text` to a TUI text editor, observe live changes from the browser tab, and exit cleanly. This is the use case that motivated the spec; if it does not work, the spec failed.
 - A vault script can call `fuji.sqlite.drizzle.select().from(entries).where(...)` and get results without any RPC round trip. This is the writer/reader-split test; if it does not work, option 4 failed.
-- Daemon log shows `attachSyncHub` accepting and disposing peer sessions cleanly with no leaked clientIDs in awareness state after disconnect.
+- Daemon log shows `attachIpcSyncServer` accepting and disposing peer sessions cleanly with no leaked clientIDs in awareness state after disconnect.
 - 10 concurrent script readers + the daemon writer survive a 1000-write soak with zero `SQLITE_BUSY`.
 
 ## Why this is worth doing
@@ -843,7 +861,9 @@ The earlier questions either resolved or got promoted to invariants. The remaini
 - ~~Hot-reload of `epicenter.config.ts`~~: restart-only. Not in scope; the dev workflow already involves editing a TS file at the terminal.
 - ~~Multiple-daemons-same-machine convergence~~: accept current behavior (B). Cloud sync handles convergence between two daemons sharing a workspace ID; awareness shows them as same-`deviceId` siblings; `peer<T>` resolution picks lowest `clientId`. If a real complaint emerges, add `absDir` to awareness payload for disambiguation; additive.
 - ~~Failed-workspace recovery~~: stay-failed-until-restart. Failed hydration is rare; auto-retry can mask real bugs; manual recovery is its own design concern.
-- ~~Mirror staleness contract (Q9 from earlier draft)~~: documented as Rule 1 below; no `flush()` primitive shipped.
+- ~~Mirror staleness contract~~: principled rule documented (read freshness from `fuji.tables.X.get(id)`, not from `fuji.sqlite`); no `flush()` primitive in v3.
+- ~~`flush()` primitive~~: dropped. Production scripts overwhelmingly write-and-exit; the next invocation reads up-to-date state. The contrived "tag-then-immediately-query-via-SQLite" case can use `await Bun.sleep(50)` if it ever shows up. If real demand emerges, flush is strictly additive (~65 LOC + restoring `MESSAGE_TYPE.SYNC_STATUS` to the IPC wire).
+- ~~Materializer debounce~~: dropped. `attachSqliteMaterializer` commits synchronously on each `updateV2` event. Yjs's `transact()` already provides batching at the Y.Doc layer.
 - ~~Script attaches its own materializer~~: supported but discouraged. JSDoc warning on `attachSqliteMaterializer` notes the cold-start cost and that the file path must NOT collide with the daemon's mirror.
 - ~~Mirror schema versioning~~: skip. Vault is built from the same commit as the daemon. Published-consumer version check is deferred until there's a published consumer.
 - ~~chokidar / `attachMarkdownMirror.watch`~~: skip. Ship `list` and `read` only in v3. Add `watch` later if a real consumer wants it.
@@ -853,12 +873,4 @@ The earlier questions either resolved or got promoted to invariants. The remaini
 
 1. **Cold-start performance target.** Original target: `<50ms wall-clock from openFujiPeer() to whenSynced` for 10k entries. Verbal alignment from review: a longer opening time is acceptable; aim `<100ms` for 10k entries, `<500ms` for 100k. Spike step 1+2 on real fuji data before commit 7 to confirm. If it blows the budget, profile encode/apply path before shipping.
 
-2. **Read-after-write coherence: pattern, not primitive.** Documented contract:
-
-   **Rule (default):** for "did the value I just wrote land?" — read through `fuji.tables.X.get(id)`, not through `fuji.sqlite`. The Y.Doc is synchronous and coherent with your own writes. The SQLite mirror lags only by IPC RTT (sub-millisecond) once the materializer is synchronous — the daemon receives the update, applies it, materializer commits in the same tick. The Y.Doc is the source of truth; SQLite is one derived view. Use the right tool.
-
-   **Rare case:** scripts that need read-after-write through SQLite call `await fuji.flush()`, which resolves once the daemon has applied the script's pending writes (and, given the materializer is synchronous, the SQLite reflects them). Design of `flush()` is captured separately below.
-
-   Why we're fine: tagging scripts, pipeline scripts, and observation scripts are the common workloads, none need read-after-write through SQLite. Interactive REPLs and tests are the cases where it matters; both can afford the explicit wait.
-
-3. **Could the materializer skip debouncing entirely?** Spike: if `attachSqliteMaterializer` committed each Y.Doc update synchronously (no debounce), the coherence window shrinks to sub-millisecond. Cost: more SQLite transactions per second. SQLite handles thousands per second easily, but a 10k-entry bulk import would become 10k transactions instead of one. Worth measuring on realistic workloads before commit 7. If throughput is acceptable, drop debounce entirely and Rule from #2 collapses ("just read the mirror, it's already current"). If not, keep debounce and the documented contract stands.
+2. **Synchronous-materializer throughput spike.** With debounce removed, an unbatched 10k-write loop becomes 10k SQL transactions (vs 1 with debounce). Production scripts that loop should wrap in `fuji.batch(() => {...})`, which collapses to one `updateV2` event and one SQL transaction; this is the documented pattern. Spike before commit 7: confirm `fuji.batch(() => for-10k)` runs in <500ms wall-clock. Also measure the unbatched failure mode (no `batch()` wrapper) so we know how bad the cost is when scripts forget. If unbatched is catastrophic (>10s for 10k), reconsider auto-batching at the materializer layer; if it's just slow (~1-5s), keep the current contract and lean on documentation.
