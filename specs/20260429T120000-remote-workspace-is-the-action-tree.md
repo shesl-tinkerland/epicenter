@@ -293,6 +293,66 @@ These were open in earlier drafts. They are decisions now, not options.
 4. **Sync attachment surface is local-only.** `sync.observe`, `sync.onStatusChange`, `sync.whenConnected` are not branded and drop from the remote type. If a script needs sync status, the daemon exposes it as a top-level call (`daemon.syncStatus(workspaceName)`), not nested under the workspace.
 5. **`Symbol.dispose` drops.** `connectDaemon`'s returned object owns its own disposal that closes the IPC connection. Calling `[Symbol.dispose]` does not forward to the remote workspace.
 6. **Type-hover ergonomics.** The exported `Remote<T>` is wrapped in a `Simplify` helper so IDE hover output shows the flattened call shape rather than a wall of conditional types. This is a small style choice, not a functional one.
+7. **Generic constraint on `connectDaemon<W>` is dropped.** No `extends { tables; actions: Actions }` constraint, no compile-time guard like `HasBrandedLeaves<W> extends true`. The contract is documented in one sentence: `W` is any type; `Remote<W>` returns whatever branded leaves it finds. If `W` has no branded leaves, `Remote<W>` is `{}` and the consumer gets an empty proxy. That is the correct behavior, not a bug to defend against. A miswired generic produces an empty surface, which is a runtime no-op and a visible API gap; that signal is sufficient.
+8. **Class-instance recursion guard.** `Remote<T>` includes a `T[K] extends Function ? never` clause before recursing into `T[K] extends object`, so `Y.Doc` and other class instances drop without walking their prototype chain. This is a single line in the mapped type, not a full nominal exclusion list.
+
+## Implementation plan
+
+Seven commits, in order. Each commit compiles, passes tests, and ships a working subset. Land as one PR or seven; the order is what matters.
+
+### 1. Add type helpers
+- New: `Simplify<T> = { [K in keyof T]: T[K] } & {}` in `packages/workspace/src/shared/types.ts` (or co-locate with `Remote`).
+- No behavior change yet; helpers are unused.
+
+### 2. Brand CRUD inside `createTable`
+- File: `packages/workspace/src/document/attach-table.ts` (around `createTable` lines ~310-490).
+- Wrap each of `get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet` as `defineQuery` / `defineMutation` instances at the point they are returned. Handlers stay synchronous; the brand is metadata.
+- Crucially: `update`'s call signature flattens from `(id, partial)` to `({ id, ...partial })`. This is the migration's only argument-shape change. The branded callable matches the wire envelope shape immediately.
+- Encryption path: `attachEncryption(ydoc).attachTable` flows through the same `createTable` factory; one injection point covers both.
+- Plain methods (`filter`, `observe`, `find`, `count`, `has`) stay unbranded.
+- Tests: `packages/workspace/src/__tests__/create-table.test.ts` and any `*.test.ts` exercising `update(id, patch)` migrate to `update({ id, ...patch })`.
+- Daemon-side `buildTableActions` is still in play at this point; behavior is unchanged externally.
+
+### 3. Migrate `update` call sites
+- ~65 call sites across ~22 files. Pattern: `tables.X.update(id, { ...patch })` to `tables.X.update({ id, ...patch })`.
+- Locations: `apps/{fuji, honeycrisp, tab-manager, zhongwen, opensidian}`, `playground/opensidian-e2e`, `examples/notes-cross-peer`, plus their tests.
+- Type-checker drives this; nothing else is changing yet.
+
+### 4. Delete `daemon/table-actions.ts`
+- The branded methods on `attachTable` are now the action handlers directly. The wrapper has no callers.
+- Delete the file and `daemon/table-actions.test.ts`.
+- Confirm no imports remain.
+
+### 5. Replace `RemoteWorkspace<W>` with `Remote<T>`
+- File: `packages/workspace/src/client/remote-workspace-types.ts` becomes `remote-types.ts` (or stays; rename is optional).
+- Delete `RemoteWorkspace<W>`, `RemoteTablesOf`, `RemoteTable`, `RemoteCallError`. Add the single `Remote<T>` mapped type with `Simplify`, the brand check, the `T[K] extends Function ? never` guard, and `WireResult<R>`.
+- File: `packages/workspace/src/client/remote.ts`. Delete `buildRemoteTables` (lines ~45-89). Delete the `sync: { peers }` slot from `buildRemoteWorkspace`'s return. The recursive proxy `buildRemoteActions` is already prefix-agnostic, so it powers the new `Remote<T>` directly when called at the workspace root. Rename it (e.g. `buildRemoteProxy`) since "actions" is no longer the right name.
+- Delete `client/remote-not-supported.ts`. The cut-line is type-level now; runtime stubs are unreachable from typed call sites.
+- Update `client/connect-daemon.ts`: drop the `extends { tables; actions: Actions }` constraint; return type becomes `Remote<W>`; generic param is unconstrained (per decision 7 above).
+
+### 6. Lift the `actions: { ... }` slot in workspace bundles
+- Three bundles: `apps/fuji/src/lib/fuji/index.ts`, `apps/tab-manager/src/lib/workspace/index.ts`, `playground/opensidian-e2e/epicenter.config.ts`.
+- For each: remove the `actions:` key, lift its contents to the top level alongside `tables`, `kv`, `ydoc`, etc.
+- Update `daemon/run-handler.ts:38` from `resolveActionPath(workspace.actions ?? {}, ctx.actionPath)` to `resolveActionPath(workspace, ctx.actionPath)`. Same change at line ~40 for the suggestions walker.
+- Update `daemon/app.ts:98` from `describeActions(entry.workspace.actions ?? {})` to `describeActions(entry.workspace)`.
+- `walkActions` and `describeActions` accept a generic `object` and walk by `isAction` brand check; signatures broaden.
+- CLI: zero changes. `epicenter run <path>` already forwards arbitrary dotted paths.
+
+### 7. Move `peers()` off the workspace facade onto `DaemonClient`
+- Today: `peers()` is on `RemoteWorkspace.sync.peers` (already removed in step 5) and on the in-process `attachSync` handle (kept).
+- Add a top-level `peers()` method on `DaemonClient` if not already present.
+- Update CLI sites that call `entry.workspace.sync.peers()` if any reference the remote facade rather than the in-process attachment. The local `serve.ts` paths already call the in-process attachment and need no change.
+
+### Validation
+- After each commit: `bun run typecheck` and `bun test` pass.
+- After step 7: a hand-test from a bun script:
+  ```ts
+  import type { openFuji } from '@apps/fuji';
+  import { connectDaemon } from '@epicenter/workspace';
+  const ws = await connectDaemon<ReturnType<typeof openFuji>>('fuji');
+  await ws.tables.entries.set({ id: '...', /* ... */ });
+  ```
+  IDE hover on `ws` shows a flattened call shape with branded leaves only; `ws.ydoc`, `ws.batch`, `ws.tables.entries.filter` are absent from the type.
 
 ## Why this is worth doing
 
