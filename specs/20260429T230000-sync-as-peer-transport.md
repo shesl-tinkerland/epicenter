@@ -485,44 +485,73 @@ Why this is right:
 
 A script that wants to be **independent of the daemon** (offline, snapshot, embedded test) can still attach its own `attachSqliteMaterializer` to its synced Y.Doc and pay the cold-start cost itself. That escape hatch stays available; it is simply not the default.
 
-## The new `peer.ts` factory
+## The new `peer.ts` and `daemon.ts` factories
 
-### Correction on per-app file shape
+### Per-app file shape (revised twice; this is the final landing)
 
-The original draft of this spec assumed each app has a `daemon.ts` factory file. **That assumption is wrong for this codebase.** The actual shape is:
+Each app gets symmetric environment factories. The browser, daemon, and peer all hold a real `Y.Doc`; what differs is which `attach*` calls fire. Per-app factories make each environment a one-line composition that the env-specific config (browser bundle, `epicenter.config.ts`, vault script) can call cleanly.
 
 ```
 apps/<app>/src/lib/<app>/
-├── index.ts             env-agnostic factory (openXxx)
-├── browser.ts           browser env factory (where the app has a browser surface)
-├── client.ts            singleton wrapper
-└── peer.ts              NEW: script env factory (only for apps that have a daemon)
-
-apps/<app>/src/lib/<app>/db-schema.ts   NEW: Drizzle schema, imported by peer.ts AND
-                                        by the playground epicenter.config.ts
-
-playground/<app>-e2e/epicenter.config.ts
-                                        the daemon recipe (already exists for the
-                                        apps that have a daemon: opensidian, tab-manager).
-                                        Imports db-schema.ts; constructs the daemon-side
-                                        workspace by attaching `attachSqliteMaterializer`,
-                                        `attachMarkdownMaterializer`, `attachIpcSyncServer`,
-                                        etc. inline.
+├── index.ts             env-agnostic core factory (openXxx)
+├── browser.ts           browser env factory (openXxxBrowser)
+├── daemon.ts            NEW: daemon env factory (openXxxDaemon)
+├── peer.ts              NEW: script env factory (openXxxPeer)
+├── db-schema.ts         NEW: Drizzle schema, imported by daemon.ts AND peer.ts
+└── client.ts            singleton wrapper for the per-env runtime
 ```
 
-There is **no per-app `daemon.ts` artifact.** The daemon recipe is the inlined `epicenter.config.ts` that the user (or the e2e playground) writes for the deployment they actually run. Per-app artifacts in this work are limited to `peer.ts` (script-side composition) and `db-schema.ts` (shared types).
+The `epicenter.config.ts` becomes a thin orchestrator that imports the daemon factory for each workspace it wants to host:
 
-### Which apps get a `peer.ts`
+```ts
+// epicenter.config.ts (sample; in-repo example lives at playground/<app>-e2e/)
+import { openFujiDaemon } from '@apps/fuji/daemon';
+import { openTabManagerDaemon } from '@apps/tab-manager/daemon';
+import { findEpicenterDir } from '@epicenter/workspace';
 
-Per-app `peer.ts` only makes sense for apps that have a corresponding daemon to peer with:
+const absDir = findEpicenterDir();
 
-| App | Has a daemon? | Gets a `peer.ts` |
+export default {
+  workspaces: [
+    openFujiDaemon({ absDir, cloudUrl: process.env.SYNC_URL }),
+    openTabManagerDaemon({ absDir, cloudUrl: process.env.SYNC_URL }),
+  ],
+};
+```
+
+One line per workspace. The user reads the config and understands the deployment without knowing which `attach*` primitives the app needs internally.
+
+### Why factories instead of inlining attaches in the config
+
+The alternative is to inline every `attach*` call in the `epicenter.config.ts`:
+
+```ts
+// what we'd have without daemon.ts factories
+const fuji = openFuji();
+attachEncryption(fuji.ydoc).attachTables(fuji.ydoc, fujiTables);
+attachSqlite(fuji.ydoc, { filePath: persistencePath(absDir, fuji.ydoc.guid) });
+attachSync(fuji.ydoc, { url: cloudUrl, getToken: () => ... });
+attachSqliteMaterializer(fuji.ydoc, { db: new Database(...) }).table(...);
+attachMarkdownMaterializer(fuji.ydoc, { rootPath: ... });
+attachIpcSyncServer(fuji.ydoc, { workspace: 'fuji' });
+// repeat for tab-manager, opensidian, ...
+```
+
+This forces the config author to know every primitive the app needs and the order to call them in. The daemon factory captures that knowledge once (in the app), so the config stays one line per workspace and the app's daemon contract evolves independently of every consumer's config.
+
+`peer.ts` and `daemon.ts` mirror each other: same composition pattern, opposite halves of the wire. Reading either tells you what the app's runtime shape is.
+
+### Every app gets all three artifacts (daemon.ts, peer.ts, db-schema.ts)
+
+| App | Has a deployed daemon today? | Gets the factories? |
 |---|---|---|
-| `apps/fuji/` | No (no `epicenter.config.ts` exists) | No. Adding one is out of scope; `peer.ts` would point at vapor. |
+| `apps/fuji/` | No (no in-repo config exists) | Yes. Writing the factory enables a user to write a config that uses it. |
 | `apps/opensidian/` | Yes (`playground/opensidian-e2e/epicenter.config.ts`) | Yes |
 | `apps/tab-manager/` | Yes (`playground/tab-manager-e2e/epicenter.config.ts`) | Yes |
 
-### Example: `peer.ts` (the same idea as the original sketch, with the daemon mismatch corrected):
+The "fuji has no daemon" objection from the prior revision was wrong: writing the factory IS the daemon, structurally. Whether anyone runs it is a deployment concern.
+
+### Example: `peer.ts`
 
 ```ts
 // apps/fuji/src/lib/fuji/peer.ts
@@ -938,8 +967,16 @@ The cleanup pass touches the new `peer.ts` files (commit 5 work) and any boot wr
 - **Drop `hono` and `@hono/standard-validator`** from `packages/workspace/package.json`.
 - **Shrink `daemon/client.ts`:** becomes `openDaemon()` returning `openSystemPeer()` under the hood. Methods: `peers` (awareness snapshot), `list` (system.workspaces read), `ping` (no-op; successful sync handshake is liveness). Drop `.run()`, `RunInput`, `ListInput`, `RpcError`. ~80 of 238 lines remain.
 - **Update `packages/workspace/src/index.ts` re-exports:** drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`; add `attachIpcSyncServer`, `attachIpcSyncClient`, `bindIpcSocket`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`.
-- **Add per-app `peer.ts` + `db-schema.ts`** for apps with a daemon (opensidian, tab-manager). Each `peer.ts` exports `openXxxPeer(opts?)` composing `openXxx()` + `attachIpcSyncClient(...)` + `attachSqliteMirror(...)` + `attachMarkdownMirror(...)`. Each derives a default `clientId` via `hashClientId(Bun.main)`.
-- **Update playground configs** (`playground/<app>-e2e/epicenter.config.ts`) to import from the new per-app `db-schema.ts` and to attach the materializers + IPC sync server (instead of relying on the Hono path).
+- **Add per-app `daemon.ts` + `peer.ts` + `db-schema.ts`** for all three apps (fuji, opensidian, tab-manager). Each app's three artifacts:
+  - `daemon.ts` exports `openXxxDaemon(opts: { absDir, cloudUrl?, ... })` composing `openXxx()` + `attachEncryption` + `attachSqlite` + `attachSync` + `attachSqliteMaterializer` + `attachMarkdownMaterializer` + `attachIpcSyncServer`. Returns the workspace bundle with the IPC server registered (the listener picks it up by workspace name).
+  - `peer.ts` exports `openXxxPeer(opts?)` composing `openXxx()` + `attachIpcSyncClient(...)` + `attachSqliteMirror(...)` + `attachMarkdownMirror(...)`. Derives a default `clientId` via `hashClientId(Bun.main)`.
+  - `db-schema.ts` exports the Drizzle schema, imported by both `daemon.ts` (for materializer column hints) and `peer.ts` (for the wrapped `drizzle(db, { schema })`).
+
+  Yes, fuji gets all three even though no fuji `epicenter.config.ts` ships in the repo today. The factory IS the daemon, structurally; whether anyone runs it is a deployment concern. Writing it now means a user can copy the sample config and add `openFujiDaemon({ absDir })` without writing any new factory code.
+
+- **Update playground configs** (`playground/{opensidian,tab-manager}-e2e/epicenter.config.ts`) to call the new `openXxxDaemon` factories instead of inlining the attach calls. The configs become one-line orchestrators.
+
+- **Add a sample `epicenter.config.ts`** at `examples/epicenter.config.sample.ts` (or in the spec's docs) that imports `openFujiDaemon` + `openTabManagerDaemon` and shows the canonical shape a user would copy and edit.
 - **Rewrite CLI commands:** `packages/cli/src/commands/run.ts` opens an ephemeral peer per invocation and invokes the action via `invokeAction(workspace.actions, path, input)`. `list.ts` and `peers.ts` open `openSystemPeer()` and read the system workspace's `workspaces` Y.Map / awareness. Drop the HTTP-client paths.
 - **Object.assign → spread** in any env-factory file the cliff touches.
 - All workspace tests pass. CLI tests adjusted for the new transport.
