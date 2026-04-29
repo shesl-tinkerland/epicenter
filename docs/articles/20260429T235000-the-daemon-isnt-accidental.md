@@ -1,6 +1,6 @@
 # The daemon isn't accidental: why every Epicenter script connects to a hub
 
-When we were designing the Epicenter API, we kept circling back to one question: do we actually need a daemon? Every script you write could just spin up its own workspace instance, attach SQLite, attach cloud sync, do its thing, and exit. No IPC, no preamble, no resident process. Beautiful in principle.
+When we were designing the Epicenter API, we kept circling back to one question: do we actually need a daemon? Every script you write could just spin up its own workspace instance, attach SQLite, attach cloud sync, do its thing, and exit. No IPC, no preamble, no resident process.
 
 We didn't go that way. Each folder gets one daemon, scoped to that folder, unique to your machine, and every script you write connects to it as a peer. This article is about why the tempting "no daemon" version doesn't survive contact with reality, and how we picked the protocol the daemon speaks.
 
@@ -10,38 +10,33 @@ The pitch writes itself. Drop the resident process. Each script does:
 
 ```ts
 using fuji = openFuji();
-// attachSqlite to the local file
-// attachSync to the cloud WebSocket
+attachSqlite(fuji.ydoc, '.epicenter/fuji.sqlite');
+attachSync(fuji.ydoc, { url: 'wss://api.epicenter.so/...' });
+
 fuji.tables.entries.set({ id: 'a', url: '...' });
 ```
 
-One model, no IPC, no daemon lifecycle. If you've ever debugged a stuck unix socket or a stale pid file, this looks like the right answer.
+If you've ever debugged a stuck unix socket or a stale pid file, this looks like the right answer. It falls over for four reasons:
 
-It falls over for four reasons, and they're all real.
+- **SQLite is single-writer.** y-sqlite providers serialize the StructStore as atomic blobs. Two Bun processes writing the same file race on WAL checkpoints and the StructStore corrupts. Turso hit this exact wall and shipped `sqld` so libsql could serve multiple processes safely. Whenever the ecosystem wants multi-process SQLite, the answer keeps coming back as a daemon.
 
-### SQLite is single-writer
+- **Cloud WebSocket fan-out.** Ten scripts running concurrently means ten WebSocket connections to your sync server. Cloudflare Durable Objects bill per connection. The whole y-websocket / y-redis / hocuspocus / partykit ecosystem is hub-and-spoke for the same reason: you want one connection per device, not one per shell command.
 
-y-sqlite providers serialize the StructStore as atomic blobs. Two Bun processes writing the same `.epicenter/fuji.sqlite` file race on WAL checkpoints and corrupt the store. This isn't a "tune your isolation level" problem; the Yjs persistence providers don't model concurrent writers to the same file at all.
-
-Look at what Turso did. They wanted libsql to work for multi-process workloads, hit exactly this wall, and shipped `sqld`: a daemon that owns the file and serves connections. The daemon for SQLite is not optional. It's what the ecosystem keeps reinventing.
-
-### Cloud WebSocket fan-out
-
-Ten scripts running concurrently means ten WebSocket connections to your sync server. Cloudflare Durable Objects bill per connection. Cloud sync servers are sized assuming one connection per device, not one per shell command.
-
-The whole y-websocket / y-redis / hocuspocus / partykit ecosystem is hub-and-spoke for the same reason. Nobody runs y-redis with "every client opens its own server connection." There's always a hub.
-
-### Cold-start hydrate
-
-A 50 MB Y.Doc loads from SQLite in roughly 1.5 seconds. Multiply that by every `bun run script.ts` invocation. Now your shell scripts feel like Java startup.
+- **Cold-start hydrate.** A 50 MB Y.Doc loads from SQLite in roughly 1.5 seconds. Multiply that by every `bun run script.ts` invocation. Now your shell scripts feel like Java startup.
 
 A daemon already has the doc in memory. A peer connecting over a unix socket only needs the state-vector diff, which is ~50ms on a warm doc. The same reason your dev server stays resident: rebuilding from scratch every time is a tax you pay for nothing.
 
-### clientID accumulation
+- **clientID accumulation.** Every Y.Doc has a random `clientID`, and every write it performs is tagged with that ID forever. Yjs needs the tag for causality and never garbage-collects. Fresh process per script means fresh random clientID per invocation:
 
-This one's subtle. Every Y.Doc has a random `clientID`, and every write it performs is tagged with that ID forever. Yjs needs the tag for causality; it never garbage-collects.
+  ```ts
+  // 1000 script invocations, no daemon:
+  ydoc.store.clients.size  // → 1000+ permanent entries
 
-Spin up a fresh process per script and you get a fresh random clientID per invocation. Run a thousand scripts in a week, and your daemon's state vector grows by a thousand permanent entries that ship on every cold-start sync. The "no daemon" model fans this problem out across every process that touches the doc.
+  // 1000 script invocations against a daemon (stable clientIDs):
+  ydoc.store.clients.size  // → 1 entry per distinct script
+  ```
+
+  That state vector ships on every cold-start sync to the cloud.
 
 ## So we kept the daemon
 
@@ -78,9 +73,54 @@ Y.Text, batch closures, run         filter with closures, awareness).
 closure filters.
 ```
 
-We went with option two: sync-as-peer. The reason is single. Option one forces you to define a parallel API surface, "the wire-callable subset," and write machinery to enforce it: branded methods, mapped types, recursive proxies, then-masking, depth-bounded type recursion. Option two doesn't.
+Under JSON-RPC, the script never holds a real Y.Doc. The proxy intercepts every method call and ships it as JSON:
 
-Under sync-as-peer, the script holds a real Y.Doc. The browser tab also holds a real Y.Doc. Both attach IO appropriate to where they run; the browser attaches IndexedDB and a cloud WebSocket, the script attaches a unix-socket sync session pointed at the daemon. The daemon is the only process that attaches SQLite and the cloud WebSocket. The differences are honest, not papered over.
+```ts
+// JSON-RPC: every call becomes a round trip
+const ws = await connectDaemon<Fuji>('fuji');
+await ws.tables.entries.set({ id: 'a', url: '...' });
+//        ↓ proxy intercepts
+//   POST /run { actionPath: 'tables.entries.set', input: {...} }
+
+ws.tables.entries.observe(cb);  // throws RemoteNotSupported
+ws.ydoc.getText('readme');      // undefined, ydoc never crossed the wire
+```
+
+To make that work, you have to define a parallel API surface, "the wire-callable subset," and write machinery to enforce it: branded methods, mapped types, recursive proxies, then-masking, depth-bounded type recursion. Then live with the parts that can't cross a JSON wire at all (`observe`, closure filters, `Y.Text` binding).
+
+We went with option two. Under sync-as-peer, the script holds a real Y.Doc, and the wire ships Yjs updates. Three env factories, one core, IO swapped per environment:
+
+```ts
+// Browser tab: IndexedDB + cloud WS
+export function openFujiBrowser(opts: { authToken: string }) {
+  const fuji = openFuji();
+  attachIndexedDb(fuji.ydoc, 'epicenter.fuji');
+  attachSync(fuji.ydoc, { url: ..., auth: opts.authToken });
+  return fuji;
+}
+
+// Daemon: SQLite + cloud WS + serves local peers
+export function openFujiDaemon(opts: { absDir: string; authToken: string }) {
+  const fuji = openFuji();
+  attachSqlite(fuji.ydoc, persistencePath(opts.absDir));
+  attachSync(fuji.ydoc, { url: ..., auth: opts.authToken });
+  attachSyncHub(fuji.ydoc, { socket: socketPathFor(opts.absDir) });
+  return fuji;
+}
+
+// Peer (script): syncs to the local daemon, no other IO
+export async function openFujiPeer(opts?: { absDir?: string }) {
+  const fuji = openFuji();
+  await attachSyncIpc(fuji.ydoc, {
+    socket: socketPathFor(opts?.absDir ?? findEpicenterDir()),
+  });
+  return fuji;
+}
+```
+
+The browser attaches IndexedDB. The daemon attaches SQLite and serves a sync hub. The peer attaches a unix-socket sync session pointed at that hub. Same `openFuji()` core under all three.
+
+The script then looks like any other workspace consumer:
 
 ```ts
 // vault/scripts/tag-untagged.ts
@@ -101,12 +141,12 @@ const readme = fuji.ydoc.getText('readme');
 readme.insert(0, '# Hello\n');
 ```
 
-`observe`, `batch`, `ydoc.getText` all just work. The script isn't pretending to be a workspace through a JSON keyhole. It is one. The daemon happens to be the peer that owns persistence and cloud sync; the script happens to be the peer that doesn't.
+`observe`, `batch`, `ydoc.getText`: all just work. The daemon happens to be the peer that owns persistence and cloud sync; the script happens to be the peer that doesn't.
 
 ## What this buys, plainly
 
-Scripts get the full Y.Doc API. Binding a `Y.Text` to a TUI editor in a script: free. Subscribing to changes pushed by the browser tab: free. Atomic multi-write batches inside a closure: free. Closure-based filters that don't cross a wire: free.
+Scripts get the full Y.Doc API. Binding a `Y.Text` to a TUI editor in a script: free. Subscribing to changes pushed by the browser tab: free. Atomic multi-write batches inside a closure: free. Closure-based filters that never cross a wire: free.
 
-The mental model collapses to one sentence. Every Epicenter process holds a real workspace. They differ only in which `attach*` primitives carry their bytes. The daemon is a peer that happens to own SQLite and the cloud WebSocket; everything else is a peer that talks to the daemon.
+The mental model collapses to one sentence. Every Epicenter process holds a real workspace. They differ only in which `attach*` primitives carry their bytes. The daemon is a peer that happens to own SQLite and the cloud WebSocket; everything else is a peer that talks to the daemon (over the same Yjs sync protocol the daemon uses to talk to the cloud).
 
 The daemon was never the accidental complexity. The accidental complexity was pretending the workspace API could be projected through a JSON wire. We dropped the wire. The daemon stayed.
