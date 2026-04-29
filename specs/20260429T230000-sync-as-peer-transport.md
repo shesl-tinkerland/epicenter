@@ -379,6 +379,33 @@ This is decided, not optional. The supervisor's reconnect-dedup logic and the da
 
 For inline eval the entry-point path is meaningless. `hashClientId` falls back to a random clientID and logs a `warn` that this invocation will accumulate a state-vector entry. Acceptable because eval is rare; the typical workflow is `bun script.ts`.
 
+### Honest cost numbers (verified against `yjs/yjs`)
+
+A single state vector entry is `varint(clientID) + varint(clock)`. Practically ~10-18 bytes per entry (53-bit integers don't varint-compress well). The state vector ships in every cold-start STEP1.
+
+| Scenario | Distinct clientIDs | STEP1 overhead |
+|---|---|---|
+| Daemon only, no scripts | 1 | ~14 B |
+| 10k script invocations, RANDOM clientIDs | 10,001 | ~140 KB |
+| 10k script invocations, STABLE (3 distinct scripts) | 4 | ~56 B |
+| 100 distinct mutating scripts run weekly for a year | 101 | ~1.4 KB |
+
+Without the discipline, every cold-start sync pays the random-clientID cost forever (no GC). With it, growth is bounded by your codebase's distinct mutating scripts, not by runtime invocation count.
+
+### Why "one daemon per device" doesn't help
+
+Already the case (one daemon per machine, enforced by socket-path uniqueness). The clientID accumulation is on the SCRIPT side, not the daemon side: scripts spawn fresh Y.Doc instances every invocation. The daemon has one stable clientID for its lifetime. Daemon multiplicity isn't relevant to the bloat.
+
+The only way to skip the discipline entirely is to not let scripts have their own Y.Docs, i.e., go back to RPC-only. The spec rejected that for capability reasons (Y.Text bind, observers, batch, closure filters) in the "vision" section.
+
+### Why GC isn't an option
+
+Per Yjs semantics: clientIDs are fundamental to causality. There is no built-in GC for old clientIDs in either the state vector or the StructStore. Even encoding the doc as a snapshot and applying to a fresh `Y.Doc` preserves the original clientIDs (they're embedded in every Item's ID). A truly fresh start would require a custom export-and-replay that strips identity; that loses CRDT history and breaks convergence with anyone holding the old doc. We accept the bounded growth from stable-clientID discipline as the right trade.
+
+### Collision safety net
+
+If two distinct scripts ever hash to the same clientID (sha256 birthday probability at 53 bits: ~5e-13 for 100 scripts, ~5e-9 for 10k scripts; astronomically unlikely), Yjs detects the collision when one peer receives an update attributed to its OWN clientID and auto-reassigns itself a fresh random clientID. So a hash collision is recoverable, not corrupting. (Source: `Doc._integrate` in `yjs/yjs`.)
+
 ### `clientId` vs `deviceId` (different concerns; do not conflate)
 
 Both appear in the IPC preamble. They are not the same thing.
@@ -460,7 +487,42 @@ A script that wants to be **independent of the daemon** (offline, snapshot, embe
 
 ## The new `peer.ts` factory
 
-Per-app, alongside `index.ts` (env-agnostic core) and `browser.ts` / `daemon.ts` (env factories):
+### Correction on per-app file shape
+
+The original draft of this spec assumed each app has a `daemon.ts` factory file. **That assumption is wrong for this codebase.** The actual shape is:
+
+```
+apps/<app>/src/lib/<app>/
+├── index.ts             env-agnostic factory (openXxx)
+├── browser.ts           browser env factory (where the app has a browser surface)
+├── client.ts            singleton wrapper
+└── peer.ts              NEW: script env factory (only for apps that have a daemon)
+
+apps/<app>/src/lib/<app>/db-schema.ts   NEW: Drizzle schema, imported by peer.ts AND
+                                        by the playground epicenter.config.ts
+
+playground/<app>-e2e/epicenter.config.ts
+                                        the daemon recipe (already exists for the
+                                        apps that have a daemon: opensidian, tab-manager).
+                                        Imports db-schema.ts; constructs the daemon-side
+                                        workspace by attaching `attachSqliteMaterializer`,
+                                        `attachMarkdownMaterializer`, `attachIpcSyncServer`,
+                                        etc. inline.
+```
+
+There is **no per-app `daemon.ts` artifact.** The daemon recipe is the inlined `epicenter.config.ts` that the user (or the e2e playground) writes for the deployment they actually run. Per-app artifacts in this work are limited to `peer.ts` (script-side composition) and `db-schema.ts` (shared types).
+
+### Which apps get a `peer.ts`
+
+Per-app `peer.ts` only makes sense for apps that have a corresponding daemon to peer with:
+
+| App | Has a daemon? | Gets a `peer.ts` |
+|---|---|---|
+| `apps/fuji/` | No (no `epicenter.config.ts` exists) | No. Adding one is out of scope; `peer.ts` would point at vapor. |
+| `apps/opensidian/` | Yes (`playground/opensidian-e2e/epicenter.config.ts`) | Yes |
+| `apps/tab-manager/` | Yes (`playground/tab-manager-e2e/epicenter.config.ts`) | Yes |
+
+### Example: `peer.ts` (the same idea as the original sketch, with the daemon mismatch corrected):
 
 ```ts
 // apps/fuji/src/lib/fuji/peer.ts
@@ -511,31 +573,31 @@ export async function openFujiPeer(opts: {
 
 `openFuji` itself takes an optional `clientId` so all three env factories can pass a stable id. Spread, not `Object.assign`: action methods close over `tables` from `openFuji`'s scope, not over the returned object's identity.
 
-The daemon factory composes the same way, attaching writers instead of readers:
+The daemon-side composition lives in the `epicenter.config.ts` of whichever deployment you run (e.g., `playground/opensidian-e2e/epicenter.config.ts`). It attaches writers instead of readers:
 
 ```ts
-// apps/fuji/src/lib/fuji/daemon.ts (sketch)
-export function openFujiDaemon(opts) {
-  const fuji = openFuji();
-  // Persistence (write-ahead log of Y.Doc updates):
-  attachSqlite(fuji.ydoc, { filePath: persistencePath(opts.absDir, fuji.ydoc.guid) });
-  // Cloud sync:
-  attachSync(fuji.ydoc, { url: opts.cloudUrl, auth: opts.token });
-  // Materialized views — daemon-side WRITERS, paired with the peer-side READERS:
-  attachSqliteMaterializer(fuji.ydoc, {
-    db: new Database(mirrorPathFor(opts.absDir, fuji.ydoc.guid)),
-    // PRAGMA journal_mode = WAL set internally
-  }).table(fuji.tables.entries, { fts: ['title', 'body'] });
-  attachMarkdownMaterializer(fuji.ydoc, {
-    rootPath: markdownPathFor(opts.absDir, fuji.ydoc.guid),
-  }).table(fuji.tables.entries);
-  // Local IPC sync hub:
-  attachIpcSyncServer(fuji.ydoc, { socket: socketPathFor(opts.absDir) });
-  return fuji;
-}
+// playground/opensidian-e2e/epicenter.config.ts (sketch)
+import * as schema from '@apps/opensidian/db-schema.js';
+
+const opensidian = openOpensidian();
+// Persistence (write-ahead log of Y.Doc updates):
+attachSqlite(opensidian.ydoc, { filePath: persistencePath(absDir, opensidian.ydoc.guid) });
+// Cloud sync:
+attachSync(opensidian.ydoc, { url: cloudUrl, auth: token });
+// Materialized views: daemon-side WRITERS, paired with the peer-side READERS:
+attachSqliteMaterializer(opensidian.ydoc, {
+  db: new Database(mirrorPathFor(absDir, opensidian.ydoc.guid)),
+  // PRAGMA journal_mode = WAL set internally
+}).table(opensidian.tables.entries, { fts: ['title', 'body'] });
+attachMarkdownMaterializer(opensidian.ydoc, {
+  rootPath: markdownPathFor(absDir, opensidian.ydoc.guid),
+}).table(opensidian.tables.entries);
+// Local IPC sync server, registered in the listener's workspace map:
+const opensidianServer = attachIpcSyncServer(opensidian.ydoc, { workspace: 'opensidian' });
+// (the bindIpcSocket call lives in createWorkspaceServer; see commit 7)
 ```
 
-This is the **honest cut-line**: `fuji.tables.X` and `fuji.kv.X` are pure CRDT (run locally, sync to daemon naturally); `fuji.sqlite` and `fuji.markdown` are read-side views of state the daemon already maintains. No redundant surfaces; no "you could call this through the wire OR locally and get the same thing" footguns. Server-only side effects (auth-tokened external APIs, kicking peers, reloading config) flow through one of two paths described in the next section.
+This is the **honest cut-line**: `opensidian.tables.X` and `opensidian.kv.X` are pure CRDT (run locally in any process, sync to daemon naturally); `opensidian.sqlite` and `opensidian.markdown` (script-side only) are read-side views of state the daemon already maintains. No redundant surfaces; no "you could call this through the wire OR locally and get the same thing" footguns. Server-only side effects (auth-tokened external APIs, kicking peers, reloading config) flow through one of two paths described in the next section.
 
 ## Server-only side effects
 
@@ -849,25 +911,37 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 - New: `packages/workspace/src/shared/paths.ts` adds `mirrorPathFor(absDir, guid)` and `markdownPathFor(absDir, guid)` helpers (alongside the existing `socketPathFor`).
 - Tests: hand-write a SQLite file via `attachSqliteMaterializer` (with WAL), open it with `attachSqliteMirror` from a sibling process, assert FTS5 query returns the right rows. Same for markdown: write tree, open mirror, assert `list` and `read` work.
 
-### 5. Add `peer.ts` env factory per app + per-app `db-schema.ts`
+### 5. (REVISED) Defer per-app peer factories to commit 7
 
-- New: `apps/{fuji,tab-manager,opensidian-e2e}/src/lib/<app>/peer.ts`.
-- Each exports `openXxxPeer(opts?)` composing `openXxx()` + `attachIpcSyncClient` + (optional) `attachSqliteMirror` + (optional) `attachMarkdownMirror`. Returned bundle has the two honest namespaces: `tables.X` (CRDT) and `sqlite` / `markdown` (materialized reads). The `attach` option lets scripts opt into just what they need.
-- New: `apps/<app>/src/lib/<app>/db-schema.ts` shared between `daemon.ts` and `peer.ts`. Drizzle schema definitions; single source of column types.
-- Each derives a default `clientId` from `Bun.main` via the shared `hashClientId(path: string): number` utility (already added in step 1).
-- Tests: each app's `peer.test.ts` smoke-tests construction against an in-process `attachIpcSyncServer` + tmpdir socket + tmpdir mirror file. Asserts: tables CRUD works locally; `sqlite.search(...)` against the warm mirror returns the right rows; `sqlite.drizzle.select()...` returns typed rows.
+> **Spec revision (post-implementation discovery):** The original draft assumed
+> every app had its own `daemon.ts` factory. The codebase does not work that
+> way: the actual daemon recipe is the inlined `epicenter.config.ts` in
+> `playground/<app>-e2e/`. `apps/fuji/` has no daemon at all; opensidian and
+> tab-manager have daemons only in their playground configs. A `peer.ts` for
+> fuji would point at vapor.
 
-### 6. Migrate `Object.assign` to spread across env factories
+Commit 5 as originally planned does not survive the codebase reality. Instead:
 
-- Cleanup pass. Affects `apps/*/src/lib/*/browser.ts`, the new `peer.ts` files, and any `vault/epicenter.config.ts` boot wrappers (`bootFuji`, `bootTabManager`).
-- Pure refactor; no behavior change. Type tests confirm equivalence.
+- **Skip the per-app peer factory work in this commit slot.** Move directly to commit 8 (spike reports), then commit 7 (the cliff), and add per-app `peer.ts` + `db-schema.ts` files for the apps that have a daemon (opensidian, tab-manager) WITHIN commit 7 alongside the server.ts swap.
+- This keeps the per-app factories in the same commit as the daemon-side wiring they peer against. Avoids shipping `peer.ts` files that point at a transport that hasn't been swapped over.
+- For the apps that have no daemon (fuji): no `peer.ts` factory; that work is out of scope until a fuji `epicenter.config.ts` is written.
 
-### 7. Delete the JSON-RPC transport (the cliff)
+### 6. (REVISED) Defer Object.assign cleanup to commit 7
 
-- Delete `client/remote.ts`, `client/remote-workspace-types.ts`, `client/connect-daemon.ts`, `daemon/run-handler.ts`, `daemon/run-errors.ts`, plus their test files.
-- Shrink `daemon/client.ts`: `DaemonClient` becomes `openDaemon()` returning `openSystemPeer()` under the hood. Methods: `peers` (awareness snapshot), `list` (system.workspaces read), `ping` (no-op; successful sync handshake is liveness). Drop `.run()`, `RunInput`, `ListInput`, `RpcError`. ~80 of 238 lines remain.
-- Update `packages/workspace/src/index.ts` re-exports: drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`. Add `attachIpcSyncServer`, `attachIpcSyncClient`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`.
-- Update `packages/cli/src/commands/run.ts` and `packages/cli/src/commands/list.ts`: rewrite to use `openSystemPeer()` (for `list`) or `openXxxPeer(...)` (for `run`). **Decision pending in this commit**: keep `epicenter run` for shell ergonomics, opening an ephemeral peer per invocation; or delete in favor of direct `bun run script.ts`. Default: keep.
+The cleanup pass touches the new `peer.ts` files (commit 5 work) and any boot wrappers. Since commit 5 is folded into commit 7, the cleanup folds in too.
+
+### 7. (EXPANDED) The cliff: transport swap + delete JSON-RPC + per-app peers + cleanup
+
+- **Server swap.** Replace the existing `bindOrRecover(socketPath, absDir, app, ping)` call (Hono-based) in `packages/workspace/src/daemon/server.ts` with `bindIpcSocket({ socketPath, servers: workspaceMap })`. The `servers` map is built from the configured workspace bundle, registering one `attachIpcSyncServer(ydoc, { workspace: name })` per workspace.
+- **Add the synthetic `system` workspace.** Spin it up at server startup (real Y.Doc, no `attachEncryption`, no `attachSqlite`, no `attachSync`; one Y.Map for `workspaces`, one Awareness for connected peers; reconstructed from live config on each boot).
+- **Delete the JSON-RPC transport:** `client/remote.ts`, `client/remote-workspace-types.ts`, `client/connect-daemon.ts`, `daemon/run-handler.ts`, `daemon/run-errors.ts`, `daemon/app.ts` (Hono), `daemon/build-app.ts` (if present), plus their test files.
+- **Drop `hono` and `@hono/standard-validator`** from `packages/workspace/package.json`.
+- **Shrink `daemon/client.ts`:** becomes `openDaemon()` returning `openSystemPeer()` under the hood. Methods: `peers` (awareness snapshot), `list` (system.workspaces read), `ping` (no-op; successful sync handshake is liveness). Drop `.run()`, `RunInput`, `ListInput`, `RpcError`. ~80 of 238 lines remain.
+- **Update `packages/workspace/src/index.ts` re-exports:** drop `connectDaemon`, `Remote`, `buildRemoteWorkspace`, `RpcError`; add `attachIpcSyncServer`, `attachIpcSyncClient`, `bindIpcSocket`, `attachSqliteMirror`, `attachMarkdownMirror`, `mirrorPathFor`, `markdownPathFor`, `openDaemon`, `hashClientId`.
+- **Add per-app `peer.ts` + `db-schema.ts`** for apps with a daemon (opensidian, tab-manager). Each `peer.ts` exports `openXxxPeer(opts?)` composing `openXxx()` + `attachIpcSyncClient(...)` + `attachSqliteMirror(...)` + `attachMarkdownMirror(...)`. Each derives a default `clientId` via `hashClientId(Bun.main)`.
+- **Update playground configs** (`playground/<app>-e2e/epicenter.config.ts`) to import from the new per-app `db-schema.ts` and to attach the materializers + IPC sync server (instead of relying on the Hono path).
+- **Rewrite CLI commands:** `packages/cli/src/commands/run.ts` opens an ephemeral peer per invocation and invokes the action via `invokeAction(workspace.actions, path, input)`. `list.ts` and `peers.ts` open `openSystemPeer()` and read the system workspace's `workspaces` Y.Map / awareness. Drop the HTTP-client paths.
+- **Object.assign → spread** in any env-factory file the cliff touches.
 - All workspace tests pass. CLI tests adjusted for the new transport.
 
 ### 8. Documentation pass
