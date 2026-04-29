@@ -271,6 +271,8 @@ The Phase 3 cutover is gated on this script existing and being documented. Users
 
 ### Phase 4: auto-generate table action wrappers
 
+> Spike 2026-04-28: `schema.pick('id').and(schema.omit('id').partial())` satisfies all required behavior (id required, rest optional, wrong `_v` rejected, missing id rejected) and preserves arktype morph brands like `EntryId` on the inferred input type. No custom walker needed; `partialOf` can be a one-line wrapper around that expression. See `packages/workspace/src/shared/__spikes__/schema-partial.spike.test.ts`.
+
 Add `daemon/table-actions.ts`:
 
 ```ts
