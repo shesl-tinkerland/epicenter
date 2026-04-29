@@ -24,7 +24,7 @@ Every Epicenter process plays one of three roles relative to a given workspace. 
 │  (e.g. fuji) │  attachSync (cloud WebSocket)                                │
 │              │  attachAwareness                                             │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│  Daemon      │  attachSqlite (durable on-disk CRDT log)                     │
+│  Daemon      │  attachSqlitePersistence (durable on-disk CRDT log)          │
 │  (epicenter  │  attachSync (cloud WebSocket)                                │
 │   serve)     │  attachSqliteMaterializer (writes mirror.db, WAL mode)       │
 │              │  attachMarkdownMaterializer (writes md/ tree)                │
@@ -56,7 +56,7 @@ The daemon also hosts a **synthetic `system` workspace** alongside user workspac
             │  Browser tab (fuji UI)  │   │  epicenter daemon            │
             │  - own Y.Doc            │   │  started by `epicenter serve`│
             │  - attachIndexedDb      │   │  - own Y.Doc                 │
-            │  - attachSync           │   │  - attachSqlite (CRDT log)   │
+            │  - attachSync           │   │  - attachSqlitePersistence   │
             │  - attachAwareness      │   │  - attachSync                │
             │                         │   │  - attachSqliteMaterializer  │
             │  fuji.tables.X.set()    │   │  - attachMarkdownMaterializer│
@@ -152,7 +152,7 @@ The daemon is constructed by *the same builder code* you would call in-process. 
 // playground/opensidian-e2e/epicenter.config.ts (excerpt)
 import {
   attachEncryption,
-  attachSqlite,
+  attachSqlitePersistence,
   attachSync,
   attachSqliteMaterializer,
   attachMarkdownMaterializer,
@@ -162,7 +162,7 @@ import {
 
 const ydoc = new Y.Doc({ guid: WORKSPACE_ID });
 const tables = attachEncryption(ydoc).attachTables(ydoc, opensidianTables);
-attachSqlite(ydoc, persistencePath(absDir));            // CRDT log
+attachSqlitePersistence(ydoc, { filePath: persistencePath(absDir) });   // CRDT log
 attachSync(ydoc, { url: toWsUrl(`${SERVER_URL}/...`), ... });
 attachSqliteMaterializer(ydoc, { db: openMirror(absDir) }) // mirror.db (WAL)
   .table(tables.entries, { fts: ['title', 'body'] });
@@ -261,7 +261,7 @@ What this gets you that an RPC mirror would not:
 - **Zero round trips per query.** A `SELECT ... WHERE ... LIMIT 50` against the mirror is one SQLite call. Marshalling rows through the unix socket would be ten thousand bytes one way and ten thousand bytes back. Local SQLite with shared OS page cache is faster than any RPC layer the daemon could expose.
 - **Full client menu, no proxy gymnastics.** Drizzle's query builder, raw SQL, FTS5 with `MATCH`, transaction blocks: all available in the script because the script is just opening a SQLite file. There is no "the wire-callable subset" to maintain. The reader uses the database client directly.
 - **Warm cache reuse.** The daemon has been running for hours; its OS page cache for `mirror.db` is hot. The script's SQLite open hits that cache. A self-contained "every script its own SQLite" approach would re-warm from cold disk on every invocation.
-- **No cold-start hydration.** Opening a SQLite file is microseconds. Hydrating a 50 MB Y.Doc from a fresh process is seconds.
+- **No Y.Doc hydration on the read path.** A script that only needs to *read* state does not have to construct a Y.Doc at all; it opens the mirror SQLite file directly. Constructing a Y.Doc to satisfy a query would mean paying `Y.applyUpdate` of the full state on every cold script invocation; reading the mirror skips that entirely.
 
 What this **does not change**: writes still flow through `Y.Doc`. The CRDT is the single source of truth. The mirror is exactly that: a one-way projection the daemon maintains. A script that wants to write does it via `fuji.tables.X.set(...)`, not by `INSERT INTO entries ...`. (In fact, the mirror file is opened `readonly: true` for scripts, which means trying to write through it errors with a SQLite read-only failure rather than diverging from the CRDT silently.)
 
@@ -269,15 +269,18 @@ What this **does not change**: writes still flow through `Y.Doc`. The CRDT is th
 
 A reasonable instinct: "Why does the daemon exist? Couldn't a script just attach its own Y.Doc, its own SQLite, its own cloud sync, like the browser tab does?"
 
-It could not, and the failure modes are concrete:
+It could, *for some workloads*. The daemon is load-bearing only when these failure modes apply:
 
-1. **SQLite is single-writer.** Two processes calling `attachSqlite` on the same file race on WAL checkpoints; the StructStore corrupts. Whenever the ecosystem wants multi-process SQLite, the answer keeps coming back as a daemon (libsql shipped `sqld` for this exact reason).
-2. **Cloud WebSocket fan-out.** Ten concurrent scripts mean ten WebSocket connections to the sync server. Cloudflare Durable Objects bill per connection, and the y-websocket / hocuspocus / partykit ecosystem is hub-and-spoke for the same reason: one connection per device.
-3. **Cold-start hydration.** A 50 MB Y.Doc loads from SQLite in roughly 1.5 seconds. Multiply by every `bun run script.ts` invocation. A daemon already has the doc in memory; a peer connecting over a unix socket only ships the state-vector diff, which is ~50 ms on a warm doc.
-4. **clientID accumulation.** Every Y.Doc has a random `clientID` that Yjs retains forever in the StructStore (CRDT causality is unbounded). Fresh process per script means fresh random clientID per invocation; 1000 invocations means 1000 permanent entries shipped on every cold-start sync. `attachIpcSyncClient` derives a stable clientID from the script's entry-point path, so two invocations of the same script reuse the same id.
-5. **Encryption boundary.** The daemon holds the workspace's encryption keys. Forking that key material into every shell script (so each can talk to the cloud independently) is worse for security than keeping it in one long-lived process and granting filesystem-permissioned IPC.
+1. **SQLite single-writer when scripts also write the materializer.** Two processes calling `attachSqliteMaterializer` on the same file race on WAL checkpoints; the StructStore corrupts. y-sqlite serializes the StructStore as atomic blobs which makes this strictly worse. The whole "multi-process SQLite" answer in the ecosystem is a serializing process: libsql ships `sqld`; we ship the daemon. They are the same shape.
+2. **Cloud WebSocket fan-out for concurrent or long-lived peers.** Ten concurrent scripts mean ten WebSocket connections to the sync server. Cloudflare Durable Objects bill per connection (and even at near-zero per-connection cost, each open WS pins the DO to a colo and consumes its memory budget). Long-lived `peer.ts` watchers compound this. Sequential one-shot scripts do not: at any moment only one WS is open. The y-websocket / hocuspocus / partykit ecosystem is hub-and-spoke for this reason.
+3. **Encryption-key boundary.** The daemon holds the workspace's encryption keys. Forking that key material into every shell script is worse for security than keeping it in one long-lived process and granting filesystem-permissioned IPC.
 
-So the daemon exists to **amortize the cost of being a sync client and a SQLite writer** for the local machine. Browsers pay the sync-client cost themselves because they are already a long-lived UI process. Scripts piggyback on the daemon for both: they get CRDT convergence over the unix socket, they get queryable state via the shared mirror file, and they get markdown reads via the shared tree. Three transports, each carrying what it carries best, composed into one workspace handle with one call shape.
+The two reasons that *sound* like daemon arguments but aren't:
+
+- **Cold-start hydration is not a daemon win.** A cold script that needs the full Y.Doc pays `Y.applyUpdate` on the whole state regardless of whether bytes come from local SQLite or from the daemon over a unix socket; the apply dominates and both paths pay it. The daemon does help long-lived peers and any peer that already has its own persistence (small state-vector diff over IPC), but a fresh script with no persistence sees no cold-start speedup from the daemon. Where the *mirror* helps cold scripts is on the *read path*: reading the mirror SQLite file skips Y.Doc construction entirely. That is a mirror property, not a daemon property; a daemon-less worker that maintains the same mirror would give scripts the same benefit.
+- **clientID accumulation is fixed peer-side, not by the daemon.** Random `clientID` per `new Y.Doc()` accumulates one StructStore entry per process invocation forever. The fix is `hashClientId(Bun.main)` (`packages/workspace/src/shared/client-id.ts`): two invocations of the same script reuse the same clientID. This works whether or not there's a daemon.
+
+So the daemon exists to **serialize multi-process writes to the SQLite materializer**, **fan out one cloud WebSocket to many local peers**, and **own the encryption key material**. Scripts that only *read* state could in principle skip the daemon entirely (open the mirror SQLite directly, never construct a Y.Doc). Scripts that *write* must either (a) go through the daemon over the IPC sync transport, or (b) use the daemon-less model with their own short-lived cloud WS and accept that the materializer must be maintained by some long-lived process. Three transports, each carrying what it carries best, composed into one workspace handle with one call shape.
 
 ## Cross-References
 

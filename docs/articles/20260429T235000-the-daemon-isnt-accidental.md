@@ -10,33 +10,23 @@ The pitch writes itself. Drop the resident process. Each script does:
 
 ```ts
 using fuji = openFuji();
-attachSqlite(fuji.ydoc, '.epicenter/fuji.sqlite');
+attachSqlitePersistence(fuji.ydoc, { filePath: '.epicenter/fuji.sqlite' });
 attachSync(fuji.ydoc, { url: 'wss://api.epicenter.so/...' });
 
 fuji.tables.entries.set({ id: 'a', url: '...' });
 ```
 
-If you've ever debugged a stuck unix socket or a stale pid file, this looks like the right answer. It falls over for four reasons:
+If you've ever debugged a stuck unix socket or a stale pid file, this looks like the right answer. It falls over for two load-bearing reasons:
 
-- **SQLite is single-writer.** y-sqlite providers serialize the StructStore as atomic blobs. Two Bun processes writing the same file race on WAL checkpoints and the StructStore corrupts. Turso hit this exact wall and shipped `sqld` so libsql could serve multiple processes safely. Whenever the ecosystem wants multi-process SQLite, the answer keeps coming back as a daemon.
+- **SQLite is single-writer.** When SQLite is also where the materializer writes, two Bun processes writing the same file race on WAL checkpoints and the StructStore corrupts. y-sqlite providers serialize the StructStore as atomic blobs, which makes this strictly worse. Turso hit this exact wall and shipped `sqld` so libsql could serve multiple processes safely. Whenever the ecosystem wants multi-process SQLite, the answer keeps coming back as a serializing process. The daemon is one such process; `sqld` is another, just with a different name.
 
-- **Cloud WebSocket fan-out.** Ten scripts running concurrently means ten WebSocket connections to your sync server. Cloudflare Durable Objects bill per connection. The whole y-websocket / y-redis / hocuspocus / partykit ecosystem is hub-and-spoke for the same reason: you want one connection per device, not one per shell command.
+- **Cloud WebSocket fan-out for concurrent or long-lived peers.** Ten scripts running concurrently means ten WebSocket connections to your sync server. Cloudflare Durable Objects bill per connection (and even when the per-connection cost is tiny, each open WS pins the DO instance to a colo and consumes its memory budget). For sequential one-shot scripts this is fine; for concurrent fanout or long-lived peer.ts watchers, you want one WS per device, not one per shell command. The whole y-websocket / y-redis / hocuspocus / partykit ecosystem is hub-and-spoke for this reason.
 
-- **Cold-start hydrate.** A 50 MB Y.Doc loads from SQLite in roughly 1.5 seconds. Multiply that by every `bun run script.ts` invocation. Now your shell scripts feel like Java startup.
+Two reasons that *sound* like daemon arguments but aren't:
 
-A daemon already has the doc in memory. A peer connecting over a unix socket only needs the state-vector diff, which is ~50ms on a warm doc. The same reason your dev server stays resident: rebuilding from scratch every time is a tax you pay for nothing.
+- **Cold-start hydrate is not a daemon win.** A cold script that needs the full Y.Doc pays `Y.applyUpdate` of the whole state regardless of where the bytes come from. Reading 50 MB from local SQLite vs. receiving 50 MB from a daemon over a unix socket is the same order of magnitude (a few ms either way); the dominant cost is the apply, which both paths pay. A daemon does help *long-lived* peers and helps any peer that already has its own persistence (small state-vector diff over IPC), but a fresh script with no persistence sees no cold-start speedup from talking to a daemon vs. talking to the cloud.
 
-- **clientID accumulation.** Every Y.Doc has a random `clientID`, and every write it performs is tagged with that ID forever. Yjs needs the tag for causality and never garbage-collects. Fresh process per script means fresh random clientID per invocation:
-
-  ```ts
-  // 1000 script invocations, no daemon:
-  ydoc.store.clients.size  // → 1000+ permanent entries
-
-  // 1000 script invocations against a daemon (stable clientIDs):
-  ydoc.store.clients.size  // → 1 entry per distinct script
-  ```
-
-  That state vector ships on every cold-start sync to the cloud.
+- **clientID accumulation is fixed peer-side, not by the daemon.** Every Y.Doc has a random `clientID`, and every write it performs is tagged with that ID forever. Fresh process per script means fresh random clientID per invocation, ten thousand entries in your state vector after ten thousand runs. The fix is `hashClientId(Bun.main)` (`packages/workspace/src/shared/client-id.ts`): derive a stable 53-bit clientID from the script's entry-point path. Two invocations of the same script reuse the same clientID. This works whether or not there's a daemon; the daemon just gets the same fix for free because daemons have stable identities trivially.
 
 ## So we kept the daemon
 
@@ -102,7 +92,7 @@ export function openFujiBrowser(opts: { authToken: string }) {
 // Daemon: SQLite + cloud WS + serves local peers
 export function openFujiDaemon(opts: { absDir: string; authToken: string }) {
   const fuji = openFuji();
-  attachSqlite(fuji.ydoc, persistencePath(opts.absDir));
+  attachSqlitePersistence(fuji.ydoc, { filePath: persistencePath(opts.absDir) });
   attachSync(fuji.ydoc, { url: ..., auth: opts.authToken });
   attachSyncHub(fuji.ydoc, { socket: socketPathFor(opts.absDir) });
   return fuji;
