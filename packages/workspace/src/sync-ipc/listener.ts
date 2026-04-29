@@ -36,6 +36,7 @@ import { Err, Ok, type Result } from 'wellcrafted/result';
 import { createFrameReader, encodeFrame } from './framing.js';
 import type { IpcSyncServer } from './server.js';
 import type { IpcChannel, IpcPreamble, IpcPreambleReply } from './types.js';
+import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
 // ============================================================================
 // Errors
@@ -110,6 +111,8 @@ type ConnectionState = {
 	readonly channel: IpcChannel;
 	/** Trigger the channel's onClose listeners. Idempotent. */
 	readonly fireClose: () => void;
+	/** Resume queued writes when the kernel buffer drains. */
+	readonly writes: WriteQueue;
 };
 
 type BunIpcSocket = {
@@ -152,6 +155,9 @@ export async function bindIpcSocket(opts: {
 			},
 			data(socket: BunIpcSocket, chunk: Uint8Array) {
 				socket.data.feed(chunk);
+			},
+			drain(socket: BunIpcSocket) {
+				socket.data?.writes.flush();
 			},
 			close(socket: BunIpcSocket) {
 				socket.data?.fireClose();
@@ -205,6 +211,7 @@ function createConnectionState(
 	let closed = false;
 	const frameListeners = new Set<(b: Uint8Array) => void>();
 	const closeListeners = new Set<() => void>();
+	const writes = createWriteQueue(() => (closed ? null : socket));
 
 	function fireClose() {
 		if (closed) return;
@@ -216,7 +223,7 @@ function createConnectionState(
 		sendFrame(bytes) {
 			if (closed) return;
 			try {
-				socket.write(encodeFrame(bytes));
+				writes.enqueue(encodeFrame(bytes));
 			} catch {
 				fireClose();
 			}
@@ -228,6 +235,7 @@ function createConnectionState(
 		close() {
 			if (closed) return;
 			try {
+				writes.flush();
 				socket.end();
 			} catch {
 				// best-effort
@@ -243,7 +251,7 @@ function createConnectionState(
 	const reader = createFrameReader((frame) => {
 		if (!preambleConsumed) {
 			preambleConsumed = true;
-			handlePreambleFrame(frame, socket, servers, channel, log);
+			handlePreambleFrame(frame, writes, servers, channel, log);
 			return;
 		}
 		for (const cb of frameListeners) cb(frame);
@@ -255,21 +263,22 @@ function createConnectionState(
 		},
 		channel,
 		fireClose,
+		writes,
 	};
 }
 
 function writeReplyEnvelope(
-	socket: BunIpcSocket,
+	writes: WriteQueue,
 	envelope: IpcPreambleReplyEnvelope,
 ) {
 	const json = JSON.stringify(envelope);
 	const payload = new TextEncoder().encode(json);
-	socket.write(encodeFrame(payload));
+	writes.enqueue(encodeFrame(payload));
 }
 
 function handlePreambleFrame(
 	frame: Uint8Array,
-	socket: BunIpcSocket,
+	writes: WriteQueue,
 	servers: Map<string, IpcSyncServer>,
 	channel: IpcChannel,
 	log: Logger,
@@ -280,7 +289,7 @@ function handlePreambleFrame(
 		parsed = JSON.parse(text);
 	} catch (cause) {
 		writeReplyEnvelope(
-			socket,
+			writes,
 			Err(
 				IpcHandshakeError.BadPreamble({
 					reason: extractErrorMessage(cause),
@@ -293,7 +302,7 @@ function handlePreambleFrame(
 
 	const validated = validatePreamble(parsed);
 	if (validated.error !== null) {
-		writeReplyEnvelope(socket, validated);
+		writeReplyEnvelope(writes, validated);
 		channel.close();
 		return;
 	}
@@ -302,7 +311,7 @@ function handlePreambleFrame(
 	const server = servers.get(preamble.workspace);
 	if (!server) {
 		writeReplyEnvelope(
-			socket,
+			writes,
 			Err(
 				IpcHandshakeError.NoSuchWorkspace({
 					workspace: preamble.workspace,
@@ -314,7 +323,7 @@ function handlePreambleFrame(
 	}
 
 	writeReplyEnvelope(
-		socket,
+		writes,
 		Ok({ workspaceGuid: preamble.workspace }),
 	);
 

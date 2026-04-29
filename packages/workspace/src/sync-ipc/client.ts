@@ -51,6 +51,7 @@ import {
 
 import { createFrameReader, encodeFrame } from './framing.js';
 import type { IpcChannel, IpcPreamble, IpcPreambleReply } from './types.js';
+import { createWriteQueue } from './write-queue.js';
 
 // ============================================================================
 // Types
@@ -483,10 +484,12 @@ async function defaultBunDial(
 		for (const cb of closeListeners) cb();
 	}
 
+	const writes = createWriteQueue(() => (closed ? null : socket));
+
 	const channel: IpcChannel = {
 		sendFrame(bytes) {
-			if (closed || !socket) return;
-			socket.write(encodeFrame(bytes));
+			if (closed) return;
+			writes.enqueue(encodeFrame(bytes));
 		},
 		onFrame(cb) {
 			frameListeners.add(cb);
@@ -495,6 +498,7 @@ async function defaultBunDial(
 		close() {
 			if (closed) return;
 			try {
+				writes.flush();
 				socket?.end();
 			} catch {
 				// best-effort
@@ -516,10 +520,13 @@ async function defaultBunDial(
 					data(_s: unknown, chunk: Uint8Array) {
 						reader.push(chunk);
 					},
+					drain(_s: unknown) {
+						writes.flush();
+					},
 					open(s: BunIpcSocket) {
 						socket = s;
 						const json = JSON.stringify(preamble);
-						s.write(encodeFrame(new TextEncoder().encode(json)));
+						writes.enqueue(encodeFrame(new TextEncoder().encode(json)));
 					},
 					close() {
 						fireClose();

@@ -84,6 +84,45 @@ describe('bindIpcSocket', () => {
 		clientDoc.destroy();
 	});
 
+	it('round-trips a single 64 KB frame without losing bytes (backpressure)', async () => {
+		// Bun's unix-socket SO_SNDBUF is ~7 KB; a naive `socket.write` on a 64 KB
+		// frame returns 0 and silently drops the rest. The write-queue + drain
+		// hook in listener/client must ride out the kernel buffer fill.
+		const socketPath = join(workdir, 'daemon.sock');
+
+		const big = 'x'.repeat(64 * 1024);
+		const serverDoc = new Y.Doc();
+		serverDoc.getMap('m').set('blob', big);
+		const fujiServer = attachIpcSyncServer(serverDoc, { workspace: 'fuji' });
+
+		const listener = await bindIpcSocket({
+			socketPath,
+			servers: new Map<string, IpcSyncServer>([['fuji', fujiServer]]),
+		});
+
+		const clientDoc = new Y.Doc();
+		const ipc = attachIpcSyncClient(clientDoc, {
+			socket: socketPath,
+			workspace: 'fuji',
+			deviceId: 'device-test',
+		});
+
+		await ipc.whenSynced;
+		expect(clientDoc.getMap('m').get('blob')).toBe(big);
+
+		// Push a large value the other direction too, to exercise the client's queue.
+		const big2 = 'y'.repeat(96 * 1024);
+		clientDoc.getMap('m').set('reverse', big2);
+		await new Promise((r) => setTimeout(r, 60));
+		expect(serverDoc.getMap('m').get('reverse')).toBe(big2);
+
+		await ipc.close();
+		await listener.close();
+		await fujiServer.close();
+		serverDoc.destroy();
+		clientDoc.destroy();
+	});
+
 	it('routes a multi-workspace listener to the right server', async () => {
 		const socketPath = join(workdir, 'daemon.sock');
 
