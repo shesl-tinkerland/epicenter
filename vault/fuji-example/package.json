@@ -1,0 +1,11 @@
+{
+	"name": "fuji-example",
+	"private": true,
+	"type": "module",
+	"description": "Example vault that exercises the Fuji daemon and script factories end-to-end.",
+	"dependencies": {
+		"@epicenter/cli": "workspace:*",
+		"@epicenter/fuji": "workspace:*",
+		"@epicenter/workspace": "workspace:*"
+	}
+}

@@ -29,7 +29,8 @@
 		"packages": [
 			"apps/*",
 			"packages/*",
-			"examples/*"
+			"examples/*",
+			"vault/*"
 		],
 		"catalog": {
 			"@types/node": "^24.0.0",

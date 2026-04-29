@@ -726,6 +726,14 @@
         "yjs": "catalog:",
       },
     },
+    "vault/fuji-example": {
+      "name": "fuji-example",
+      "dependencies": {
+        "@epicenter/cli": "workspace:*",
+        "@epicenter/fuji": "workspace:*",
+        "@epicenter/workspace": "workspace:*",
+      },
+    },
   },
   "patchedDependencies": {
     "@tanstack/ai@0.8.1": "patches/@tanstack%2Fai@0.8.1.patch",
@@ -2338,6 +2346,8 @@
     "fs-extra": ["fs-extra@11.3.4", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-CTXd6rk/M3/ULNQj8FBqBWHYBVYybQ3VPBw0xGKFe3tuH7ytT6ACnvzpIQ3UZtB8yvUKC2cXn1a+x+5EVQLovA=="],
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
+
+    "fuji-example": ["fuji-example@workspace:vault/fuji-example"],
 
     "function-bind": ["function-bind@1.1.2", "", {}, "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA=="],
 
