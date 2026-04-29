@@ -5,7 +5,7 @@
  * deviceId, friendly name, platform, and the session-local clientID.
  *
  * `epicenter peers` requires a running daemon for the resolved `--dir`.
- * Without `up`, the handler errors with a hint pointing at `epicenter up`.
+ * Without one, the handler errors with a hint pointing at `epicenter serve`.
  *
  * Prints `no peers connected` to stderr when every workspace is empty (text
  * mode only; JSON mode always emits a valid array, even if empty).

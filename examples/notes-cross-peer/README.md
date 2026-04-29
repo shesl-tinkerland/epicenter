@@ -18,13 +18,13 @@ bun x epicenter auth login        # one-time, https://api.epicenter.so
 **Terminal 1** — bring peer-a online as a long-lived peer (Ctrl-C to stop):
 
 ```bash
-bun x epicenter up --dir examples/notes-cross-peer/peer-a
+bun x epicenter serve --dir examples/notes-cross-peer/peer-a
 ```
 
 **Terminal 2** — bring peer-b online too, then dispatch via its daemon to peer-a:
 
 ```bash
-bun x epicenter up --dir examples/notes-cross-peer/peer-b &
+bun x epicenter serve --dir examples/notes-cross-peer/peer-b &
 bun x epicenter peers --dir examples/notes-cross-peer/peer-b
 bun x epicenter run notes.add --dir examples/notes-cross-peer/peer-b --peer notes-repro-peer-a '{"body":"from peer-b"}'
 ```

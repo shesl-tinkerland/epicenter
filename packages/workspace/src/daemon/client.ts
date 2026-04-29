@@ -1,5 +1,5 @@
 /**
- * Hand-rolled typed client for the `epicenter up` daemon. Three surfaces:
+ * Hand-rolled typed client for the `epicenter serve` daemon. Three surfaces:
  *
  * - {@link pingDaemon}: cheap liveness probe; never throws, never returns
  *   Result. Boolean is the right shape for a fast-path predicate.

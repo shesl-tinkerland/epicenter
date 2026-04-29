@@ -210,7 +210,7 @@ Scripts and the CLI both reach a remote workspace through one function:
 import { connectDaemon } from '@epicenter/workspace';
 import { openFuji } from '@epicenter/fuji/workspace';
 
-using fuji = await connectDaemon<typeof openFuji>({
+using fuji = await connectDaemon<ReturnType<typeof openFuji>>({
   id: 'epicenter.fuji',
   absDir: '/Users/braden/Code/vault',  // optional; defaults to upward search
 });
@@ -219,7 +219,7 @@ const entries = await fuji.tables.entries.getAllValid();
 await fuji.actions.entries.update({ id, title: 'New' });
 ```
 
-`typeof openFuji` is type-only at runtime. TypeScript reads `openFuji`'s return type to shape the remote client; the function body never executes in the script process. The script holds a unix socket and a typed RPC stub: no Y.Doc, no SQLite, no sync session locally.
+`ReturnType<typeof openFuji>` is type-only at runtime. TypeScript reads `openFuji`'s return type to shape the remote client; the function body never executes in the script process. The script holds a unix socket and a typed RPC stub: no Y.Doc, no SQLite, no sync session locally.
 
 `absDir` is optional. If omitted, `connectDaemon` walks parent directories from `process.cwd()` looking for an `epicenter.config.ts` or `.epicenter/` marker, the way `git` finds the repo root. Pass it explicitly when you need to address a workspace outside the cwd's tree.
 
@@ -262,7 +262,7 @@ Inside the script:
 import { connectDaemon } from '@epicenter/workspace';
 import { openFuji } from '@epicenter/fuji/workspace';
 
-using fuji = await connectDaemon<typeof openFuji>({ id: 'epicenter.fuji' });
+using fuji = await connectDaemon<ReturnType<typeof openFuji>>({ id: 'epicenter.fuji' });
 
 const untagged = (await fuji.tables.entries.getAllValid())
   .filter(e => e.tags.length === 0);

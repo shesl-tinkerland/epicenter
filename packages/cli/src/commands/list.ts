@@ -13,7 +13,7 @@
  * natural home: the peers verb already owns the awareness/RPC dimension.
  *
  * `epicenter list` requires a running daemon for the resolved `--dir`.
- * Without `up`, the handler errors with a hint pointing at `epicenter up`.
+ * Without one, the handler errors with a hint pointing at `epicenter serve`.
  */
 
 import {

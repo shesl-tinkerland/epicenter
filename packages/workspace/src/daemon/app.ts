@@ -1,5 +1,5 @@
 /**
- * Hono app for the `epicenter up` daemon. Single source of truth for the
+ * Hono app for the `epicenter serve` daemon. Single source of truth for the
  * routes; the server (`bindUnixSocket`) wires this into Bun's listener
  * and the hand-rolled `daemonClient` in `./client.ts` POSTs against it.
  *

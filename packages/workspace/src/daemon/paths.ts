@@ -1,9 +1,9 @@
 /**
- * Path builders for the long-lived `epicenter up` daemon.
+ * Path builders for the long-lived `epicenter serve` daemon.
  *
- * Pure helpers: no side effects, no directory creation. The `up` command
- * (Wave 5) owns the `mkdir`/`chmod` work; consumers here are free to call
- * these from anywhere without worrying about filesystem mutation.
+ * Pure helpers: no side effects, no directory creation. The `serve` command
+ * owns the `mkdir`/`chmod` work; consumers here are free to call these from
+ * anywhere without worrying about filesystem mutation.
  *
  * See spec: `20260426T235000-cli-up-long-lived-peer.md` § Socket location.
  */

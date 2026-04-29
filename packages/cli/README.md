@@ -40,9 +40,9 @@ Inside this monorepo:
 
 The package exposes the `epicenter` binary via `src/bin.ts`.
 
-## The four commands
+## The commands
 
-`run`, `list`, and `peers` dispatch to the local `epicenter up` daemon for the resolved `--dir`. Start it once at the top of your session (`epicenter up &`), then run as many shell-shortcut commands as you want; without `up`, those three verbs error with a hint pointing back here. `up`, `down`, `ps`, `logs`, and `auth` work without a daemon.
+`run`, `list`, and `peers` dispatch to the local `epicenter serve` daemon for the resolved `--dir`. Start it once at the top of your session (`epicenter serve &`), then run as many shell-shortcut commands as you want; without a daemon, those three verbs error with a hint pointing back here. `serve` and `auth` work without a prior daemon.
 
 ```bash
 # auth — server session (pre-workspace; no --dir or --workspace)
@@ -51,8 +51,8 @@ epicenter auth login https://self-hosted.example  # self-hosted override
 epicenter auth status                             # most recent session
 epicenter auth logout                             # most recent session
 
-# up — bring the workspace online as a callable peer (run once per session)
-epicenter up &
+# serve — bring the workspace online as a callable peer (run once per session)
+epicenter serve &
 
 # list — what actions are exposed on this device
 epicenter list                                      # full tree

@@ -157,6 +157,8 @@ Note that "today's `connectWorkspace`" (from `packages/cli/src/connect.ts`) is t
 
 ## What gets deleted, moved, and added
 
+> Sections below show the original plan. See the Review section at the end for what actually shipped (e.g. `connectDaemon<W>` instead of `<typeof builder>`, `partialUpdate` instead of `partialOf`, `shared/paths.ts` and not `paths/persistence.ts`).
+
 ```
 DELETED
   (none in @epicenter/cli — the prior front-door functions referenced by the
