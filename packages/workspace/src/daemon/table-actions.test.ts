@@ -71,24 +71,18 @@ describe('buildTableActions', () => {
 		expect(table.count()).toBe(2);
 	});
 
-	test('update.input accepts `{ id }` alone', () => {
+	test('update.input is a JSON Schema with id required and other fields optional', () => {
 		const { actions } = setupEntries();
-		const schema = actions.update.input as unknown as ReturnType<
-			typeof type
-		>;
-		const ok = (schema as unknown as (v: unknown) => unknown)({ id: 'x' });
-		expect(ok instanceof type.errors).toBe(false);
-
-		const noId = (schema as unknown as (v: unknown) => unknown)({
-			title: 'no id',
-		});
-		expect(noId instanceof type.errors).toBe(true);
-
-		const wrongV = (schema as unknown as (v: unknown) => unknown)({
-			id: 'x',
-			_v: 99,
-		});
-		expect(wrongV instanceof type.errors).toBe(true);
+		const schema = actions.update.input as unknown as {
+			type?: string;
+			properties?: Record<string, unknown>;
+			required?: readonly string[];
+		};
+		expect(schema.type).toBe('object');
+		expect(schema.properties).toBeDefined();
+		expect(schema.properties?.id).toBeDefined();
+		expect(schema.required).toContain('id');
+		expect(schema.required).not.toContain('title');
 	});
 
 	test('action metadata carries titles', () => {
