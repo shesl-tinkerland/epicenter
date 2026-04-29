@@ -1,19 +1,21 @@
 /**
  * `connectDaemon` — front door for talking to a workspace hosted by a
  * running daemon. The single entry point shared by vault scripts and
- * (in Phase 7) every CLI command that dispatches a workspace action.
+ * every CLI command that dispatches a workspace action.
  *
- * Generic `T` is the workspace builder function (e.g. `typeof openFuji`);
- * its body never runs in the caller — TypeScript reads `ReturnType<T>` at
- * compile time only, and the runtime returns a `RemoteWorkspace<...>`
- * proxy backed by a unix-socket `DaemonClient`.
+ * Generic `W` is the workspace shape (typically
+ * `ReturnType<typeof openFuji>`); the runtime returns a
+ * `RemoteWorkspace<W>` proxy backed by a unix-socket `DaemonClient`.
+ * `W` is type-only: no workspace code runs in the caller process.
  *
  * @example
  * ```ts
  * import { connectDaemon } from '@epicenter/workspace';
  * import { openFuji } from '@epicenter/fuji/workspace';
  *
- * using fuji = await connectDaemon<typeof openFuji>({ id: 'epicenter.fuji' });
+ * using fuji = await connectDaemon<ReturnType<typeof openFuji>>({
+ *   id: 'epicenter.fuji',
+ * });
  * await fuji.actions.entries.update({ id, tags: ['untagged'] });
  * ```
  *
@@ -42,17 +44,17 @@ import type { RemoteWorkspace } from './remote-workspace-types.js';
  * resolved socket. Start one with `epicenter serve`. There is no
  * auto-spawn: explicit lifecycle is the contract.
  */
-export async function connectDaemon<T extends (...args: any[]) => any>({
+export async function connectDaemon<W>({
 	id,
 	absDir = findEpicenterDir(process.cwd()),
 }: {
 	id: string;
 	absDir?: string;
-}): Promise<RemoteWorkspace<ReturnType<T>>> {
+}): Promise<RemoteWorkspace<W>> {
 	const socketPath = socketPathFor(absDir);
 	if (!(await pingDaemon(socketPath))) {
 		throw DaemonError.Required({ absDir, id }).error;
 	}
 	const client = daemonClient(socketPath);
-	return buildRemoteWorkspace<ReturnType<T>>(client, id);
+	return buildRemoteWorkspace<W>(client, id);
 }
