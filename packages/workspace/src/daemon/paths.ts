@@ -1,18 +1,24 @@
 /**
- * Path builders for the long-lived `epicenter serve` daemon.
+ * Path builders for the daemon and per-workspace state.
+ *
+ * Two conventions:
+ *   per-user (sockets, logs): `~/.epicenter/...`
+ *   per-workspace (SQLite):    `<absDir>/.epicenter/...`
  *
  * Pure helpers: no side effects, no directory creation. The `serve` command
  * owns the `mkdir`/`chmod` work; consumers here are free to call these from
  * anywhere without worrying about filesystem mutation.
- *
- * See spec: `20260426T235000-cli-up-long-lived-peer.md` § Socket location.
  */
 
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { epicenterHome } from '../shared/paths.js';
+/** `$EPICENTER_HOME` env, then `~/.epicenter/`. */
+function epicenterHome(): string {
+	return Bun.env.EPICENTER_HOME ?? join(homedir(), '.epicenter');
+}
 
 /**
  * Resolve the runtime directory for daemon sockets and metadata.
@@ -60,4 +66,21 @@ export function metadataPathFor(dir: string): string {
  */
 export function logPathFor(dir: string): string {
 	return join(epicenterHome(), 'log', `${dirHash(dir)}.log`);
+}
+
+/**
+ * Path to a workspace's SQLite persistence file.
+ *
+ * Convention: `<absDir>/.epicenter/persistence/<workspaceId>.db`.
+ * `absDir` is the project root (where `epicenter.config.ts` lives);
+ * `workspaceId` is `ws.ydoc.guid`.
+ *
+ * @example
+ * ```ts
+ * persistencePath('/Users/braden/Code/vault', 'epicenter.fuji')
+ * // → '/Users/braden/Code/vault/.epicenter/persistence/epicenter.fuji.db'
+ * ```
+ */
+export function persistencePath(absDir: string, workspaceId: string): string {
+	return join(absDir, '.epicenter', 'persistence', `${workspaceId}.db`);
 }

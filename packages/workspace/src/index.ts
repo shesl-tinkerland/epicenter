@@ -276,6 +276,7 @@ export {
 	dirHash,
 	logPathFor,
 	metadataPathFor,
+	persistencePath,
 	runtimeDir,
 	socketPathFor,
 } from './daemon/paths.js';
@@ -324,9 +325,3 @@ export type {
 // ════════════════════════════════════════════════════════════════════════════
 
 export { partialUpdate } from './shared/schema-partial.js';
-
-// ════════════════════════════════════════════════════════════════════════════
-// PATHS
-// ════════════════════════════════════════════════════════════════════════════
-
-export { epicenterHome, persistencePath } from './shared/paths.js';
