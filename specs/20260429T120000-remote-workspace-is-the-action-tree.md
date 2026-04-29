@@ -13,7 +13,7 @@
 
 ## One sentence
 
-A remote workspace is a typed proxy over the workspace itself, where the brand on `defineQuery`/`defineMutation` is the cut-line for what crosses the wire and the workspace's published type is the single source of truth.
+A remote workspace is a typed proxy over the workspace itself, where the action metadata attached by `defineQuery`/`defineMutation` is the cut-line for what crosses the wire and the workspace's published type is the single source of truth.
 
 ## The vision, stated upfront
 
@@ -42,21 +42,21 @@ import { connectDaemon } from '@epicenter/workspace';
 
 const ws = await connectDaemon<Fuji>('fuji');
 
-await ws.tables.entries.set(row);          // because tables.entries.set is branded
-await ws.savedTabs.create({ url });        // because savedTabs.create is branded
+await ws.tables.entries.set(row);          // because tables.entries.set is an action
+await ws.savedTabs.create({ url });        // because savedTabs.create is an action
 // ws.ydoc                ← does not exist on the type
 // ws.batch               ← does not exist on the type
 // ws.encryption          ← does not exist on the type
 // ws.tables.entries.filter   ← does not exist on the type
 ```
 
-`connectDaemon` walks `Fuji` at the type level. Every leaf carrying the `defineQuery` or `defineMutation` brand becomes callable, awaited, and `Result`-wrapped. Everything else is filtered out by the brand check. There is no second contract anywhere in the system. The workspace's published type IS its remote contract, mechanically transformed.
+`connectDaemon` walks `Fuji` at the type level. Every leaf returned by `defineQuery` or `defineMutation` becomes callable, awaited, and `Result`-wrapped. Everything else is filtered out by the action check. There is no second contract anywhere in the system. The workspace's published type IS its remote contract, mechanically transformed.
 
 ## The skepticism this spec is responding to
 
 While reviewing `packages/workspace/src/client/remote.ts` and `remote-workspace-types.ts`, the question came up: why is there a `RemoteWorkspace<W>` contract at all when `openFuji()` and friends have no contract? `openFuji` is structurally typed by its return value; nobody ever wrote `interface FujiWorkspace`. But the remote side has a hand-written nominal contract that pretends to mirror the local side, doesn't actually mirror it, and forces the team to maintain two parallel implementations of the same thing.
 
-That asymmetry is the smell. This spec resolves it by deleting the parallel contract and deriving the remote shape from the same source the local shape already uses: the action tree, with `defineQuery` and `defineMutation` brands as the only thing that decides "is this on the wire."
+That asymmetry is the smell. This spec resolves it by deleting the parallel contract and deriving the remote shape from the same source the local shape already uses: the action tree, with the `defineQuery` / `defineMutation` action tag as the only thing that decides "is this on the wire."
 
 ## The smell, concretely
 
@@ -85,7 +85,7 @@ The deeper problem these symptoms share: **the remote side reaches into `W` for 
 
 Step back from the current implementation. What is the wire-callable substrate, really?
 
-Every leaf on the wire must be JSON-in / JSON-out, addressable by a dotted path, and introspectable so a proxy can know what to call. The workspace already has exactly that thing: the action tree built from `defineQuery` and `defineMutation`. Both helpers brand their return value with metadata (input schema, title, description, kind). `walkActions` and `describeActions` in `packages/workspace/src/shared/actions.ts` traverse it at runtime.
+Every leaf on the wire must be JSON-in / JSON-out, addressable by a dotted path, and introspectable so a proxy can know what to call. The workspace already has exactly that thing: the action tree built from `defineQuery` and `defineMutation`. Both helpers tag the handler with metadata (input schema, title, description, `type` discriminant). `walkActions` and `describeActions` in `packages/workspace/src/shared/actions.ts` traverse it at runtime.
 
 So the wire substrate already exists. The mistake was building a *second* substrate (the `RemoteTable` typing path) parallel to it.
 
@@ -93,31 +93,31 @@ The reframe collapses that. The wire surface is whatever the action tree exposes
 
 ## The workspace is the tree. There is no `actions` namespace.
 
-The remote contract is `Remote<Fuji>`, not `Remote<Fuji['actions']>`. The `actions: { ... }` slot on the workspace bundle is removed entirely. Branded leaves sit at the top level of the workspace, alongside `tables` and `kv` (which themselves contain branded leaves at `tables.X.set`, `kv.Y.get`, etc.). The reasons:
+The remote contract is `Remote<Fuji>`, not `Remote<Fuji['actions']>`. The `actions: { ... }` slot on the workspace bundle is removed entirely. Action leaves sit at the top level of the workspace, alongside `tables` and `kv` (which themselves contain action leaves at `tables.X.set`, `kv.Y.get`, etc.). The reasons:
 
-1. **The local workspace already mixes branded actions with non-branded furniture in one object.** `openFuji()` returns `{ ydoc, tables, kv, encryption, batch, [Symbol.dispose], ... }`. There is no semantic boundary between `actions` and the rest at the top level; the boundary is the brand on each leaf. An `actions` namespace would be organizational ceremony, not a semantic line.
-2. **The brand does the structural work.** "If you want `ws.foo` over the wire, define `foo` as `defineQuery` or `defineMutation`." That is the rule, stated honestly. An `actions` namespace would restate the rule with extra typing.
-3. **`tables` and `kv` are already namespaced trees of leaves.** Once the CRUD methods on a `Table` are themselves `defineMutation`/`defineQuery` instances, the table is naturally a subtree of the workspace's action tree. There is no useful distinction between "actions the user wrote" and "actions the framework mounted." Both are just branded leaves.
+1. **The local workspace already mixes actions with plain non-action furniture in one object.** `openFuji()` returns `{ ydoc, tables, kv, encryption, batch, [Symbol.dispose], ... }`. There is no semantic boundary between `actions` and the rest at the top level; the boundary is whether each leaf is an action. An `actions` namespace would be organizational ceremony, not a semantic line.
+2. **The action tag does the structural work.** "If you want `ws.foo` over the wire, define `foo` as `defineQuery` or `defineMutation`." That is the rule, stated honestly. An `actions` namespace would restate the rule with extra typing.
+3. **`tables` and `kv` are already namespaced trees of leaves.** Once the CRUD methods on a `Table` are themselves `defineMutation`/`defineQuery` instances, the table is naturally a subtree of the workspace's action tree. There is no useful distinction between "actions the user wrote" and "actions the framework mounted." Both are just action leaves.
 4. **It matches in-process call shape.** Inside fuji, the developer writes `fuji.tables.entries.set(row)` and `fuji.savedTabs.create(input)`. Both are addressable from the workspace root locally. Both are addressable from the workspace root remotely. The shape is identical; only the call signature changes (sync vs `Promise<Result>`).
 
-Locally the workspace includes things that cannot cross (Y.Doc, batch closure, idb, encryption, sync attachment). The remote mapped type filters them out by walking only branded leaves. So locally `fuji.ydoc` exists; remotely `ws.ydoc` does not exist on the type at all. That is the contract.
+Locally the workspace includes things that cannot cross (Y.Doc, batch closure, idb, encryption, sync attachment). The remote mapped type filters them out by walking only action leaves. So locally `fuji.ydoc` exists; remotely `ws.ydoc` does not exist on the type at all. That is the contract.
 
-## The cut-line: brand presence
+## The cut-line: action presence
 
-A leaf is on the wire if and only if it is the return value of `defineQuery` or `defineMutation`. Both helpers attach a brand the type system can see:
+A leaf is on the wire if and only if it is the return value of `defineQuery` or `defineMutation`. Both helpers tag the handler with a `type` discriminant the type system can see:
 
 ```ts
-type Query<I, R>    = (input: I) => R | Promise<R>  & { __kind: 'query';    input: ... };
-type Mutation<I, R> = (input: I) => R | Promise<R>  & { __kind: 'mutation'; input: ... };
+type Query<I, R>    = ((input: I) => R | Promise<R>) & { type: 'query';    input: ... };
+type Mutation<I, R> = ((input: I) => R | Promise<R>) & { type: 'mutation'; input: ... };
 ```
 
 Anything else, regardless of whether it happens to be a function, regardless of whether it returns JSON-friendly data, is not on the wire. Plain methods like `Table.filter`, `Table.observe`, `Table.batch`, getters, properties, Y.Doc handles, attach* handles all drop. This makes the rule type-checkable, not convention-checkable, and removes any need for runtime stubs.
 
-**`attachTable` produces CRUD methods that are branded `defineQuery` / `defineMutation` instances directly.** Not "should." This is the rule. Same for `attachKv`. Branding the CRUD methods means they cross the wire automatically without a wrapper layer, deletes `buildTableActions` outright (the existing layer that re-wraps the same handlers as branded actions for the daemon side), and lets `tables.entries.set` be one function in both worlds. The non-branded methods on a `Table` (`filter`, `observe`, `find`, `count`, `has`) stay as plain methods and simply do not appear on the remote type.
+**`attachTable` produces CRUD methods that are `defineQuery` / `defineMutation` instances directly.** Not "should." This is the rule. Same for `attachKv`. Defining the CRUD methods as actions means they cross the wire automatically without a wrapper layer, deletes `buildTableActions` outright (the existing layer that re-wraps the same handlers as actions for the daemon side), and lets `tables.entries.set` be one function in both worlds. The plain methods on a `Table` (`filter`, `observe`, `find`, `count`, `has`) stay as plain methods and simply do not appear on the remote type.
 
 ## The type rule for the remote shape
 
-The proxy walks the workspace and rewrites every branded leaf into a serializable, awaited, Result-typed call. The rule:
+The proxy walks the workspace and rewrites every action leaf into a serializable, awaited, Result-typed call. The rule:
 
 ```
 For each leaf in W:
@@ -128,9 +128,9 @@ For each leaf in W:
           - else:                 S = R,       E = never
         and the wire error union `RpcError = DaemonError | ResolveError | RunError | TableParseError`
         folds into E.
-  - if leaf is a non-branded function:        drop
-  - if leaf is an object with branded descendants: recurse
-  - if leaf is an object with no branded descendants: drop
+  - if leaf is a plain (non-action) function:  drop
+  - if leaf is an object with action descendants: recurse
+  - if leaf is an object with no action descendants: drop
   - otherwise (Y.Doc, primitives, getters):  drop
 ```
 
@@ -152,7 +152,7 @@ type RemoteLeaf<F> =
 type Remote<T> = {
   [K in keyof T as
     T[K] extends Query<any, any> | Mutation<any, any> ? K :
-    T[K] extends object ? (HasBrandedLeaves<T[K]> extends true ? K : never) :
+    T[K] extends object ? (HasActionLeaves<T[K]> extends true ? K : never) :
     never
   ]: T[K] extends Query<any, any> | Mutation<any, any> ? RemoteLeaf<T[K]>
    : T[K] extends object ? Remote<T[K]>
@@ -178,7 +178,7 @@ import { fujiTables } from '../workspace.js';
 export function openFuji() {
   const ydoc = new Y.Doc({ guid: 'epicenter.fuji', gc: false });
   const encryption = attachEncryption(ydoc);
-  const tables = encryption.attachTables(ydoc, fujiTables);    // CRUD methods are now branded
+  const tables = encryption.attachTables(ydoc, fujiTables);    // CRUD methods are now actions
   const kv = encryption.attachKv(ydoc, {});
 
   // Custom user actions sit at the top level, alongside tables/kv. No `actions` slot.
@@ -201,8 +201,8 @@ export function openFuji() {
 
 Two things to notice:
 
-- There is no `actions: { ... }` slot. The branded leaves are at top level. That is what becomes addressable on the wire.
-- `tables.savedTabs.set` inside the handler is a plain in-process mutation against the live Table. The branding of `tables` CRUD is invisible to callers; you do not have to think about it.
+- There is no `actions: { ... }` slot. The action leaves are at top level. That is what becomes addressable on the wire.
+- `tables.savedTabs.set` inside the handler is a plain in-process mutation against the live Table. The fact that `tables` CRUD is defined as actions is invisible to callers; you do not have to think about it.
 
 ### Consuming a workspace remotely (the part the user wanted detail on)
 
@@ -214,7 +214,7 @@ import type { openFuji } from '@apps/fuji';
 const ws = await connectDaemon<ReturnType<typeof openFuji>>('fuji');
 //          └── connects to the unix socket served by `epicenter serve`
 
-// Branded leaves are reachable. Type system filters everything else.
+// Action leaves are reachable. Type system filters everything else.
 await ws.savedTabs.create({ url: 'https://...' });
 //       └── inferred: (input: { url: string }) => Promise<Result<void, TableParseError | RpcError>>
 
@@ -226,10 +226,10 @@ await ws.tables.entries.set({ id: 'abc', url: '...' });
 
 // These do NOT exist on the type and would be a compile error:
 // ws.ydoc                    ← not on the wire (live Y.Doc)
-// ws.batch(...)              ← not branded, not on the wire
-// ws.tables.entries.filter(...)   ← not branded
-// ws.tables.entries.observe(...)  ← not branded
-// ws.kv.someUnboundKey       ← not branded if your kv has only typed entries
+// ws.batch(...)              ← not an action, not on the wire
+// ws.tables.entries.filter(...)   ← not an action
+// ws.tables.entries.observe(...)  ← not an action
+// ws.kv.someUnboundKey       ← not an action if your kv has only typed entries
 ```
 
 The mental model collapses to: **the type of `ws` is the workspace, with everything that isn't a defined action stripped out, and every remaining leaf wrapped as `Promise<Result<_, _ | RpcError>>`.**
@@ -262,7 +262,7 @@ Going through the code, file by file:
 | `packages/workspace/src/client/remote-not-supported.ts` | Delete. The cut-line is in the type, no runtime stub needed. |
 | `packages/workspace/src/client/remote.ts` | Delete `buildRemoteTables`. Keep the recursive action proxy (it already implements walk-and-dispatch); rename it. Drop the hardcoded `sync.peers` slot from the facade. |
 | `packages/workspace/src/client/connect-daemon.ts` | Generic param changes from `<W extends {tables;actions:Actions}>` to `<W>`; return type is `Remote<W>`. Add or expose `daemon.peers()` / `daemon.list()` separately. |
-| `packages/workspace/src/daemon/table-actions.ts` | Delete. The six verbs are defined inside `attachTable` as branded leaves; there is no wrapper layer. |
+| `packages/workspace/src/daemon/table-actions.ts` | Delete. The six verbs are defined inside `attachTable` as action leaves; there is no wrapper layer. |
 | `packages/workspace/src/document/attach-table.ts` | The CRUD methods (`get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet`) are constructed as `defineMutation` / `defineQuery` instances. Plain methods (`filter`, `observe`, `find`, `count`, `has`) stay as-is and simply drop on the remote. |
 | `packages/workspace/src/daemon/run-handler.ts` | Action path resolution is unchanged; `tables.X.verb` is just a path through the workspace tree like any other. Delete special-casing if any. |
 | `apps/fuji/src/lib/fuji/index.ts` | Migration: move `actions: { ... }` contents up to the top level. The `actions` slot is removed. |
@@ -275,8 +275,8 @@ The total LOC delta is negative. The `client/` directory shrinks to two files (p
 
 One PR. Hard cut.
 
-- Branded leaves move out of `actions: { ... }` to the top level of every workspace bundle.
-- `attachTable` and `attachKv` produce branded CRUD directly; `buildTableActions` is deleted.
+- Action leaves move out of `actions: { ... }` to the top level of every workspace bundle.
+- `attachTable` and `attachKv` produce CRUD as actions directly; `buildTableActions` is deleted.
 - `RemoteWorkspace<W>`, `RemoteTablesOf`, `RemoteTable`, `RemoteCallError`, and `RemoteNotSupported` are deleted; `Remote<T>` is the only exported mapped type.
 - `connectDaemon<W>` accepts the full workspace type as `W`. Existing call sites passing `<W>` continue to compile as long as `W` is still the workspace type; the remote shape they get back is now derived by the new mapped type.
 - `peers()` moves off the workspace facade onto the daemon client. CLI/script call sites updating from `ws.sync.peers()` to `daemon.peers()` is a find/replace.
@@ -287,13 +287,13 @@ The known consumers are fuji, tab-manager, and the opensidian playground. All li
 
 These were open in earlier drafts. They are decisions now, not options.
 
-1. **`attachTable` CRUD is branded.** `attachTable` returns an object whose `get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet` are `defineMutation` / `defineQuery` instances. The handlers are synchronous and return `Result<_, _>`. The `Mutation` / `Query` brand carries metadata; it does not force the call to be async. In-process call sites continue to use the sync `Result<TRow, E>` branch with no ergonomic change. The remote mapped type wraps every branded leaf in `Promise<Result<_, _ | RpcError>>` regardless of the handler's local sync/async nature; that is consistent and unambiguous on the wire.
-2. **`Remote<W>` walks the full workspace.** Not scoped to a known slot. `walkActions` is replaced by a generic `walkBrandedLeaves(value)` that recurses any object and yields branded leaves with their dotted paths. Cheap; workspaces are small.
-3. **`Y.Doc` and other class instances drop cleanly via brand-only inclusion.** The mapped type only includes leaves whose type matches `Query<I, R> | Mutation<I, R>` or objects whose recursive `Remote<...>` is non-empty. `Y.Doc` is neither; it drops without a nominal exclusion list.
-4. **Sync attachment surface is local-only.** `sync.observe`, `sync.onStatusChange`, `sync.whenConnected` are not branded and drop from the remote type. If a script needs sync status, the daemon exposes it as a top-level call (`daemon.syncStatus(workspaceName)`), not nested under the workspace.
+1. **`attachTable` CRUD is defined as actions.** `attachTable` returns an object whose `get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet` are `defineMutation` / `defineQuery` instances. The handlers are synchronous and return `Result<_, _>`. The `Mutation` / `Query` action metadata is just metadata; it does not force the call to be async. In-process call sites continue to use the sync `Result<TRow, E>` branch with no ergonomic change. The remote mapped type wraps every action leaf in `Promise<Result<_, _ | RpcError>>` regardless of the handler's local sync/async nature; that is consistent and unambiguous on the wire.
+2. **`Remote<W>` walks the full workspace.** Not scoped to a known slot. `walkActions` is replaced by a generic `walkActionLeaves(value)` that recurses any object and yields action leaves with their dotted paths. Cheap; workspaces are small.
+3. **`Y.Doc` and other class instances drop cleanly via action-only inclusion.** The mapped type only includes leaves whose type matches `Query<I, R> | Mutation<I, R>` or objects whose recursive `Remote<...>` is non-empty. `Y.Doc` is neither; it drops without a nominal exclusion list.
+4. **Sync attachment surface is local-only.** `sync.observe`, `sync.onStatusChange`, `sync.whenConnected` are not actions and drop from the remote type. If a script needs sync status, the daemon exposes it as a top-level call (`daemon.syncStatus(workspaceName)`), not nested under the workspace.
 5. **`Symbol.dispose` drops.** `connectDaemon`'s returned object owns its own disposal that closes the IPC connection. Calling `[Symbol.dispose]` does not forward to the remote workspace.
 6. **Type-hover ergonomics.** The exported `Remote<T>` is wrapped in a `Simplify` helper so IDE hover output shows the flattened call shape rather than a wall of conditional types. This is a small style choice, not a functional one.
-7. **Generic constraint on `connectDaemon<W>` is dropped.** No `extends { tables; actions: Actions }` constraint, no compile-time guard like `HasBrandedLeaves<W> extends true`. The contract is documented in one sentence: `W` is any type; `Remote<W>` returns whatever branded leaves it finds. If `W` has no branded leaves, `Remote<W>` is `{}` and the consumer gets an empty proxy. That is the correct behavior, not a bug to defend against. A miswired generic produces an empty surface, which is a runtime no-op and a visible API gap; that signal is sufficient.
+7. **Generic constraint on `connectDaemon<W>` is dropped.** No `extends { tables; actions: Actions }` constraint, no compile-time guard like `HasActionLeaves<W> extends true`. The contract is documented in one sentence: `W` is any type; `Remote<W>` returns whatever action leaves it finds. If `W` has no action leaves, `Remote<W>` is `{}` and the consumer gets an empty proxy. That is the correct behavior, not a bug to defend against. A miswired generic produces an empty surface, which is a runtime no-op and a visible API gap; that signal is sufficient.
 8. **Class-instance recursion guard.** `Remote<T>` includes a `T[K] extends Function ? never` clause before recursing into `T[K] extends object`, so `Y.Doc` and other class instances drop without walking their prototype chain. This is a single line in the mapped type, not a full nominal exclusion list.
 
 ## Implementation plan
@@ -304,12 +304,12 @@ Seven commits, in order. Each commit compiles, passes tests, and ships a working
 - New: `Simplify<T> = { [K in keyof T]: T[K] } & {}` in `packages/workspace/src/shared/types.ts` (or co-locate with `Remote`).
 - No behavior change yet; helpers are unused.
 
-### 2. Brand CRUD inside `createTable`
+### 2. Define CRUD as actions inside `createTable`
 - File: `packages/workspace/src/document/attach-table.ts` (around `createTable` lines ~310-490).
-- Wrap each of `get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet` as `defineQuery` / `defineMutation` instances at the point they are returned. Handlers stay synchronous; the brand is metadata.
-- Crucially: `update`'s call signature flattens from `(id, partial)` to `({ id, ...partial })`. This is the migration's only argument-shape change. The branded callable matches the wire envelope shape immediately.
+- Wrap each of `get`, `getAllValid`, `set`, `update`, `delete`, `bulkSet` as `defineQuery` / `defineMutation` instances at the point they are returned. Handlers stay synchronous; the action tag is just metadata.
+- Crucially: `update`'s call signature flattens from `(id, partial)` to `({ id, ...partial })`. This is the migration's only argument-shape change. The action callable matches the wire envelope shape immediately.
 - Encryption path: `attachEncryption(ydoc).attachTable` flows through the same `createTable` factory; one injection point covers both.
-- Plain methods (`filter`, `observe`, `find`, `count`, `has`) stay unbranded.
+- Plain methods (`filter`, `observe`, `find`, `count`, `has`) stay as plain methods (no action tag).
 - Tests: `packages/workspace/src/__tests__/create-table.test.ts` and any `*.test.ts` exercising `update(id, patch)` migrate to `update({ id, ...patch })`.
 - Daemon-side `buildTableActions` is still in play at this point; behavior is unchanged externally.
 
@@ -319,13 +319,13 @@ Seven commits, in order. Each commit compiles, passes tests, and ships a working
 - Type-checker drives this; nothing else is changing yet.
 
 ### 4. Delete `daemon/table-actions.ts`
-- The branded methods on `attachTable` are now the action handlers directly. The wrapper has no callers.
+- The action methods on `attachTable` are now the action handlers directly. The wrapper has no callers.
 - Delete the file and `daemon/table-actions.test.ts`.
 - Confirm no imports remain.
 
 ### 5. Replace `RemoteWorkspace<W>` with `Remote<T>`
 - File: `packages/workspace/src/client/remote-workspace-types.ts` becomes `remote-types.ts` (or stays; rename is optional).
-- Delete `RemoteWorkspace<W>`, `RemoteTablesOf`, `RemoteTable`, `RemoteCallError`. Add the single `Remote<T>` mapped type with `Simplify`, the brand check, the `T[K] extends Function ? never` guard, and `WireResult<R>`.
+- Delete `RemoteWorkspace<W>`, `RemoteTablesOf`, `RemoteTable`, `RemoteCallError`. Add the single `Remote<T>` mapped type with `Simplify`, the action check, the `T[K] extends Function ? never` guard, and `WireResult<R>`.
 - File: `packages/workspace/src/client/remote.ts`. Delete `buildRemoteTables` (lines ~45-89). Delete the `sync: { peers }` slot from `buildRemoteWorkspace`'s return. The recursive proxy `buildRemoteActions` is already prefix-agnostic, so it powers the new `Remote<T>` directly when called at the workspace root. Rename it (e.g. `buildRemoteProxy`) since "actions" is no longer the right name.
 - Delete `client/remote-not-supported.ts`. The cut-line is type-level now; runtime stubs are unreachable from typed call sites.
 - Update `client/connect-daemon.ts`: drop the `extends { tables; actions: Actions }` constraint; return type becomes `Remote<W>`; generic param is unconstrained (per decision 7 above).
@@ -335,7 +335,7 @@ Seven commits, in order. Each commit compiles, passes tests, and ships a working
 - For each: remove the `actions:` key, lift its contents to the top level alongside `tables`, `kv`, `ydoc`, etc.
 - Update `daemon/run-handler.ts:38` from `resolveActionPath(workspace.actions ?? {}, ctx.actionPath)` to `resolveActionPath(workspace, ctx.actionPath)`. Same change at line ~40 for the suggestions walker.
 - Update `daemon/app.ts:98` from `describeActions(entry.workspace.actions ?? {})` to `describeActions(entry.workspace)`.
-- `walkActions` and `describeActions` accept a generic `object` and walk by `isAction` brand check; signatures broaden.
+- `walkActions` and `describeActions` accept a generic `object` and walk by the structural `isAction` check; signatures broaden.
 - CLI: zero changes. `epicenter run <path>` already forwards arbitrary dotted paths.
 
 ### 7. Move `peers()` off the workspace facade onto `DaemonClient`
@@ -352,13 +352,13 @@ Seven commits, in order. Each commit compiles, passes tests, and ships a working
   const ws = await connectDaemon<ReturnType<typeof openFuji>>('fuji');
   await ws.tables.entries.set({ id: '...', /* ... */ });
   ```
-  IDE hover on `ws` shows a flattened call shape with branded leaves only; `ws.ydoc`, `ws.batch`, `ws.tables.entries.filter` are absent from the type.
+  IDE hover on `ws` shows a flattened call shape with action leaves only; `ws.ydoc`, `ws.batch`, `ws.tables.entries.filter` are absent from the type.
 
 ## Why this is worth doing
 
 Three reasons, in order of weight:
 
-1. **One contract, derived from the source.** The local workspace shape, filtered by brand, IS the remote contract. No parallel implementation. New attach primitives, new actions, new namespaces propagate to the remote automatically.
+1. **One contract, derived from the source.** The local workspace shape, filtered to action leaves, IS the remote contract. No parallel implementation. New attach primitives, new actions, new namespaces propagate to the remote automatically.
 2. **The cut-line is type-checkable.** "Wrap in `defineQuery`/`defineMutation` to expose, otherwise it stays local" is a rule the type system enforces. No `RemoteNotSupported` runtime trap, no maintenance debt for dynamic property stubs, no convention drift.
 3. **The developer perspective is honest.** The local workspace is structural. The remote workspace is the same shape, mechanically transformed. The transformation rule is one mapped type that can be read in fifteen lines. Anyone who can read `openFuji` can read its remote contract.
 

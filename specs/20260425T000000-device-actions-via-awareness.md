@@ -138,7 +138,7 @@ If three apps each ship near-identical 6-line device-identity helpers, *then* ex
 
 ### `serializeActionManifest(actions): DeviceAwarenessState['offers']`
 
-Walks the action tree, extracts schema/type/description metadata for each branded action, returns a flat record. About 10 lines.
+Walks the action tree, extracts schema/type/description metadata for each action, returns a flat record. About 10 lines.
 
 ```ts
 import { iterateActions } from '@epicenter/workspace';
@@ -418,7 +418,7 @@ Constraint: device ids must not contain dots. `crypto.randomUUID()` and nanoid d
 ## What this does NOT change
 
 - `attachSync` and `attachAwareness` keep their current decomposition. Sync owns the WebSocket and RPC; awareness owns presence state. Sync transports awareness updates as before.
-- The action registry shape from the teardown spec stays the same: branded callables in a nested tree.
+- The action registry shape from the teardown spec stays the same: action callables in a nested tree.
 - `dispatchAction(actions, method, input)` stays the local dispatcher. `dispatch` callback on `attachSync` keeps using it for incoming RPC.
 - No new attach primitive. No new framework concept beyond the awareness state convention.
 
