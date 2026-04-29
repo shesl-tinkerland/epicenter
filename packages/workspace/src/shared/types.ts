@@ -6,6 +6,14 @@ import type { Brand } from 'wellcrafted/brand';
 export type MaybePromise<T> = T | Promise<T>;
 
 /**
+ * Flatten a mapped/conditional type for IDE hover output. The intersection
+ * with `{}` forces the type checker to evaluate the mapped type one layer
+ * deeper, so consumers see the resolved call shape rather than a wall of
+ * conditional-type nesting on hover.
+ */
+export type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+/**
  * Branded type for absolute filesystem paths.
  *
  * Ensures paths have been resolved to absolute paths at the type level,
