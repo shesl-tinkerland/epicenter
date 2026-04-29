@@ -35,9 +35,9 @@ export async function executeRun(
 	const { workspace } = entry;
 	if (workspace.whenReady) await workspace.whenReady;
 
-	const action = resolveActionPath(workspace.actions ?? {}, ctx.actionPath);
+	const action = resolveActionPath(workspace, ctx.actionPath);
 	if (!action) {
-		const entries = [...walkActions(workspace.actions ?? {})];
+		const entries = [...walkActions(workspace)];
 		const descendants = entriesUnder(entries, ctx.actionPath);
 		if (descendants.length > 0) {
 			return RunError.UsageError({

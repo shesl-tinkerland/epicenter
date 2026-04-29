@@ -4,7 +4,7 @@
  * round-trips through serialization the same way the daemonClient sees
  * it, so this is the load-bearing test surface for list dispatch logic.
  *
- * `/list` is now a one-primitive route: `describeActions(workspace.actions)`.
+ * `/list` is now a one-primitive route: `describeActions(workspace)`.
  * No modes, no peer waits, no fan-out. Per-peer schema introspection lives
  * on `/peers` (and `peers <deviceId>` on the CLI).
  */
@@ -26,11 +26,11 @@ function fakeEntry(
 	name: string,
 	actions?: Record<string, unknown>,
 ): WorkspaceEntry {
-	const workspace: LoadedWorkspace = {
+	const workspace = {
 		whenReady: Promise.resolve(),
-		actions: actions as LoadedWorkspace['actions'],
+		...(actions ?? {}),
 		[Symbol.dispose]() {},
-	};
+	} satisfies LoadedWorkspace;
 	return { name, workspace } as WorkspaceEntry;
 }
 

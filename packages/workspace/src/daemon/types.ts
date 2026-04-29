@@ -3,19 +3,22 @@
  *
  * `LoadedWorkspace` is the structural contract every workspace export has
  * to satisfy: the `[Symbol.dispose]` discriminator, plus the optional
- * `whenReady`, `actions`, and `sync` fields the daemon reads when present.
+ * `whenReady` and `sync` fields the daemon reads when present. The
+ * workspace's branded actions live as named leaves on the bundle itself
+ * (at any depth), not under a fixed `actions` slot — `walkActions(workspace)`
+ * discovers them at runtime.
  *
  * `WorkspaceEntry` is one named entry the daemon hosts. The CLI's config
  * loader produces these from `epicenter.config.ts` exports.
  */
 
-import type { Actions } from '../shared/actions.js';
 import type { SyncAttachment } from '../document/attach-sync.js';
 
 /**
  * Fields the daemon looks at on each workspace export. Only `[Symbol.dispose]`
  * is required (it's the discriminator); everything else is read when
- * present. Extra fields the factory returns are ignored.
+ * present. Extra fields the factory returns are ignored. `walkActions` and
+ * `resolveActionPath` walk the bundle at runtime to find branded leaves.
  */
 export type LoadedWorkspace = {
 	/**
@@ -26,9 +29,6 @@ export type LoadedWorkspace = {
 
 	/** Awaited before any action invocation, if present. */
 	readonly whenReady?: Promise<unknown>;
-
-	/** Exposes runnable actions to `epicenter run` / `epicenter list`. */
-	readonly actions?: Actions;
 
 	/**
 	 * Enables `--peer` targeting and `epicenter peers`. `attachSync(doc, { device })`

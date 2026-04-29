@@ -229,12 +229,29 @@ export function isMutation(value: unknown): value is Mutation {
 }
 
 /**
- * Resolve a dotted path against an action tree, returning the leaf
- * `Action` if the path lands on one. Returns `undefined` for missing
+ * `true` iff `v` is a plain object literal (constructor is `Object` or
+ * prototype is `null`). Used to bound `walkActions` so it doesn't recurse
+ * into class instances like `Y.Doc`, arktype `Type`, or other workspace
+ * furniture: those carry methods on their prototype and have no business
+ * being on the wire.
+ */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+	if (typeof v !== 'object' || v === null) return false;
+	const proto = Object.getPrototypeOf(v);
+	return proto === null || proto === Object.prototype;
+}
+
+/**
+ * Resolve a dotted path against a workspace (or any object), returning the
+ * leaf `Action` if the path lands on one. Returns `undefined` for missing
  * paths or paths that resolve to a namespace.
+ *
+ * Walks by explicit segment, so passing a full workspace bundle is safe:
+ * the resolver only touches the keys named in `path` and never enumerates
+ * into class instances.
  */
 export function resolveActionPath(
-	actions: Actions,
+	actions: object,
 	path: string,
 ): Action | undefined {
 	const segments = path.split('.');
@@ -247,28 +264,30 @@ export function resolveActionPath(
 }
 
 /**
- * Lazily yield every action in a tree as `[dotPath, Action]` pairs. Order
- * is depth-first, left-to-right by author definition (Object key order).
- * Yields live callables — invoke them, inspect them, or strip to metadata
- * via {@link describeActions}.
+ * Lazily yield every branded action in a workspace (or any object) as
+ * `[dotPath, Action]` pairs. Order is depth-first, left-to-right by author
+ * definition (Object key order). Yields live callables: invoke them,
+ * inspect them, or strip to metadata via {@link describeActions}.
+ *
+ * Recursion only descends into plain object literals. Class instances
+ * (`Y.Doc`, arktype `Type`, etc.) and functions short-circuit, so passing
+ * a full workspace bundle as the root is safe and bounded.
  *
  * Pair with `Object.fromEntries`, `Array.from`, or a `for…of` loop:
  * ```ts
- * for (const [path, action] of walkActions(workspace.actions)) {
+ * for (const [path, action] of walkActions(workspace)) {
  *   if (action.type === 'mutation') console.log(path);
  * }
  * ```
  */
 export function* walkActions(
-	actions: Actions,
+	actions: object,
 	prefix = '',
 ): Generator<[string, Action]> {
 	for (const [key, value] of Object.entries(actions)) {
 		const path = prefix ? `${prefix}.${key}` : key;
 		if (isAction(value)) yield [path, value];
-		else if (value != null && typeof value === 'object') {
-			yield* walkActions(value as Actions, path);
-		}
+		else if (isPlainObject(value)) yield* walkActions(value, path);
 	}
 }
 
@@ -281,7 +300,7 @@ export function* walkActions(
  * Built atop {@link walkActions}. Use that primitive directly if you want
  * to iterate live callables instead of metadata.
  */
-export function describeActions(actions: Actions): ActionManifest {
+export function describeActions(actions: object): ActionManifest {
 	return Object.fromEntries(
 		Array.from(walkActions(actions), ([path, action]) => [path, toMeta(action)]),
 	);
