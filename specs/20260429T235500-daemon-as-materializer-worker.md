@@ -556,9 +556,13 @@ already established by apps/fuji/src/lib/fuji/browser.ts. Two new files
 plus tests. No deletions.
 
 PRECONDITIONS:
-  - Phase 0 is merged: attach-sqlite supports `readonly: true` and runs
-    PRAGMA journal_mode = WAL on open. Verify by reading
-    packages/workspace/src/document/attach-sqlite.ts before starting.
+  - Phase 0 is merged: persistence is split into two exports.
+    Verify by reading both before starting:
+      packages/workspace/src/document/attach-sqlite-persistence.ts
+      packages/workspace/src/document/attach-sqlite-readonly-persistence.ts
+    The writer enables WAL on the file; the readonly hydrator opens
+    the same file `{ readonly: true }` and rejects `whenLoaded` with
+    `MissingFile` when the file is absent.
   - apps/fuji/src/lib/fuji/index.ts exports the IO-free `openFuji()` core.
   - apps/fuji/src/lib/fuji/browser.ts exports `openFuji(auth, device)`
     with attachIndexedDb + attachBroadcastChannel + attachSync. Read this
@@ -612,10 +616,20 @@ CHANGE 2: apps/fuji/src/lib/fuji/script.ts (NEW FILE)
        codebase already has `findEpicenterDir()` or similar, use it.
        If not, default to `process.cwd()` and document the assumption
        in JSDoc.
-    4. Compute persistencePath(absDir, 'fuji'). Check `existsSync(path)`.
-       If exists: `attachSqliteReadonlyPersistence(handle.ydoc, { filePath })`
-       and await its `whenLoaded`. If not: skip silently. Either way,
-       proceed.
+    4. Compute persistencePath(absDir, 'fuji'). Always call
+       `attachSqliteReadonlyPersistence(handle.ydoc, { filePath })` and
+       await its `whenLoaded`. If the file is missing, the attachment
+       rejects whenLoaded with `MissingFile { name, filePath }` —
+       catch this specific variant and proceed (the script will cold-
+       sync from cloud instead). Re-throw any other rejection. Pattern:
+         const ro = attachSqliteReadonlyPersistence(handle.ydoc, { filePath });
+         try { await ro.whenLoaded } catch (err) {
+           if (err?.name !== 'MissingFile') throw err
+           // file absent: warm hydrate skipped, fall through to cloud sync
+         }
+       Do NOT pre-check existence with Bun.file().exists() then call: the
+       readonly attachment already does that check, and racing it from
+       the caller adds nothing.
     5. attachSync(handle.ydoc, { url: CLOUD_URL, auth }).
     6. Return the handle.
 
