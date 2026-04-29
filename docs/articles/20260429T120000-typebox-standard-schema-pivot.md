@@ -131,7 +131,31 @@ const UserBox = Type.Unsafe<v.InferOutput<typeof VUser>>(jsonSchema)
 
 Same pattern across all three. The interop layer is JSON Schema, not a shared runtime contract.
 
-And here is the irony worth naming: Standard Schema itself has already moved in this direction. The `standardschema.dev/json-schema` page defines `StandardJSONSchemaV1`, a sub-spec that adds a `jsonSchema` converter to the `~standard` namespace. Every library that implements it exposes `schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' })`. The spec that TypeBox walked away from has, itself, leaned into JSON Schema as the shared format.
+And here is the irony worth naming: Standard Schema itself has already moved in this direction. The `standardschema.dev/json-schema` page defines `StandardJSONSchemaV1`, a sub-spec (shipped in `@standard-schema/spec@1.1.0`) that adds a `jsonSchema` converter to the `~standard` namespace. Every library that implements it exposes a `jsonSchema` object with `input` and `output` methods:
+
+```typescript
+import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec'
+import { Type, type TUnsafe } from '@sinclair/typebox'
+
+/**
+ * Wrap any library that implements both StandardSchemaV1 and the
+ * StandardJSONSchemaV1 sub-spec (arktype 2.1.28+, zod 4.2+, valibot 1.2+)
+ * as a TypeBox TSchema, preserving the inferred output type.
+ */
+export function toTypeBox<S extends StandardSchemaV1 & StandardJSONSchemaV1>(
+  schema: S,
+): TUnsafe<StandardSchemaV1.InferOutput<S>> {
+  // Call as a method, not via destructuring. The spec's example
+  // implementer uses `this.input(params)` inside `output()`; pulling
+  // `input` off the converter would break the binding.
+  const json = schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' })
+  return Type.Unsafe<StandardSchemaV1.InferOutput<S>>(json)
+}
+```
+
+`Type.Unsafe<T>(jsonSchemaValue)` is the canonical TypeBox API for "I have a JSON Schema document from somewhere, give me a TSchema with my chosen static type." There is no `Type.FromJsonSchema(json)` in TypeBox 0.34.x or in the 1.x dev line: `Type.Unsafe` is the documented escape hatch, intentionally so.
+
+One subtle gotcha worth surfacing: the `jsonSchema` converter is an *object* with `input` and `output` methods, not a function. The spec's reference implementation writes `output(params) { return this.input(params) }` (method shorthand using `this`), so destructuring `const { input } = schema['~standard'].jsonSchema` would unbind the receiver and break that implementer. ArkType happens to use arrow functions internally, so destructuring works there, but the spec doesn't guarantee it. Always invoke as a method on the converter.
 
 The validate contract and the JSON Schema contract both live under `~standard`. TypeBox isn't implementing either. But the trajectory of the rest of the ecosystem is converging on the JSON Schema side regardless.
 
