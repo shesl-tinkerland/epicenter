@@ -24,7 +24,6 @@ import {
 	type ResolveError,
 	type RpcError,
 	type RunError,
-	type RunInput,
 } from '@epicenter/workspace';
 import pc from 'picocolors';
 import { extractErrorMessage } from 'wellcrafted/error';
@@ -97,30 +96,25 @@ export const runCommand: CommandModule = {
 			),
 	handler: async (argv) => {
 		const args = argv as Record<string, unknown>;
-		const actionPath = String(args.action);
 		const format = args.format as 'json' | 'jsonl' | undefined;
+		const target = resolveTarget(args);
 		const peerTarget =
 			typeof args.peer === 'string' && args.peer.length > 0
 				? args.peer
 				: undefined;
-		const waitMs = args.wait as number;
-		const target = resolveTarget(args);
-		const input = await resolveInput(args);
-
-		const ctx: RunInput = {
-			actionPath,
-			input,
-			peerTarget,
-			waitMs,
-			workspace: target.userWorkspace,
-		};
 
 		const { data: daemon, error: daemonErr } = await getDaemon(target);
 		if (daemonErr) {
 			fail(daemonErr.message);
 			return;
 		}
-		const result = await daemon.run(ctx);
+		const result = await daemon.run({
+			actionPath: String(args.action),
+			input: await resolveInput(args),
+			peerTarget,
+			waitMs: args.wait as number,
+			workspace: target.userWorkspace,
+		});
 		render(result, { format, workspace: target.userWorkspace });
 	},
 };

@@ -73,17 +73,15 @@ export const listCommand: CommandModule = {
 			fail(daemonErr.message);
 			return;
 		}
-		const result = await daemon.list({ workspace: target.userWorkspace });
-		if (result.error) {
-			fail(result.error.message);
+		const { data: entries, error } = await daemon.list({
+			workspace: target.userWorkspace,
+		});
+		if (error) {
+			fail(error.message);
 			return;
 		}
-
-		if (path === undefined) {
-			renderAll(result.data, format);
-			return;
-		}
-		renderAtPath(result.data, path, format);
+		if (path === undefined) renderAll(entries, format);
+		else renderAtPath(entries, path, format);
 	},
 };
 
