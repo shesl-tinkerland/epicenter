@@ -20,19 +20,15 @@
  * ```
  */
 
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** Resolve the Epicenter home directory. Not exported; use `epicenterPaths.home()`. */
-function resolveHome(): string {
-	return Bun.env.EPICENTER_HOME ?? join(homedir(), '.epicenter');
-}
+import { epicenterHome } from '@epicenter/workspace';
 
 /**
  * Grouped path resolution for all files under `~/.epicenter/`.
  *
- * Each method calls `resolveHome()` directly (no `this` references), so
- * destructuring is safe: `const { persistence } = epicenterPaths`.
+ * Each method calls `epicenterHome()` directly (no `this` references), so
+ * destructuring is safe: `const { authSessions } = epicenterPaths`.
  */
 export const epicenterPaths = {
 	/**
@@ -48,7 +44,7 @@ export const epicenterPaths = {
 	 * ```
 	 */
 	home() {
-		return resolveHome();
+		return epicenterHome();
 	},
 
 	/**
@@ -64,6 +60,6 @@ export const epicenterPaths = {
 	 * ```
 	 */
 	authSessions() {
-		return join(resolveHome(), 'auth', 'sessions.json');
+		return join(epicenterHome(), 'auth', 'sessions.json');
 	},
 } as const;

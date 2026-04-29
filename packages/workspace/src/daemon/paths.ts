@@ -10,19 +10,9 @@
 
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/**
- * Resolve the Epicenter home directory.
- *
- * Resolution order: `$EPICENTER_HOME` env, then `~/.epicenter/`. Mirrors
- * the resolution used by the CLI's auth/paths helper so daemon sockets and
- * logs land under the same root regardless of which package wrote them.
- */
-function epicenterHome(): string {
-	return Bun.env.EPICENTER_HOME ?? join(homedir(), '.epicenter');
-}
+import { epicenterHome } from '../shared/paths.js';
 
 /**
  * Resolve the runtime directory for daemon sockets and metadata.

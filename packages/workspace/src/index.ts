@@ -323,10 +323,10 @@ export type {
 // SCHEMA HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 
-export { partialOf } from './shared/schema-partial.js';
+export { partialUpdate } from './shared/schema-partial.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATHS
 // ════════════════════════════════════════════════════════════════════════════
 
-export { persistencePath } from './paths/persistence.js';
+export { epicenterHome, persistencePath } from './shared/paths.js';
