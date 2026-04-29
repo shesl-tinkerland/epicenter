@@ -12,9 +12,9 @@
  *
  * `tables` are simpler: the wire surface is fixed (`get`, `getAllValid`,
  * `set`, `update`, `delete`, `bulkSet`), each one a thin `client.run` call
- * with a path of the form `tables.<name>.<verb>`. That layout matches what
- * `buildTableActions(...)` mounts on the in-process workspace, so the same
- * routes serve both directions.
+ * with a path of the form `tables.<name>.<verb>`. The branded CRUD methods
+ * on `attachTable` mount on the in-process workspace at the same paths,
+ * so the same routes serve both directions.
  *
  * `filter`, `observe`, and document handles throw `RemoteNotSupported`
  * because they require a live Y.Doc and can't cross the wire. The type

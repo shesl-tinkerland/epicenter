@@ -258,8 +258,8 @@ export {
 // ════════════════════════════════════════════════════════════════════════════
 //
 // Mixed audience:
-//   * createWorkspaceServer, buildTableActions, persistencePath are
-//     consumer surface (epicenter.config.ts authors call these).
+//   * createWorkspaceServer and persistencePath are consumer surface
+//     (epicenter.config.ts authors call these).
 //   * Everything else (buildApp, bindUnixSocket, sockets/metadata path
 //     helpers, RunInput/ListInput) is CLI-lifecycle plumbing.
 
@@ -310,7 +310,6 @@ export {
 	type WorkspaceServer,
 	type WorkspaceServerOptions,
 } from './daemon/server.js';
-export { buildTableActions } from './daemon/table-actions.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CLIENT (remote workspace proxy)
