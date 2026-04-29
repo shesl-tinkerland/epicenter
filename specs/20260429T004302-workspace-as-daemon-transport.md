@@ -1,6 +1,6 @@
 # Workspace as daemon transport: collapse the script/CLI split
 
-**Status**: ready for review (rev 2, rewritten 2026-04-28)
+**Status**: implemented (Phases 1-7 + audit cleanup landed 2026-04-28; Phase 8 vault rewrite deferred to its own branch)
 **Date**: 2026-04-28 (originally 2026-04-29)
 **Revision note**: the prior revision of this spec assumed a `defineWorkspace` factory primitive that the package no longer ships. That primitive was deleted (specs `20260421T010000` and `20260421T170000`); apps now compose workspaces inline with `attach*` and a shared "open" helper (e.g. `openFuji()` in `apps/fuji/src/lib/fuji/index.ts`). This rewrite drops the factory framing, drops the `connectWorkspace(factory, { transport })` umbrella API, and lands the same architectural goal as a thinner layer on top of the current shape.
 **Related**:
@@ -493,3 +493,43 @@ Mitigation: accept it. The CLI renders rather than composes. Scripts, the typed-
 6. Net code deletion across `packages/cli` is at least 500 lines.
 7. `~/.epicenter/persistence/` is no longer referenced outside the migration script.
 8. `createWorkspaceServer` is callable from any bun process (CLI, vault, embedded).
+
+## Review
+
+**Implemented**: 2026-04-28
+**Branch**: `workspace-as-daemon-transport`
+
+### Summary
+
+Phases 1-7 landed plus a follow-up audit pass. The transport plumbing is complete: the daemon module lives in `@epicenter/workspace`, `createWorkspaceServer` factors out the daemon core, persistence is project-local, `buildTableActions` + `partialUpdate` auto-generate CRUD actions, `buildRemoteWorkspace` + `connectDaemon` form the script-side front door, and the CLI commands route through the same plumbing. Phase 8 (vault rewrite) is deferred to its own branch where domain-action design (create / soft-delete / restore semantics on `openFuji`) gets explicit attention.
+
+Commits on the branch (oldest to newest):
+
+- `ea7f2f6a2` `refactor(workspace)!: move daemon module from @epicenter/cli` (P1)
+- `5c1721a6e` `feat(workspace): add createWorkspaceServer factory` (P2)
+- `c08e440fe` `feat(workspace)!: switch persistence to local <absDir>/.epicenter` (P3)
+- `ec1d1b3e2` `refactor(cli)!: drop persistence migration script and env override` (compat removal)
+- `016b7bb04` `spike(workspace): arktype .partial() brand-preservation verdict` (P4 spike)
+- `6c578693f` `feat(workspace): buildTableActions + partialOf` (P4)
+- `eefdcef07` `feat(workspace): buildRemoteWorkspace + RemoteNotSupported` (P5)
+- `944d7983c` `feat(workspace): connectDaemon front door` (P6)
+- `d9d1e4c0a` `refactor(cli): tighten run/list handlers, record Phase 7 reality` (P7)
+- `da78b7f22` `chore: trim dead surface across workspace + cli` (audit Bucket 1)
+- `1bda8b865` `refactor(workspace): collapse paths/ into shared/paths.ts` (audit B2.2 + B3.4)
+- `074a660c9` `refactor(workspace): rename partialOf to partialUpdate, drop keep param` (audit B2.3)
+- `e76769103` `refactor(workspace): connectDaemon generic takes workspace shape directly` (audit B2.4)
+
+### Deviations from spec
+
+- **Persistence migration script**: spec called for `migrate-persistence-to-local.ts` and an `EPICENTER_PERSISTENCE_DIR` env override. Both removed. Pre-1.0 internal monorepo, no external users; orphaning existing global persistence is acceptable.
+- **CLI line count**: spec called for ~600 line delete across `run/list/peers`. Actual delete: ~8 lines. Earlier script-first-collapse work had already thinned these files; the remaining bulk (argv builders, error rendering, JSON-input parsing, action-tree printer) is genuine. CLI commands kept `getDaemon` rather than switching to `connectDaemon` because the proxy lacks `--peer` / `--wait` overrides; CLI is a renderer, vault scripts are the typed consumers.
+- **`createWorkspaceServer` input shape**: takes `WorkspaceEntry[]` (the existing `{ name, workspace }` shape) rather than the spec sketch's `Workspace[]` keyed by `ydoc.guid`. The wire still dispatches by name; switching to id-based dispatch ripples through `app.ts`, `resolve-entry.ts`, the wire schema, and every test, which is its own change.
+- **`partialOf` → `partialUpdate`**: simplified from `partialOf(schema, { keep })` to `partialUpdate(schema)` (always keeps `id`). Single call site, single shape, YAGNI on the option until a second use case shows up.
+- **`connectDaemon` generic**: changed from `<T extends fn>` (caller writes `<typeof openFuji>`) to `<W>` (caller writes `<ReturnType<typeof openFuji>>`). One extra wrapping at call site, honest signature.
+- **`arkAsTSchema` kludge in `buildTableActions`**: arktype schemas don't fit the typebox `TSchema` slot that `defineQuery` / `defineMutation` expect, so each schema is mutated via `Object.assign` to wear a typebox `[Kind]` symbol. Documented honestly in the file. The clean fix is widening the action `input` slot to accept `StandardSchemaV1`; out of scope for this spec.
+
+### Follow-up work
+
+- **Phase 8 (vault rewrite)**: vault is currently broken pre-this-spec (uses deleted `createFujiWorkspace().withExtension(...)` DSL). Its own branch should: (1) inline `connectWorkspace` from cli at the call sites in `vault/epicenter.config.ts` (deletes `cli/src/connect.ts`, eliminates the naming collision with `connectDaemon`); (2) hand-write domain actions (`create`, soft-delete, `restore`, `bulkCreate`) on `openFuji()` and `openTabManager()`; (3) rewrite `vault/scripts/*.ts` as `connectDaemon` clients; (4) update `vault/AGENTS.md`.
+- **`StandardSchemaV1` for action input**: widen `defineQuery` / `defineMutation`'s `input` slot to accept `StandardSchemaV1 | TSchema`. Eliminates the `arkAsTSchema` kludge. Affects every consumer of `Action.input` including the AI tool bridge.
+- **ID-based wire dispatch**: switch the daemon's `/run` route to dispatch by `ydoc.guid` rather than the export `name`. Touches `app.ts`, `resolve-entry.ts`, route schemas, every test, and `connectDaemon`'s `id` semantics.
