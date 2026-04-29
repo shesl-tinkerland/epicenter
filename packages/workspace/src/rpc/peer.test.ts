@@ -50,14 +50,17 @@ type RpcCall = {
  * Only `find`, `observe`, and `rpc` are populated; tests never touch the
  * connection-lifecycle methods.
  */
-function mockSync(opts: {
+function mockSync({
+	present: presentInit,
+	respond,
+	calls = [],
+}: {
 	present: Record<string, number>;
 	respond: (call: RpcCall) => Promise<Result<unknown, RpcError>>;
 	calls?: RpcCall[];
 }): SyncAttachment & { drop(deviceId: string): void } {
-	const present = new Map(Object.entries(opts.present));
+	const present = new Map(Object.entries(presentInit));
 	const observers = new Set<() => void>();
-	const calls = opts.calls ?? [];
 
 	return {
 		// peer-discovery surface
@@ -100,7 +103,7 @@ function mockSync(opts: {
 		async rpc(target, action, input, options) {
 			const call = { target, action, input, options };
 			calls.push(call);
-			return opts.respond(call);
+			return respond(call);
 		},
 		// transport surface — irrelevant for these tests, but the type wants them
 		whenConnected: Promise.resolve(),

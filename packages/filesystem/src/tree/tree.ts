@@ -140,21 +140,26 @@ export function attachFileTree(filesTable: Table<FileRow>) {
 		 *
 		 * @returns The new FileId.
 		 */
-		create(opts: {
+		create({
+			name,
+			parentId,
+			type,
+			size,
+		}: {
 			name: string;
 			parentId: FileId | null;
 			type: 'file' | 'folder';
 			size: number;
 		}): FileId {
-			validateName(opts.name);
-			assertUniqueName(filesTable, index.getChildIds(opts.parentId), opts.name);
+			validateName(name);
+			assertUniqueName(filesTable, index.getChildIds(parentId), name);
 			const id = generateFileId();
 			filesTable.set({
 				id,
-				name: opts.name,
-				parentId: opts.parentId,
-				type: opts.type,
-				size: opts.size,
+				name,
+				parentId,
+				type,
+				size,
 				createdAt: Date.now(),
 				updatedAt: Date.now(),
 				trashedAt: null,

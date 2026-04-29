@@ -10,17 +10,22 @@ import { describe, expect, test } from 'bun:test';
 import type { AwarenessState } from '../load-config';
 import { formatPeerMiss, formatRpcError } from './run';
 
-function miss(opts: {
+function miss({
+	peerTarget,
+	sawPeers,
+	waitMs,
+	emptyReason = null,
+}: {
 	peerTarget: string;
 	sawPeers: boolean;
 	waitMs: number;
 	emptyReason?: string | null;
 }) {
 	return PeerMiss.PeerMiss({
-		peerTarget: opts.peerTarget,
-		sawPeers: opts.sawPeers,
-		waitMs: opts.waitMs,
-		emptyReason: opts.emptyReason ?? null,
+		peerTarget,
+		sawPeers,
+		waitMs,
+		emptyReason,
 	}).error;
 }
 

@@ -48,7 +48,11 @@ export type SessionUnlockAttachment = {
  */
 export function attachSessionUnlock(
 	encryption: EncryptionAttachment,
-	opts: {
+	{
+		sessions,
+		serverUrl,
+		waitFor,
+	}: {
 		sessions: SessionStore;
 		serverUrl: string;
 		/** Optional upstream gate, typically `persistence.whenLoaded`. */
@@ -56,8 +60,8 @@ export function attachSessionUnlock(
 	},
 ): SessionUnlockAttachment {
 	const whenChecked = (async () => {
-		if (opts.waitFor) await opts.waitFor;
-		const session = await opts.sessions.load(opts.serverUrl);
+		if (waitFor) await waitFor;
+		const session = await sessions.load(serverUrl);
 		if (session?.encryptionKeys) {
 			encryption.applyKeys(session.encryptionKeys);
 		}

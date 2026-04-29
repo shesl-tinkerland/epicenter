@@ -59,11 +59,12 @@ export type WorkspaceServer = {
  * with a deferred `listen()`. The factory does not touch the filesystem
  * until `listen()` is called.
  */
-export function createWorkspaceServer(
-	opts: WorkspaceServerOptions,
-): WorkspaceServer {
+export function createWorkspaceServer({
+	absDir,
+	workspaces,
+}: WorkspaceServerOptions): WorkspaceServer {
 	const seen = new Set<string>();
-	for (const entry of opts.workspaces) {
+	for (const entry of workspaces) {
 		if (seen.has(entry.name)) {
 			throw new Error(
 				`createWorkspaceServer: duplicate workspace name '${entry.name}'`,
@@ -72,8 +73,8 @@ export function createWorkspaceServer(
 		seen.add(entry.name);
 	}
 
-	const socketPath = socketPathFor(opts.absDir);
-	const app = buildApp(opts.workspaces);
+	const socketPath = socketPathFor(absDir);
+	const app = buildApp(workspaces);
 
 	let server: UnixSocketServer | undefined;
 
@@ -82,7 +83,7 @@ export function createWorkspaceServer(
 		async listen() {
 			const result = await bindOrRecover(
 				socketPath,
-				opts.absDir,
+				absDir,
 				app,
 				pingDaemon,
 			);

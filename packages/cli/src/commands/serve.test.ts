@@ -79,14 +79,16 @@ type FakeOptions = {
 	readyPromise?: Promise<unknown>;
 };
 
-function makeFakeWorkspace(opts: FakeOptions = {}): LoadedWorkspace {
+function makeFakeWorkspace({
+	readyPromise = Promise.resolve(),
+}: FakeOptions = {}): LoadedWorkspace {
 	return {
 		[Symbol.dispose]() {
 			/* no-op */
 		},
-		whenReady: opts.readyPromise ?? Promise.resolve(),
+		whenReady: readyPromise,
 		sync: {
-			whenConnected: opts.readyPromise ?? Promise.resolve(),
+			whenConnected: readyPromise,
 			status: { phase: 'connected', hasLocalChanges: false },
 			onStatusChange: () => () => {},
 			peers: () => new Map(),
