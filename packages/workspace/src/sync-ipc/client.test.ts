@@ -2,15 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { Awareness as YAwareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
-import {
-	attachIpcSyncServer,
-	type IpcChannel,
-	type IpcPreamble,
-} from '../daemon/sync-hub.js';
-import {
-	attachIpcSyncClient,
-	type IpcDialResult,
-} from './sync-ipc.js';
+import { attachIpcSyncServer } from './server.js';
+import { attachIpcSyncClient, type IpcDialResult } from './client.js';
+import type { IpcChannel, IpcPreamble } from './types.js';
 import { Err, Ok } from 'wellcrafted/result';
 
 // In-memory channel pair (mirrors the helper in sync-hub.test.ts but kept

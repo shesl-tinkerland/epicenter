@@ -1,13 +1,13 @@
 /**
- * Daemon-side hub of the local IPC sync transport.
+ * Daemon-side, per-Y.Doc IPC sync server.
  *
- * `attachIpcSyncServer(ydoc, opts)` wires a Y.Doc to peer sessions arriving
+ * `attachIpcSyncServer(ydoc, opts)` wires one Y.Doc to peer sessions arriving
  * over the unix socket. It does NOT bind the socket: it exposes
  * `acceptSession({ channel, preamble })`, which the socket-bind layer
- * (`createWorkspaceServer`) calls once it has parsed the JSON preamble and
- * resolved the workspace selector. This separation keeps the hub testable
- * with an in-memory channel pair and lets the bind layer multiplex N
- * workspaces over one socket.
+ * (`./listener.ts`) calls once it has parsed the JSON preamble and resolved
+ * the workspace selector. This separation keeps the server testable with an
+ * in-memory channel pair and lets the listener multiplex N workspaces over
+ * one socket.
  *
  * Wire vocabulary on the IPC socket is `MESSAGE_TYPE.SYNC` and
  * `MESSAGE_TYPE.AWARENESS` only. `SYNC_STATUS` and `RPC` are deliberately
@@ -48,43 +48,11 @@ import {
 	type SyncMessageType,
 } from '@epicenter/sync';
 
+import type { IpcChannel, IpcPreamble } from './types.js';
+
 // ============================================================================
 // Types
 // ============================================================================
-
-/**
- * JSON preamble sent by the peer as the first frame of a connection. Parsed
- * and validated by the socket-bind layer; the hub receives it as a
- * structured object.
- */
-export type IpcPreamble = {
-	/** Workspace selector (matches an `attachIpcSyncServer.workspace` value). */
-	workspace: string;
-	/** Stable per-device identifier. Cross-device addressing concern. */
-	deviceId: string;
-	/** Yjs clientID hint. Mandatory for ephemeral peers (state-vector hygiene). */
-	clientId: number;
-	/** True for one-shot script peers; false for long-running peers (browsers, sidecars). */
-	isEphemeral: boolean;
-	/** Optional: peer's per-table schema fingerprints for handshake validation. */
-	schemaManifest?: Record<string, string>;
-};
-
-/**
- * Bidirectional framed-message channel. The bind layer wraps a `Bun.Socket`
- * with framing; tests pass an in-memory pair. Frames are fully-formed
- * Yjs/awareness messages (the JSON preamble is consumed before `acceptSession`).
- */
-export type IpcChannel = {
-	/** Send one frame to the remote side. */
-	sendFrame: (bytes: Uint8Array) => void;
-	/** Subscribe to inbound frames. Returns an unsubscribe function. */
-	onFrame: (cb: (bytes: Uint8Array) => void) => () => void;
-	/** Initiate channel close. Implementations should be idempotent. */
-	close: () => void;
-	/** Subscribe to channel-close. Fires exactly once per channel lifetime. */
-	onClose: (cb: () => void) => () => void;
-};
 
 /** Public snapshot of one connected session. */
 export type SessionSnapshot = {

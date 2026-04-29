@@ -4,7 +4,7 @@ import {
 	FRAME_HEADER_BYTES,
 	createFrameReader,
 	encodeFrame,
-} from './ipc-framing.js';
+} from './framing.js';
 
 describe('ipc-framing', () => {
 	it('round trips a single frame', () => {

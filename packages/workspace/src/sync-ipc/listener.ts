@@ -33,11 +33,9 @@ import {
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 
-import type { IpcChannel, IpcPreamble, IpcSyncServer } from './sync-hub.js';
-import {
-	createFrameReader,
-	encodeFrame,
-} from '../shared/ipc-framing.js';
+import { createFrameReader, encodeFrame } from './framing.js';
+import type { IpcSyncServer } from './server.js';
+import type { IpcChannel, IpcPreamble, IpcPreambleReply } from './types.js';
 
 // ============================================================================
 // Errors
@@ -90,10 +88,6 @@ export type IpcPreambleReplyEnvelope = Result<
 	IpcPreambleReply,
 	IpcHandshakeError
 >;
-
-export type IpcPreambleReply = {
-	workspaceGuid?: string;
-};
 
 export type IpcListener = {
 	readonly socketPath: string;

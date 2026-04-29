@@ -2,11 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { Awareness as YAwareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
-import {
-	attachIpcSyncServer,
-	type IpcChannel,
-	type IpcPreamble,
-} from './sync-hub.js';
+import { attachIpcSyncServer } from './server.js';
+import type { IpcChannel, IpcPreamble } from './types.js';
 
 // ---------------------------------------------------------------------------
 // In-memory channel pair: each side observes frames the other side sends.

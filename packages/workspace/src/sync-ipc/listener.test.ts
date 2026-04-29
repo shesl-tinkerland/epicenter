@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as Y from 'yjs';
 
-import { attachIpcSyncClient } from '../client/sync-ipc.js';
-import { attachIpcSyncServer, type IpcSyncServer } from './sync-hub.js';
-import { bindIpcSocket, type IpcListener } from './sync-listener.js';
+import { attachIpcSyncClient } from './client.js';
+import { attachIpcSyncServer, type IpcSyncServer } from './server.js';
+import { bindIpcSocket, type IpcListener } from './listener.js';
 
 let workdir: string;
 

@@ -49,8 +49,8 @@ import {
 	type SyncMessageType,
 } from '@epicenter/sync';
 
-import type { IpcChannel, IpcPreamble } from '../daemon/sync-hub.js';
-import { createFrameReader, encodeFrame } from '../shared/ipc-framing.js';
+import { createFrameReader, encodeFrame } from './framing.js';
+import type { IpcChannel, IpcPreamble, IpcPreambleReply } from './types.js';
 
 // ============================================================================
 // Types
@@ -61,18 +61,6 @@ export type IpcSyncStatus =
 	| { phase: 'connecting'; retries: number; lastError?: string }
 	| { phase: 'connected' }
 	| { phase: 'failed'; reason: string };
-
-/**
- * Server's response to the peer's preamble. Carries any encryption keys the
- * server hands out for this workspace plus the server's own clientId for
- * awareness identification (when relevant).
- */
-export type IpcPreambleReply = {
-	workspaceGuid?: string;
-	encryptionKeys?: unknown;
-	serverClientId?: number;
-	daemonManifest?: Record<string, string>;
-};
 
 export const IpcSyncClientError = defineErrors({
 	/**
