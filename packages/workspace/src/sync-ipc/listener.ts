@@ -71,6 +71,10 @@ export const IpcListenerError = defineErrors({
 		message: `[bindIpcSocket] bind failed: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
+	StopFailed: ({ cause }: { cause: unknown }) => ({
+		message: `[bindIpcSocket] listener.stop() raised: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
 });
 export type IpcListenerError = InferErrors<typeof IpcListenerError>;
 
@@ -120,7 +124,12 @@ type BunIpcSocket = {
 
 export async function bindIpcSocket(opts: {
 	socketPath: string;
-	/** Map of workspace selector to its `attachIpcSyncServer`. */
+	/**
+	 * Workspace selector to its `attachIpcSyncServer`. Captured by reference:
+	 * mutating the map after bind (adding or removing workspaces) is picked
+	 * up on the next inbound preamble. Keys must match what peers advertise
+	 * in the `workspace` field of their preamble.
+	 */
 	servers: Map<string, IpcSyncServer>;
 	log?: Logger;
 }): Promise<IpcListener> {
@@ -175,7 +184,7 @@ export async function bindIpcSocket(opts: {
 			try {
 				listener?.stop?.();
 			} catch (cause) {
-				log.warn(IpcListenerError.BindFailed({ cause }));
+				log.warn(IpcListenerError.StopFailed({ cause }));
 			}
 			resolveDisposed();
 		},

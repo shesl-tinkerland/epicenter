@@ -193,29 +193,21 @@ export function attachIpcSyncClient(
 		}
 	}
 
-	function buildPreamble(): IpcPreamble {
-		return {
-			workspace: opts.workspace,
-			deviceId: opts.deviceId,
-			clientId: ydoc.clientID,
-			isEphemeral,
-			schemaManifest: opts.schemaManifest,
-		};
-	}
-
-	function dial(): Promise<IpcDialResult> {
-		if (opts.connect) return opts.connect();
-		if (!opts.socket) {
-			throw new Error(
-				'[attachIpcSyncClient] either `socket` or `connect` must be provided',
-			);
-		}
-		return defaultBunDial(opts.socket, buildPreamble());
-	}
-
 	async function safeDial(): Promise<IpcDialResult> {
 		try {
-			return await dial();
+			if (opts.connect) return await opts.connect();
+			if (!opts.socket) {
+				throw new Error(
+					'[attachIpcSyncClient] either `socket` or `connect` must be provided',
+				);
+			}
+			return await defaultBunDial(opts.socket, {
+				workspace: opts.workspace,
+				deviceId: opts.deviceId,
+				clientId: ydoc.clientID,
+				isEphemeral,
+				schemaManifest: opts.schemaManifest,
+			});
 		} catch (cause) {
 			return Err(IpcSyncClientError.ConnectFailed({ cause }).error);
 		}
