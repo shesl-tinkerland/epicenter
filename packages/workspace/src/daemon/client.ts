@@ -21,7 +21,7 @@
 
 import { join } from 'node:path';
 
-import type { ActionManifest } from '@epicenter/workspace';
+import type { ActionManifest } from '../shared/actions.js';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -29,12 +29,27 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
-import { CONFIG_FILENAME } from '../load-config.js';
-import type { ResolvedTarget } from '../util/common-options.js';
 import type { ResolveError } from './resolve-entry.js';
 import type { ListInput, PeerSnapshot, RunInput } from './app.js';
 import { socketPathFor } from './paths.js';
 import type { RunError } from './run-errors.js';
+
+/**
+ * Filename of the workspace config the daemon expects. Hard-coded here so
+ * `getDaemon` can surface a clean `MissingConfig` error without pulling
+ * the CLI's `load-config` module into the workspace package.
+ */
+const CONFIG_FILENAME = 'epicenter.config.ts';
+
+/**
+ * Resolved `--dir` + `--workspace` for a single command invocation. The CLI
+ * builds this from yargs argv and passes it to `getDaemon`; consumers
+ * outside the CLI (vault scripts) build it inline.
+ */
+export type ResolvedTarget = {
+	absDir: string;
+	userWorkspace: string | undefined;
+};
 
 /**
  * Tagged-error variants returned by daemon client surfaces. Domain errors

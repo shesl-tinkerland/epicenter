@@ -689,6 +689,7 @@
       "dependencies": {
         "@ark/json-schema": "^0.0.4",
         "@epicenter/sync": "workspace:*",
+        "@hono/standard-validator": "catalog:",
         "@noble/ciphers": "^2.1.1",
         "@noble/hashes": "^2.0.1",
         "@sindresorhus/slugify": "catalog:",
@@ -703,6 +704,7 @@
         "drizzle-orm": "catalog:",
         "elysia": "^1.2.25",
         "fflate": "catalog:",
+        "hono": "catalog:",
         "lib0": "catalog:",
         "mime": "catalog:",
         "nanoid": "catalog:",

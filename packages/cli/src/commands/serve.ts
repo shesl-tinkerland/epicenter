@@ -26,20 +26,18 @@ import {
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 import type { Argv, CommandModule } from 'yargs';
 
-import { buildApp } from '../daemon/app.js';
-import { pingDaemon } from '../daemon/client.js';
 import {
 	bindOrRecover,
+	buildApp,
+	type DaemonMetadata,
+	pingDaemon,
+	socketPathFor,
 	type StartupError,
 	type UnixSocketServer,
-	unlinkSocketFile,
-} from '../daemon/unix-socket.js';
-import {
-	type DaemonMetadata,
 	unlinkMetadata,
+	unlinkSocketFile,
 	writeMetadata,
-} from '../daemon/metadata.js';
-import { socketPathFor } from '../daemon/paths.js';
+} from '@epicenter/workspace';
 import {
 	type LoadConfigResult,
 	type LoadError,

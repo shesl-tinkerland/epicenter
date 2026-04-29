@@ -15,7 +15,7 @@ import { createLogger } from 'wellcrafted/logger';
 
 import { metadataPathFor } from './paths.js';
 
-const log = createLogger('cli/daemon/metadata');
+const log = createLogger('workspace/daemon/metadata');
 
 /**
  * On-disk shape of `<dirHash>.meta.json`.

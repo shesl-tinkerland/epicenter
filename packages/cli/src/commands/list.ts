@@ -16,20 +16,22 @@
  * Without `up`, the handler errors with a hint pointing at `epicenter up`.
  */
 
-import { type ActionManifest } from '@epicenter/workspace';
+import {
+	type ActionManifest,
+	getDaemon,
+	type ResolveError,
+} from '@epicenter/workspace';
 import pc from 'picocolors';
 import Type, { type TSchema } from 'typebox';
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule } from 'yargs';
 
-import { getDaemon } from '../daemon/client';
 import {
 	dirOption,
 	resolveTarget,
 	workspaceOption,
 } from '../util/common-options';
 import { fail, formatYargsOptions, output } from '../util/format-output';
-import type { ResolveError } from '../daemon/resolve-entry';
 
 type Format = 'json' | 'jsonl' | undefined;
 

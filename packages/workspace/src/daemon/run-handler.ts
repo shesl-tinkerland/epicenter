@@ -21,10 +21,10 @@ import {
 	invokeAction,
 	resolveActionPath,
 	walkActions,
-} from '@epicenter/workspace';
+} from '../shared/actions.js';
 import { Ok } from 'wellcrafted/result';
 
-import type { WorkspaceEntry } from '../load-config.js';
+import type { WorkspaceEntry } from './types.js';
 import type { RunInput } from './app.js';
 import { RunError, type RunResponse } from './run-errors.js';
 

@@ -11,11 +11,10 @@
  * mode only; JSON mode always emits a valid array, even if empty).
  */
 
+import { getDaemon, type PeerSnapshot } from '@epicenter/workspace';
 import pc from 'picocolors';
 import type { Argv, CommandModule } from 'yargs';
 
-import type { PeerSnapshot } from '../daemon/app';
-import { getDaemon } from '../daemon/client';
 import { dirOption, resolveTarget, workspaceOption } from '../util/common-options';
 import { fail, formatYargsOptions, output, outputError } from '../util/format-output';
 

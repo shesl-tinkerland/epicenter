@@ -252,3 +252,50 @@ export {
 	makeEpicenterLink,
 	parseEpicenterLink,
 } from './links.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// DAEMON (unix socket transport)
+// ════════════════════════════════════════════════════════════════════════════
+
+export type { LoadedWorkspace, WorkspaceEntry } from './daemon/types.js';
+export {
+	buildApp,
+	ListInput,
+	PeerSnapshot,
+	RunInput,
+} from './daemon/app.js';
+export {
+	DaemonError,
+	type DaemonClient,
+	daemonClient,
+	getDaemon,
+	pingDaemon,
+	type ResolvedTarget,
+} from './daemon/client.js';
+export {
+	dirHash,
+	logPathFor,
+	metadataPathFor,
+	runtimeDir,
+	socketPathFor,
+} from './daemon/paths.js';
+export {
+	type DaemonMetadata,
+	readMetadata,
+	unlinkMetadata,
+	writeMetadata,
+} from './daemon/metadata.js';
+export {
+	ResolveError,
+} from './daemon/resolve-entry.js';
+export {
+	RunError,
+	type RunResponse,
+} from './daemon/run-errors.js';
+export {
+	bindOrRecover,
+	bindUnixSocket,
+	StartupError,
+	type UnixSocketServer,
+	unlinkSocketFile,
+} from './daemon/unix-socket.js';

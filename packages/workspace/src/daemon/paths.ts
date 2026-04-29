@@ -10,9 +10,19 @@
 
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { epicenterPaths } from '../auth/paths.js';
+/**
+ * Resolve the Epicenter home directory.
+ *
+ * Resolution order: `$EPICENTER_HOME` env, then `~/.epicenter/`. Mirrors
+ * the resolution used by the CLI's auth/paths helper so daemon sockets and
+ * logs land under the same root regardless of which package wrote them.
+ */
+function epicenterHome(): string {
+	return Bun.env.EPICENTER_HOME ?? join(homedir(), '.epicenter');
+}
 
 /**
  * Resolve the runtime directory for daemon sockets and metadata.
@@ -26,7 +36,7 @@ export function runtimeDir(): string {
 	if (process.env.XDG_RUNTIME_DIR) {
 		return join(process.env.XDG_RUNTIME_DIR, 'epicenter');
 	}
-	return join(epicenterPaths.home(), 'run');
+	return join(epicenterHome(), 'run');
 }
 
 /**
@@ -59,5 +69,5 @@ export function metadataPathFor(dir: string): string {
  * the operator can read post-mortem logs after a crash or reboot.
  */
 export function logPathFor(dir: string): string {
-	return join(epicenterPaths.home(), 'log', `${dirHash(dir)}.log`);
+	return join(epicenterHome(), 'log', `${dirHash(dir)}.log`);
 }

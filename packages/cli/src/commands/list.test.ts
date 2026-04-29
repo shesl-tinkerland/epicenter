@@ -1,7 +1,7 @@
 /**
  * Unit coverage for the pure helpers in `list.ts`. Renderer text output
  * and CLI argv plumbing are exercised end-to-end via the route tests in
- * `daemon/list-route.test.ts` and the command tests under `test/`; here
+ * `@epicenter/workspace`'s `daemon/list-route.test.ts` and the command tests under `test/`; here
  * we lock the small data projection that the renderer reuses.
  */
 

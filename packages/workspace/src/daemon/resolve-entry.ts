@@ -1,7 +1,7 @@
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 
-import type { WorkspaceEntry } from '../load-config';
+import type { WorkspaceEntry } from './types.js';
 
 /**
  * Tagged-error variants returned by {@link resolveEntry}. Both are

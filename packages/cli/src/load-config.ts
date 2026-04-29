@@ -36,9 +36,9 @@
  */
 
 import type {
-	Actions,
+	LoadedWorkspace,
 	PeerAwarenessState,
-	SyncAttachment,
+	WorkspaceEntry,
 } from '@epicenter/workspace';
 import { join, resolve } from 'node:path';
 import {
@@ -50,31 +50,7 @@ import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
 export const CONFIG_FILENAME = 'epicenter.config.ts';
 
-/**
- * Fields the CLI looks at on each workspace export. Only `[Symbol.dispose]`
- * is required (it's the discriminator); everything else is read when
- * present. Extra fields the factory returns are ignored.
- */
-export type LoadedWorkspace = {
-	/**
-	 * Called by the CLI at exit. The discriminator: its presence is what
-	 * marks the export as a workspace.
-	 */
-	[Symbol.dispose](): void;
-
-	/** Awaited before any action invocation, if present. */
-	readonly whenReady?: Promise<unknown>;
-
-	/** Exposes runnable actions to `epicenter run` / `epicenter list`. */
-	readonly actions?: Actions;
-
-	/**
-	 * Enables `--peer` targeting and `epicenter peers`. `attachSync(doc, { device })`
-	 * carries presence inline; `peers()` / `find()` / `observe()` live on the
-	 * SyncAttachment when the workspace was constructed with a `device`.
-	 */
-	readonly sync?: SyncAttachment;
-};
+export type { LoadedWorkspace, WorkspaceEntry };
 
 /**
  * Per-peer awareness state under the standard `device` schema. Re-exported
@@ -83,12 +59,6 @@ export type LoadedWorkspace = {
  * `state.device.{id,name,platform}` without `?.`.
  */
 export type AwarenessState = PeerAwarenessState;
-
-/** One named workspace export from `epicenter.config.ts`. */
-export type WorkspaceEntry = {
-	name: string;
-	workspace: LoadedWorkspace;
-};
 
 export type LoadConfigResult = {
 	entries: WorkspaceEntry[];

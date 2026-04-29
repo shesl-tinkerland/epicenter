@@ -16,13 +16,14 @@
  */
 
 import { sValidator } from '@hono/standard-validator';
-import { describeActions, PeerDevice } from '@epicenter/workspace';
+import { describeActions } from '../shared/actions.js';
+import { PeerDevice } from '../document/standard-awareness-defs.js';
 import { type } from 'arktype';
 import { Hono } from 'hono';
 import { Err, Ok } from 'wellcrafted/result';
 
 import { resolveEntry } from './resolve-entry.js';
-import type { WorkspaceEntry } from '../load-config.js';
+import type { WorkspaceEntry } from './types.js';
 import { executeRun } from './run-handler.js';
 
 /**

@@ -12,7 +12,8 @@
  * other variant.
  */
 
-import type { PeerMiss, RpcError } from '@epicenter/workspace';
+import type { PeerMiss } from '../document/attach-sync.js';
+import type { RpcError } from '@epicenter/sync';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -20,7 +21,7 @@ import {
 } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 
-import type { AwarenessState } from '../load-config.js';
+import type { PeerAwarenessState as AwarenessState } from '../document/standard-awareness-defs.js';
 import type { ResolveError } from './resolve-entry.js';
 
 /**

@@ -10,11 +10,17 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { defineQuery } from '@epicenter/workspace';
+import type { Result } from 'wellcrafted/result';
 
-import type { ListResult } from '../commands/list';
-import type { LoadedWorkspace, WorkspaceEntry } from '../load-config';
+import {
+	type ActionManifest,
+	defineQuery,
+} from '../shared/actions.js';
 import { buildApp } from './app';
+import type { ResolveError } from './resolve-entry.js';
+import type { LoadedWorkspace, WorkspaceEntry } from './types.js';
+
+type ListResult = Result<ActionManifest, ResolveError>;
 
 function fakeEntry(
 	name: string,

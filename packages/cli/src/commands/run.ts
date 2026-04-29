@@ -17,17 +17,21 @@
  *   3: peer-miss (`--peer <target>` didn't resolve within `--wait`)
  */
 
-import type { PeerMiss, RpcError } from '@epicenter/workspace';
+import {
+	type DaemonError,
+	getDaemon,
+	type PeerMiss,
+	type ResolveError,
+	type RpcError,
+	type RunError,
+	type RunInput,
+} from '@epicenter/workspace';
 import pc from 'picocolors';
 import { extractErrorMessage } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 import type { Argv, CommandModule, Options } from 'yargs';
 
-import type { RunInput } from '../daemon/app';
-import { type DaemonError, getDaemon } from '../daemon/client';
-import type { RunError } from '../daemon/run-errors';
 import type { AwarenessState } from '../load-config';
-import type { ResolveError } from '../daemon/resolve-entry';
 import {
 	dirOption,
 	resolveTarget,

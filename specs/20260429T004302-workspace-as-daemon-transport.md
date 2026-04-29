@@ -196,6 +196,8 @@ These land in dependency order. Each phase compiles green and ships independentl
 
 ### Phase 1: move daemon module into `@epicenter/workspace`
 
+> Done 2026-04-28: moved 8 modules + 6 test files via `git mv`; added a `daemon/types.ts` (`LoadedWorkspace`, `WorkspaceEntry`) so `@epicenter/cli`'s `load-config.ts` re-exports from the workspace package; re-exported the daemon surface from `packages/workspace/src/index.ts`; CLI commands (`run`, `list`, `peers`, `serve`, `serve.test`) now import from `@epicenter/workspace`. Workspace package picked up `hono` and `@hono/standard-validator` deps. All 28 daemon tests green; pre-existing test failures unrelated.
+
 Mechanical relocation. No behavior change.
 
 ```
