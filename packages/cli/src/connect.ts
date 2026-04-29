@@ -7,12 +7,9 @@
  * persistence + unlock + sync ceremony. Workspace-specific concerns
  * (tables, kv, materializers, actions, per-row caches) stay caller-owned.
  *
- * Persistence path resolution order:
- *   1. Explicit `persistencePath` option, if provided.
- *   2. `$EPICENTER_PERSISTENCE_DIR/<ydoc.guid>.db`, if the env var is set.
- *      Useful for unusual deployments (containerized, network filesystem).
- *   3. Default: `<absDir>/.epicenter/persistence/<ydoc.guid>.db` where
- *      `absDir` is `opts.absDir ?? process.cwd()`.
+ * Persistence path resolution: `<absDir>/.epicenter/persistence/<ydoc.guid>.db`,
+ * where `absDir` defaults to `process.cwd()`. Pass `persistencePath` explicitly
+ * to override.
  *
  * Requires a prior `epicenter auth login` so a session exists at
  * `~/.epicenter/auth/sessions.json`. Without one, the chain still wires up
@@ -39,7 +36,6 @@
  * ```
  */
 
-import { join } from 'node:path';
 import type {
 	EncryptionAttachment,
 	SqliteAttachment,
@@ -75,9 +71,8 @@ export type ConnectWorkspaceOptions = {
 	 */
 	absDir?: string;
 	/**
-	 * Override the local SQLite persistence path. Defaults to the
-	 * `<absDir>/.epicenter/persistence/<ydoc.guid>.db` convention, with
-	 * `$EPICENTER_PERSISTENCE_DIR` honored as a global override.
+	 * Override the local SQLite persistence path. Defaults to
+	 * `<absDir>/.epicenter/persistence/<ydoc.guid>.db`.
 	 */
 	persistencePath?: string;
 };
@@ -90,17 +85,6 @@ export type ConnectedWorkspace = {
 	whenReady: Promise<unknown>;
 };
 
-function resolvePersistencePath(
-	ydocGuid: string,
-	absDir: string,
-	override: string | undefined,
-): string {
-	if (override !== undefined) return override;
-	const envDir = Bun.env.EPICENTER_PERSISTENCE_DIR;
-	if (envDir) return join(envDir, `${ydocGuid}.db`);
-	return persistencePath(absDir, ydocGuid);
-}
-
 export function connectWorkspace({
 	ydoc,
 	encryption,
@@ -110,14 +94,8 @@ export function connectWorkspace({
 }: ConnectWorkspaceOptions): ConnectedWorkspace {
 	const sessions = createSessionStore();
 
-	const resolvedPersistencePath = resolvePersistencePath(
-		ydoc.guid,
-		absDir,
-		persistencePathOverride,
-	);
-
 	const persistence = attachSqlite(ydoc, {
-		filePath: resolvedPersistencePath,
+		filePath: persistencePathOverride ?? persistencePath(absDir, ydoc.guid),
 	});
 
 	const unlock = attachSessionUnlock(encryption, {

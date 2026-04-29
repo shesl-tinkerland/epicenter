@@ -243,7 +243,7 @@ Internally, `createWorkspaceServer` builds a `Map<workspaceId, Workspace>` keyed
 
 ### Phase 3: switch persistence path to local
 
-> Done 2026-04-28: added `packages/workspace/src/paths/persistence.ts` (`persistencePath(absDir, workspaceId)`) and re-exported from `@epicenter/workspace`. `packages/cli/src/connect.ts` (the bundle helper) now defaults persistence to `<absDir>/.epicenter/persistence/<id>.db` (absDir defaulting to `process.cwd()`); `EPICENTER_PERSISTENCE_DIR` env var available as a global override; explicit `persistencePath` option still wins. Removed `epicenterPaths.persistence` from `packages/cli/src/auth/paths.ts` (auth/sessions stays global; per-workspace persistence is now a workspace-package concern). Updated playground configs (`opensidian-e2e` passes `absDir: import.meta.dir`; `tab-manager-e2e` calls `persistencePath(import.meta.dir, ...)` directly). Added one-time migration script at `packages/cli/scripts/migrate-persistence-to-local.ts` (interactive by default; `--from <id> --to <absDir>` for non-interactive single-file moves; refuses to overwrite). Pragmatic deviation from spec sketch: kept the migration script standalone (run with `bun packages/cli/scripts/migrate-persistence-to-local.ts`) rather than wiring it into the yargs CLI; the spec permits this. Grep gate: `EPICENTER_PATHS.persistence` / `epicenterPaths.persistence` produce zero hits in code (only historical specs remain). Workspace + CLI typecheck clean; no new test failures (pre-existing `system.describe`, `describePeer`, and `cli.test.ts` yargs-message failures unchanged).
+> Done 2026-04-28: added `packages/workspace/src/paths/persistence.ts` (`persistencePath(absDir, workspaceId)`) and re-exported from `@epicenter/workspace`. `packages/cli/src/connect.ts` (the bundle helper) now defaults persistence to `<absDir>/.epicenter/persistence/<id>.db` (absDir defaulting to `process.cwd()`); explicit `persistencePath` option still wins. Removed `epicenterPaths.persistence` from `packages/cli/src/auth/paths.ts` (auth/sessions stays global; per-workspace persistence is now a workspace-package concern). Updated playground configs (`opensidian-e2e` passes `absDir: import.meta.dir`; `tab-manager-e2e` calls `persistencePath(import.meta.dir, ...)` directly). Breaking change with no migration shim: this is a pre-1.0 internal monorepo with no external users, so existing global persistence files at `~/.epicenter/persistence/<id>.db` are intentionally orphaned (delete them by hand if you care). Grep gate: `EPICENTER_PATHS.persistence` / `epicenterPaths.persistence` produce zero hits in code (only historical specs remain). Workspace + CLI typecheck clean.
 
 Add `paths/persistence.ts`:
 
@@ -257,17 +257,7 @@ export function persistencePath(absDir: string, workspaceId: string): string {
 
 Update `packages/cli/src/connect.ts`'s `epicenterPaths.persistence(workspaceId)` default to take an `absDir` argument instead of resolving against `~/.epicenter/`. Update vault's wrappers to pass `absDir`. Update test fixtures.
 
-Provide a one-time migration script at `packages/cli/scripts/migrate-persistence-to-local.ts`:
-
-```bash
-$ bun x epicenter migrate-persistence
-moving ~/.epicenter/persistence/epicenter.fuji.db
-   to /Users/braden/Code/vault/.epicenter/persistence/epicenter.fuji.db ...
-```
-
-The script reads each `~/.epicenter/persistence/<id>.db`, asks the user which absDir owns it (or accepts `--from <id> --to <absDir>` flags), moves the file, removes the global one. If a workspaceId has no clear single owner (multiple configs declare it), errors and tells the user to do it manually.
-
-The Phase 3 cutover is gated on this script existing and being documented. Users who upgrade without running it lose access to existing persistence until they do; that is acceptable but must be flagged in release notes.
+This is a clean breaking change with no migration shim. Pre-1.0 internal monorepo, no external users; existing global persistence files at `~/.epicenter/persistence/<id>.db` are simply orphaned (delete by hand if desired).
 
 ### Phase 4: auto-generate table action wrappers
 
@@ -460,18 +450,11 @@ using fuji = openFuji({ ... });  // or a vault-shaped boot wrapper that points a
 
 No daemon involvement, no cross-test contamination. Cleanup is `rmSync(tmpdir, { recursive: true })`.
 
-### Migration of existing `~/.epicenter/persistence/<id>.db` files
+### Existing `~/.epicenter/persistence/<id>.db` files
 
-The `migrate-persistence-to-local` script handles the one-time move. Document the upgrade step in vault's release notes. After the script runs, the global persistence directory should contain only `auth/sessions.json` and any device-id state.
-
-### Power users who want global persistence back
-
-Provide an env var override: `EPICENTER_PERSISTENCE_DIR=/some/global/path` redirects the persistence path. Default behavior is local; the override is for unusual deployments (containerized, network filesystem). Document but do not surface prominently.
+Pre-1.0 internal monorepo; no migration shim. Existing global persistence files are intentionally orphaned by this change. Delete them by hand if you care.
 
 ## Risks and mitigations
-
-**Risk: vault users on existing global persistence break on upgrade.**
-Mitigation: ship `migrate-persistence-to-local` script. Document the upgrade. Consider a major version bump on `@epicenter/workspace` so the change is visible.
 
 **Risk: `partialOf` schema combinator harder to express than expected.**
 Mitigation: spike before committing to Phase 4. If arktype's `.partial()` does not preserve brands, build a minimal helper in `packages/workspace/src/shared/schema-partial.ts`. Worst case: a custom walker over the schema's record shape.
