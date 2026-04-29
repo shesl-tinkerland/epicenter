@@ -304,6 +304,13 @@ export {
 	type WorkspaceServer,
 	type WorkspaceServerOptions,
 } from './daemon/server.js';
+export { buildTableActions } from './daemon/table-actions.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// SCHEMA HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+
+export { partialOf, type PartialOf } from './shared/schema-partial.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATHS
