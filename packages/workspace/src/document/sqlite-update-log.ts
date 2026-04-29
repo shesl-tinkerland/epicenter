@@ -1,11 +1,11 @@
 /**
  * Shared append-log compaction helper for SQLite-backed Y.Doc persistence.
  *
- * Both `attachSqlite(ydoc, { filePath })` (per-doc, document-layer) and
- * `sqlitePersistence({ filePath })` (workspace-scope extension) use the
- * same append-log strategy: every `updateV2` becomes a tiny `INSERT INTO
- * updates (data) VALUES (?)`, and periodically the log is compacted into a
- * single row encoded via `Y.encodeStateAsUpdateV2`.
+ * Both `attachSqlitePersistence(ydoc, { filePath })` (per-doc,
+ * document-layer) and `sqlitePersistence({ filePath })` (workspace-scope
+ * extension) use the same append-log strategy: every `updateV2` becomes a
+ * tiny `INSERT INTO updates (data) VALUES (?)`, and periodically the log
+ * is compacted into a single row encoded via `Y.encodeStateAsUpdateV2`.
  *
  * The constants and the helper live here so both consumers share one source
  * of truth. Drift between the two previously caused silent behavior skew.

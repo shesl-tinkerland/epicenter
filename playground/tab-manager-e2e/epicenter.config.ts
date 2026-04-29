@@ -31,7 +31,7 @@ import {
 } from '@epicenter/tab-manager/workspace';
 import {
 	attachEncryption,
-	attachSqlite,
+	attachSqlitePersistence,
 	attachSync,
 	persistencePath,
 } from '@epicenter/workspace';
@@ -55,7 +55,7 @@ const tables = encryption.attachTables(ydoc, tabManagerTables);
 // materializer's `.kv()` call has something to observe.
 const kv = encryption.attachKv(ydoc, {});
 
-const persistence = attachSqlite(ydoc, {
+const persistence = attachSqlitePersistence(ydoc, {
 	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
 });
 

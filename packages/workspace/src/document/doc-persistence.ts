@@ -10,7 +10,7 @@
  *
  * This is a *consumer contract*, not a produced attachment — there is no
  * `attachPersistence()` function. Real producers (`attachIndexedDb`,
- * `attachSqlite`) return richer types that structurally satisfy this shape.
+ * `attachSqlitePersistence`) return richer types that structurally satisfy this shape.
  */
 export type DocPersistence = {
 	whenLoaded: Promise<unknown>;

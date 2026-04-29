@@ -286,7 +286,7 @@ export type SyncAttachment = {
 
 /**
  * Anything with a `.whenLoaded` promise (typically `attachIndexedDb` or
- * `attachSqlite` results). Lets `waitFor` accept the attachment directly
+ * `attachSqlitePersistence` results). Lets `waitFor` accept the attachment directly
  * rather than reaching into `.whenLoaded`.
  */
 export type WaitForBarrier = Promise<unknown> | { whenLoaded: Promise<unknown> };

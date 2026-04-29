@@ -17,7 +17,7 @@ The pattern: a vanilla `openX()` function constructs the workspace's `Y.Doc`, co
 │  attachTable / attachTables / attachKv                     │ ← Data attachments
 │  attachEncryption → .attachTable / .attachTables / .attachKv
 │  attachAwareness                                           │ ← Presence
-│  attachIndexedDb / attachSqlite / attachBroadcastChannel   │ ← Persistence + cross-tab
+│  attachIndexedDb / attachSqlitePersistence / attachBroadcastChannel │ ← Persistence + cross-tab
 │  attachSync                                                │ ← WebSocket sync
 │  attachSqliteMaterializer                                  │ ← Queryable mirror
 ├────────────────────────────────────────────────────────────┤

@@ -127,9 +127,16 @@ export {
 } from './document/attach-indexed-db.js';
 
 export {
-	attachSqlite,
-	type SqliteAttachment,
-} from './document/attach-sqlite.js';
+	AttachSqlitePersistenceError,
+	attachSqlitePersistence,
+	type SqlitePersistenceAttachment,
+} from './document/attach-sqlite-persistence.js';
+
+export {
+	AttachSqliteReadonlyPersistenceError,
+	attachSqliteReadonlyPersistence,
+	type SqliteReadonlyPersistenceAttachment,
+} from './document/attach-sqlite-readonly-persistence.js';
 
 export {
 	attachBroadcastChannel,

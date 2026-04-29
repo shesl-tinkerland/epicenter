@@ -17,7 +17,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
 	attachEncryption,
-	attachSqlite,
+	attachSqlitePersistence,
 	createDisposableCache,
 	generateId,
 } from '@epicenter/workspace';
@@ -48,7 +48,7 @@ function createTestClient() {
 	const encryption = attachEncryption(ydoc);
 	const tables = encryption.attachTables(ydoc, opensidianTables);
 	const kv = encryption.attachKv(ydoc, {});
-	const persistence = attachSqlite(ydoc, { filePath: dbPath(WORKSPACE_ID) });
+	const persistence = attachSqlitePersistence(ydoc, { filePath: dbPath(WORKSPACE_ID) });
 
 	const contentDocs = createDisposableCache(
 		(fileId: FileId) =>
@@ -57,7 +57,7 @@ function createTestClient() {
 				workspaceId: WORKSPACE_ID,
 				filesTable: tables.files,
 				attachPersistence: (contentDoc) =>
-					attachSqlite(contentDoc, {
+					attachSqlitePersistence(contentDoc, {
 						filePath: join(
 							PERSISTENCE_DIR,
 							'content',
@@ -210,7 +210,7 @@ describe('e2e: opensidian pushFromMarkdown', () => {
 		const encryption = attachEncryption(ydoc);
 		const tables = encryption.attachTables(ydoc, opensidianTables);
 		const kv = encryption.attachKv(ydoc, {});
-		const persistence = attachSqlite(ydoc, {
+		const persistence = attachSqlitePersistence(ydoc, {
 			filePath: join(IMPORT_PERSISTENCE, 'opensidian.db'),
 		});
 
@@ -221,7 +221,7 @@ describe('e2e: opensidian pushFromMarkdown', () => {
 					workspaceId: WORKSPACE_ID,
 					filesTable: tables.files,
 					attachPersistence: (contentDoc) =>
-						attachSqlite(contentDoc, {
+						attachSqlitePersistence(contentDoc, {
 							filePath: join(
 								IMPORT_PERSISTENCE,
 								'content',

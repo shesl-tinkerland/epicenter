@@ -33,7 +33,7 @@ import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
 import {
 	attachEncryption,
-	attachSqlite,
+	attachSqlitePersistence,
 	attachSync,
 	createDisposableCache,
 	defineMutation,
@@ -63,7 +63,7 @@ const encryption = attachEncryption(ydoc);
 const tables = encryption.attachTables(ydoc, opensidianTables);
 const kv = encryption.attachKv(ydoc, {});
 
-const persistence = attachSqlite(ydoc, {
+const persistence = attachSqlitePersistence(ydoc, {
 	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
 });
 
@@ -88,7 +88,7 @@ const whenReady = Promise.all([
 ]);
 
 /**
- * Per-file content persistence via `attachSqlite`. Each content Y.Doc writes
+ * Per-file content persistence via `attachSqlitePersistence`. Each content Y.Doc writes
  * its own `{guid}.db` under `<absDir>/.epicenter/persistence/{workspaceId}/content/`,
  * matching the per-workspace SQLite convention from the workspace package.
  */
@@ -106,7 +106,7 @@ const fileContentDocs = createDisposableCache(
 			workspaceId: WORKSPACE_ID,
 			filesTable: tables.files,
 			attachPersistence: (contentDoc) =>
-				attachSqlite(contentDoc, {
+				attachSqlitePersistence(contentDoc, {
 					filePath: join(CONTENT_DIR, `${contentDoc.guid}.db`),
 				}),
 		}),
