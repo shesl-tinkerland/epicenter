@@ -307,6 +307,19 @@ export {
 export { buildTableActions } from './daemon/table-actions.js';
 
 // ════════════════════════════════════════════════════════════════════════════
+// CLIENT (remote workspace proxy)
+// ════════════════════════════════════════════════════════════════════════════
+
+export { buildRemoteWorkspace } from './client/remote.js';
+export { RemoteNotSupported } from './client/remote-not-supported.js';
+export type {
+	RemoteAction,
+	RemoteCallError,
+	RemoteTable,
+	RemoteWorkspace,
+} from './client/remote-workspace-types.js';
+
+// ════════════════════════════════════════════════════════════════════════════
 // SCHEMA HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 
