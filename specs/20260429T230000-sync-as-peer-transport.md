@@ -47,7 +47,7 @@ Each namespace exists because the others can't do its job:
 
 There is no third namespace for "dispatch a server-only action to the daemon." Server-only side effects (Stripe calls, kicking peers, reloading config) flow through one of two paths that already exist: (a) the daemon's own observer reacts to a Y.Doc state change the script wrote, or (b) a CLI command runs in the daemon's own process (e.g. `epicenter kick <peerId>`). See "Server-only side effects" below. Adding a third script-facing namespace for these turned out to be over-engineering.
 
-**Composability: each peer attaches what it needs.** `openFujiPeer({ attach: ['tables', 'sqlite'] })` yields a workspace with just the CRDT and the SQLite mirror. A markdown-only script asks for `['markdown']` and never opens the SQLite file. Each piece is independent; the daemon-side `openFujiDaemon` composes the same way (writers and the sync hub).
+**Composability lives at the per-app factory level.** `openFujiPeer()` returns the full bundle for fuji (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition: a new daemon-side materializer adds a new field on the peer return type; TypeScript catches consumer breakage at call sites. There is no runtime feature flag, no string literal in the API, no optional fields. If a script genuinely wants a different shape, it bypasses the per-app factory and composes primitives directly: `openFuji()` + `attachSyncIpc(...)` + whichever mirrors it wants.
 
 Three env factories per app (`browser.ts`, `daemon.ts`, `peer.ts`), one underlying type (`Fuji = ReturnType<typeof openFuji>`), differing only in attached IO handles. The script's `fuji` is structurally a peer of the browser's `fuji`. They differ in lifetime and in which `attach*` primitives carry the bytes, not in the API surface.
 
@@ -361,46 +361,33 @@ import {
 
 export async function openFujiPeer(opts: {
   absDir?: string;
-  workspace?: string;       // defaults to 'fuji' (only one in this app)
   clientId?: number;        // defaults to hashClientId(Bun.main)
   isEphemeral?: boolean;    // defaults to true; opt false for long-running peers
-  attach?: ReadonlyArray<'tables' | 'sqlite' | 'markdown'>;  // defaults to all three
 } = {}) {
   const absDir = opts.absDir ?? findEpicenterDir();
-  const attach = new Set(opts.attach ?? ['tables', 'sqlite', 'markdown']);
   const fuji = openFuji({ clientId: opts.clientId ?? hashClientId(Bun.main) });
 
-  // (1) Local Y.Doc, synced over the unix socket.
-  //     Always attached: the IPC sync session is the daemon's liveness contract,
-  //     and `attach: ['markdown']`-only scripts still need the daemon to be the
-  //     authoritative writer of the file they are reading.
+  // Local Y.Doc, synced over the unix socket.
   const ipc = await attachSyncIpc(fuji.ydoc, {
     socket: socketPathFor(absDir),
-    workspace: opts.workspace ?? 'fuji',
+    workspace: 'fuji',
     encryption: fuji.encryption,
     isEphemeral: opts.isEphemeral ?? true,
   });
   await ipc.whenSynced;
 
-  // (2) Read-only access to the daemon's materialized files. Composable.
-  const sqliteMirror = attach.has('sqlite')
-    ? attachSqliteMirror({ filePath: mirrorPathFor(absDir, fuji.ydoc.guid) })
-    : null;
-  const markdownMirror = attach.has('markdown')
-    ? attachMarkdownMirror({ rootPath: markdownPathFor(absDir, fuji.ydoc.guid) })
-    : null;
+  // Read-only access to the daemon's materialized files.
+  const sqliteMirror = attachSqliteMirror({ filePath: mirrorPathFor(absDir, fuji.ydoc.guid) });
+  const markdownMirror = attachMarkdownMirror({ rootPath: markdownPathFor(absDir, fuji.ydoc.guid) });
 
   return {
     ...fuji,                                        // tables.X, kv.X, batch, ydoc
     ipc,
-    sqlite: sqliteMirror && {                       // typed SQLite read
-      ...sqliteMirror,
-      drizzle: drizzle(sqliteMirror.db, { schema }),
-    },
-    markdown: markdownMirror,                       // markdown read
+    sqlite: { ...sqliteMirror, drizzle: drizzle(sqliteMirror.db, { schema }) },
+    markdown: markdownMirror,
     async [Symbol.asyncDispose]() {
-      sqliteMirror?.[Symbol.dispose]();
-      markdownMirror?.[Symbol.dispose]();
+      sqliteMirror[Symbol.dispose]();
+      markdownMirror[Symbol.dispose]();
       await ipc.close();
       fuji[Symbol.dispose]();
     },
@@ -666,7 +653,9 @@ The `system.workspaces` Y.Map carries `{ id, name, guid, _v }` — the stable id
 
 14. **The script's workspace handle has two honest namespaces.** `tables.X` for pure CRDT (local Y.Doc, freshness-coherent), `sqlite` / `markdown` for materialized reads (shared files via WAL or filesystem). Each surface uses the right primitive for its job; no namespace is reachable two ways. Server-only side effects use Y.Doc-mediated request entries (Path A) or daemon-internal CLI commands (Path B); they are not script-facing namespaces.
 
-15. **Composable attach surface.** `openFujiPeer({ attach: ['tables', 'sqlite'] })` opens the IPC sync and the SQLite mirror but skips the markdown mirror. Each piece is independent; scripts pay only for what they use. The IPC sync is always attached because it is the daemon's liveness contract.
+15. **Per-app factories own composition; no runtime feature flag.** `openFujiPeer()` always returns the full bundle (CRDT + IPC sync + SQLite mirror + markdown mirror) because fuji's `openFujiDaemon` writes both materializer files. The factory IS the composition. No `attach: [...]` option, no string literals, no optional fields on the return type. Scripts wanting a different shape compose primitives directly (`openFuji()` + `attachSyncIpc(...)`).
+
+17. **Materializer commits synchronously, no debouncing.** `attachSqliteMaterializer` reacts to the daemon Y.Doc's `updateV2` event by committing changed rows to SQLite **in the same tick**, not on a debounce timer. Yjs's `transact()` already provides batching: a 1000-write loop wrapped in `fuji.batch(() => {...})` produces ONE `updateV2` event with 1000 row changes inside, which the materializer commits as ONE SQL transaction. The natural batching unit is the Yjs transaction, not a wall-clock window. Consequence: the SQLite mirror is coherent with the daemon's Y.Doc within microseconds of the daemon applying an update; the only remaining lag for a script reading SQLite is the IPC RTT for the daemon to RECEIVE the script's update (sub-millisecond on local IPC). This makes `flush()` (when added) reduce to a single SYNC_STATUS ack with no separate "materializer-flushed" wait. Spike before commit 7: confirm SQLite throughput is fine for a realistic 10k-bulk-import workload via `fuji.batch`.
 
 16. **No RPC over the IPC socket (Revelation 2).** The unix socket carries Yjs sync only (`SYNC`, `AWARENESS`, `SYNC_STATUS`). No `MESSAGE_TYPE.RPC` frames; no `peer<T>(syncIpc, deviceId)` proxy; no `fuji.daemon.X` namespace. The cross-device peer RPC mailbox in `attachSync` (cloud) is unchanged: `peer<T>(workspace.sync, 'phone')` works the same way it does today. For local server-only effects, scripts use Y.Map request entries (Path A) or daemon-internal CLI commands (Path B); for cross-device action invocation, scripts use cloud `peer<T>` as today. One form of RPC remains in the system (cloud-side, unchanged); the IPC socket has none.
 
@@ -721,7 +710,7 @@ Nine commits, in order. Each commit compiles and passes tests independently. Ste
 - Each exports `openXxxPeer(opts?)` composing `openXxx()` + `attachSyncIpc` + (optional) `attachSqliteMirror` + (optional) `attachMarkdownMirror`. Returned bundle has the two honest namespaces: `tables.X` (CRDT) and `sqlite` / `markdown` (materialized reads). The `attach` option lets scripts opt into just what they need.
 - New: `apps/<app>/src/lib/<app>/db-schema.ts` shared between `daemon.ts` and `peer.ts`. Drizzle schema definitions; single source of column types.
 - Each derives a default `clientId` from `Bun.main` via the shared `hashClientId(path: string): number` utility (already added in step 1).
-- Tests: each app's `peer.test.ts` smoke-tests construction against an in-process `attachSyncHub` + tmpdir socket + tmpdir mirror file. Asserts: tables CRUD works locally, `sqlite.search(...)` against the warm mirror returns the right rows, `attach: ['tables']`-only mode skips opening the mirror file.
+- Tests: each app's `peer.test.ts` smoke-tests construction against an in-process `attachSyncHub` + tmpdir socket + tmpdir mirror file. Asserts: tables CRUD works locally; `sqlite.search(...)` against the warm mirror returns the right rows; `sqlite.drizzle.select()...` returns typed rows.
 
 ### 6. Migrate `Object.assign` to spread across env factories
 
@@ -866,9 +855,9 @@ The earlier questions either resolved or got promoted to invariants. The remaini
 
 2. **Read-after-write coherence: pattern, not primitive.** Documented contract:
 
-   **Rule (default):** for "did the value I just wrote land?" — read through `fuji.tables.X.get(id)`, not through `fuji.sqlite`. The Y.Doc is synchronous and coherent with your own writes; the SQLite mirror lags by up to one materializer debounce window (~100ms). The Y.Doc is the source of truth; SQLite is one derived view. Use the right tool.
+   **Rule (default):** for "did the value I just wrote land?" — read through `fuji.tables.X.get(id)`, not through `fuji.sqlite`. The Y.Doc is synchronous and coherent with your own writes. The SQLite mirror lags only by IPC RTT (sub-millisecond) once the materializer is synchronous — the daemon receives the update, applies it, materializer commits in the same tick. The Y.Doc is the source of truth; SQLite is one derived view. Use the right tool.
 
-   **Rare case:** scripts that need read-after-write through SQLite must call `await fuji.ipc.flush()` (resolves when daemon acked) and then either poll the mirror briefly or `await new Promise(r => setTimeout(r, MATERIALIZER_DEBOUNCE_MS + 20))`. No formal `whenFlushed` primitive in v3; if read-after-write becomes common, add the primitive then.
+   **Rare case:** scripts that need read-after-write through SQLite call `await fuji.flush()`, which resolves once the daemon has applied the script's pending writes (and, given the materializer is synchronous, the SQLite reflects them). Design of `flush()` is captured separately below.
 
    Why we're fine: tagging scripts, pipeline scripts, and observation scripts are the common workloads, none need read-after-write through SQLite. Interactive REPLs and tests are the cases where it matters; both can afford the explicit wait.
 
