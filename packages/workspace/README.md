@@ -264,6 +264,8 @@ The Y.Doc carries data. Your definition files carry meaning.
 
 ### Multi-Device Sync Topology
 
+> For a full picture of how processes reach a workspace, see the [architecture docs](./docs/architecture/README.md): [Process Topology](./docs/architecture/process-topology.md) covers same-machine access (browser tab vs. `epicenter serve` daemon vs. CLI/scripts), [Network Topology](./docs/architecture/network-topology.md) covers cross-machine convergence, and [Action Dispatch](./docs/architecture/action-dispatch.md) covers cross-device action invocation. The summary below is the WAN-side picture only.
+
 Epicenter supports distributed sync where Y.Doc instances replicate across devices via y-websocket:
 
 ```

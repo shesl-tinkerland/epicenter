@@ -1,5 +1,7 @@
 # Action Dispatch
 
+> **Companion docs:** This doc covers the **third** transport in the system, used when you must run an action on a *specific peer device*. For the other two, see [Process Topology](./process-topology.md) (same-machine IPC into the local daemon via unix socket `/run`) and [Network Topology](./network-topology.md) (Y.Doc convergence between Y.Doc owners over WebSocket). Pick this transport when neither in-process call nor `/run` will do, because the action requires runtime-specific APIs available only on a particular peer (e.g. `browser.tabs.*` lives on the extension, not the daemon).
+
 > **Note**: "Suspended" terminology was renamed to "saved" in the codebase. References below use the original names. See `specs/20260213T014300-rename-suspended-to-saved.md`.
 
 How to invoke actions across runtimes using YJS as the transport layer.
@@ -294,7 +296,8 @@ For browser -> server, HTTP is simpler. Use the requests table when you need to 
 
 ## Related Documentation
 
+- [Process Topology](./process-topology.md): Same-machine transport (unix socket `/run`); the alternative when "the right peer" is the local daemon and not a remote device.
 - [Request Dispatch Spec](../../../../specs/20260213T103000-request-dispatch.md): Implementation spec with tab-manager examples
 - [Device Identity](./device-identity.md): How devices identify themselves
-- [Network Topology](./network-topology.md): Connection patterns
+- [Network Topology](./network-topology.md): Connection patterns; the underlying transport this doc rides on.
 - [SYNC_ARCHITECTURE.md](../../SYNC_ARCHITECTURE.md): Multi-device sync details

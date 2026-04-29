@@ -4,16 +4,19 @@ System architecture documentation for Epicenter's distributed sync system.
 
 ## Documents
 
-| Document                                  | Description                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------- |
-| [Network Topology](./network-topology.md) | Node types (client/server), connection rules, example topologies |
-| [Device Identity](./device-identity.md)   | How devices identify themselves, server URLs, registry entries   |
-| [Action Dispatch](./action-dispatch.md)   | Cross-device action invocation via YJS command mailbox           |
-| [Security](./security.md)                 | Security layers (Tailscale, content-addressing), threat model    |
+| Document                                  | Description                                                                                  |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [Process Topology](./process-topology.md) | Browser tab vs. daemon vs. CLI/scripts on one machine; how the daemon is just a sync client. |
+| [Network Topology](./network-topology.md) | How Y.Doc owners on different machines converge through the sync server.                     |
+| [Device Identity](./device-identity.md)   | How devices identify themselves, server URLs, registry entries.                              |
+| [Action Dispatch](./action-dispatch.md)   | Cross-device action invocation via YJS command mailbox.                                      |
+| [Security](./security.md)                 | Security layers (Tailscale, content-addressing), threat model.                               |
+
+The three transport docs ([Process Topology](./process-topology.md), [Network Topology](./network-topology.md), [Action Dispatch](./action-dispatch.md)) describe three orthogonal channels that compose: process topology covers same-machine IPC, network topology covers cross-machine Yjs sync, and action dispatch covers targeted cross-device RPC riding on top of sync.
 
 ## Quick Reference
 
-> **Topology note:** Epicenter uses a two-tier architecture. Browsers connect to the remote server (`apps/api`) which handles auth (Better Auth), AI streaming (`/ai/chat`), and a Yjs relay. A local sidecar tier was previously planned but has been removed (see `specs/20260311T080000-remove-server-local.md`). See [Network Topology](./network-topology.md) for the full picture.
+> **Topology note:** Epicenter uses a two-tier architecture. Y.Doc owners (browser tabs and `epicenter serve` daemons) connect to the remote server (`apps/api`) which handles auth (Better Auth), AI streaming (`/ai/chat`), and a Yjs relay. The daemon is itself just another sync client; CLI commands and bun scripts piggyback on it via a unix socket so they do not have to own a Y.Doc. See [Process Topology](./process-topology.md) for the same-machine view and [Network Topology](./network-topology.md) for the cross-machine view. A local sidecar tier was previously planned but has been removed (see `specs/20260311T080000-remove-server-local.md`).
 
 ### Node Types
 

@@ -1,8 +1,10 @@
 # Network Topology
 
-> **Status note:** This document describes the sync topology. The current architecture uses a **remote server** (`apps/api`) that handles auth (Better Auth), AI streaming, AI proxy, and a Yjs relay. A local sidecar tier was previously planned but has been removed (see `specs/20260311T080000-remove-server-local.md`). The local-mesh topology described below is aspirational and not yet implemented.
+> **Companion docs:** [Process Topology](./process-topology.md) describes how processes on a single machine reach a workspace (browser tab vs. daemon vs. CLI/scripts). This doc describes how Y.Doc owners on different machines converge with each other. Read [Process Topology](./process-topology.md) first if you want to understand which kind of process you are looking at; this doc is the WAN-side picture.
 
-Epicenter uses a **leaderless, bidirectional graph** topology for syncing data across devices. This document describes the node types, connection rules, and example configurations.
+> **Status note:** This document describes the sync topology between Y.Doc owners (browser tabs and `epicenter serve` daemons). The current architecture uses a **remote server** (`apps/api`) that handles auth (Better Auth), AI streaming, AI proxy, and a Yjs relay. The local-mesh topology described in the example below is one possible deployment (laptop-to-laptop over Tailscale); in the typical deployment today every Y.Doc owner is a sync client of `apps/api`. A local sidecar tier was previously planned but has been removed (see `specs/20260311T080000-remove-server-local.md`).
+
+Epicenter uses a **leaderless, bidirectional graph** topology for syncing data across devices. This document describes the node types, connection rules, and example configurations. For the daemon's role specifically (which is "another sync client of the same server, plus a local IPC server"), see [Process Topology](./process-topology.md).
 
 ## Node Types
 
@@ -193,6 +195,8 @@ When offline:
 
 ## Related Documentation
 
+- [Process Topology](./process-topology.md): How processes on one machine reach a workspace (browser tab, daemon, CLI, scripts) and how the daemon is itself a sync client like any browser tab.
 - [Device Identity](./device-identity.md): How nodes identify themselves
+- [Action Dispatch](./action-dispatch.md): Cross-device action invocation via the Y.Doc requests table; rides on top of the sync transport described here.
 - [Security](./security.md): Network security model
 - [Blob Sync](../blobs/README.md): How binary files sync across the network
