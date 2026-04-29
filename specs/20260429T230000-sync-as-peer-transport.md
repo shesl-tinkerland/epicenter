@@ -123,6 +123,78 @@ Three Y.Docs hosted by the daemon (two user workspaces plus one synthetic system
 
 Transport (1) is the unix socket carrying Yjs sync (the existing `@epicenter/sync` framing). Transport (2) crosses by the filesystem, with SQLite WAL handling concurrency between the daemon writer and N script readers. There is **no third transport** for "RPC dispatch to the daemon" — server-only side effects flow through (1) as Y.Doc state the daemon's own observer reacts to, or run as daemon-internal commands invoked via `epicenter <command>` in the daemon's own process.
 
+## Concepts glossary
+
+This spec introduces or relies on several Yjs and IPC concepts that may not be obvious. Skim this section before reading the design; refer back as needed.
+
+### `clientID` (Yjs)
+A 53-bit positive integer per `Y.Doc` instance. Every operation is attributed in the StructStore as `(clientID, clock) -> op`, where `clock` is a per-clientID monotonic counter. This is Yjs's causality vector. State vectors (the sync handshake's diff key) index by clientID. See `clientID discipline` below for the stable-derivation requirement.
+
+### `deviceId` (Epicenter)
+A user-configured string identifying a physical or logical device (e.g., `'laptop-braden'`). Distinct from `clientID`: one device commonly hosts multiple Y.Docs (browser tab + script), each with its own clientID. Used by awareness presence and cross-device action dispatch (`peer<T>(deviceId)`), not by Yjs internals.
+
+### State vector
+A compact summary `Map<clientID, maxClock>` representing "what I have." The peer ships its state vector in STEP1; the server returns "every op not covered by your vector" in STEP2. Bigger state vector = more handshake bytes. This is why ephemeral peers with random clientIDs are expensive (the daemon's vector grows by one entry per invocation).
+
+### STEP1 / STEP2 (Yjs sync protocol)
+The two-message handshake:
+- `STEP1 { stateVector }` says "this is what I have, send me what I'm missing."
+- `STEP2 { update }` answers with the diff (V2-encoded).
+
+In sync-ipc both sides do this in parallel: client and server each send their STEP1 on connect, each replies with STEP2.
+
+### `origin` (Yjs transactions)
+Every write to a `Y.Doc` carries an opaque `origin` tag, observable on `ydoc.on('updateV2', (update, origin) => ...)`. Used to break echo loops: when a peer's update is applied with `Y.applyUpdateV2(doc, bytes, sessionOrigin)`, the fanout listener filters `if (origin === sessionOrigin) return` so the originating peer doesn't receive its own write back.
+
+**Per-session origin symbols are load-bearing on the daemon hub.** The hub multiplexes N peer sessions over one Y.Doc; each session uses `Symbol(`hub:${sessionId}`)` as its origin so the fanout filter means "don't echo to THIS peer" while still fanning to siblings. A single shared `IPC_ORIGIN` would block fanouts to all sibling peers.
+
+### Awareness (Yjs)
+A separate primitive (`y-protocols/awareness`) for ephemeral presence: cursor positions, "I'm online", typing indicators. Unlike CRDT state, awareness:
+- Auto-expires when a connection drops (`removeAwarenessStates` on disconnect).
+- Doesn't go in the StructStore (no causality, no permanent retention).
+- Has its own broadcast lane: `MESSAGE_TYPE.AWARENESS`.
+
+The synthetic system workspace's "connected peers" surface is Awareness, not a Y.Map, precisely because it is single-writer (daemon) and ephemeral.
+
+### `MESSAGE_TYPE` constants (`@epicenter/sync`)
+The first varint of every framed message identifies its kind:
+- `SYNC` (0): contains a STEP1, STEP2, or UPDATE inside.
+- `AWARENESS` (1): an awareness state update.
+- `QUERY_AWARENESS` (3): "send me the current awareness states" (used by cloud sync; not used by IPC).
+- `SYNC_STATUS` (100): version-tracking for "Saving..."/"Saved" UX. **Excluded from the IPC wire** (no flush primitive).
+- `RPC` (101): cross-peer action dispatch. **Excluded from the IPC wire** (no IPC mailbox; cross-device RPC stays on cloud sync).
+
+### Length-prefix framing
+Unix sockets are byte streams: `data(socket, chunk)` may give you half a message or three messages glued together. The framer prepends a 4-byte little-endian length to each payload; the receiver buffers until it has a complete frame. Implemented in `sync-ipc/framing.ts`.
+
+### `IpcChannel`
+The internal duplex-channel abstraction in `sync-ipc/types.ts`. Both `bindIpcSocket` (production) and the test in-memory channel pair conform to it. Lets the server's `acceptSession` and the client's session loop be socket-agnostic and unit-testable without a real socket.
+
+### `isEphemeral` (preamble flag)
+The peer self-declares one-shot script (`true`, the default) vs long-running peer (`false`, e.g., browser tab, sidecar). Two semantic effects:
+- The daemon does NOT publish ephemeral peers' presence on the system workspace's awareness (avoids flicker as scripts come and go).
+- Per-peer sync state retention across reconnects is not held for ephemeral peers (currently neither side implements retention; future work).
+
+### Wellcrafted `Result` on the wire
+Wire envelopes serialize the literal `Result<T, E>` shape from wellcrafted: `{ data, error }` where `error` is either `null` (success) or a defineErrors variant with `name`, `message`, and structured fields. The discriminator is `error.name` (the variant tag), not a custom `_tag` field. The peer parses JSON and narrows on `error.name === 'NoSuchWorkspace'` to handle typed failures.
+
+### WAL mode (SQLite)
+`PRAGMA journal_mode = WAL` enables Write-Ahead Logging: the database file plus a separate `.db-wal` file allow N readers + 1 writer concurrently with snapshot isolation. Required so the script-side `attachSqliteMirror` can open the daemon's mirror file `{ readonly: true }` and run Drizzle/raw SQL/FTS5 without blocking the daemon writer.
+
+WAL requires a local filesystem (NFS does not honor WAL coordination). On macOS/Linux local disks, this is the bread-and-butter SQLite pattern.
+
+### Materializer vs Mirror
+Two halves of the same primitive:
+
+| Side | Primitive | Direction | Owner |
+|---|---|---|---|
+| Daemon | `attachSqliteMaterializer(ydoc, { db })` | Y.Doc -> SQLite | the only writer |
+| Script | `attachSqliteMirror({ filePath })` | SQLite file -> script | N concurrent readers |
+
+Same pattern for markdown: `attachMarkdownMaterializer` writes a `.md` tree; `attachMarkdownMirror` walks it.
+
+The script's reads are local file access against a hot OS page cache, sub-millisecond. The materializer commits synchronously on each `updateV2` event (no debounce); Yjs's `transact()` provides batching at the source, so a `batch()` block of N writes produces ONE `updateV2` event with N row changes.
+
 ## The skepticism this spec is responding to
 
 The prior spec landed `Remote<T>` as a structurally derived mapped type, replacing a hand-written `RemoteWorkspace<W>`. That was the right move within the constraint "the wire is JSON-RPC." But the constraint itself was never re-examined.
@@ -263,25 +335,63 @@ Why this isn't over-engineered:
 
 ## clientID discipline
 
-Yjs's `clientID` is a 53-bit per-`Y.Doc` random identifier. Every operation a Y.Doc performs is attributed to its clientID, and the StructStore retains those attributions forever (CRDT causality is unbounded). This is normally fine. With ephemeral peers, naively-random clientIDs accumulate one entry per script invocation in the daemon's state vector.
+### What `clientID` is, mechanically
 
-10k script invocations per week × random clientID per process = a state vector that grows ~80 KB/week and is shipped with every cold-start sync. That is a real cost.
+Yjs assigns every `Y.Doc` instance a 53-bit positive integer `clientID`. Every operation that doc emits is attributed in the StructStore as `(clientID, clock) -> operation`, where `clock` is a per-clientID monotonic counter. The pair forms Yjs's causality vector: every CRDT op carries the identity of the doc that produced it.
 
-**Decision: scripts pass a stable clientID hint per script identity.**
+Two replicas converge by exchanging **state vectors**. A state vector is the compact summary `Map<clientID, maxClock>`: "I have all clocks <= N for clientID X, all clocks <= M for clientID Y, ..." The sync handshake's STEP1 ships the peer's state vector; STEP2 returns "every operation not covered by your vector." Bigger state vector = bigger handshake.
+
+CRDT correctness depends on never reusing a `(clientID, clock)` pair for two different ops. Yjs's default is to mint a random 53-bit clientID per `new Y.Doc()`; collisions are astronomically unlikely. Every clientID that ever wrote stays in the StructStore forever (CRDT causality is unbounded).
+
+### Why ephemeral peers create a problem
+
+A vault script invoked once per `bun run script.ts` constructs a fresh `new Y.Doc()`, which gets a fresh random clientID. If the script writes anything, that clientID lands permanently in the StructStore. 10k invocations per week => 10k clientID entries per week in the daemon's state vector. Every new peer's cold-start sync ships the full state vector.
+
+Browsers and the daemon don't have this problem because they're long-running processes: one Y.Doc, one clientID, for the life of the tab/process.
+
+### The fix: derive `clientID` from the script's identity
+
+Two invocations of the same script must reuse the same clientID. The script's logical identity (its entry-point path) is stable across runs; hash it.
 
 ```ts
-await using fuji = await openFujiPeer({
-  clientId: stableClientIdFromArgv0(),   // e.g. hash('vault/scripts/import-feed.ts')
-});
+// packages/workspace/src/shared/client-id.ts
+export function hashClientId(path: string): number {
+  const digest = createHash('sha256').update(path).digest();
+  // First 8 bytes as big-endian u64, masked to 53 bits, +1.
+  // 53 bits because Number.MAX_SAFE_INTEGER is 2^53 - 1; Yjs stores
+  // clientIDs as JS numbers, not BigInt. +1 because clientID 0 is
+  // reserved by Yjs for "no peer."
+  ...
+}
+
+await using fuji = await openFujiPeer();
+// openFujiPeer internally:
+//   const ydoc = new Y.Doc({ guid, clientID: hashClientId(Bun.main) });
 ```
 
-`openFujiPeer` constructs the `Y.Doc` with `new Y.Doc({ guid, clientID: hint })`. Two invocations of the same script reuse the same clientID. Their writes merge cleanly under Yjs causality (later clock values supersede earlier). The state vector grows by the count of *distinct scripts that mutate*, not the count of invocations.
+Two invocations of `vault/scripts/import-feed.ts` => same clientID => their writes appear to Yjs as "more clocks from the same peer" (totally fine; identical to a single peer doing all the writes in sequence). Two different scripts => different clientIDs (sha256 collision space at 53 bits >> any vault's script count). The state vector grows with *distinct mutating scripts*, not invocations.
 
-For read-only scripts, the clientID never appears in the StructStore and the choice is irrelevant; we still set it for awareness identification, but no causality entry is created.
+Read-only scripts never write to the StructStore, so the choice is irrelevant for them; we still pass the hashed clientID for consistency (and for awareness identification when applicable).
 
-`openFujiPeer` derives a default clientID from the script's entry-point path (`Bun.main`) so the user does not have to specify one. Override is a corner case.
+This is decided, not optional. The supervisor's reconnect-dedup logic and the daemon's awareness teardown both key on clientID being stable across reconnects of the same logical peer.
 
-This is decided, not optional. The spec's dispose handling and the supervisor for re-attach behavior both rely on clientID stability for correctness.
+### Edge case: `bun -e '<inline>'` has no stable `Bun.main`
+
+For inline eval the entry-point path is meaningless. `hashClientId` falls back to a random clientID and logs a `warn` that this invocation will accumulate a state-vector entry. Acceptable because eval is rare; the typical workflow is `bun script.ts`.
+
+### `clientId` vs `deviceId` (different concerns; do not conflate)
+
+Both appear in the IPC preamble. They are not the same thing.
+
+| | `clientId` | `deviceId` |
+|---|---|---|
+| Scope | per-Y.Doc instance | per machine / per logical "device" |
+| Purpose | CRDT causality + state-vector keying | Cross-device addressing (`peer<T>(deviceId)`); awareness identity |
+| Lifetime | persists in StructStore forever once it writes | configured by user; persisted in OS keychain or config |
+| Type | 53-bit positive integer | string (e.g., `'laptop-braden'`) |
+| Used by | Yjs internals, sync handshake | awareness presence; cross-device action dispatch |
+
+Two peers with the SAME deviceId but DIFFERENT clientIds is normal: one device, two processes (e.g., the browser tab and a script, both opening their own Y.Docs). They converge through sync.
 
 ## The writer/reader split for materialized state
 
@@ -504,18 +614,42 @@ DELETE  packages/workspace/src/daemon/list-route.test.ts
 
 ## What gets added
 
-```
-ADD  packages/workspace/src/daemon/sync-hub.ts                ~120 LOC
-       attachIpcSyncServer(ydoc, opts). Multiplexes sessions on daemon.sock.
-       Handles MESSAGE_TYPE.{SYNC,AWARENESS}. NO SYNC_STATUS frames
-       over the IPC socket; cross-device peer<T> RPC is unchanged on
-       cloud sync. Per-session origin symbols. Reconnect dedup by clientId.
+The four IPC transport files plus their shared types live together in
+`packages/workspace/src/sync-ipc/` (a cohesive feature folder). The
+mirror primitives live in `packages/workspace/src/client/`. The shared
+helpers (`paths`, `client-id`) live in `packages/workspace/src/shared/`.
 
-ADD  packages/workspace/src/client/sync-ipc.ts                ~90 LOC
+```
+ADD  packages/workspace/src/sync-ipc/types.ts                 ~60 LOC
+       IpcChannel (duplex framed-message channel), IpcPreamble
+       (handshake JSON), IpcPreambleReply (handshake reply payload).
+       Shared by server, client, and listener.
+
+ADD  packages/workspace/src/sync-ipc/framing.ts               ~60 LOC
+       u32 LE length-prefix codec: encodeFrame, createFrameReader.
+       Used by both halves of the wire so byte-stream chunks
+       reassemble into complete messages.
+
+ADD  packages/workspace/src/sync-ipc/server.ts                ~340 LOC
+       attachIpcSyncServer(ydoc, opts). Per-Y.Doc daemon-side sync
+       coordinator. Multiplexes peer sessions over its one Y.Doc.
+       Handles MESSAGE_TYPE.{SYNC,AWARENESS} only. Per-session origin
+       symbols. Reconnect dedup by clientId.
+
+ADD  packages/workspace/src/sync-ipc/client.ts                ~480 LOC
        attachIpcSyncClient(ydoc, opts). Peer side of the unix-socket sync.
-       Pure Yjs sync state machine. Exposes { whenSynced, status,
-       observe, close, whenDisposed }. Does NOT expose .rpc /
-       .find / .peers; it isn't a SyncAttachment, just a hub client.
+       AbortController-driven supervisor; per-session listeners (no
+       global activeChannel state). Exposes { whenSynced, status,
+       observe, close, whenDisposed }. NO .rpc / .find / .peers; it
+       isn't a SyncAttachment.
+
+ADD  packages/workspace/src/sync-ipc/listener.ts              ~280 LOC
+       bindIpcSocket(opts). Process-wide unix socket binder + workspace
+       router. Parses each connection's preamble, replies with a
+       serialized wellcrafted Result envelope, then hands the channel
+       to the matching IpcSyncServer's acceptSession. Per-connection
+       state lives in Bun's typed socket.data slot. Hono is NOT
+       involved (no raw byte-stream surface in Hono).
 
 ADD  packages/workspace/src/client/sqlite-mirror.ts           ~80 LOC
        attachSqliteMirror({ filePath }). Opens the daemon's mirror.db
@@ -534,8 +668,11 @@ ADD  packages/workspace/src/shared/paths.ts                   ~40 LOC
        mirrorPathFor(absDir, guid)      NEW
        markdownPathFor(absDir, guid)    NEW
 
-ADD  packages/workspace/src/shared/client-id.ts               ~10 LOC
-       hashClientId(path: string): number for stable Bun.main hashing.
+ADD  packages/workspace/src/shared/client-id.ts               ~45 LOC
+       hashClientId(path: string): number. sha256 of path, masked to
+       53 bits, +1. Stable across invocations of the same script so
+       the daemon's state vector grows by distinct mutating scripts,
+       not by invocations. See "clientID discipline" for why.
 
 MODIFY packages/workspace/src/document/materializer/sqlite/sqlite.ts
        +1 LOC: db.exec('PRAGMA journal_mode = WAL') after the Database
@@ -554,11 +691,13 @@ MODIFY apps/{fuji,tab-manager,opensidian-e2e}/src/lib/<app>/daemon.ts
 
 ADD  packages/workspace/src/client/sqlite-mirror.test.ts      ~150 LOC
 ADD  packages/workspace/src/client/markdown-mirror.test.ts    ~120 LOC
-ADD  packages/workspace/src/daemon/sync-hub.test.ts           ~150 LOC
-ADD  packages/workspace/src/client/sync-ipc.test.ts           ~150 LOC
+ADD  packages/workspace/src/sync-ipc/server.test.ts           ~270 LOC
+ADD  packages/workspace/src/sync-ipc/client.test.ts           ~250 LOC
+ADD  packages/workspace/src/sync-ipc/listener.test.ts         ~140 LOC
+ADD  packages/workspace/src/sync-ipc/framing.test.ts          ~70 LOC
 ADD  per-app peer.test.ts × 3                                 ~150 LOC total
                                                               ─────────
-                                                              ~1500 LOC src + tests
+                                                              ~2400 LOC src + tests
 ```
 
 ## What gets modified
