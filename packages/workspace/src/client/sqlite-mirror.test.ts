@@ -45,12 +45,12 @@ async function seedMirrorFile(filePath: string, rows: Array<{ id: string; title:
 	const writerDb = new Database(filePath);
 	const materializer = attachSqliteMaterializer(ydoc, {
 		db: writerDb,
-		debounceMs: 0,
 	}).table(tables.entries, { fts: ['title', 'body'] });
 	await materializer.whenFlushed;
 	for (const row of rows) tables.entries.set({ ...row, _v: 1 });
-	// Force a flush by waiting a couple of microtasks past the debounce.
-	await new Promise<void>((resolve) => setTimeout(resolve, 50));
+	// One tick lets the post-transact flush enqueued in `afterTransaction`
+	// drain through the materializer's syncQueue.
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
 	ydoc.destroy();
 	writerDb.close();
 }
@@ -110,7 +110,7 @@ describe('attachSqliteMirror', () => {
 		const ydoc = new Y.Doc({ guid: 'no-fts' });
 		const tables = attachTables(ydoc, { entries: entriesTable });
 		const writer = new Database(filePath);
-		const m = attachSqliteMaterializer(ydoc, { db: writer, debounceMs: 0 }).table(
+		const m = attachSqliteMaterializer(ydoc, { db: writer }).table(
 			tables.entries,
 		);
 		await m.whenFlushed;

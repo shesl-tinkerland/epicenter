@@ -32,7 +32,7 @@ type AnyTable = Table<any>;
 
 /** Errors surfaced by the SQLite materializer's async background sync loop. */
 export const SqliteMaterializerError = defineErrors({
-	/** Debounced flush of pending row writes to the mirror database failed. */
+	/** Per-transact flush of pending row writes to the mirror database failed. */
 	SyncFailed: ({ cause }: { cause: unknown }) => ({
 		message: `[attachSqliteMaterializer] Failed to sync SQLite materializer: ${extractErrorMessage(cause)}`,
 		cause,
@@ -105,19 +105,17 @@ export function attachSqliteMaterializer(
 	ydoc: Y.Doc,
 	{
 		db,
-		debounceMs = 100,
 		waitFor,
 		log = createLogger('attachSqliteMaterializer'),
 	}: {
 		db: MirrorDatabase;
-		debounceMs?: number;
 		/**
 		 * Gate: the materializer awaits this before the initial DDL + full-load.
 		 * Matches the `waitFor` convention used by `attachSync`. Omit for no gate.
 		 */
 		waitFor?: Promise<unknown>;
 		/**
-		 * Logger for background failures (debounced sync flush, FTS query).
+		 * Logger for background failures (per-transact sync flush, FTS query).
 		 * Defaults to a console-backed logger with source `attachSqliteMaterializer`.
 		 */
 		log?: Logger;
@@ -125,7 +123,6 @@ export function attachSqliteMaterializer(
 ) {
 	const registered = new Map<string, RegisteredTable>();
 	let pendingSync = new Map<string, Set<string>>();
-	let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 	let syncQueue = Promise.resolve();
 	let isDisposed = false;
 	/**
@@ -178,49 +175,66 @@ export function attachSqliteMaterializer(
 	}
 
 	// ── Sync engine ──────────────────────────────────────────────
+	//
+	// Per spec invariant 16: one Yjs transact = one SQL transaction. Per-table
+	// observers populate `pendingSync` synchronously inside the transact's
+	// observer phase; `ydoc.on('afterTransaction', ...)` then enqueues a single
+	// flush on `syncQueue`. The flush wraps all pending row writes for that
+	// transact in BEGIN/COMMIT, so 10k row updates inside one Yjs transact
+	// produce one SQL transaction (one fsync) instead of 10k auto-commits.
 
-	function scheduleSync(tableName: string, changedIds: ReadonlySet<string>) {
+	function recordPending(tableName: string, changedIds: ReadonlySet<string>) {
 		if (isDisposed) return;
-
 		let tableIds = pendingSync.get(tableName);
 		if (tableIds === undefined) {
 			tableIds = new Set<string>();
 			pendingSync.set(tableName, tableIds);
 		}
-
 		for (const id of changedIds) tableIds.add(id);
+	}
 
-		if (syncTimeout !== null) clearTimeout(syncTimeout);
-
-		syncTimeout = setTimeout(() => {
-			syncTimeout = null;
-			syncQueue = syncQueue
-				.then(() => flushPendingSync())
-				.catch((cause: unknown) => {
-					log.error(SqliteMaterializerError.SyncFailed({ cause }));
-				});
-		}, debounceMs);
+	function enqueueFlush() {
+		if (isDisposed) return;
+		if (pendingSync.size === 0) return;
+		syncQueue = syncQueue
+			.then(() => flushPendingSync())
+			.catch((cause: unknown) => {
+				log.error(SqliteMaterializerError.SyncFailed({ cause }));
+			});
 	}
 
 	async function flushPendingSync() {
 		if (isDisposed) return;
+		if (pendingSync.size === 0) return;
 
 		const currentPending = pendingSync;
 		pendingSync = new Map<string, Set<string>>();
 
-		for (const [tableName, ids] of currentPending) {
-			const entry = registered.get(tableName);
-			if (entry === undefined) continue;
+		await db.run('BEGIN');
+		try {
+			for (const [tableName, ids] of currentPending) {
+				const entry = registered.get(tableName);
+				if (entry === undefined) continue;
 
-			for (const id of ids) {
-				const { data: row, error } = entry.table.get(id);
-				if (error || row === null) {
-					// Invalid or missing → drop from mirror.
-					await deleteRow(tableName, id);
-					continue;
+				for (const id of ids) {
+					const { data: row, error } = entry.table.get(id);
+					if (error || row === null) {
+						// Invalid or missing → drop from mirror.
+						await deleteRow(tableName, id);
+						continue;
+					}
+					await insertRow(tableName, row);
 				}
-				await insertRow(tableName, row);
 			}
+			await db.run('COMMIT');
+		} catch (error: unknown) {
+			try {
+				await db.run('ROLLBACK');
+			} catch {
+				// Best-effort: if ROLLBACK itself fails (e.g. txn already aborted),
+				// surface the original cause, not the rollback noise.
+			}
+			throw error;
 		}
 	}
 
@@ -294,10 +308,7 @@ export function attachSqliteMaterializer(
 		// Close the registration window even if `initialize()` never ran
 		// (e.g., waitFor stalled and the ydoc was destroyed before init).
 		isRegistrationOpen = false;
-		if (syncTimeout !== null) {
-			clearTimeout(syncTimeout);
-			syncTimeout = null;
-		}
+		ydoc.off('afterTransaction', onAfterTransaction);
 		for (const entry of registered.values()) entry.unsubscribe?.();
 	}
 
@@ -353,9 +364,14 @@ export function attachSqliteMaterializer(
 
 		for (const [tableName, entry] of registered) {
 			entry.unsubscribe = entry.table.observe((changedIds) => {
-				scheduleSync(tableName, changedIds);
+				recordPending(tableName, changedIds);
 			});
 		}
+		ydoc.on('afterTransaction', onAfterTransaction);
+	}
+
+	function onAfterTransaction() {
+		enqueueFlush();
 	}
 
 	const whenFlushed = initialize();

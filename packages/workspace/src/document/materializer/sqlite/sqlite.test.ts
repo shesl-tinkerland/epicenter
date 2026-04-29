@@ -76,7 +76,6 @@ type TableRegistration = {
 
 type SetupOptions = {
 	tables?: (t: AttachedTables) => TableRegistration[];
-	debounceMs?: number;
 };
 
 function setup(options: SetupOptions = {}) {
@@ -86,10 +85,7 @@ function setup(options: SetupOptions = {}) {
 		const ydoc = new Y.Doc({ guid: id });
 		const tables = attachTables(ydoc, tableDefinitions);
 
-		const materializer = attachSqliteMaterializer(ydoc, {
-			db,
-			debounceMs: options.debounceMs,
-		});
+		const materializer = attachSqliteMaterializer(ydoc, { db });
 
 		const registrations =
 			options.tables?.(tables) ??
