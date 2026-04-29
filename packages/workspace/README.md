@@ -264,9 +264,9 @@ The Y.Doc carries data. Your definition files carry meaning.
 
 ### Multi-Device Sync Topology
 
-> For a full picture of how processes reach a workspace, see the [architecture docs](./docs/architecture/README.md): [Process Topology](./docs/architecture/process-topology.md) covers same-machine access (browser tab vs. `epicenter serve` daemon vs. CLI/scripts), [Network Topology](./docs/architecture/network-topology.md) covers cross-machine convergence, and [Action Dispatch](./docs/architecture/action-dispatch.md) covers cross-device action invocation. The summary below is the WAN-side picture only.
+> For a full picture of how processes reach a workspace, see the [architecture docs](./docs/architecture/README.md): [Process Topology](./docs/architecture/process-topology.md) covers same-machine access (browser tab, `epicenter serve` daemon, and script peers as three Y.Doc-holding siblings), [Network Topology](./docs/architecture/network-topology.md) covers cross-machine convergence, and [Action Dispatch](./docs/architecture/action-dispatch.md) covers cross-device action invocation. The summary below is the WAN-side picture only.
 
-Epicenter supports distributed sync where Y.Doc instances replicate across devices via y-websocket:
+Epicenter supports distributed sync where Y.Doc instances replicate across devices. On each machine, a browser tab, the daemon, and any script peers are siblings: each holds a real Y.Doc, and they reconcile through whichever providers are attached (cloud y-websocket, the daemon's local Yjs sync over a unix socket, broadcast channel for cross-tab):
 
 ```
    PHONE                   LAPTOP                    DESKTOP
@@ -274,17 +274,23 @@ Epicenter supports distributed sync where Y.Doc instances replicate across devic
    │ Browser  │           │ Browser  │              │ Browser  │
    │ Y.Doc    │           │ Y.Doc    │              │ Y.Doc    │
    └────┬─────┘           └────┬─────┘              └────┬─────┘
-        │                      │                         │
-   (no server)            ┌────▼─────┐              ┌────▼─────┐
-        │                 │ Elysia   │◄────────────►│ Elysia   │
-        │                 │ :3913    │  server-to-  │ :3913    │
-        │                 └────┬─────┘    server    └────┬─────┘
-        │                      │                         │
-        └──────────────────────┴─────────────────────────┘
+        │                      │ WS                      │ WS
+   (no daemon)            ┌────▼─────┐              ┌────▼─────┐
+        │                 │ Daemon   │◄────────────►│ Daemon   │
+        │                 │ Y.Doc    │  server-to-  │ Y.Doc    │
+        │                 │ :3913    │   server     │ :3913    │
+        │                 └────┬─────┘              └────┬─────┘
+        │                      │ unix socket             │ unix socket
+        │                 ┌────▼─────┐              ┌────▼─────┐
+        │                 │ Script   │              │ Script   │
+        │                 │ Y.Doc    │              │ Y.Doc    │
+        │                 └──────────┘              └──────────┘
+        │                                                │
+        └────────────────────────────────────────────────┘
                            Connect to multiple nodes
 ```
 
-Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest.
+Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest. On the laptop and desktop, a script peer (CLI, agent, scheduled job) attaches to the local daemon over a unix socket via `attachSyncIpc` and gets the same merged Y.Doc as the browser tab next to it. Daemon-only RPC (signed sends, peer kicks) rides the same unix socket as `MESSAGE_TYPE.RPC` frames; the script writes ordinary CRDT operations for everything else.
 
 ### How It All Fits Together
 
@@ -1317,7 +1323,9 @@ await handle.idb.whenDisposed;
 
 `@epicenter/workspace` is the core client/workspace library. The public root export does not currently ship a built-in server helper.
 
-What the package does give you is the raw material a server adapter needs:
+Browser tab, daemon, and script peer are all "clients" of the cloud sync server in the same way: each runs the same builder, calls `attachSync` to reach the cloud, and holds a real `Y.Doc`. The script peer is additionally an IPC peer of the local daemon (it composes `attachSyncIpc(...)` providing Yjs sync over the daemon's unix socket on top of any cloud `attachSync`). There is no separate "thin client" or `Remote<T>` proxy; script-side code reads and writes the same `bundle.tables`, `bundle.kv`, etc. as everything else.
+
+What the package does give you for adapter authors is the raw material a server adapter needs:
 
 - `bundle.actions` (whatever your builder returned)
 - `iterateActions(...)`

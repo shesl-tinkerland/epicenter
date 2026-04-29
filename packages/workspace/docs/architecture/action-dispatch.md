@@ -1,6 +1,6 @@
 # Action Dispatch
 
-> **Companion docs:** This doc covers the **third** transport in the system, used when you must run an action on a *specific peer device*. For the other two, see [Process Topology](./process-topology.md) (same-machine IPC into the local daemon via unix socket `/run`) and [Network Topology](./network-topology.md) (Y.Doc convergence between Y.Doc owners over WebSocket). Pick this transport when neither in-process call nor `/run` will do, because the action requires runtime-specific APIs available only on a particular peer (e.g. `browser.tabs.*` lives on the extension, not the daemon).
+> **Companion docs:** This doc covers cross-device action dispatch via a Y.Doc `requests` table, used when you must run an action on a *specific peer device*. The transport here (Y.Doc replication; whatever providers are attached) is unchanged by the script-peer redesign. For the other two paths in the system, see [Process Topology](./process-topology.md) (same-machine IPC: a script peer attaches to the local daemon via Yjs sync over a unix socket; daemon-only RPC rides that same socket as `MESSAGE_TYPE.RPC` frames via `peer<T>(sync, deviceId)`) and [Network Topology](./network-topology.md) (Y.Doc convergence between Y.Doc owners over WebSocket). Pick this transport when neither an in-process call nor local daemon RPC will do, because the action requires runtime-specific APIs available only on a particular peer (e.g. `browser.tabs.*` lives on the extension, not the daemon).
 
 > **Note**: "Suspended" terminology was renamed to "saved" in the codebase. References below use the original names. See `specs/20260213T014300-rename-suspended-to-saved.md`.
 
@@ -296,7 +296,7 @@ For browser -> server, HTTP is simpler. Use the requests table when you need to 
 
 ## Related Documentation
 
-- [Process Topology](./process-topology.md): Same-machine transport (unix socket `/run`); the alternative when "the right peer" is the local daemon and not a remote device.
+- [Process Topology](./process-topology.md): Same-machine transport (Yjs sync over a unix socket, with daemon-only RPC riding the same socket as `MESSAGE_TYPE.RPC` frames); the alternative when "the right peer" is the local daemon and not a remote device.
 - [Request Dispatch Spec](../../../../specs/20260213T103000-request-dispatch.md): Implementation spec with tab-manager examples
 - [Device Identity](./device-identity.md): How devices identify themselves
 - [Network Topology](./network-topology.md): Connection patterns; the underlying transport this doc rides on.
