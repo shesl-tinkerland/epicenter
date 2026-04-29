@@ -1,111 +1,41 @@
 /**
- * `buildRemoteWorkspace` — typed proxy that turns a `DaemonClient` into a
- * workspace-shaped facade. Local call sites get the same `tables.X.set(...)`,
- * `actions.A.B(...)`, `sync.peers()` shape they would have in-process; each
- * method dispatches over the unix socket via `client.run` / `client.peers`.
+ * `buildRemoteProxy` — typed proxy that turns a `DaemonClient` into a
+ * workspace-shaped facade. Local call sites use the same dotted path they
+ * would in-process (`tables.X.set(...)`, `savedTabs.create(...)`); each
+ * call dispatches over the unix socket via `client.run`.
  *
- * Why a recursive Proxy for actions: we don't know the action tree at
- * type-erasure time. When the user writes `ws.actions.deeply.nested.foo({})`,
- * we walk the property chain at runtime, accumulate the path segments, and
- * dispatch on call. `then` is masked so accidental `await ws.actions.x` does
- * not turn the proxy into a thenable.
+ * The proxy is a single recursive `Proxy` rooted at the workspace itself.
+ * Property access walks the chain and accumulates path segments; calling
+ * the resulting proxy invokes `client.run` with the joined dotted path.
+ * That same machinery powered the old `actions` proxy: it is prefix-
+ * agnostic, so dropping the `actions` namespace is a no-op for runtime.
  *
- * `tables` are simpler: the wire surface is fixed (`get`, `getAllValid`,
- * `set`, `update`, `delete`, `bulkSet`), each one a thin `client.run` call
- * with a path of the form `tables.<name>.<verb>`. The branded CRUD methods
- * on `attachTable` mount on the in-process workspace at the same paths,
- * so the same routes serve both directions.
+ * `then` is masked at every level so an accidental `await ws.tables.x` does
+ * not turn an intermediate namespace into a thenable and pollute the path
+ * with a stray `.then` segment.
  *
- * `filter`, `observe`, and document handles throw `RemoteNotSupported`
- * because they require a live Y.Doc and can't cross the wire. The type
- * doesn't expose them; the runtime stubs exist so dynamic access patterns
- * fail loudly rather than silently returning undefined.
- *
- * Phase 5 of `specs/20260429T004302-workspace-as-daemon-transport.md`.
+ * The branded CRUD methods on `attachTable` mount on the in-process
+ * workspace at the same paths (`tables.<name>.<verb>`), so the same routes
+ * serve both directions.
  */
 
 import type { DaemonClient } from '../daemon/client.js';
-import type { Actions } from '../shared/actions.js';
-import { RemoteNotSupported } from './remote-not-supported.js';
-import type { RemoteWorkspace } from './remote-workspace-types.js';
+import type { Remote } from './remote-workspace-types.js';
 
 /** Default `waitMs` value we send on every `/run` request. */
 const DEFAULT_WAIT_MS = 5000;
 
 /**
- * Build the per-table CRUD proxy. Property access on a string `tableName`
- * yields an object with the wire-callable methods plus runtime stubs for
- * `filter` / `observe` that throw `RemoteNotSupported`.
- *
- * `workspaceName` is the daemon-side workspace selector. Today the wire
- * uses the human-facing `name` (per Phase 2 deviation in the spec); the
- * argument to `buildRemoteWorkspace` doubles for both id and name until
- * the wire moves to id-based dispatch.
- */
-function buildRemoteTables(
-	client: DaemonClient,
-	workspaceName: string,
-): unknown {
-	return new Proxy(Object.create(null) as Record<string, unknown>, {
-		get(_target, tableName) {
-			if (typeof tableName !== 'string') return undefined;
-			// Mask thenable detection so destructuring / await doesn't trip
-			// on a missing `then`.
-			if (tableName === 'then') return undefined;
-			const run = (verb: string, input: unknown) =>
-				client.run({
-					workspace: workspaceName,
-					actionPath: `tables.${tableName}.${verb}`,
-					input,
-					waitMs: DEFAULT_WAIT_MS,
-				});
-			return {
-				get: (input: { id: string }) => run('get', input),
-				getAllValid: () => run('getAllValid', undefined),
-				set: (row: unknown) => run('set', row),
-				update: (input: unknown) => run('update', input),
-				delete: (input: { id: string }) => run('delete', input),
-				bulkSet: (input: { rows: unknown[] }) => run('bulkSet', input),
-				// Runtime stubs for surfaces the type intentionally hides.
-				// These exist so dynamic property access fails loudly with a
-				// useful error instead of returning undefined.
-				filter: () => {
-					throw RemoteNotSupported.RemoteNotSupported({
-						method: `tables.${tableName}.filter`,
-						reason:
-							'predicate-based filtering needs a live Y.Doc; use getAllValid() and filter client-side, or use the in-process builder.',
-					}).error;
-				},
-				observe: () => {
-					throw RemoteNotSupported.RemoteNotSupported({
-						method: `tables.${tableName}.observe`,
-						reason:
-							'live subscriptions are not exposed over the unix socket transport; use the in-process builder.',
-					}).error;
-				},
-			};
-		},
-	});
-}
-
-/**
- * Build the recursive action proxy. Every property access produces another
+ * Recursive proxy rooted at the workspace. Property access produces another
  * proxy carrying the path-so-far; calling the proxy dispatches `client.run`
  * with the joined dotted path.
  *
  * `function () {}` is the proxy target so `apply` is reachable. The `then`
  * key is masked everywhere on the path (otherwise an `await` on an
- * intermediate namespace would turn it into a thenable and pollute the
- * action tree with a `.then(...)` call).
+ * intermediate namespace would turn it into a thenable).
  */
-function buildRemoteActions(
-	client: DaemonClient,
-	workspaceName: string,
-): unknown {
+function buildRemoteProxy(client: DaemonClient, workspaceName: string): unknown {
 	const make = (path: string[]): unknown => {
-		// Targeted cast: the proxy target is a function so `apply` works,
-		// but the public type for callers is a nested action tree. Both
-		// access shapes go through the same handlers.
 		const target = (() => {}) as unknown as object;
 		return new Proxy(target, {
 			get(_target, prop) {
@@ -128,22 +58,13 @@ function buildRemoteActions(
 }
 
 /**
- * Compose the remote workspace facade. Generic `W` is the type of the
- * in-process workspace (typically `ReturnType<typeof openFuji>`); the
- * mapped type `RemoteWorkspace<W>` rewrites it into its wire equivalent.
+ * Compose the remote workspace facade. Generic `W` is the in-process
+ * workspace shape; `Remote<W>` filters it to branded leaves only and
+ * rewrites each leaf to `Promise<Result<_, _ | RpcError>>`.
  */
-export function buildRemoteWorkspace<
-	W extends { tables: unknown; actions: Actions },
->(client: DaemonClient, workspaceName: string): RemoteWorkspace<W> {
-	// `tables` and `actions` are runtime Proxy values; we cast through
-	// `unknown` to let the public mapped type narrow them on the consumer
-	// side. The Proxy machinery synthesizes the in-process shape on
-	// demand from path segments.
-	return {
-		tables: buildRemoteTables(client, workspaceName),
-		actions: buildRemoteActions(client, workspaceName),
-		sync: {
-			peers: () => client.peers(),
-		},
-	} as unknown as RemoteWorkspace<W>;
+export function buildRemoteWorkspace<W>(
+	client: DaemonClient,
+	workspaceName: string,
+): Remote<W> {
+	return buildRemoteProxy(client, workspaceName) as Remote<W>;
 }

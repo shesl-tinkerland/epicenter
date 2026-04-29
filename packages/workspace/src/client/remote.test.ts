@@ -1,6 +1,6 @@
 /**
  * Smoke tests for `buildRemoteWorkspace`. Uses a stub `DaemonClient` that
- * records every call rather than touching a real socket — the runtime
+ * records every call rather than touching a real socket: the runtime
  * Proxy machinery is what we're verifying, not transport.
  */
 
@@ -38,14 +38,14 @@ describe('buildRemoteWorkspace tables', () => {
 		// biome-ignore lint/suspicious/noExplicitAny: smoke test — shape is irrelevant
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
-		await ws.tables.entries.get({ id: 'xyz' });
+		await ws.tables.entries.get('xyz');
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]!.method).toBe('run');
 		expect(calls[0]!.arg).toMatchObject({
 			workspace: WORKSPACE,
 			actionPath: 'tables.entries.get',
-			input: { id: 'xyz' },
+			input: 'xyz',
 		});
 	});
 
@@ -75,33 +75,15 @@ describe('buildRemoteWorkspace tables', () => {
 			input: { id: 'a', title: 'changed' },
 		});
 	});
-
-	test('tables.X.observe throws RemoteNotSupported', () => {
-		const { client } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-
-		expect(() => ws.tables.entries.observe()).toThrow(
-			/observe is not supported/i,
-		);
-	});
-
-	test('tables.X.filter throws RemoteNotSupported', () => {
-		const { client } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-
-		expect(() => ws.tables.entries.filter()).toThrow(/filter is not supported/i);
-	});
 });
 
-describe('buildRemoteWorkspace actions', () => {
-	test('actions.namespace.action dispatches dotted path', async () => {
+describe('buildRemoteWorkspace nested actions', () => {
+	test('top-level branded leaves dispatch by name', async () => {
 		const { client, calls } = makeStubClient();
 		// biome-ignore lint/suspicious/noExplicitAny: smoke test
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
-		await ws.actions.savedTabs.list({});
+		await ws.savedTabs.list({});
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]!.arg).toMatchObject({
@@ -116,7 +98,7 @@ describe('buildRemoteWorkspace actions', () => {
 		// biome-ignore lint/suspicious/noExplicitAny: smoke test
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
-		await ws.actions.deeply.nested.action({ x: 1 });
+		await ws.deeply.nested.action({ x: 1 });
 
 		expect(calls[0]!.arg).toMatchObject({
 			actionPath: 'deeply.nested.action',
@@ -129,7 +111,7 @@ describe('buildRemoteWorkspace actions', () => {
 		// biome-ignore lint/suspicious/noExplicitAny: smoke test
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
-		await ws.actions.system.describe();
+		await ws.system.describe();
 
 		expect(calls[0]!.arg).toMatchObject({
 			actionPath: 'system.describe',
@@ -143,24 +125,10 @@ describe('buildRemoteWorkspace actions', () => {
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
 		// Just walking the chain should issue zero RPCs.
-		const namespace = ws.actions.deeply.nested;
+		const namespace = ws.deeply.nested;
 		expect(calls).toHaveLength(0);
 
 		await namespace.action({});
 		expect(calls).toHaveLength(1);
 	});
 });
-
-describe('buildRemoteWorkspace sync.peers', () => {
-	test('sync.peers calls client.peers()', async () => {
-		const { client, calls } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test
-		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
-
-		await ws.sync.peers();
-
-		expect(calls).toHaveLength(1);
-		expect(calls[0]!.method).toBe('peers');
-	});
-});
-

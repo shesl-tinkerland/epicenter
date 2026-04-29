@@ -322,11 +322,7 @@ export {
 export { buildRemoteWorkspace } from './client/remote.js';
 export { connectDaemon } from './client/connect-daemon.js';
 export { findEpicenterDir } from './client/find-epicenter-dir.js';
-export { RemoteNotSupported } from './client/remote-not-supported.js';
-export type {
-	RemoteTable,
-	RemoteWorkspace,
-} from './client/remote-workspace-types.js';
+export type { Remote } from './client/remote-workspace-types.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // SCHEMA HELPERS

@@ -1,89 +1,68 @@
 /**
- * Mapped types that rewrite an in-process workspace shape into its
- * remote (RPC) equivalent. The remote workspace is what
- * `buildRemoteWorkspace<T>(client, name)` returns; this file owns its
- * compile-time shape.
+ * `Remote<T>` — derive the remote (RPC) call shape of an in-process workspace
+ * by walking its type and keeping only branded `defineQuery` /
+ * `defineMutation` leaves.
  *
- * Two transforms:
+ * The workspace is the action tree. There is no parallel contract. Pass the
+ * full workspace type as `T` (typically `ReturnType<typeof openFuji>`) and
+ * `Remote<T>` filters it to:
  *
- *   tables[K]:  Table<TRow>           ->  RemoteTable<TRow>
- *   actions:    nested Action tree    ->  nested wrapped tree
+ * - branded leaves at any depth become wire-callable and `Result`-wrapped
+ *   via {@link WrapAction} (`Promise<Result<R, E | RpcError>>`)
+ * - non-branded functions (plain methods, callbacks, class methods) drop
+ * - objects containing no branded descendants drop
+ * - `Y.Doc` and other class-instance properties drop because none of their
+ *   own properties are branded
  *
- * For tables, we expose only the wire-callable subset (CRUD). `filter`,
- * `observe`, and live document handles are intentionally absent from the
- * type so call sites cannot reach for them; the runtime proxy still
- * surfaces them as `RemoteNotSupported`-throwing stubs in case some
- * destructuring path encounters one.
- *
- * For actions, we delegate to `RemoteActions<A>` from `shared/actions.ts`
- * (the same machinery `peer<T>(...)` uses), which wraps every leaf into
- * `(...args) => Promise<Result<T, E | RpcError>>`. That way the remote
- * action shape stays in lockstep with cross-peer RPC.
+ * Any value that doesn't pass through one of those branches drops. This
+ * means a generic with no branded leaves yields an empty proxy: that is
+ * the correct behavior, not a bug — see decision 7 in the companion spec.
  */
 
-import type { Result } from 'wellcrafted/result';
-
-import type { BaseRow, Table } from '../document/attach-table.js';
-import type { Actions, RemoteActions } from '../shared/actions.js';
-import type { TableParseError } from '../document/attach-table.js';
-import type { DaemonError } from '../daemon/client.js';
-import type { ResolveError } from '../daemon/resolve-entry.js';
-import type { RunError } from '../daemon/run-errors.js';
-import type { PeerSnapshot } from '../daemon/app.js';
+import type { Simplify } from '../shared/types.js';
+import type { Action, WrapAction } from '../shared/actions.js';
 
 /**
- * Domain errors any remote workspace call can fail with, in addition to
- * the per-action error type. Internal: surfaces in `RemoteTable<TRow>`
- * method signatures.
- */
-type RemoteCallError =
-	| DaemonError
-	| ResolveError
-	| RunError
-	| TableParseError;
-
-/**
- * The wire-callable subset of a `Table`. Methods that need a live document
- * (predicate filter, observe, document handles) are deliberately omitted
- * from the type. The runtime proxy throws `RemoteNotSupported` if anyone
- * reaches for them dynamically.
- */
-export type RemoteTable<TRow extends BaseRow> = {
-	get(input: {
-		id: TRow['id'];
-	}): Promise<Result<TRow | null, RemoteCallError>>;
-	getAllValid(): Promise<Result<TRow[], RemoteCallError>>;
-	set(row: TRow): Promise<Result<void, RemoteCallError>>;
-	update(
-		input: { id: TRow['id'] } & Partial<Omit<TRow, 'id'>>,
-	): Promise<Result<TRow | null, RemoteCallError>>;
-	delete(input: {
-		id: TRow['id'];
-	}): Promise<Result<void, RemoteCallError>>;
-	bulkSet(input: { rows: TRow[] }): Promise<Result<void, RemoteCallError>>;
-};
-
-/** Recursively map a `Tables` map (in-process) to remote tables. */
-type RemoteTablesOf<TS> = {
-	[K in keyof TS]: TS[K] extends Table<infer TRow>
-		? RemoteTable<TRow>
-		: never;
-};
-
-/**
- * Remote workspace shape derived from the in-process workspace `W`.
+ * `true` if `T` is an object that contains at least one branded leaf, at
+ * any depth. Used as the cut-line for whether a non-branded property
+ * survives `Remote<T>`.
  *
- * `W` is constrained to require `tables` and `actions` slots so that a
- * miswired generic produces a clear compile error rather than silently
- * degrading to an empty index signature. Pass
- * `ReturnType<typeof openFuji>` (or any opener that exposes both slots).
+ * Mutually recursive with {@link IsRemoteKey}. The `true extends ...`
+ * trick collapses the union of per-key bools: any single `true` in the
+ * map satisfies the constraint, so any branded descendant keeps the
+ * ancestor.
  */
-export type RemoteWorkspace<
-	W extends { tables: unknown; actions: Actions },
-> = {
-	tables: RemoteTablesOf<W['tables']>;
-	actions: RemoteActions<W['actions']>;
-	sync: {
-		peers(): Promise<Result<PeerSnapshot[], DaemonError>>;
-	};
-};
+type HasBrandedLeaves<T> = T extends object
+	? true extends { [K in keyof T]-?: IsRemoteKey<T[K]> }[keyof T]
+		? true
+		: false
+	: false;
+
+/**
+ * `true` if `V` should appear on the remote. Branded actions are always
+ * kept; plain functions (incl. class methods, getters returning callables)
+ * are always dropped; objects are kept only when they recursively contain
+ * a branded leaf.
+ */
+type IsRemoteKey<V> = V extends Action
+	? true
+	: V extends Function
+		? false
+		: V extends object
+			? HasBrandedLeaves<V>
+			: false;
+
+/**
+ * The remote-callable shape of `T`. Branded leaves are awaited and
+ * `Result`-wrapped; non-branded keys drop.
+ *
+ * Wrapped in {@link Simplify} so IDE hover output shows the flattened
+ * call shape rather than a wall of conditional types.
+ */
+export type Remote<T> = Simplify<{
+	[K in keyof T as IsRemoteKey<T[K]> extends true ? K : never]: T[K] extends Action
+		? WrapAction<T[K]>
+		: T[K] extends object
+			? Remote<T[K]>
+			: never;
+}>;
