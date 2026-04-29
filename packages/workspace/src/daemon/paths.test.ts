@@ -3,7 +3,14 @@ import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { dirHash, runtimeDir, socketPathFor } from './paths.js';
+import {
+	dirHash,
+	markdownPathFor,
+	mirrorPathFor,
+	persistencePath,
+	runtimeDir,
+	socketPathFor,
+} from './paths.js';
 
 describe('daemon/paths', () => {
 	const originalXdg = process.env.XDG_RUNTIME_DIR;
@@ -35,6 +42,25 @@ describe('daemon/paths', () => {
 		delete process.env.XDG_RUNTIME_DIR;
 		const dir = realpathSync(tmpdir());
 		expect(socketPathFor(dir).length).toBeLessThanOrEqual(100);
+	});
+
+	test('mirrorPathFor lives alongside persistencePath under .epicenter/', () => {
+		const dir = '/Users/me/vault';
+		expect(mirrorPathFor(dir, 'epicenter.fuji')).toBe(
+			'/Users/me/vault/.epicenter/mirrors/epicenter.fuji.db',
+		);
+		// Distinct from the persistence file (raw Y.Doc update log) so the
+		// two coexist without colliding.
+		expect(mirrorPathFor(dir, 'epicenter.fuji')).not.toBe(
+			persistencePath(dir, 'epicenter.fuji'),
+		);
+	});
+
+	test('markdownPathFor is a directory, not a file', () => {
+		const dir = '/Users/me/vault';
+		expect(markdownPathFor(dir, 'epicenter.fuji')).toBe(
+			'/Users/me/vault/.epicenter/markdown/epicenter.fuji',
+		);
 	});
 
 	test('runtimeDir honors XDG_RUNTIME_DIR when set, falls back to home/run when unset', () => {

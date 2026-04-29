@@ -84,3 +84,43 @@ export function logPathFor(dir: string): string {
 export function persistencePath(absDir: string, workspaceId: string): string {
 	return join(absDir, '.epicenter', 'persistence', `${workspaceId}.db`);
 }
+
+/**
+ * Path to a workspace's SQLite materializer mirror file.
+ *
+ * Convention: `<absDir>/.epicenter/mirrors/<workspaceId>.db`. The daemon's
+ * `attachSqliteMaterializer` writes this file (in WAL journal mode); script
+ * peers open the same path read-only via `attachSqliteMirror`.
+ *
+ * Distinct from `persistencePath`: persistence holds the raw Y.Doc update
+ * log (the canonical CRDT history); the mirror holds typed rows + FTS5
+ * indexes derived from that history. Different shape, different concurrency
+ * profile, different consumers.
+ *
+ * @example
+ * ```ts
+ * mirrorPathFor('/Users/braden/Code/vault', 'epicenter.fuji')
+ * // → '/Users/braden/Code/vault/.epicenter/mirrors/epicenter.fuji.db'
+ * ```
+ */
+export function mirrorPathFor(absDir: string, workspaceId: string): string {
+	return join(absDir, '.epicenter', 'mirrors', `${workspaceId}.db`);
+}
+
+/**
+ * Root directory for a workspace's markdown materializer tree.
+ *
+ * Convention: `<absDir>/.epicenter/markdown/<workspaceId>/`. The daemon's
+ * `attachMarkdownMaterializer` writes per-table subdirectories of `.md`
+ * files under this root; script peers walk the same tree read-only via
+ * `attachMarkdownMirror`.
+ *
+ * @example
+ * ```ts
+ * markdownPathFor('/Users/braden/Code/vault', 'epicenter.fuji')
+ * // → '/Users/braden/Code/vault/.epicenter/markdown/epicenter.fuji'
+ * ```
+ */
+export function markdownPathFor(absDir: string, workspaceId: string): string {
+	return join(absDir, '.epicenter', 'markdown', workspaceId);
+}

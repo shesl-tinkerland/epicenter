@@ -280,7 +280,9 @@ export {
 export {
 	dirHash,
 	logPathFor,
+	markdownPathFor,
 	metadataPathFor,
+	mirrorPathFor,
 	persistencePath,
 	runtimeDir,
 	socketPathFor,
@@ -323,6 +325,28 @@ export { buildRemoteWorkspace } from './client/remote.js';
 export { connectDaemon } from './client/connect-daemon.js';
 export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export type { Remote } from './client/remote-workspace-types.js';
+export {
+	attachSqliteMirror,
+	type AttachSqliteMirrorOptions,
+	type SqliteMirrorAttachment,
+} from './client/sqlite-mirror.js';
+export {
+	attachMarkdownMirror,
+	type AttachMarkdownMirrorOptions,
+	type MarkdownFileEntry,
+	type MarkdownListOptions,
+	type MarkdownMirrorAttachment,
+} from './client/markdown-mirror.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// CLIENT-ID DERIVATION
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Stable Yjs clientID hint for ephemeral peers (vault scripts). Keeps the
+// daemon's state vector bounded by the count of distinct mutating scripts
+// rather than the count of invocations.
+
+export { hashClientId } from './shared/client-id.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // SCHEMA HELPERS
