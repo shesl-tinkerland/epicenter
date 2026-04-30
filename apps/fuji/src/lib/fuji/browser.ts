@@ -10,7 +10,7 @@ import {
 } from '@epicenter/workspace';
 import { createEntryContentDoc } from '$lib/entry-content-docs';
 import type { EntryId } from '$lib/workspace';
-import { openFuji as openFujiDoc } from './index';
+import { openFuji as openFujiDoc } from './core';
 
 export function openFuji({
 	auth,

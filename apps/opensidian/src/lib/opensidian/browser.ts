@@ -19,7 +19,7 @@ import {
 import { Bash } from 'just-bash';
 import Type from 'typebox';
 import { Ok } from 'wellcrafted/result';
-import { openOpensidian as openOpensidianDoc } from './index';
+import { openOpensidian as openOpensidianDoc } from './core';
 
 export function openOpensidian({
 	auth,

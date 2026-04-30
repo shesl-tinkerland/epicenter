@@ -10,7 +10,7 @@ import {
 } from '@epicenter/workspace';
 import { createNoteBodyDoc } from '$lib/note-body-docs';
 import type { NoteId } from '$lib/workspace';
-import { openHoneycrisp as openHoneycrispDoc } from './index';
+import { openHoneycrisp as openHoneycrispDoc } from './core';
 
 export function openHoneycrisp({
 	auth,

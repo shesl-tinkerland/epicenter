@@ -6,7 +6,7 @@
 	"type": "module",
 	"exports": {
 		"./workspace": "./src/lib/workspace.ts",
-		"./openHoneycrisp": "./src/lib/honeycrisp/index.ts",
+		"./openHoneycrisp": "./src/lib/honeycrisp/core.ts",
 		"./browser": "./src/lib/honeycrisp/browser.ts",
 		"./daemon": "./src/lib/honeycrisp/daemon.ts",
 		"./script": "./src/lib/honeycrisp/script.ts"

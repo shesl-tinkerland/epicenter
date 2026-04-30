@@ -6,7 +6,7 @@
 	"type": "module",
 	"exports": {
 		"./workspace": "./src/lib/workspace/index.ts",
-		"./openZhongwen": "./src/lib/zhongwen/index.ts",
+		"./openZhongwen": "./src/lib/zhongwen/core.ts",
 		"./browser": "./src/lib/zhongwen/browser.ts",
 		"./daemon": "./src/lib/zhongwen/daemon.ts",
 		"./script": "./src/lib/zhongwen/script.ts"

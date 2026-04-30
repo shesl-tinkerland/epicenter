@@ -2,7 +2,7 @@ import {
 	attachBroadcastChannel,
 	attachIndexedDb,
 } from '@epicenter/workspace';
-import { openZhongwen as openZhongwenDoc } from './index';
+import { openZhongwen as openZhongwenDoc } from './core';
 
 export function openZhongwen() {
 	const doc = openZhongwenDoc();

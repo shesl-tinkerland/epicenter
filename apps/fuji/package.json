@@ -6,7 +6,7 @@
 	"type": "module",
 	"exports": {
 		"./workspace": "./src/lib/workspace.ts",
-		"./openFuji": "./src/lib/fuji/index.ts",
+		"./openFuji": "./src/lib/fuji/core.ts",
 		"./browser": "./src/lib/fuji/browser.ts",
 		"./daemon": "./src/lib/fuji/daemon.ts",
 		"./script": "./src/lib/fuji/script.ts"
