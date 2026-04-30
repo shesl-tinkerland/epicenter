@@ -43,7 +43,8 @@
 // visible makes it obvious which package owns the contract.
 
 // ════════════════════════════════════════════════════════════════════════════
-// DEVICE IDENTITY
+// CORE: generic primitives (no Yjs, no sync wiring)
+// Subpath: @epicenter/workspace/core
 // ════════════════════════════════════════════════════════════════════════════
 
 export {
@@ -51,13 +52,22 @@ export {
 	getOrCreateDeviceId,
 	getOrCreateDeviceIdAsync,
 	type SimpleStorage,
-} from './shared/device-id.js';
-
-// ════════════════════════════════════════════════════════════════════════════
-// SHARED TYPES
-// ════════════════════════════════════════════════════════════════════════════
-
-export type { MaybePromise } from './shared/types';
+	type MaybePromise,
+	type AbsolutePath,
+	type ProjectDir,
+	type Guid,
+	type Id,
+	generateGuid,
+	generateId,
+	createId,
+	type DateIsoString,
+	type ParsedDateTimeString,
+	type TimezoneId,
+	DateTimeString,
+	createDisposableCache,
+	type DisposableCache,
+	DisposableCacheError,
+} from './core/index.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // ERROR TYPES
@@ -72,30 +82,6 @@ export { ExtensionError } from './shared/errors';
 // "mkdirSync is not exported" errors). Import the sink directly from the subpath
 // in Bun/Node entry points; the logger core (`createLogger`, `consoleSink`, etc.)
 // still comes from `wellcrafted/logger`.
-
-// ════════════════════════════════════════════════════════════════════════════
-// CORE TYPES
-// ════════════════════════════════════════════════════════════════════════════
-
-export type { AbsolutePath, ProjectDir } from './shared/types';
-
-// ════════════════════════════════════════════════════════════════════════════
-// ID UTILITIES
-// ════════════════════════════════════════════════════════════════════════════
-
-export type { Guid, Id } from './shared/id';
-export { generateGuid, generateId, Id as createId } from './shared/id';
-
-// ════════════════════════════════════════════════════════════════════════════
-// DATE UTILITIES
-// ════════════════════════════════════════════════════════════════════════════
-
-export type {
-	DateIsoString,
-	ParsedDateTimeString,
-	TimezoneId,
-} from './shared/datetime-string';
-export { DateTimeString } from './shared/datetime-string';
 
 // ════════════════════════════════════════════════════════════════════════════
 // DOCUMENT PRIMITIVES: attach*, define*, createDisposableCache, encryption,
@@ -209,11 +195,6 @@ export {
 	type TimelineEntry,
 } from './document/attach-timeline/index.js';
 
-export {
-	createDisposableCache,
-	type DisposableCache,
-	DisposableCacheError,
-} from './cache/disposable-cache.js';
 export { defineTable } from './document/define-table.js';
 export { defineKv } from './document/define-kv.js';
 export { docGuid } from './document/doc-guid.js';
