@@ -1,9 +1,10 @@
 import { attachEncryption } from '@epicenter/workspace';
 import * as Y from 'yjs';
-import { createHoneycrispActions, honeycrispTables } from '$lib/workspace';
+import { createHoneycrispActions, honeycrispTables } from '../workspace.js';
 
-export function openHoneycrisp() {
+export function openHoneycrisp({ clientID }: { clientID?: number } = {}) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.honeycrisp', gc: false });
+	if (clientID !== undefined) ydoc.clientID = clientID;
 	const encryption = attachEncryption(ydoc);
 	const tables = encryption.attachTables(ydoc, honeycrispTables);
 	const kv = encryption.attachKv(ydoc, {});

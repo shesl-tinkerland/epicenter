@@ -5,7 +5,11 @@
 	"version": "0.0.1",
 	"type": "module",
 	"exports": {
-		"./workspace": "./src/lib/workspace.ts"
+		"./workspace": "./src/lib/workspace.ts",
+		"./openHoneycrisp": "./src/lib/honeycrisp/index.ts",
+		"./browser": "./src/lib/honeycrisp/browser.ts",
+		"./daemon": "./src/lib/honeycrisp/daemon.ts",
+		"./script": "./src/lib/honeycrisp/script.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -14,6 +18,7 @@
 		"build": "NODE_ENV=production vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
+		"test": "bun test ./src/lib/honeycrisp",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
 	"devDependencies": {
