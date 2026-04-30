@@ -1,26 +1,52 @@
 /**
- * Walk up from `start` (default cwd) looking for the first directory that
- * contains `epicenter.config.ts` or a `.epicenter/` directory. Returns the
- * absolute path of that directory.
+ * Walk up the filesystem from `start` (default `process.cwd()`) until we
+ * hit the first directory that contains `epicenter.config.ts` or a
+ * `.epicenter/` directory. That directory is the project root.
  *
- * Used by `connectDaemon` so vault scripts don't have to pass `absDir`
- * explicitly: running a script from anywhere inside the vault tree resolves
- * the same daemon socket the surrounding `epicenter serve` is bound to.
+ * This is the canonical way to mint a `ProjectDir`: every other consumer
+ * (daemon path helpers, script factories, `connectDaemon`) accepts
+ * `ProjectDir` so the brand acts as proof that the path was discovered via
+ * this function and points at a real vault root. Plain `string` paths
+ * (e.g., `process.cwd()`) won't satisfy `ProjectDir` without an explicit
+ * cast.
  *
- * Throws if neither marker is found before reaching the filesystem root.
+ * Used by `connectDaemon` and per-app `script.ts` factories so vault
+ * scripts don't have to pass `absDir` explicitly: running a script from
+ * anywhere inside the vault tree resolves the same daemon socket the
+ * surrounding `epicenter serve` is bound to.
  *
- * Phase 6 of `specs/20260429T004302-workspace-as-daemon-transport.md`.
+ * Throws if no marker is found before reaching the filesystem root.
+ * Catching is deliberate: callers that want a "run anywhere, cold-sync
+ * from cloud" mode pass an explicit `absDir` (typically `process.cwd()`)
+ * to opt out of the throw.
+ *
+ * @param start Where to begin walking up. Defaults to `process.cwd()` so
+ *   the caller's invocation directory drives discovery.
+ * @returns The project root, branded as `ProjectDir`.
+ * @throws If no `epicenter.config.ts` or `.epicenter/` is found before the
+ *   filesystem root.
+ *
+ * @example
+ * ```ts
+ * // From inside a vault script:
+ * const projectDir = findEpicenterDir();
+ * // → '/Users/braden/Code/my-vault' as ProjectDir
+ *
+ * // Explicit start (e.g. resolving from a known config path):
+ * findEpicenterDir(path.dirname(configPath));
+ * ```
  */
 
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import type { ProjectDir } from '../shared/types.js';
 
-export function findEpicenterDir(start: string = process.cwd()): string {
+export function findEpicenterDir(start: string = process.cwd()): ProjectDir {
 	let current = resolve(start);
 	while (true) {
 		const hasConfig = existsSync(join(current, 'epicenter.config.ts'));
 		const hasDir = existsSync(join(current, '.epicenter'));
-		if (hasConfig || hasDir) return current;
+		if (hasConfig || hasDir) return current as ProjectDir;
 		const parent = dirname(current);
 		if (parent === current) {
 			throw new Error(

@@ -8,20 +8,21 @@
  * `playground/opensidian-e2e/epicenter.config.ts` for the full composition)
  * which a single one-line factory can't capture.
  *
- * Pairs with `script.ts` (short-lived peers that read this daemon's
- * persistence file and sync via cloud) and `browser.ts` (Svelte UI).
+ * Pairs with `script.ts` (short-lived peers that read this daemon's yjs
+ * file and sync via cloud) and `browser.ts` (Svelte UI).
  */
 
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
-	yjsPath,
+	type ProjectDir,
 	toWsUrl,
+	yjsPath,
+	type WebSocketImpl,
 } from '@epicenter/workspace';
 import { openOpensidian as openOpensidianDoc } from './index.js';
-
-const SERVER_URL = 'https://api.epicenter.so';
 
 export function openOpensidian({
 	getToken,
@@ -31,13 +32,19 @@ export function openOpensidian({
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
-	absDir: string;
+	/**
+	 * Project root (where `epicenter.config.ts` lives). Required: the daemon
+	 * is the sole writer of `<absDir>/.epicenter/yjs/<guid>.db`, so there
+	 * is no sane fallback. Mint via `findEpicenterDir()` at the call site
+	 * to brand a discovered path as `ProjectDir`.
+	 */
+	absDir: ProjectDir;
 	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it (defaults to
 	 * `globalThis.WebSocket`).
 	 */
-	webSocketImpl?: typeof WebSocket;
+	webSocketImpl?: WebSocketImpl;
 }) {
 	const doc = openOpensidianDoc();
 
@@ -46,7 +53,7 @@ export function openOpensidian({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
@@ -58,8 +65,8 @@ export function openOpensidian({
 		persistence,
 		sync,
 		/**
-		 * Resolves once the daemon's persistence file has replayed into the
-		 * Y.Doc: the durable state is in memory and writes are safe. Does NOT
+		 * Resolves once the daemon's yjs file has replayed into the Y.Doc:
+		 * the durable state is in memory and writes are safe. Does NOT
 		 * gate the cloud WS handshake. Compose with `sync.whenConnected` for
 		 * "fully online before proceeding."
 		 */

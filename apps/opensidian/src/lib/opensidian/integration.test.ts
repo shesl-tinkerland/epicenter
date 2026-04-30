@@ -15,22 +15,24 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { NoopWebSocket } from '@epicenter/workspace';
+import { NoopWebSocket, type ProjectDir } from '@epicenter/workspace';
 import { type FileId, generateFileId } from '@epicenter/filesystem';
 import { openOpensidian as openOpensidianDaemon } from './daemon.js';
 import { openOpensidian as openOpensidianScript } from './script.js';
 
-let workdir: string;
+let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'opensidian-integration-'));
+	workdir = mkdtempSync(
+		join(tmpdir(), 'opensidian-integration-'),
+	) as ProjectDir;
 });
 
 afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
+const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates files the daemon wrote', async () => {

@@ -12,22 +12,28 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { DateTimeString, NoopWebSocket } from '@epicenter/workspace';
+import {
+	DateTimeString,
+	NoopWebSocket,
+	type ProjectDir,
+} from '@epicenter/workspace';
 import { type NoteId } from '../workspace.js';
 import { openHoneycrisp as openHoneycrispDaemon } from './daemon.js';
 import { openHoneycrisp as openHoneycrispScript } from './script.js';
 
-let workdir: string;
+let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'honeycrisp-integration-'));
+	workdir = mkdtempSync(
+		join(tmpdir(), 'honeycrisp-integration-'),
+	) as ProjectDir;
 });
 
 afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
+const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates notes the daemon wrote', async () => {

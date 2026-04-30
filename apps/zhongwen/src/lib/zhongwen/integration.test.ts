@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { NoopWebSocket } from '@epicenter/workspace';
+import { NoopWebSocket, type ProjectDir } from '@epicenter/workspace';
 import {
 	type ConversationId,
 	generateConversationId,
@@ -17,17 +17,17 @@ import {
 import { openZhongwen as openZhongwenDaemon } from './daemon.js';
 import { openZhongwen as openZhongwenScript } from './script.js';
 
-let workdir: string;
+let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'zhongwen-integration-'));
+	workdir = mkdtempSync(join(tmpdir(), 'zhongwen-integration-')) as ProjectDir;
 });
 
 afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
+const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates conversations the daemon wrote', async () => {

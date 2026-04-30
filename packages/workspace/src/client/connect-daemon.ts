@@ -27,6 +27,7 @@
  * reachable through this workspace handle.
  */
 
+import type { ProjectDir } from '../shared/types.js';
 import { DaemonError, daemonClient, pingDaemon } from '../daemon/client.js';
 import { socketPathFor } from '../daemon/paths.js';
 import { findEpicenterDir } from './find-epicenter-dir.js';
@@ -54,7 +55,13 @@ export async function connectDaemon<W>({
 	absDir = findEpicenterDir(process.cwd()),
 }: {
 	id: string;
-	absDir?: string;
+	/**
+	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
+	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via
+	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
+	 * `absDir` to opt out.
+	 */
+	absDir?: ProjectDir;
 }): Promise<Remote<W>> {
 	const socketPath = socketPathFor(absDir);
 	if (!(await pingDaemon(socketPath))) {

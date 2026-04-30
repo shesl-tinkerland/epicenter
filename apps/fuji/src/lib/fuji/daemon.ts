@@ -10,23 +10,21 @@
  * file and sync via cloud) and `browser.ts` (Svelte UI).
  */
 
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { Database } from 'bun:sqlite';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
 	markdownPath,
+	type ProjectDir,
 	sqlitePath,
 	toWsUrl,
 	yjsPath,
+	type WebSocketImpl,
 } from '@epicenter/workspace';
 import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import { openFuji as openFujiDoc } from './index.js';
-
-const SERVER_URL = 'https://api.epicenter.so';
 
 export function openFuji({
 	getToken,
@@ -36,13 +34,19 @@ export function openFuji({
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
-	absDir: string;
+	/**
+	 * Project root (where `epicenter.config.ts` lives). Required: the daemon
+	 * is the sole writer of `<absDir>/.epicenter/yjs/<guid>.db`, so there
+	 * is no sane fallback. Mint via `findEpicenterDir()` at the call site
+	 * to brand a discovered path as `ProjectDir`.
+	 */
+	absDir: ProjectDir;
 	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it (defaults to
 	 * `globalThis.WebSocket`).
 	 */
-	webSocketImpl?: typeof WebSocket;
+	webSocketImpl?: WebSocketImpl;
 }) {
 	const doc = openFujiDoc();
 
@@ -51,19 +55,15 @@ export function openFuji({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
 		webSocketImpl,
 	});
 
-	const sqliteFile = sqlitePath(absDir, doc.ydoc.guid);
-	// `attachSqliteMaterializer` takes a Database, not a path, so it can't
-	// create its own parent dir. `attachSqlitePersistence` mkdirs its own.
-	mkdirSync(path.dirname(sqliteFile), { recursive: true });
 	const sqlite = attachSqliteMaterializer(doc.ydoc, {
-		db: new Database(sqliteFile),
+		filePath: sqlitePath(absDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries);
 

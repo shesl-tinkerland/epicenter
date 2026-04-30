@@ -13,17 +13,18 @@
  * yjs file) and `browser.ts` (Svelte UI).
  */
 
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachSqliteReadonlyPersistence,
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
+	type ProjectDir,
 	toWsUrl,
 	yjsPath,
+	type WebSocketImpl,
 } from '@epicenter/workspace';
 import { openFuji as openFujiDoc } from './index.js';
-
-const SERVER_URL = 'https://api.epicenter.so';
 
 export async function openFuji({
 	getToken,
@@ -38,7 +39,7 @@ export async function openFuji({
 	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
 	 * `absDir` (e.g., `process.cwd()`) to opt out.
 	 */
-	absDir?: string;
+	absDir?: ProjectDir;
 	/**
 	 * Y.Doc clientID for this script. Defaults to `hashClientId(Bun.main)`
 	 * so two invocations of the same script reuse the same clientID and
@@ -50,7 +51,7 @@ export async function openFuji({
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it.
 	 */
-	webSocketImpl?: typeof WebSocket;
+	webSocketImpl?: WebSocketImpl;
 }) {
 	const doc = openFujiDoc({ clientID });
 
@@ -59,7 +60,7 @@ export async function openFuji({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,

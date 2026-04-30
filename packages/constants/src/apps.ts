@@ -24,3 +24,23 @@ export const APPS = {
 } as const;
 
 export type AppId = keyof typeof APPS;
+
+/**
+ * Canonical URL of the Epicenter API hub (auth, sync, AI, encryption keys).
+ *
+ * Single source of truth for `https://api.epicenter.so`. Derived from
+ * `APPS.API.urls[0]` so the URL is declared exactly once. Import this in
+ * app daemon/script factories instead of redeclaring a local `SERVER_URL`.
+ *
+ * @example
+ * ```ts
+ * import { EPICENTER_API_URL } from '@epicenter/constants/apps';
+ * import { toWsUrl } from '@epicenter/workspace';
+ *
+ * attachSync(doc, {
+ *   url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
+ *   // ...
+ * });
+ * ```
+ */
+export const EPICENTER_API_URL = APPS.API.urls[0];

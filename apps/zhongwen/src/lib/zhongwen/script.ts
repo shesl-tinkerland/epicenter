@@ -8,17 +8,18 @@
  * Pairs with `daemon.ts` and `browser.ts`.
  */
 
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachSqliteReadonlyPersistence,
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
+	type ProjectDir,
 	toWsUrl,
 	yjsPath,
+	type WebSocketImpl,
 } from '@epicenter/workspace';
 import { openZhongwen as openZhongwenDoc } from './index.js';
-
-const SERVER_URL = 'https://api.epicenter.so';
 
 export async function openZhongwen({
 	getToken,
@@ -27,9 +28,25 @@ export async function openZhongwen({
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
-	absDir?: string;
+	/**
+	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
+	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via
+	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
+	 * `absDir` (e.g., `process.cwd() as ProjectDir`) to opt out.
+	 */
+	absDir?: ProjectDir;
+	/**
+	 * Y.Doc clientID for this script. Defaults to `hashClientId(Bun.main)`
+	 * so two invocations of the same script reuse the same clientID and
+	 * their writes merge under Yjs causality. Override for tests, debugging,
+	 * or scripts that genuinely want a fresh peer identity per run.
+	 */
 	clientID?: number;
-	webSocketImpl?: typeof WebSocket;
+	/**
+	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
+	 * dialing real servers; production omits it.
+	 */
+	webSocketImpl?: WebSocketImpl;
 }) {
 	const doc = openZhongwenDoc({ clientID });
 
@@ -38,7 +55,7 @@ export async function openZhongwen({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,

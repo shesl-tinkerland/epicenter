@@ -24,19 +24,19 @@ afterEach(() => {
 describe('findEpicenterDir', () => {
 	test('finds via epicenter.config.ts marker', () => {
 		writeFileSync(join(root, 'epicenter.config.ts'), '');
-		expect(findEpicenterDir(root)).toBe(root);
+		expect<string>(findEpicenterDir(root)).toBe(root);
 	});
 
 	test('finds via .epicenter directory marker', () => {
 		mkdirSync(join(root, '.epicenter'));
-		expect(findEpicenterDir(root)).toBe(root);
+		expect<string>(findEpicenterDir(root)).toBe(root);
 	});
 
 	test('walks up from a nested subdirectory', () => {
 		writeFileSync(join(root, 'epicenter.config.ts'), '');
 		const nested = join(root, 'a', 'b', 'c');
 		mkdirSync(nested, { recursive: true });
-		expect(findEpicenterDir(nested)).toBe(root);
+		expect<string>(findEpicenterDir(nested)).toBe(root);
 	});
 
 	test('throws if no marker is found', () => {

@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { ProjectDir } from '../shared/types.js';
 import { connectDaemon } from './connect-daemon.js';
 
 let root: string;
@@ -27,7 +28,7 @@ describe('connectDaemon', () => {
 	test('throws DaemonError.Required when no daemon is listening', async () => {
 		let caught: unknown;
 		try {
-			await connectDaemon({ id: 'demo', absDir: root });
+			await connectDaemon({ id: 'demo', absDir: root as ProjectDir });
 		} catch (err) {
 			caught = err;
 		}
