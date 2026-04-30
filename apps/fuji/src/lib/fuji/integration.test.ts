@@ -36,7 +36,10 @@ const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates entries the daemon wrote', async () => {
 		// 1. Daemon owns the persistence file: write a few entries through it.
-		using daemon = openFujiDaemon({
+		// Not `await using`: the writer must close before the reader opens so
+		// the readonly attachment sees the file on stable WAL pages. Disposed
+		// explicitly mid-scope below.
+		const daemon = openFujiDaemon({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: wsImpl,
@@ -76,7 +79,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		daemon[Symbol.dispose]();
 
 		// 2. Script opens the same absDir and replays the persistence file.
-		using script = await openFujiScript({
+		await using script = await openFujiScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: wsImpl,

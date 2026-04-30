@@ -30,7 +30,7 @@ describe('openFuji (script)', () => {
 		// with `MissingFile`, the factory swallows it, hydrate resolves to
 		// empty. The handle's `tables.entries` is empty until cloud sync
 		// would (in real use) populate it.
-		using handle = await openFuji({
+		await using handle = await openFuji({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: NoopWebSocket as unknown as typeof WebSocket,
