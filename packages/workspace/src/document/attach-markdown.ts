@@ -262,8 +262,8 @@ export function attachMarkdown(
 		waitFor,
 		log = createLogger('attachMarkdown'),
 	}: {
-		/** Base output directory. Accepts a string or async getter for lazy path resolution. */
-		dir: string | (() => MaybePromise<string>);
+		/** Base output directory. */
+		dir: string;
 		/**
 		 * Gate: the materializer awaits this before the initial filesystem flush.
 		 * Matches the `waitFor` convention used by `attachSync`. Omit for no gate.
@@ -285,8 +285,6 @@ export function attachMarkdown(
 	 * where late registrations would be picked up for initial flush.
 	 */
 	let isRegistrationOpen = true;
-
-	const resolveDir = async () => (typeof dir === 'function' ? await dir() : dir);
 
 	// ── Per-table materialization ───────────────────────────────
 
@@ -389,16 +387,15 @@ export function attachMarkdown(
 		isRegistrationOpen = false;
 		if (isDisposed) return;
 
-		const baseDir = await resolveDir();
-		await mkdir(baseDir, { recursive: true });
+		await mkdir(dir, { recursive: true });
 
 		for (const entry of registered.values()) {
 			if (isDisposed) return;
-			entry.unsubscribe = await materializeTable(baseDir, entry);
+			entry.unsubscribe = await materializeTable(dir, entry);
 		}
 
 		if (registeredKv && !isDisposed) {
-			registeredKv.unsubscribe = await materializeKv(baseDir, registeredKv);
+			registeredKv.unsubscribe = await materializeKv(dir, registeredKv);
 		}
 	}
 
@@ -407,13 +404,12 @@ export function attachMarkdown(
 	// ── Push (imports markdown files into workspace tables) ─────
 
 	async function pushMarkdownFiles(): Promise<PushResult> {
-		const baseDir = await resolveDir();
 		const events: PushEvent[] = [];
 
 		for (const entry of registered.values()) {
 			const tableName = entry.table.name;
 			const subdir = entry.config.dir ?? tableName;
-			const directory = join(baseDir, subdir);
+			const directory = join(dir, subdir);
 
 			let files: string[];
 			try {
@@ -494,7 +490,6 @@ export function attachMarkdown(
 	async function rebuildMarkdownFiles(
 		tableName?: string,
 	): Promise<{ deleted: number; written: number }> {
-		const baseDir = await resolveDir();
 		let deleted = 0;
 		let written = 0;
 
@@ -512,7 +507,7 @@ export function attachMarkdown(
 		}
 
 		for (const entry of targets) {
-			const directory = join(baseDir, entry.config.dir ?? entry.table.name);
+			const directory = join(dir, entry.config.dir ?? entry.table.name);
 
 			// Sweep existing .md files
 			try {
@@ -540,7 +535,7 @@ export function attachMarkdown(
 			const serialize = config.serialize ?? defaultKvSerialize;
 			const state = { ...kv.getAll() };
 			const result = serialize(state);
-			await writeFile(join(baseDir, result.filename), result.content);
+			await writeFile(join(dir, result.filename), result.content);
 			written++;
 		}
 
@@ -564,10 +559,9 @@ export function attachMarkdown(
 				'Re-serialize all valid rows from registered tables to markdown files on disk',
 			input: Type.Object({}),
 			handler: async () => {
-				const baseDir = await resolveDir();
 				let written = 0;
 				for (const entry of registered.values()) {
-					const directory = join(baseDir, entry.config.dir ?? entry.table.name);
+					const directory = join(dir, entry.config.dir ?? entry.table.name);
 					await mkdir(directory, { recursive: true });
 					for (const row of entry.table.getAllValid()) {
 						const { filename, content } = await rowToMarkdownFile(
