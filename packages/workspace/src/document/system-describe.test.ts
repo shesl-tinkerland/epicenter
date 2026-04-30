@@ -8,7 +8,7 @@
  *     user actions and returns the live action manifest.
  *   - User code cannot publish a top-level `system` namespace: `attachSync`
  *     throws at bootstrap.
- *   - `describePeer(sync, deviceId)` round-trips between two attachments
+ *   - `sync.describePeer(deviceId)` round-trips between two attachments
  *     and returns the remote manifest.
  *   - Awareness carries no manifest: only the device descriptor.
  */
@@ -18,7 +18,6 @@ import {
 	decodeRpcPayload,
 	defineMutation,
 	defineQuery,
-	describePeer,
 	encodeRpcRequest,
 	encodeSyncStep2,
 	MESSAGE_TYPE,
@@ -43,7 +42,7 @@ class FakeWebSocket {
 	readyState = FakeWebSocket.CONNECTING;
 	binaryType: 'arraybuffer' | 'blob' = 'blob';
 	onopen: (() => void) | null = null;
-	onclose: (() => void) | null = null;
+	onclose: ((ev: { code: number; reason: string }) => void) | null = null;
 	onerror: (() => void) | null = null;
 	onmessage: Listener | null = null;
 
@@ -68,14 +67,14 @@ class FakeWebSocket {
 		this.sent.push(data instanceof Uint8Array ? data : new Uint8Array(data));
 	}
 
-	close() {
+	close(code?: number, reason?: string) {
 		if (
 			this.readyState === FakeWebSocket.CLOSED ||
 			this.readyState === FakeWebSocket.CLOSING
 		)
 			return;
 		this.readyState = FakeWebSocket.CLOSED;
-		this.onclose?.();
+		this.onclose?.({ code: code ?? 1005, reason: reason ?? '' });
 	}
 
 	addEventListener() {}
@@ -230,7 +229,7 @@ describe('system.describe', () => {
 	});
 });
 
-describe('describePeer(sync, deviceId)', () => {
+describe('sync.describePeer(deviceId)', () => {
 	test('round-trips between two attachments via system.describe', async () => {
 		// Two ydocs sharing one in-memory wire. The "remote" ydoc registers a
 		// peer awareness state on the "local" sync directly; for RPC we wire
@@ -298,7 +297,7 @@ describe('describePeer(sync, deviceId)', () => {
 			localWs.deliver(frame);
 		};
 
-		const result = await describePeer(localSync, 'remote');
+		const result = await localSync.describePeer('remote');
 		expect(result.error).toBeNull();
 		const manifest = result.data!;
 		expect(Object.keys(manifest).sort()).toEqual(['tabs.close']);

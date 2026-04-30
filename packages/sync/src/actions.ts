@@ -89,7 +89,7 @@ export type ActionMeta<TInput extends TSchema | undefined = TSchema | undefined>
 /**
  * Flat dot-path → `ActionMeta` map describing a peer's full action surface.
  * Returned by the runtime-injected `system.describe` RPC and consumed via
- * `describePeer(sync, deviceId)`.
+ * `sync.describePeer(deviceId)`.
  */
 export type ActionManifest = Record<string, ActionMeta>;
 
@@ -294,7 +294,7 @@ export function* walkActions(
 /**
  * Walk an `Actions` tree into its flat `ActionManifest`: the wire form
  * returned by `system.describe`. Live `input` schemas are retained;
- * functions are dropped. Pairs with `describePeer(sync, id)`, which
+ * functions are dropped. Pairs with `sync.describePeer(id)`, which
  * returns the same shape from a remote peer.
  *
  * Built atop {@link walkActions}. Use that primitive directly if you want

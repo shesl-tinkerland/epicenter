@@ -281,17 +281,42 @@ export type SyncAttachment = {
 	 */
 	observe(callback: () => void): () => void;
 	/**
+	 * Build a typed remote-action proxy targeting a peer by deviceId. Each
+	 * leaf method dispatches via this attachment's `rpc` channel and returns
+	 * `Promise<Result<T, E | RpcError>>`. The proxy is stateless: every call
+	 * resolves the deviceId via `find()` first-match-wins, and rejects with
+	 * `RpcError.PeerLeft` if the matched peer disappears mid-call rather
+	 * than waiting for the timeout.
+	 *
+	 * @example
+	 * ```ts
+	 * const macbook = workspace.sync.peer<TabManagerActions>('macbook-pro');
+	 * const result = await macbook.tabs.close({ tabIds: [1, 2] });
+	 * ```
+	 */
+	peer<TActions extends Actions>(deviceId: string): RemoteActions<TActions>;
+	/**
+	 * Fetch a peer's full action manifest via the runtime-injected
+	 * `system.describe` RPC. Returns the same `ActionManifest` shape the
+	 * local `describeActions` walker produces, with live `input` schemas
+	 * retained. Thin wrapper around `peer()`: inherits its peer-resolution
+	 * and peer-removed race semantics.
+	 *
+	 * @example
+	 * ```ts
+	 * const result = await workspace.sync.describePeer('macbook-pro');
+	 * if (result.error) toast.error(extractErrorMessage(result.error));
+	 * else for (const [path, meta] of Object.entries(result.data)) { ... }
+	 * ```
+	 */
+	describePeer(deviceId: string): Promise<Result<ActionManifest, RpcError>>;
+	/**
 	 * Escape hatch: the underlying y-protocols handles. Use for advanced
 	 * cases (custom event listeners, integrations expecting raw types).
 	 * `awareness` is `null` when no presence was configured.
 	 */
 	raw: { awareness: YAwareness | null };
 };
-
-// Compile-time assertion: SyncAttachment must structurally satisfy PeerTransport.
-// If SyncAttachment.rpc or find ever drifts from PeerTransport's contract, this
-// line will produce a type error before any runtime mismatch surfaces.
-void ((_s: SyncAttachment): PeerTransport => _s);
 
 /**
  * Anything with a `.whenLoaded` promise (typically `attachIndexedDb` or
@@ -356,7 +381,7 @@ export type SyncAttachmentConfig = {
 	 *
 	 * Awareness carries presence only: no action manifest. Consumers that
 	 * need to enumerate a peer's actions call
-	 * `describePeer(sync, deviceId)` to fetch the full local
+	 * `sync.describePeer(deviceId)` to fetch the full local
 	 * `ActionManifest` on demand via the runtime-injected `system.describe`
 	 * RPC.
 	 */
@@ -493,7 +518,7 @@ export function attachSync(
 	// Inject `system.*` meta operations into the dispatch tree.
 	// `system.describe` is argless and returns the full local
 	// `ActionManifest` (dot-path → ActionMeta with live input schemas).
-	// Consumers fetch on demand via `describePeer(sync, deviceId)`
+	// Consumers fetch on demand via `sync.describePeer(deviceId)`
 	// rather than receiving a manifest broadcast in awareness.
 	//
 	// Type-annotate against `SystemActions` (the canonical type in
@@ -1107,7 +1132,7 @@ export function attachSync(
 		}
 	});
 
-	return {
+	const attachment: SyncAttachment = {
 		whenConnected,
 		get status() {
 			return status.get();
@@ -1203,6 +1228,48 @@ export function attachSync(
 			if (!typedAwareness) return () => {};
 			return typedAwareness.observe(callback);
 		},
+		peer<TActions extends Actions>(
+			deviceId: string,
+		): RemoteActions<TActions> {
+			const send: Sender = async (path, input, options) => {
+				const found = attachment.find(deviceId);
+				if (!found) {
+					return Err(RpcError.PeerNotFound({ peer: deviceId }).error);
+				}
+
+				// Race the rpc against a peer-removed signal. If the matched peer
+				// disappears mid-call, reject immediately: don't wait for the timeout.
+				return new Promise<Result<unknown, RpcError>>((resolveCall) => {
+					let settled = false;
+					const settle = (v: Result<unknown, RpcError>) => {
+						if (settled) return;
+						settled = true;
+						unsubscribe();
+						resolveCall(v);
+					};
+					const unsubscribe = attachment.observe(() => {
+						if (!attachment.find(deviceId)) {
+							settle(Err(RpcError.PeerLeft({ peer: deviceId }).error));
+						}
+					});
+
+					attachment
+						.rpc(found.clientId, path, input, options)
+						.then((res) => settle(res as Result<unknown, RpcError>))
+						.catch((cause) =>
+							settle(
+								Err(RpcError.ActionFailed({ action: path, cause }).error),
+							),
+						);
+				});
+			};
+			return buildRemoteProxy<TActions>(send);
+		},
+		describePeer(deviceId) {
+			return attachment
+				.peer<{ system: SystemActions }>(deviceId)
+				.system.describe();
+		},
 		raw: { awareness },
 		async rpc<
 			TMap extends RpcActionMap = DefaultRpcMap,
@@ -1279,6 +1346,7 @@ export function attachSync(
 			});
 		},
 	};
+	return attachment;
 }
 
 // ============================================================================

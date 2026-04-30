@@ -3,10 +3,10 @@
  *
  * Each connected peer publishes a small `device` descriptor (id, name,
  * platform). Other peers read awareness to enumerate who's online and
- * dispatch via `peer<T>(workspace, deviceId)`.
+ * dispatch via `workspace.sync.peer<T>(deviceId)`.
  *
  * Action discovery is NOT in awareness: it's an on-demand RPC. Use
- * `describePeer(sync, deviceId)` to fetch a peer's full action
+ * `sync.describePeer(deviceId)` to fetch a peer's full action
  * tree when you need it.
  *
  * Apps opt in by spreading `standardAwarenessDefs` into their `attachAwareness`
@@ -38,7 +38,7 @@ export type Platform = typeof Platform.infer;
 /**
  * The peer descriptor published by each connected peer. Presence-only
  * carries identity, not capabilities. Action discovery happens on demand
- * via `describePeer(sync, deviceId)`.
+ * via `sync.describePeer(deviceId)`.
  *
  * Named `PeerDevice` (not `Device`) so it doesn't collide with app-level
  * `Device` table-row types (e.g. tab-manager's devices table).

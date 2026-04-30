@@ -40,7 +40,7 @@ export async function openFuji({
 	/**
 	 * Required: a long-lived materializer worker should always show up in
 	 * awareness so peers can see "the daemon is up" and can RPC-route to it
-	 * via `peer(workspace, deviceId)`. Mint via `getOrCreateDeviceId()` or
+	 * via `workspace.sync.peer(deviceId)`. Mint via `getOrCreateDeviceId()` or
 	 * read from `~/.epicenter/deviceId`.
 	 */
 	device: DeviceDescriptor;

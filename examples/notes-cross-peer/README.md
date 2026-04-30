@@ -4,7 +4,7 @@ Two-peer minimal repro for the `system.describe` cross-peer fetch.
 
 Both configs construct the same workspace (`epicenter.notes-repro`) with
 distinct deviceIds, so each appears in the other's awareness. Exercises
-`describePeer(sync, deviceId)` end-to-end against the deployed API.
+`sync.describePeer(deviceId)` end-to-end against the deployed API.
 
 ## Setup
 
@@ -35,11 +35,10 @@ under "Local vs. remote"):
 
 ```ts
 // examples/notes-cross-peer/inspect-peer.ts
-import { describePeer } from '@epicenter/workspace';
 import { notes } from './peer-b/epicenter.config';
 
 await notes.whenReady;
-const result = await describePeer(notes.sync, 'notes-repro-peer-a');
+const result = await notes.sync.describePeer('notes-repro-peer-a');
 console.log(result.error ?? result.data);
 notes.dispose();
 ```
