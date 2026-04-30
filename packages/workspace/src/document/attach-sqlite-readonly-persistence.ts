@@ -39,6 +39,25 @@ export type AttachSqliteReadonlyPersistenceError = InferErrors<
 	typeof AttachSqliteReadonlyPersistenceError
 >;
 
+/**
+ * Type guard for the `MissingFile` rejection from `whenLoaded`.
+ *
+ * Use this in factories that want to skip the readonly attachment when the
+ * writer hasn't created the file yet (e.g., a script-side `openFuji`
+ * falling through to a cold cloud sync). Prefer this over matching on
+ * `err.name === 'MissingFile'`: this stays correct under refactors,
+ * minification, and downstream re-exports.
+ */
+export function isMissingFile(
+	err: unknown,
+): err is Extract<AttachSqliteReadonlyPersistenceError, { name: 'MissingFile' }> {
+	return (
+		typeof err === 'object' &&
+		err !== null &&
+		(err as { name?: unknown }).name === 'MissingFile'
+	);
+}
+
 export type SqliteReadonlyPersistenceAttachment = {
 	/**
 	 * Resolves when the SQLite file's existing rows have replayed into the

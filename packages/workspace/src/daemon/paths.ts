@@ -86,41 +86,42 @@ export function persistencePath(absDir: string, workspaceId: string): string {
 }
 
 /**
- * Path to a workspace's SQLite materializer mirror file.
+ * Path to a workspace's SQLite mirror file (the queryable SQL surface).
  *
- * Convention: `<absDir>/.epicenter/mirrors/<workspaceId>.db`. The daemon's
+ * Convention: `<absDir>/.epicenter/sqlite/<workspaceId>.db`. The daemon's
  * `attachSqliteMaterializer` writes this file (in WAL journal mode); script
  * peers open the same path read-only via `attachSqliteMirror`.
  *
- * Distinct from `persistencePath`: persistence holds the raw Y.Doc update
- * log (the canonical CRDT history); the mirror holds typed rows + FTS5
- * indexes derived from that history. Different shape, different concurrency
- * profile, different consumers.
+ * Distinct from `persistencePath`: persistence is the role (durability of
+ * the Y.Doc update log; SQLite is implementation detail and you never open
+ * it with `sqlite3`). This file is the surface (you open it with `sqlite3`
+ * to run SELECT and FTS5 queries; that's its whole point). Different
+ * shape, different concurrency profile, different consumers.
  *
  * @example
  * ```ts
- * mirrorPathFor('/Users/braden/Code/vault', 'epicenter.fuji')
- * // → '/Users/braden/Code/vault/.epicenter/mirrors/epicenter.fuji.db'
+ * sqlitePath('/Users/braden/Code/vault', 'epicenter.fuji')
+ * // → '/Users/braden/Code/vault/.epicenter/sqlite/epicenter.fuji.db'
  * ```
  */
-export function mirrorPathFor(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'mirrors', `${workspaceId}.db`);
+export function sqlitePath(absDir: string, workspaceId: string): string {
+	return join(absDir, '.epicenter', 'sqlite', `${workspaceId}.db`);
 }
 
 /**
  * Root directory for a workspace's markdown materializer tree.
  *
- * Convention: `<absDir>/.epicenter/markdown/<workspaceId>/`. The daemon's
+ * Convention: `<absDir>/.epicenter/md/<workspaceId>/`. The daemon's
  * `attachMarkdownMaterializer` writes per-table subdirectories of `.md`
  * files under this root; script peers walk the same tree read-only via
  * `attachMarkdownMirror`.
  *
  * @example
  * ```ts
- * markdownPathFor('/Users/braden/Code/vault', 'epicenter.fuji')
- * // → '/Users/braden/Code/vault/.epicenter/markdown/epicenter.fuji'
+ * markdownPath('/Users/braden/Code/vault', 'epicenter.fuji')
+ * // → '/Users/braden/Code/vault/.epicenter/md/epicenter.fuji'
  * ```
  */
-export function markdownPathFor(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'markdown', workspaceId);
+export function markdownPath(absDir: string, workspaceId: string): string {
+	return join(absDir, '.epicenter', 'md', workspaceId);
 }

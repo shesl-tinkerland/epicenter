@@ -135,6 +135,7 @@ export {
 export {
 	AttachSqliteReadonlyPersistenceError,
 	attachSqliteReadonlyPersistence,
+	isMissingFile,
 	type SqliteReadonlyPersistenceAttachment,
 } from './document/attach-sqlite-readonly-persistence.js';
 
@@ -287,12 +288,12 @@ export {
 export {
 	dirHash,
 	logPathFor,
-	markdownPathFor,
+	markdownPath,
 	metadataPathFor,
-	mirrorPathFor,
 	persistencePath,
 	runtimeDir,
 	socketPathFor,
+	sqlitePath,
 } from './daemon/paths.js';
 export {
 	type DaemonMetadata,

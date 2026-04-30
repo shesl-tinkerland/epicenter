@@ -26,7 +26,7 @@
  */
 
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
 import { createFileContentDoc } from '@epicenter/filesystem';
@@ -38,6 +38,7 @@ import {
 	createDisposableCache,
 	defineMutation,
 	persistencePath,
+	sqlitePath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import {
@@ -51,10 +52,9 @@ import * as Y from 'yjs';
 
 const SERVER_URL = 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
-const MATERIALIZER_DIR = join(import.meta.dir, '.epicenter', 'materializer');
-mkdirSync(MATERIALIZER_DIR, { recursive: true });
-
 const WORKSPACE_ID = 'opensidian';
+const MIRROR_FILE = sqlitePath(import.meta.dir, WORKSPACE_ID);
+mkdirSync(dirname(MIRROR_FILE), { recursive: true });
 
 const sessions = createSessionStore();
 
@@ -156,7 +156,7 @@ const markdown = attachMarkdownMaterializer(ydoc, {
 });
 
 const sqlite = attachSqliteMaterializer(ydoc, {
-	db: new Database(join(MATERIALIZER_DIR, 'opensidian.db')),
+	db: new Database(MIRROR_FILE),
 	waitFor: whenReady,
 }).table(tables.files, { fts: ['name'] });
 

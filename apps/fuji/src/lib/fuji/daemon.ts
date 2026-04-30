@@ -16,9 +16,9 @@ import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
-	markdownPathFor,
-	mirrorPathFor,
+	markdownPath,
 	persistencePath,
+	sqlitePath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
@@ -49,7 +49,7 @@ export function openFuji({
 		getToken,
 	});
 
-	const mirrorFile = mirrorPathFor(absDir, doc.ydoc.guid);
+	const mirrorFile = sqlitePath(absDir, doc.ydoc.guid);
 	// `attachSqliteMaterializer` takes a Database, not a path, so it can't
 	// create its own parent dir. `attachSqlitePersistence` mkdirs its own.
 	mkdirSync(path.dirname(mirrorFile), { recursive: true });
@@ -59,7 +59,7 @@ export function openFuji({
 	}).table(doc.tables.entries);
 
 	const markdown = attachMarkdownMaterializer(doc.ydoc, {
-		dir: markdownPathFor(absDir, doc.ydoc.guid),
+		dir: markdownPath(absDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	});
 
@@ -69,6 +69,14 @@ export function openFuji({
 		sync,
 		sqlite,
 		markdown,
+		/**
+		 * Resolves once the daemon's persistence file has replayed into the
+		 * Y.Doc: the durable state is in memory and writes are safe. Does
+		 * NOT gate the materializers' initial flush (they `waitFor` the same
+		 * signal but their first row writes happen after this resolves) or
+		 * the cloud WS handshake (offline-tolerant by design). Compose with
+		 * `sync.whenConnected` if you need "fully online before proceeding."
+		 */
 		whenReady: persistence.whenLoaded,
 	};
 }

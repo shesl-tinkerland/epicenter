@@ -5,11 +5,11 @@ import { join } from 'node:path';
 
 import {
 	dirHash,
-	markdownPathFor,
-	mirrorPathFor,
+	markdownPath,
 	persistencePath,
 	runtimeDir,
 	socketPathFor,
+	sqlitePath,
 } from './paths.js';
 
 describe('daemon/paths', () => {
@@ -44,22 +44,22 @@ describe('daemon/paths', () => {
 		expect(socketPathFor(dir).length).toBeLessThanOrEqual(100);
 	});
 
-	test('mirrorPathFor lives alongside persistencePath under .epicenter/', () => {
+	test('sqlitePath lives alongside persistencePath under .epicenter/', () => {
 		const dir = '/Users/me/vault';
-		expect(mirrorPathFor(dir, 'epicenter.fuji')).toBe(
-			'/Users/me/vault/.epicenter/mirrors/epicenter.fuji.db',
+		expect(sqlitePath(dir, 'epicenter.fuji')).toBe(
+			'/Users/me/vault/.epicenter/sqlite/epicenter.fuji.db',
 		);
 		// Distinct from the persistence file (raw Y.Doc update log) so the
 		// two coexist without colliding.
-		expect(mirrorPathFor(dir, 'epicenter.fuji')).not.toBe(
+		expect(sqlitePath(dir, 'epicenter.fuji')).not.toBe(
 			persistencePath(dir, 'epicenter.fuji'),
 		);
 	});
 
-	test('markdownPathFor is a directory, not a file', () => {
+	test('markdownPath is a directory, not a file', () => {
 		const dir = '/Users/me/vault';
-		expect(markdownPathFor(dir, 'epicenter.fuji')).toBe(
-			'/Users/me/vault/.epicenter/markdown/epicenter.fuji',
+		expect(markdownPath(dir, 'epicenter.fuji')).toBe(
+			'/Users/me/vault/.epicenter/md/epicenter.fuji',
 		);
 	});
 

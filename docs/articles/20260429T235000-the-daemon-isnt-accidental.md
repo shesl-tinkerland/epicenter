@@ -113,11 +113,11 @@ export function openFuji({ getToken, device, absDir }) {
   });
   attachSync(fuji, { url, waitFor: persistence.whenLoaded, device, getToken });
   attachSqliteMaterializer(fuji.ydoc, {
-    db: new Database(mirrorPathFor(absDir, fuji.ydoc.guid)),
+    db: new Database(sqlitePath(absDir, fuji.ydoc.guid)),
     waitFor: persistence.whenLoaded,
   });
   attachMarkdownMaterializer(fuji.ydoc, {
-    dir: markdownPathFor(absDir, fuji.ydoc.guid),
+    dir: markdownPath(absDir, fuji.ydoc.guid),
     waitFor: persistence.whenLoaded,
   });
   return { ...fuji, persistence, whenReady: persistence.whenLoaded };

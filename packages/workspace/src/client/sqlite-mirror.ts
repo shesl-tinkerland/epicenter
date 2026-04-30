@@ -35,7 +35,7 @@ import type {
 export type AttachSqliteMirrorOptions = {
 	/**
 	 * Absolute path to the daemon's mirror SQLite file. Typically
-	 * `mirrorPathFor(absDir, ydoc.guid)`.
+	 * `sqlitePath(absDir, ydoc.guid)`.
 	 */
 	filePath: string;
 };
@@ -78,7 +78,7 @@ export type SqliteMirrorAttachment = {
  * @example
  * ```ts
  * using mirror = attachSqliteMirror({
- *   filePath: mirrorPathFor(absDir, fuji.ydoc.guid),
+ *   filePath: sqlitePath(absDir, fuji.ydoc.guid),
  * });
  * const hits = await mirror.search('entries', 'hello world', { limit: 25 });
  * const drizzleDb = drizzle(mirror.db, { schema });

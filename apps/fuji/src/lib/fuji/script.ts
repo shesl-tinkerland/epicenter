@@ -18,6 +18,7 @@ import {
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
+	isMissingFile,
 	persistencePath,
 	toWsUrl,
 } from '@epicenter/workspace';
@@ -64,10 +65,8 @@ export function openFuji({
 
 	// `whenReady` swallows `MissingFile` (no daemon has written here yet:
 	// fall through to cold cloud sync) and re-throws every other error.
-	// `defineErrors` tags variants with `.name`; matching on it avoids
-	// racing the attachment's own existence check with `Bun.file().exists()`.
 	const whenReady = persistence.whenLoaded.catch((err: unknown) => {
-		if ((err as { name?: string } | null)?.name !== 'MissingFile') throw err;
+		if (!isMissingFile(err)) throw err;
 	});
 
 	const sync = attachSync(doc, {
