@@ -37,7 +37,7 @@ import {
 	attachSync,
 	createDisposableCache,
 	defineMutation,
-	persistencePath,
+	yjsPath,
 	sqlitePath,
 	toWsUrl,
 } from '@epicenter/workspace';
@@ -64,7 +64,7 @@ const tables = encryption.attachTables(ydoc, opensidianTables);
 const kv = encryption.attachKv(ydoc, {});
 
 const persistence = attachSqlitePersistence(ydoc, {
-	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
+	filePath: yjsPath(import.meta.dir, WORKSPACE_ID),
 });
 
 const unlock = attachSessionUnlock(encryption, {
@@ -88,14 +88,15 @@ const whenReady = Promise.all([
 ]);
 
 /**
- * Per-file content persistence via `attachSqlitePersistence`. Each content Y.Doc writes
- * its own `{guid}.db` under `<absDir>/.epicenter/persistence/{workspaceId}/content/`,
- * matching the per-workspace SQLite convention from the workspace package.
+ * Per-file content persistence via `attachSqlitePersistence`. Each content
+ * Y.Doc writes its own `{guid}.db` under `<absDir>/.epicenter/yjs/{workspaceId}/content/`,
+ * nested under the workspace's yjs folder so per-file logs sit alongside
+ * the main workspace log.
  */
 const CONTENT_DIR = join(
 	import.meta.dir,
 	'.epicenter',
-	'persistence',
+	'yjs',
 	WORKSPACE_ID,
 	'content',
 );

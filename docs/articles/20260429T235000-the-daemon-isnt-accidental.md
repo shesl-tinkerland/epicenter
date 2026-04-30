@@ -10,7 +10,7 @@ The pitch writes itself. Drop the resident process. Each script does:
 
 ```ts
 using fuji = openFuji();
-attachSqlitePersistence(fuji.ydoc, { filePath: '.epicenter/persistence/fuji.db' });
+attachSqlitePersistence(fuji.ydoc, { filePath: '.epicenter/yjs/fuji.db' });
 attachSync(fuji.ydoc, { url: 'wss://api.epicenter.so/...' });
 
 fuji.tables.entries.set({ id: 'a', url: '...' });
@@ -74,7 +74,7 @@ The third option is the one we shipped. Scripts read the daemon's persistence fi
 // Script: read the daemon's persistence file readonly, sync via cloud
 export function openFuji({ getToken, absDir }) {
   const fuji = openFujiCore({ clientID: hashClientId(Bun.main) });
-  const filePath = persistencePath(absDir ?? findEpicenterDir(), fuji.ydoc.guid);
+  const filePath = yjsPath(absDir ?? findEpicenterDir(), fuji.ydoc.guid);
   const persistence = attachSqliteReadonlyPersistence(fuji.ydoc, { filePath });
 
   // Swallow MissingFile (no daemon has written here): fall through to cold cloud sync.
@@ -109,7 +109,7 @@ export function openFuji({ auth, device }) {
 export function openFuji({ getToken, device, absDir }) {
   const fuji = openFujiCore();
   const persistence = attachSqlitePersistence(fuji.ydoc, {
-    filePath: persistencePath(absDir, fuji.ydoc.guid),
+    filePath: yjsPath(absDir, fuji.ydoc.guid),
   });
   attachSync(fuji, { url, waitFor: persistence.whenLoaded, device, getToken });
   attachSqliteMaterializer(fuji.ydoc, {

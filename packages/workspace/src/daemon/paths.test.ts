@@ -3,14 +3,7 @@ import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-	dirHash,
-	markdownPath,
-	persistencePath,
-	runtimeDir,
-	socketPathFor,
-	sqlitePath,
-} from './paths.js';
+import { dirHash, runtimeDir, socketPathFor } from './paths.js';
 
 describe('daemon/paths', () => {
 	const originalXdg = process.env.XDG_RUNTIME_DIR;
@@ -42,25 +35,6 @@ describe('daemon/paths', () => {
 		delete process.env.XDG_RUNTIME_DIR;
 		const dir = realpathSync(tmpdir());
 		expect(socketPathFor(dir).length).toBeLessThanOrEqual(100);
-	});
-
-	test('sqlitePath lives alongside persistencePath under .epicenter/', () => {
-		const dir = '/Users/me/vault';
-		expect(sqlitePath(dir, 'epicenter.fuji')).toBe(
-			'/Users/me/vault/.epicenter/sqlite/epicenter.fuji.db',
-		);
-		// Distinct from the persistence file (raw Y.Doc update log) so the
-		// two coexist without colliding.
-		expect(sqlitePath(dir, 'epicenter.fuji')).not.toBe(
-			persistencePath(dir, 'epicenter.fuji'),
-		);
-	});
-
-	test('markdownPath is a directory, not a file', () => {
-		const dir = '/Users/me/vault';
-		expect(markdownPath(dir, 'epicenter.fuji')).toBe(
-			'/Users/me/vault/.epicenter/md/epicenter.fuji',
-		);
 	});
 
 	test('runtimeDir honors XDG_RUNTIME_DIR when set, falls back to home/run when unset', () => {

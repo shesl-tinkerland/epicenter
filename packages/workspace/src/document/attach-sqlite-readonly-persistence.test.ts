@@ -2,7 +2,7 @@
  * Tests for `attachSqliteReadonlyPersistence` (the reader side of the
  * SQLite persistence pair). Covers: round-trip from a writer file,
  * concurrent open against an active writer (WAL snapshot reads),
- * synchronous error on missing file, and the no-write-listener invariant.
+ * missing-file no-op via `fileExisted`, and the no-write-listener invariant.
  */
 
 import { Database } from 'bun:sqlite';
@@ -53,6 +53,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		const reader = attachSqliteReadonlyPersistence(readerDoc, { filePath });
 		await reader.whenLoaded;
 
+		expect(await reader.fileExisted).toBe(true);
 		const readerMap = readerDoc.getMap<number>('m');
 		expect(readerMap.size).toBe(1000);
 		expect(readerMap.get('k0')).toBe(0);
@@ -103,14 +104,13 @@ describe('attachSqliteReadonlyPersistence', () => {
 		await writer.whenDisposed;
 	});
 
-	test('rejects whenLoaded with MissingFile when file is absent', async () => {
+	test('missing file is a no-op: whenLoaded resolves, fileExisted is false, doc stays empty', async () => {
 		const filePath = join(workdir, 'does-not-exist.sqlite');
 		const ydoc = new Y.Doc();
 		const att = attachSqliteReadonlyPersistence(ydoc, { filePath });
-		await expect(att.whenLoaded).rejects.toMatchObject({
-			name: 'MissingFile',
-			filePath,
-		});
+		await att.whenLoaded;
+		expect(await att.fileExisted).toBe(false);
+		expect(ydoc.getMap('m').size).toBe(0);
 		ydoc.destroy();
 		await att.whenDisposed;
 	});

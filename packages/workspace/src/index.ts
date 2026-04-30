@@ -133,9 +133,7 @@ export {
 } from './document/attach-sqlite-persistence.js';
 
 export {
-	AttachSqliteReadonlyPersistenceError,
 	attachSqliteReadonlyPersistence,
-	isMissingFile,
 	type SqliteReadonlyPersistenceAttachment,
 } from './document/attach-sqlite-readonly-persistence.js';
 
@@ -267,11 +265,9 @@ export {
 // DAEMON (unix socket transport)
 // ════════════════════════════════════════════════════════════════════════════
 //
-// Mixed audience:
-//   * createWorkspaceServer and persistencePath are consumer surface
-//     (epicenter.config.ts authors call these).
-//   * Everything else (buildApp, bindUnixSocket, sockets/metadata path
-//     helpers, RunInput/ListInput) is CLI-lifecycle plumbing.
+// CLI-lifecycle plumbing: buildApp, daemon client, runtime path helpers
+// (sockets, metadata, log). Per-workspace data layout helpers (yjs, sqlite,
+// markdown) live in the WORKSPACE PATHS section below.
 
 export type { LoadedWorkspace, WorkspaceEntry } from './daemon/types.js';
 export {
@@ -290,13 +286,20 @@ export {
 export {
 	dirHash,
 	logPathFor,
-	markdownPath,
 	metadataPathFor,
-	persistencePath,
 	runtimeDir,
 	socketPathFor,
-	sqlitePath,
 } from './daemon/paths.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// WORKSPACE PATHS (per-workspace data layout)
+// ════════════════════════════════════════════════════════════════════════════
+
+export {
+	markdownPath,
+	sqlitePath,
+	yjsPath,
+} from './document/workspace-paths.js';
 export {
 	type DaemonMetadata,
 	readMetadata,

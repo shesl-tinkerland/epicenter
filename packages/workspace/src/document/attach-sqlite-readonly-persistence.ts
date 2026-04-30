@@ -10,62 +10,30 @@
  * daemon-as-materializer-worker design at
  * `specs/20260429T235500-daemon-as-materializer-worker.md`).
  *
- * The file must already exist; missing files reject `whenLoaded` with
- * `MissingFile` rather than silently creating an empty database. The
- * existence check uses `Bun.file(filePath).exists()`, matching the rest
- * of the codebase's Bun-native I/O. The writer is expected to have set
+ * Missing files are a no-op: `whenLoaded` resolves immediately with no
+ * replay (the Y.Doc stays empty). `fileExisted` distinguishes the warm
+ * path (file was there, rows replayed) from the cold path (file absent,
+ * caller falls through to cloud sync). The writer is expected to have set
  * WAL on the file so concurrent readers get snapshot pages without
  * `SQLITE_BUSY`.
  */
 
 import { Database } from 'bun:sqlite';
-import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import * as Y from 'yjs';
-
-/** Errors surfaced by `attachSqliteReadonlyPersistence` at the boundary. */
-export const AttachSqliteReadonlyPersistenceError = defineErrors({
-	/**
-	 * The persistence file does not exist on disk. Distinguishes "no daemon
-	 * has ever written to this path" from a real driver failure; callers
-	 * can choose to skip the readonly attachment and fall back to a fresh
-	 * Y.Doc (synced via `attachSync`) instead.
-	 */
-	MissingFile: ({ filePath }: { filePath: string }) => ({
-		message: `[attachSqliteReadonlyPersistence] file does not exist: ${filePath}. Surfaced as a whenLoaded rejection; the writer (attachSqlitePersistence) has not created the file yet, or the path is wrong.`,
-		filePath,
-	}),
-});
-export type AttachSqliteReadonlyPersistenceError = InferErrors<
-	typeof AttachSqliteReadonlyPersistenceError
->;
-
-/**
- * Type guard for the `MissingFile` rejection from `whenLoaded`.
- *
- * Use this in factories that want to skip the readonly attachment when the
- * writer hasn't created the file yet (e.g., a script-side `openFuji`
- * falling through to a cold cloud sync). Prefer this over matching on
- * `err.name === 'MissingFile'`: this stays correct under refactors,
- * minification, and downstream re-exports.
- */
-export function isMissingFile(
-	err: unknown,
-): err is Extract<AttachSqliteReadonlyPersistenceError, { name: 'MissingFile' }> {
-	return (
-		typeof err === 'object' &&
-		err !== null &&
-		(err as { name?: unknown }).name === 'MissingFile'
-	);
-}
 
 export type SqliteReadonlyPersistenceAttachment = {
 	/**
-	 * Resolves when the SQLite file's existing rows have replayed into the
-	 * Y.Doc. After this resolves the reader's Y.Doc reflects the writer's
-	 * state at open time; subsequent writer changes are NOT observed (this
-	 * is a one-shot hydrate, not a live mirror).
+	 * Resolves once any existing rows have replayed. If the file did not
+	 * exist at open time, resolves immediately with no replay (the Y.Doc
+	 * stays empty). Pair with `fileExisted` to detect which path ran.
 	 */
 	whenLoaded: Promise<unknown>;
+	/**
+	 * Resolves to `true` if the file existed at open time and rows were
+	 * replayed; `false` if the daemon has not written here yet. Snapshot
+	 * value, taken once at construction; the file is not re-checked later.
+	 */
+	fileExisted: Promise<boolean>;
 	/**
 	 * Resolves after `ydoc.destroy()` AND `db.close()`. No final compaction
 	 * (the reader never wrote). Opt-in: tests and CLIs flushing before
@@ -80,11 +48,10 @@ export function attachSqliteReadonlyPersistence(
 ): SqliteReadonlyPersistenceAttachment {
 	let db: Database | null = null;
 
+	const fileExisted: Promise<boolean> = Bun.file(filePath).exists();
+
 	const whenLoaded = (async () => {
-		if (!(await Bun.file(filePath).exists())) {
-			throw AttachSqliteReadonlyPersistenceError.MissingFile({ filePath })
-				.error;
-		}
+		if (!(await fileExisted)) return;
 		db = new Database(filePath, { readonly: true });
 		// File is owned by the writer. No CREATE TABLE, no WAL pragma (the
 		// writer set it), no updateV2 listener, no compaction: pure snapshot
@@ -111,5 +78,5 @@ export function attachSqliteReadonlyPersistence(
 		}
 	});
 
-	return { whenLoaded, whenDisposed };
+	return { whenLoaded, fileExisted, whenDisposed };
 }

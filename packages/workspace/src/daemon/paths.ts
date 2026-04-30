@@ -1,9 +1,13 @@
 /**
- * Path builders for the daemon and per-workspace state.
+ * Daemon-process path helpers.
  *
- * Two conventions:
- *   per-user (sockets, logs): `~/.epicenter/...`
- *   per-workspace (SQLite):    `<absDir>/.epicenter/...`
+ * Per-user runtime: socket, metadata sidecar, log file. All live under the
+ * runtime dir (`$XDG_RUNTIME_DIR/epicenter` on Linux, `~/.epicenter/run`
+ * elsewhere) or under `~/.epicenter/log/` (persistent log). Keyed by a hash
+ * of the daemon's `--dir` so two daemons on the same machine never collide.
+ *
+ * For per-workspace data layout (yjs/sqlite/markdown under `<absDir>/.epicenter/`),
+ * see `document/workspace-paths.ts`. Different audience, different rationale.
  *
  * Pure helpers: no side effects, no directory creation. The `serve` command
  * owns the `mkdir`/`chmod` work; consumers here are free to call these from
@@ -66,62 +70,4 @@ export function metadataPathFor(dir: string): string {
  */
 export function logPathFor(dir: string): string {
 	return join(epicenterHome(), 'log', `${dirHash(dir)}.log`);
-}
-
-/**
- * Path to a workspace's SQLite persistence file.
- *
- * Convention: `<absDir>/.epicenter/persistence/<workspaceId>.db`.
- * `absDir` is the project root (where `epicenter.config.ts` lives);
- * `workspaceId` is `ws.ydoc.guid`.
- *
- * @example
- * ```ts
- * persistencePath('/Users/braden/Code/vault', 'epicenter.fuji')
- * // → '/Users/braden/Code/vault/.epicenter/persistence/epicenter.fuji.db'
- * ```
- */
-export function persistencePath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'persistence', `${workspaceId}.db`);
-}
-
-/**
- * Path to a workspace's SQLite mirror file (the queryable SQL surface).
- *
- * Convention: `<absDir>/.epicenter/sqlite/<workspaceId>.db`. The daemon's
- * `attachSqliteMaterializer` writes this file (in WAL journal mode); script
- * peers open the same path read-only via `attachSqliteMirror`.
- *
- * Distinct from `persistencePath`: persistence is the role (durability of
- * the Y.Doc update log; SQLite is implementation detail and you never open
- * it with `sqlite3`). This file is the surface (you open it with `sqlite3`
- * to run SELECT and FTS5 queries; that's its whole point). Different
- * shape, different concurrency profile, different consumers.
- *
- * @example
- * ```ts
- * sqlitePath('/Users/braden/Code/vault', 'epicenter.fuji')
- * // → '/Users/braden/Code/vault/.epicenter/sqlite/epicenter.fuji.db'
- * ```
- */
-export function sqlitePath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'sqlite', `${workspaceId}.db`);
-}
-
-/**
- * Root directory for a workspace's markdown materializer tree.
- *
- * Convention: `<absDir>/.epicenter/md/<workspaceId>/`. The daemon's
- * `attachMarkdownMaterializer` writes per-table subdirectories of `.md`
- * files under this root; script peers walk the same tree read-only via
- * `attachMarkdownMirror`.
- *
- * @example
- * ```ts
- * markdownPath('/Users/braden/Code/vault', 'epicenter.fuji')
- * // → '/Users/braden/Code/vault/.epicenter/md/epicenter.fuji'
- * ```
- */
-export function markdownPath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'md', workspaceId);
 }

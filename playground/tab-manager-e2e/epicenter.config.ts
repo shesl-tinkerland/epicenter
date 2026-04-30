@@ -33,7 +33,7 @@ import {
 	attachEncryption,
 	attachSqlitePersistence,
 	attachSync,
-	persistencePath,
+	yjsPath,
 } from '@epicenter/workspace';
 import {
 	attachMarkdownMaterializer,
@@ -56,7 +56,7 @@ const tables = encryption.attachTables(ydoc, tabManagerTables);
 const kv = encryption.attachKv(ydoc, {});
 
 const persistence = attachSqlitePersistence(ydoc, {
-	filePath: persistencePath(import.meta.dir, WORKSPACE_ID),
+	filePath: yjsPath(import.meta.dir, WORKSPACE_ID),
 });
 
 const unlock = attachSessionUnlock(encryption, {
