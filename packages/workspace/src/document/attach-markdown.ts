@@ -21,31 +21,25 @@ import type { SerializeResult } from './markdown/markdown.js';
 import { assembleMarkdown } from './markdown/markdown.js';
 import { parseMarkdownFile } from './markdown/parse-markdown-file.js';
 
-export { assembleMarkdown, type SerializeResult } from './markdown/markdown.js';
+// Re-exports kept narrow to what current consumers actually pull through
+// the `@epicenter/workspace/document/attach-markdown` subpath. `SerializeResult`
+// and `toIdFilename` were dropped (no external consumers); internal modules
+// still import them directly from `./markdown/*`.
+export { assembleMarkdown } from './markdown/markdown.js';
 export { parseMarkdownFile } from './markdown/parse-markdown-file.js';
 export { prepareMarkdownFiles } from './markdown/prepare-markdown-files.js';
-export {
-	slugFilename,
-	toIdFilename,
-	toSlugFilename,
-} from './markdown/serializers.js';
+export { slugFilename, toSlugFilename } from './markdown/serializers.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PUSH ERROR + EVENT TYPES
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Errors produced during `push` that aren't already covered by
- * `TableParseError`. Filename / tableName provenance lives on the
- * emitted `PushEvent`, not inside the error: the error knows its
- * layer, the event carries external context.
- */
-/**
  * Errors produced by the background write-observer (table row → .md file,
  * KV state → serialized file). These run inside `.catch(...)` of a detached
  * async task, so they ship to the logger, not through a Result to the caller.
  */
-export const MaterializerWriteError = defineErrors({
+export const AttachMarkdownWriteError = defineErrors({
 	TableWriteFailed: ({
 		tableName,
 		cause,
@@ -53,18 +47,26 @@ export const MaterializerWriteError = defineErrors({
 		tableName: string;
 		cause: unknown;
 	}) => ({
-		message: `[markdown-materializer] table write failed for "${tableName}": ${extractErrorMessage(cause)}`,
+		message: `[attachMarkdown] table write failed for "${tableName}": ${extractErrorMessage(cause)}`,
 		tableName,
 		cause,
 	}),
 	KvWriteFailed: ({ cause }: { cause: unknown }) => ({
-		message: `[markdown-materializer] kv write failed: ${extractErrorMessage(cause)}`,
+		message: `[attachMarkdown] kv write failed: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
 });
-export type MaterializerWriteError = InferErrors<typeof MaterializerWriteError>;
+export type AttachMarkdownWriteError = InferErrors<
+	typeof AttachMarkdownWriteError
+>;
 
-export const MaterializerPushError = defineErrors({
+/**
+ * Errors produced during `push` that aren't already covered by
+ * `TableParseError`. Filename / tableName provenance lives on the
+ * emitted `PushEvent`, not inside the error: the error knows its
+ * layer, the event carries external context.
+ */
+export const AttachMarkdownPushError = defineErrors({
 	/** Reading the file from disk failed. */
 	ReadFailed: ({ cause }: { cause: unknown }) => ({
 		message: `Read failed: ${extractErrorMessage(cause)}`,
@@ -76,7 +78,9 @@ export const MaterializerPushError = defineErrors({
 		cause,
 	}),
 });
-export type MaterializerPushError = InferErrors<typeof MaterializerPushError>;
+export type AttachMarkdownPushError = InferErrors<
+	typeof AttachMarkdownPushError
+>;
 
 /**
  * A single event emitted during `push`. Three kinds:
@@ -103,7 +107,7 @@ export type PushEvent =
 			kind: 'error';
 			path: string;
 			tableName: string;
-			error: MaterializerPushError | TableParseError;
+			error: AttachMarkdownPushError | TableParseError;
 	  };
 
 /** Aggregated result of one `push` invocation. */
@@ -256,7 +260,7 @@ export function attachMarkdown(
 	{
 		dir,
 		waitFor,
-		log = createLogger('markdown-materializer'),
+		log = createLogger('attachMarkdown'),
 	}: {
 		/** Base output directory. Accepts a string or async getter for lazy path resolution. */
 		dir: string | (() => MaybePromise<string>);
@@ -327,7 +331,7 @@ export function attachMarkdown(
 				}
 			})().catch((cause) => {
 				log.warn(
-					MaterializerWriteError.TableWriteFailed({
+					AttachMarkdownWriteError.TableWriteFailed({
 						tableName: table.name,
 						cause,
 					}),
@@ -355,7 +359,7 @@ export function attachMarkdown(
 				const result = serialize(state);
 				await writeFile(join(baseDir, result.filename), result.content);
 			})().catch((cause) => {
-				log.warn(MaterializerWriteError.KvWriteFailed({ cause }));
+				log.warn(AttachMarkdownWriteError.KvWriteFailed({ cause }));
 			});
 		});
 	}
@@ -428,7 +432,7 @@ export function attachMarkdown(
 				// 1. Read
 				const { data: content, error: readError } = await tryAsync({
 					try: () => readFile(join(directory, filename), 'utf-8'),
-					catch: (cause) => MaterializerPushError.ReadFailed({ cause }),
+					catch: (cause) => AttachMarkdownPushError.ReadFailed({ cause }),
 				});
 				if (readError) {
 					events.push({ kind: 'error', path, tableName, error: readError });
@@ -448,7 +452,7 @@ export function attachMarkdown(
 				const { data: row, error: callbackError } = await tryAsync({
 					try: async () => fromMarkdown(parsed),
 					catch: (cause) =>
-						MaterializerPushError.FromMarkdownCallbackFailed({ cause }),
+						AttachMarkdownPushError.FromMarkdownCallbackFailed({ cause }),
 				});
 				if (callbackError) {
 					events.push({ kind: 'error', path, tableName, error: callbackError });

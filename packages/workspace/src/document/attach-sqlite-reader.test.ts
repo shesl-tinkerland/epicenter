@@ -92,7 +92,7 @@ describe('attachSqliteReader', () => {
 		]);
 
 		using mirror = attachSqliteReader({ filePath });
-		const hits = await mirror.search('entries', 'hello');
+		const hits = mirror.search('entries', 'hello');
 		const ids = hits.map((h) => h.id).sort();
 		expect(ids).toEqual(['a', 'c']);
 		for (const hit of hits) {
@@ -114,7 +114,7 @@ describe('attachSqliteReader', () => {
 		ydoc.destroy();
 
 		using mirror = attachSqliteReader({ filePath });
-		const hits = await mirror.search('entries', 'anything');
+		const hits = mirror.search('entries', 'anything');
 		expect(hits).toEqual([]);
 	});
 
@@ -127,7 +127,7 @@ describe('attachSqliteReader', () => {
 		const mirror = attachSqliteReader({ filePath });
 		mirror[Symbol.dispose]();
 		// Subsequent search short-circuits without throwing.
-		const hits = await mirror.search('entries', 'alpha');
+		const hits = mirror.search('entries', 'alpha');
 		expect(hits).toEqual([]);
 	});
 });

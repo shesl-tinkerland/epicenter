@@ -33,7 +33,7 @@ import type {
 /**
  * Options for {@link attachSqliteReader}.
  */
-export type SqliteMirrorOptions = {
+export type AttachSqliteReaderOptions = {
 	/**
 	 * Absolute path to the daemon's mirror SQLite file. Typically
 	 * `sqlitePath(projectDir, ydoc.guid)`.
@@ -46,10 +46,10 @@ export type SqliteMirrorOptions = {
  *
  * Returned by {@link attachSqliteReader}. Disposable via the
  * explicit-resource-management protocol: declare with
- * `using mirror = attachSqliteReader(...)` and the underlying database
+ * `using reader = attachSqliteReader(...)` and the underlying database
  * handle closes on scope exit.
  */
-export type SqliteMirror = {
+export type SqliteReaderAttachment = {
 	/**
 	 * The opened SQLite database handle. Read-only; `query_only` PRAGMA is
 	 * set so accidental writes fail at the driver layer.
@@ -64,7 +64,7 @@ export type SqliteMirror = {
 		tableName: string,
 		query: string,
 		options?: SearchOptions,
-	): Promise<SearchResult[]>;
+	): SearchResult[];
 	/** Close the database handle. Idempotent. */
 	[Symbol.dispose](): void;
 };
@@ -79,16 +79,16 @@ export type SqliteMirror = {
  *
  * @example
  * ```ts
- * using mirror = attachSqliteReader({
+ * using reader = attachSqliteReader({
  *   filePath: sqlitePath(projectDir, fuji.ydoc.guid),
  * });
- * const hits = await mirror.search('entries', 'hello world', { limit: 25 });
- * const drizzleDb = drizzle(mirror.db, { schema });
+ * const hits = reader.search('entries', 'hello world', { limit: 25 });
+ * const drizzleDb = drizzle(reader.db, { schema });
  * ```
  */
 export function attachSqliteReader({
 	filePath,
-}: SqliteMirrorOptions): SqliteMirror {
+}: AttachSqliteReaderOptions): SqliteReaderAttachment {
 	const db = new Database(filePath, { readonly: true });
 	db.run('PRAGMA query_only = ON');
 	// Wait up to 5s on SQLITE_BUSY when a reader opens during a checkpoint
@@ -113,11 +113,11 @@ export function attachSqliteReader({
 		return columns;
 	}
 
-	async function search(
+	function search(
 		tableName: string,
 		query: string,
 		options?: SearchOptions,
-	): Promise<SearchResult[]> {
+	): SearchResult[] {
 		if (isDisposed) return [];
 		const ftsColumns = ftsColumnsFor(tableName);
 		if (ftsColumns.length === 0) return [];
