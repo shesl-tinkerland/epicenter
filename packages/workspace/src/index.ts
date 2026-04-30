@@ -324,8 +324,8 @@ export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export type { Remote } from './client/remote-workspace-types.js';
 export {
 	attachSqliteReader,
-	type AttachSqliteReaderOptions,
-	type SqliteReaderAttachment,
+	type SqliteMirror,
+	type SqliteMirrorOptions,
 } from './client/attach-sqlite-reader.js';
 
 // ════════════════════════════════════════════════════════════════════════════

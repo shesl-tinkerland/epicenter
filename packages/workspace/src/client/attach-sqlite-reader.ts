@@ -33,7 +33,7 @@ import type {
 /**
  * Options for {@link attachSqliteReader}.
  */
-export type AttachSqliteReaderOptions = {
+export type SqliteMirrorOptions = {
 	/**
 	 * Absolute path to the daemon's mirror SQLite file. Typically
 	 * `sqlitePath(projectDir, ydoc.guid)`.
@@ -42,13 +42,14 @@ export type AttachSqliteReaderOptions = {
 };
 
 /**
- * Read-only handle returned by {@link attachSqliteReader}.
+ * Read-only handle on the daemon's materialized SQLite mirror.
  *
- * Disposable via the explicit-resource-management protocol: declare with
+ * Returned by {@link attachSqliteReader}. Disposable via the
+ * explicit-resource-management protocol: declare with
  * `using mirror = attachSqliteReader(...)` and the underlying database
  * handle closes on scope exit.
  */
-export type SqliteReaderAttachment = {
+export type SqliteMirror = {
 	/**
 	 * The opened SQLite database handle. Read-only; `query_only` PRAGMA is
 	 * set so accidental writes fail at the driver layer.
@@ -87,7 +88,7 @@ export type SqliteReaderAttachment = {
  */
 export function attachSqliteReader({
 	filePath,
-}: AttachSqliteReaderOptions): SqliteReaderAttachment {
+}: SqliteMirrorOptions): SqliteMirror {
 	const db = new Database(filePath, { readonly: true });
 	db.run('PRAGMA query_only = ON');
 	// Wait up to 5s on SQLITE_BUSY when a reader opens during a checkpoint
