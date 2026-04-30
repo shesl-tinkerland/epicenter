@@ -34,6 +34,7 @@ import {
 	attachEncryption,
 	attachSqlitePersistence,
 	attachSync,
+	toWsUrl,
 	yjsPath,
 } from '@epicenter/workspace';
 import {
@@ -66,7 +67,7 @@ const unlock = attachSessionUnlock(encryption, {
 });
 
 const sync = attachSync(ydoc, {
-	url: (docId) => `${EPICENTER_API_URL}/workspaces/${docId}`,
+	url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${WORKSPACE_ID}`),
 	// Gate connection on local hydrate + unlock so the handshake only exchanges
 	// the delta, not the whole document.
 	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
@@ -79,14 +80,14 @@ const whenReady = Promise.all([
 	sync.whenConnected,
 ]);
 
-const markdown = attachMarkdownMaterializer(
-	{ tables, kv, whenReady },
-	{ dir: MARKDOWN_DIR },
-)
-	.table('savedTabs', { filename: slugFilename('title') })
-	.table('bookmarks', { filename: slugFilename('title') })
-	.table('devices')
-	.kv();
+const markdown = attachMarkdownMaterializer(ydoc, {
+	dir: MARKDOWN_DIR,
+	waitFor: whenReady,
+})
+	.table(tables.savedTabs, { filename: slugFilename('title') })
+	.table(tables.bookmarks, { filename: slugFilename('title') })
+	.table(tables.devices)
+	.kv(kv);
 
 export const tabManager = {
 	whenReady,
