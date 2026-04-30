@@ -36,7 +36,6 @@ afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates entries the daemon wrote', async () => {
@@ -47,7 +46,7 @@ describe('daemon -> script handoff via persistence file', () => {
 			using daemon = openFujiDaemon({
 				getToken: () => 'fake-token',
 				absDir: workdir,
-				webSocketImpl: wsImpl,
+				webSocketImpl: NoopWebSocket,
 			});
 			await daemon.persistence.whenLoaded;
 
@@ -81,7 +80,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		using script = await openFujiScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
-			webSocketImpl: wsImpl,
+			webSocketImpl: NoopWebSocket,
 		});
 		const titles = script.tables.entries
 			.getAllValid()

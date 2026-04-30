@@ -32,7 +32,6 @@ afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates files the daemon wrote', async () => {
@@ -43,7 +42,7 @@ describe('daemon -> script handoff via persistence file', () => {
 			using daemon = openOpensidianDaemon({
 				getToken: () => 'fake-token',
 				absDir: workdir,
-				webSocketImpl: wsImpl,
+				webSocketImpl: NoopWebSocket,
 			});
 			await daemon.persistence.whenLoaded;
 
@@ -74,7 +73,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		using script = await openOpensidianScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
-			webSocketImpl: wsImpl,
+			webSocketImpl: NoopWebSocket,
 		});
 		const names = script.tables.files
 			.getAllValid()

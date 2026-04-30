@@ -27,7 +27,6 @@ afterEach(() => {
 	rmSync(workdir, { recursive: true, force: true });
 });
 
-const wsImpl = NoopWebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates conversations the daemon wrote', async () => {
@@ -38,7 +37,7 @@ describe('daemon -> script handoff via persistence file', () => {
 			using daemon = openZhongwenDaemon({
 				getToken: () => 'fake-token',
 				absDir: workdir,
-				webSocketImpl: wsImpl,
+				webSocketImpl: NoopWebSocket,
 			});
 			await daemon.persistence.whenLoaded;
 
@@ -66,7 +65,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		using script = await openZhongwenScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
-			webSocketImpl: wsImpl,
+			webSocketImpl: NoopWebSocket,
 		});
 		const titles = script.tables.conversations
 			.getAllValid()
