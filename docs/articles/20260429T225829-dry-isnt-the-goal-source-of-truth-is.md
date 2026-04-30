@@ -22,7 +22,7 @@ PRAGMA busy_timeout = 5000;
 
 Plus the same verification dance: `journal_mode = WAL` doesn't throw on silent fallback, so you have to read the result and warn if it isn't `'wal'`. Plus the same fallback handling for `:memory:`.
 
-So I wrote `applyWriterPragmas(db, log)` in one file and copy-pasted it into the other, swapping `SqliteMaterializerError.PragmaSetupFailed` for `AttachSqlitePersistenceError.PragmaSetupFailed`. About eight lines of difference between the two copies, mostly the error namespace.
+So I wrote `applyWriterPragmas(db, log)` in one file and copy-pasted it into the other, swapping `SqliteMaterializerError.PragmaSetupFailed` for `AttachSqlitePersistenceError.PragmaSetupFailed`. About eight lines of difference between the two copies, mostly the error namespace. (That function was later absorbed into `openWriterSqlite`, which became the actual single source of truth for "open a writer-side SQLite file" — mkdir + new Database + WAL pragmas in one call. The extraction was still the right move; the concept just found a more natural home.)
 
 Should this be extracted?
 
@@ -88,7 +88,7 @@ When the proxy and the truth disagree (as they do for things like `quoteIdentifi
 
 Stop reaching for "extract this, it's duplicated." Start reaching for "name the concept these copies are implementing, and decide if it's one concept or two."
 
-If you can name the concept (`applyWriterPragmas`: "our standard pragma setup for writer-side SQLite files in this codebase"), extract. The name is the source of truth, and the extracted function is its implementation.
+If you can name the concept (`openWriterSqlite`: "open a writer-side SQLite file with our standard WAL pragma setup"), extract. The name is the source of truth, and the extracted function is its implementation.
 
 If you can't name the concept without saying "the same code as that other place" (the only thing the two `quoteIdentifier` copies share), don't extract. There's no concept, just a coincidence.
 

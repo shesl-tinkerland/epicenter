@@ -170,7 +170,7 @@ These are per-USER state, not per-replica.
 // vault/scripts/tag-untagged.ts
 import { openFuji } from '@epicenter/fuji/script';
 
-await using fuji = await openFuji({ getToken });
+using fuji = openFuji({ getToken });
 
 const untagged = fuji.tables.entries
   .filter(e => !e.deletedAt && e.tags.length === 0);

@@ -76,14 +76,10 @@ export function openFuji({ getToken, absDir }) {
   const fuji = openFujiCore({ clientID: hashClientId(Bun.main) });
   const filePath = yjsPath(absDir ?? findEpicenterDir(), fuji.ydoc.guid);
   const persistence = attachSqliteReadonlyPersistence(fuji.ydoc, { filePath });
-
-  // Swallow MissingFile (no daemon has written here): fall through to cold cloud sync.
-  const whenReady = persistence.whenLoaded.catch((err) => {
-    if (err?.name !== 'MissingFile') throw err;
-  });
-
-  attachSync(fuji, { url: '...', waitFor: whenReady, getToken });
-  return { ...fuji, persistence, whenReady };
+  // If the daemon hasn't written yet, fileExisted is false and no rows are replayed.
+  // Sync starts immediately; the script cold-hydrates from cloud.
+  attachSync(fuji, { url: '...', getToken });
+  return { ...fuji, persistence };
 }
 ```
 
@@ -111,16 +107,14 @@ export function openFuji({ getToken, device, absDir }) {
   const persistence = attachSqlitePersistence(fuji.ydoc, {
     filePath: yjsPath(absDir, fuji.ydoc.guid),
   });
-  attachSync(fuji, { url, waitFor: persistence.whenLoaded, device, getToken });
+  attachSync(fuji, { url, device, getToken });
   attachSqliteMaterializer(fuji.ydoc, {
     db: new Database(sqlitePath(absDir, fuji.ydoc.guid)),
-    waitFor: persistence.whenLoaded,
   });
   attachMarkdownMaterializer(fuji.ydoc, {
     dir: markdownPath(absDir, fuji.ydoc.guid),
-    waitFor: persistence.whenLoaded,
   });
-  return { ...fuji, persistence, whenReady: persistence.whenLoaded };
+  return { ...fuji, persistence };
 }
 ```
 
@@ -130,8 +124,7 @@ The script then looks like any other workspace consumer:
 
 ```ts
 // vault/scripts/tag-untagged.ts
-const fuji = openFuji({ getToken: () => loadToken() });
-await fuji.whenReady;
+using fuji = openFuji({ getToken: () => loadToken() });
 
 const untagged = fuji.tables.entries
   .filter(e => !e.deletedAt && e.tags.length === 0);
