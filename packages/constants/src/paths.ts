@@ -7,30 +7,39 @@
  * for) and must never drift between consumers.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 /**
- * Per-project directory name. Lives at `<projectDir>/.epicenter/` and
- * stores the workspace's per-app data layout: `yjs/`, `sqlite/`, `md/`.
+ * The hidden directory name used in both the user home and the project root.
+ *
+ * Private on purpose: callers should resolve a full path via
+ * {@link epicenterHome} or {@link epicenterProjectDir}, not concatenate the
+ * literal themselves. Same name in both locations because it's named after
+ * the app; what differs is *where* it lives, which the helpers express.
+ */
+const EPICENTER_DIR_NAME = '.epicenter';
+
+/**
+ * Per-user directory for runtime state: daemon sockets, metadata sidecars,
+ * logs, and CLI auth sessions.
+ *
+ * Resolves `$EPICENTER_HOME` first, then falls back to `~/.epicenter/`.
+ */
+export function epicenterHome(): string {
+	return process.env.EPICENTER_HOME ?? join(homedir(), EPICENTER_DIR_NAME);
+}
+
+/**
+ * Per-project directory under `<projectDir>/.epicenter/`. Stores the
+ * workspace's per-app data layout: `yjs/`, `sqlite/`, `md/`.
  *
  * Discovered by `findEpicenterDir`'s upward walk and used by `yjsPath`,
  * `sqlitePath`, `markdownPath` to build per-workspace file paths.
- *
- * Distinct from {@link EPICENTER_USER_DIR_NAME} on purpose: same string
- * value today, but different concepts. Keep them split so a future rename
- * of one doesn't accidentally drag the other along.
  */
-export const EPICENTER_PROJECT_DIR_NAME = '.epicenter';
-
-/**
- * Per-user directory name. Lives at `~/.epicenter/` (or `$EPICENTER_HOME`)
- * and stores user-scoped runtime state: daemon sockets, metadata sidecars,
- * logs, and CLI auth sessions.
- *
- * Distinct from {@link EPICENTER_PROJECT_DIR_NAME} on purpose: same string
- * value today, different concept. The user-home version follows the
- * `~/.<app>/` convention for CLI tools; the project version is a local
- * data folder that lives alongside source.
- */
-export const EPICENTER_USER_DIR_NAME = '.epicenter';
+export function epicenterProjectDir(projectDir: string): string {
+	return join(projectDir, EPICENTER_DIR_NAME);
+}
 
 /**
  * Workspace config filename. Both `findEpicenterDir` (project-root walk)

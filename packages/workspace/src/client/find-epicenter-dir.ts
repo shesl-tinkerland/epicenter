@@ -39,7 +39,7 @@
 
 import {
 	CONFIG_FILENAME,
-	EPICENTER_PROJECT_DIR_NAME,
+	epicenterProjectDir,
 } from '@epicenter/constants/paths';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -49,12 +49,12 @@ export function findEpicenterDir(start: string = process.cwd()): ProjectDir {
 	let current = resolve(start);
 	while (true) {
 		const hasConfig = existsSync(join(current, CONFIG_FILENAME));
-		const hasDir = existsSync(join(current, EPICENTER_PROJECT_DIR_NAME));
+		const hasDir = existsSync(epicenterProjectDir(current));
 		if (hasConfig || hasDir) return current as ProjectDir;
 		const parent = dirname(current);
 		if (parent === current) {
 			throw new Error(
-				`findEpicenterDir: no ${CONFIG_FILENAME} or ${EPICENTER_PROJECT_DIR_NAME}/ directory found ` +
+				`findEpicenterDir: no ${CONFIG_FILENAME} or .epicenter/ directory found ` +
 					`walking up from ${start}`,
 			);
 		}
