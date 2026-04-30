@@ -292,6 +292,32 @@ export type SyncAttachment = {
 export type WaitForBarrier = Promise<unknown> | { whenLoaded: Promise<unknown> };
 
 /**
+ * Minimum WebSocket-like instance the supervisor reads/writes. Subset of the
+ * WHATWG `WebSocket` interface; both `globalThis.WebSocket` and the
+ * `NoopWebSocket` test stub satisfy it without casts.
+ */
+export type WebSocketLike = {
+	readyState: number;
+	binaryType: 'arraybuffer' | 'blob';
+	onopen: ((ev?: unknown) => void) | null;
+	onclose: ((ev: { code: number; reason: string }) => void) | null;
+	onerror: ((ev?: unknown) => void) | null;
+	onmessage: ((ev: { data: ArrayBuffer | string }) => void) | null;
+	send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void;
+	close(code?: number, reason?: string): void;
+};
+
+/**
+ * Constructor matching `new WebSocket(url, protocols?)`. Pass to
+ * `attachSync` via `webSocketImpl`. Tests pass `NoopWebSocket`; production
+ * code omits the field and inherits `globalThis.WebSocket`.
+ */
+export type WebSocketImpl = new (
+	url: string,
+	protocols?: string | string[],
+) => WebSocketLike;
+
+/**
  * First arg of `attachSync`. Either a bare `Y.Doc` (content docs) or a
  * doc bundle (workspace docs); when a bundle is passed and no `actions`
  * is set in config, sync uses `doc.actions` for inbound RPC dispatch.
@@ -375,11 +401,13 @@ export type SyncAttachmentConfig = {
 	 * WebSocket constructor. Defaults to `globalThis.WebSocket` (the runtime's
 	 * native or polyfilled implementation). Tests pass a stub here to avoid
 	 * dialing real servers without monkey-patching the global; production code
-	 * omits it. Must be structurally compatible with the WHATWG WebSocket
-	 * interface (`new WS(url, protocols)`, `readyState`, `send`, `close`,
-	 * `onopen`/`onclose`/`onerror`/`onmessage`).
+	 * omits it. The type is the minimum interface the supervisor uses, not
+	 * the full WHATWG `WebSocket` — that lets `NoopWebSocket` (in
+	 * `noop-ws.ts`) satisfy it without an `as unknown as typeof WebSocket`
+	 * cast. The native `globalThis.WebSocket` constructor is structurally
+	 * assignable.
 	 */
-	webSocketImpl?: typeof WebSocket;
+	webSocketImpl?: WebSocketImpl;
 	/**
 	 * Logger for background supervisor failures (waitFor rejections, socket
 	 * close timeouts). Defaults to a console-backed logger with source
