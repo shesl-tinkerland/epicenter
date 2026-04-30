@@ -345,9 +345,9 @@ CRDT correctness depends on never reusing a `(clientID, clock)` pair for two dif
 
 ### Why ephemeral peers create a problem
 
-A vault script invoked once per `bun run script.ts` constructs a fresh `new Y.Doc()`, which gets a fresh random clientID. If the script writes anything, that clientID lands permanently in the StructStore. 10k invocations per week => 10k clientID entries per week in the daemon's state vector. Every new peer's cold-start sync ships the full state vector.
+A vault script invoked once per `bun run script.ts` constructs a fresh `new Y.Doc()`, which gets a fresh random clientID. If the script writes anything, that clientID lands permanently in the StructStore. 10k invocations per week => 10k clientID entries per week in the workspace's state vector, replicated to every peer (daemon, browser tab, cloud snapshot). Every new peer's cold-start sync ships the full state vector.
 
-Browsers and the daemon don't have this problem because they're long-running processes: one Y.Doc, one clientID, for the life of the tab/process.
+Browsers and the daemon don't have this problem because they're long-running processes: one Y.Doc, one clientID, for the life of the tab/process. Note that this fix is peer-side: `hashClientId` works whether or not the script talks to a daemon; a daemon-less script that opens its own cloud WS gets the same benefit by passing the hashed clientID into its `new Y.Doc({ clientID })` call.
 
 ### The fix: derive `clientID` from the script's identity
 
