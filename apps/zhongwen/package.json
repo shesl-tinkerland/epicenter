@@ -5,7 +5,11 @@
 	"version": "0.0.1",
 	"type": "module",
 	"exports": {
-		"./workspace": "./src/lib/workspace/index.ts"
+		"./workspace": "./src/lib/workspace/index.ts",
+		"./openZhongwen": "./src/lib/zhongwen/index.ts",
+		"./browser": "./src/lib/zhongwen/browser.ts",
+		"./daemon": "./src/lib/zhongwen/daemon.ts",
+		"./script": "./src/lib/zhongwen/script.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -13,6 +17,7 @@
 		"dev:remote": "bun --bun vite dev --mode production",
 		"build": "bun --bun vite build",
 		"preview": "bun --bun vite preview",
+		"test": "bun test ./src/lib/zhongwen",
 		"typecheck": "svelte-check",
 		"deploy": "bun run build && wrangler deploy"
 	},
