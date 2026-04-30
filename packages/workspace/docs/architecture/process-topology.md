@@ -2,15 +2,14 @@
 
 > **Companion docs:** [Network Topology](./network-topology.md) describes how Y.Docs sync between machines (the WAN view). This doc describes how processes on a single machine reach a workspace (the LAN/IPC view). See also [Action Dispatch](./action-dispatch.md) for cross-device action invocation, which rides on top of cloud sync rather than the local socket.
 
-A workspace lives in any process that holds a live `Y.Doc`. Other processes on the same machine need access to that workspace's CRDT state, the actions only one process can run, and the materialized indexes the daemon already maintains. Epicenter solves all three with **three transports** that compose:
+A workspace lives in any process that holds a live `Y.Doc`. Other processes on the same machine need access to that workspace's CRDT state, the actions only one process can run, and the materialized indexes the daemon already maintains. Epicenter solves these with **two transports** that compose:
 
 | Transport | Who uses it | Crosses devices? | Wire |
 |---|---|---|---|
-| **Cloud Yjs sync (WebSocket)** | Y.Doc owners converging across machines | Yes | binary CRDT updates over WS |
-| **Local Yjs sync over unix socket** | Script peer to daemon CRDT (`MESSAGE_TYPE.SYNC` + `MESSAGE_TYPE.AWARENESS` only) | No (same machine) | length-prefixed binary frames on `daemon.sock` |
-| **Shared filesystem (SQLite WAL + markdown tree)** | Scripts reading materialized state the daemon already maintains | No (same machine) | SQLite file in WAL mode plus a flat `.md` tree |
+| **Cloud Yjs sync (WebSocket)** | Every Y.Doc owner (browser tab, daemon, script) | Yes | binary CRDT updates over WS |
+| **Shared filesystem (SQLite WAL + markdown tree)** | Scripts reading the daemon's persistence and materializer files | No (same machine) | SQLite files in WAL mode plus a flat `.md` tree |
 
-The first transport is documented in [Network Topology](./network-topology.md) and is unchanged. This doc focuses on **the second and third** and how they compose with the first to give every process the same workspace handle, with the same call shape on the same data, regardless of where the bytes actually live.
+Cloud sync is the only sync wire. Scripts open their own short-lived cloud WebSocket and read the daemon's persistence file `{ readonly: true }` for warm hydrate. There is no local IPC sync transport. The first transport is documented in [Network Topology](./network-topology.md). This doc focuses on **the filesystem path** and how it composes with cloud sync to give every process the same workspace handle, with the same call shape on the same data.
 
 ## The Three Process Roles
 
@@ -24,19 +23,19 @@ Every Epicenter process plays one of three roles relative to a given workspace. 
 │  (e.g. fuji) │  attachSync (cloud WebSocket)                                │
 │              │  attachAwareness                                             │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│  Daemon      │  attachSqlitePersistence (durable on-disk CRDT log)          │
+│  Daemon      │  attachSqlitePersistence (sole writer; durable CRDT log)     │
 │  (epicenter  │  attachSync (cloud WebSocket)                                │
 │   serve)     │  attachSqliteMaterializer (writes mirror.db, WAL mode)       │
 │              │  attachMarkdownMaterializer (writes md/ tree)                │
-│              │  attachIpcSyncServer (serves local peers on daemon.sock)           │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│  Script peer │  attachIpcSyncClient (peers the daemon over daemon.sock)           │
-│  (CLI / bun) │  attachSqliteMirror (read-only; opens daemon's mirror.db)    │
+│  Script peer │  attachSqliteReadonlyPersistence (reads daemon's persistence)│
+│  (CLI / bun) │  attachSync (own cloud WebSocket)                            │
+│              │  attachSqliteMirror (read-only; opens daemon's mirror.db)    │
 │              │  attachMarkdownMirror (read-only; reads daemon's md/ tree)   │
 └──────────────┴──────────────────────────────────────────────────────────────┘
 ```
 
-The single most important thing to internalize: **the script is a sibling of the browser tab and the daemon, not a thin client.** All three hold real Y.Docs. All three call `tables.X.set(...)` as a direct, in-process Y.Doc mutation. The script's writes happen to be observed by `attachIpcSyncClient` and shipped to the daemon as Yjs `update` messages, the same way the browser tab's writes are observed by `attachSync` and shipped to the cloud sync server. Both are sync clients of something; only the something differs.
+The single most important thing to internalize: **the script is a sibling of the browser tab and the daemon, not a thin client.** All three hold real Y.Docs. All three call `tables.X.set(...)` as a direct, in-process Y.Doc mutation. All three call `attachSync` to converge through the cloud sync server. The script is "special" only in that it is short-lived and reads the daemon's persistence file once at startup to skip a cold-sync.
 
 The daemon also hosts a **synthetic `system` workspace** alongside user workspaces. It is a real Y.Doc with a `workspaces` Y.Map and an Awareness for connected peers; the CLI is a peer of `system`. There is no separate "control protocol"; daemon-wide observability rides the same sync session as everything else.
 
@@ -48,59 +47,50 @@ The daemon also hosts a **synthetic `system` workspace** alongside user workspac
                        │  apps/api  (Cloudflare/Bun)     │
                        │  - Yjs WebSocket relay          │
                        │  - auth, AI proxy               │
-                       └───────▲─────────────────▲───────┘
-                               │ WebSocket       │ WebSocket
-                               │ (attachSync)    │ (attachSync)
-                               │                 │
-            ┌──────────────────┴──────┐   ┌──────┴───────────────────────┐
-            │  Browser tab (fuji UI)  │   │  epicenter daemon            │
-            │  - own Y.Doc            │   │  started by `epicenter serve`│
-            │  - attachIndexedDb      │   │  - own Y.Doc                 │
-            │  - attachSync           │   │  - attachSqlitePersistence   │
-            │  - attachAwareness      │   │  - attachSync                │
-            │                         │   │  - attachSqliteMaterializer  │
-            │  fuji.tables.X.set()    │   │  - attachMarkdownMaterializer│
-            │   ↓                     │   │  - attachIpcSyncServer             │
-            │  direct Y.Doc mutate    │   │                              │
-            └─────────────────────────┘   │  fuji.tables.X.set()         │
-                                          │   ↓                          │
-                                          │  direct Y.Doc mutate         │
-                                          └─┬────────────┬───────────────┘
-                                            │            │
-                                            │ unix       │ files: mirror.db (WAL),
-                                            │ socket     │        md/ tree
-                                            │ daemon     │
-                                            │ .sock      │
-                                            ▼            ▼
-                                     ┌─────────────────────────────────┐
-                                     │  Script peer (bun script / CLI) │
-                                     │  - own Y.Doc                    │
-                                     │  - attachIpcSyncClient (CRDT + RPC)   │
-                                     │  - attachSqliteMirror (RO file) │
-                                     │  - attachMarkdownMirror (RO)    │
-                                     └─────────────────────────────────┘
+                       └──▲────────────▲────────────▲────┘
+                          │ WebSocket  │ WebSocket  │ WebSocket
+                          │ attachSync │ attachSync │ attachSync
+                          │            │            │
+       ┌──────────────────┴────┐  ┌────┴────────────┴───┐  ┌────────────────┐
+       │ Browser tab (fuji UI) │  │ epicenter daemon    │  │ Script peer    │
+       │ - own Y.Doc           │  │ epicenter serve     │  │ bun script/CLI │
+       │ - attachIndexedDb     │  │ - own Y.Doc         │  │ - own Y.Doc    │
+       │ - attachSync          │  │ - attachSqlite-     │  │ - attachSqlite-│
+       │ - attachAwareness     │  │     Persistence     │  │     Readonly-  │
+       │                       │  │ - attachSync        │  │     Persistence│
+       │ fuji.tables.X.set()   │  │ - attachSqlite-     │  │ - attachSync   │
+       │  ↓                    │  │     Materializer    │  │                │
+       │ direct Y.Doc mutate   │  │ - attachMarkdown-   │  │ fuji.tables.   │
+       └───────────────────────┘  │     Materializer    │  │   X.set()      │
+                                  │                     │  │  ↓             │
+                                  │ writes:             │  │ direct Y.Doc   │
+                                  │  persistence/<id>.db│  │   mutate       │
+                                  │  materializer/<id>  │  │                │
+                                  │  md/                │  │ reads:         │
+                                  └─────────┬───────────┘  │  persistence/  │
+                                            │              │  materializer/ │
+                                            │ filesystem   │  md/           │
+                                            └──────────────►                │
+                                                           └────────────────┘
 
-                       Three Y.Doc owners. Browser tab and daemon
-                       converge through the cloud sync server. The
-                       script converges with the daemon over the unix
-                       socket, then transitively with the rest through
-                       the daemon. Materialized state (mirror.db, md/)
-                       crosses the script boundary by filesystem, not
-                       by RPC.
+           Three Y.Doc owners. All three converge through the cloud sync
+           server. The daemon owns the persistence and materializer files;
+           the script reads them. There is no local IPC; cloud sync is the
+           only sync wire.
 ```
 
 ## Two Namespaces on a Script's Workspace Handle
 
-The script's `fuji` handle exposes one universal namespace plus two script-specific ones. Each namespace is backed by a different transport, but the call shape is uniform: import `openFujiPeer`, get a handle, call methods.
+The script's `fuji` handle exposes one universal namespace plus two script-specific ones. Each namespace is backed by a different transport, but the call shape is uniform: import `openFuji` from `@epicenter/fuji/script`, get a handle, call methods.
 
 ```
 fuji.tables.X        Pure local Y.Doc surface. CRDT writes / reads /
                      observe / batch / closure filters. Identical to the
-                     browser tab's `fuji.tables.X`. Mutations flow to
-                     the daemon as Yjs update frames over the unix
-                     socket; the daemon redistributes them to the cloud
-                     and to other local peers. CRDT is the source of
-                     truth.
+                     browser tab's `fuji.tables.X`. Mutations flow over
+                     the script's own cloud WebSocket; the daemon
+                     receives them via its own attachSync, applies to
+                     its Y.Doc, and writes to its persistence and
+                     materializer files. CRDT is the source of truth.
 
 fuji.sqlite.X        Shared SQLite read. The daemon's
                      attachSqliteMaterializer writes mirror.db with
@@ -122,7 +112,7 @@ fuji.markdown.X      Shared markdown tree. The daemon's
                      files.
 ```
 
-The crucial insight: **materialized state crosses by filesystem, not by RPC.** The daemon already maintains a queryable mirror and a readable markdown tree. Sending those across a socket to a script would be redundant work; the script can open the daemon's files directly because SQLite WAL mode and the OS filesystem already provide the concurrency primitives we need. Writes still flow through Y.Doc (CRDT is the source of truth), but reads of derived state are direct.
+The crucial insight: **everything crosses by filesystem (state read) or cloud (state write).** The daemon owns the persistence file and the materializer projections; scripts read both directly because SQLite WAL mode and the OS filesystem already provide the concurrency primitives we need. Writes flow through `attachSync` to the cloud sync server, which fans out to every connected peer (the daemon included). CRDT is the single source of truth; the daemon is the single writer of derived files.
 
 ## Same Call Shape, Different Execution
 
@@ -149,30 +139,17 @@ The browser owns its `Y.Doc` and converges with everyone else through the cloud 
 The daemon is constructed by *the same builder code* you would call in-process. Its `epicenter.config.ts` runs in the daemon's process and exports a workspace bundle:
 
 ```ts
-// playground/opensidian-e2e/epicenter.config.ts (excerpt)
-import {
-  attachEncryption,
-  attachSqlitePersistence,
-  attachSync,
-  attachSqliteMaterializer,
-  attachMarkdownMaterializer,
-  attachIpcSyncServer,
-  toWsUrl,
-} from '@epicenter/workspace';
+// vault/fuji-example/epicenter.config.ts (excerpt)
+import { openFuji } from '@epicenter/fuji/daemon';
 
-const ydoc = new Y.Doc({ guid: WORKSPACE_ID });
-const tables = attachEncryption(ydoc).attachTables(ydoc, opensidianTables);
-attachSqlitePersistence(ydoc, { filePath: persistencePath(absDir) });   // CRDT log
-attachSync(ydoc, { url: toWsUrl(`${SERVER_URL}/...`), ... });
-attachSqliteMaterializer(ydoc, { db: openMirror(absDir) }) // mirror.db (WAL)
-  .table(tables.entries, { fts: ['title', 'body'] });
-attachMarkdownMaterializer(ydoc, { rootDir: mdDir(absDir) });
-attachIpcSyncServer({ socket: socketPathFor(absDir), workspaces: [...] });
-
-export const opensidian = { whenReady, actions, sync, tables, ydoc, ... };
+export const fuji = openFuji({
+  authToken: () => sessionStore.token,
+  absDir: import.meta.dir,
+});
+export const workspaces = [fuji];
 ```
 
-`epicenter serve` loads this file, awaits `whenReady`, and parks. From the daemon's own perspective, it is a Y.Doc-owning process that calls the same `tables.X` methods as the browser. From the outside, it serves three things on the filesystem: the unix socket (Yjs sync only: SYNC + AWARENESS frames; no RPC mailbox over IPC), the SQLite mirror file in WAL mode (readable by any process), and the markdown tree (readable by any process).
+`@epicenter/fuji/daemon` internally composes `attachSqlitePersistence` (sole writer; WAL mode), `attachSync` (cloud WebSocket), `attachSqliteMaterializer` (writes mirror.db, WAL), and `attachMarkdownMaterializer` (writes md/ tree). `epicenter serve` loads the config, awaits `whenReady`, and parks. From the outside, it serves three things on the filesystem: the persistence file (readable by scripts), the SQLite materializer file in WAL mode (readable by any process), and the markdown tree (readable by any process). An optional `/run` HTTP RPC server on `daemon.sock` is mounted when enabled (typed action dispatch from CLI, scripts, or curl).
 
 The daemon has no `fuji.sqlite.*` or `fuji.markdown.*` namespace because it doesn't need to read its own materialized state through that path: it owns the `Y.Doc` directly, so it queries via `tables.X` and projects through the materializer. The mirror is for *readers*.
 
@@ -180,9 +157,10 @@ The daemon has no `fuji.sqlite.*` or `fuji.markdown.*` namespace because it does
 
 ```ts
 // any bun script in the workspace's folder
-import { openFujiPeer } from '@apps/fuji';
+import { openFuji } from '@epicenter/fuji/script';
 
-await using fuji = await openFujiPeer();
+await using fuji = openFuji({ authToken });
+await fuji.whenReady;
 
 // Same call shape as the browser tab:
 fuji.tables.entries.set({ id, url });
@@ -209,9 +187,9 @@ const matches = await fuji.sqlite.search('entries', 'rust async');
 const files = await fuji.markdown.list({ prefix: 'inbox/' });
 ```
 
-The script's `fuji.tables.entries.set(...)` is **a direct mutation of the script's local Y.Doc**, identical to the browser tab. `attachIpcSyncClient` observes that mutation and ships it to the daemon as a Yjs `update` frame. The daemon applies it (its `Y.Doc` advances), the daemon's `attachSync` ships it to the cloud, the daemon's `attachSqliteMaterializer` projects it into `mirror.db`, the daemon's `attachMarkdownMaterializer` writes the new markdown file. Other connected peers see the update over their own `attachIpcSyncClient` sessions.
+The script's `fuji.tables.entries.set(...)` is **a direct mutation of the script's local Y.Doc**, identical to the browser tab. The script's own `attachSync` observes that mutation and ships it to the cloud sync server. The daemon's `attachSync` receives the update, applies it (its `Y.Doc` advances), the daemon's `attachSqlitePersistence` writes the update to disk, the daemon's `attachSqliteMaterializer` projects it into `mirror.db`, and the daemon's `attachMarkdownMaterializer` writes the new markdown file. Other connected peers (browser tabs, other scripts) see the update through their own cloud sync sessions.
 
-Calls that have no equivalent on the browser tab (`fuji.sqlite.*`, `fuji.markdown.*`) reflect the asymmetry of the actual deployment: the daemon is the local writer of mirrors; the script is the local reader and the local closure-running scratchpad. We do not pretend these surfaces are universal. They exist on the handle that needs them. Server-only side effects (Stripe calls, kicking peers) flow through Y.Map request entries the daemon observes, or run as daemon-internal CLI commands; there is no `fuji.daemon.X` namespace and no RPC mailbox over the IPC socket.
+Calls that have no equivalent on the browser tab (`fuji.sqlite.*`, `fuji.markdown.*`) reflect the asymmetry of the actual deployment: the daemon is the local writer of materializer outputs; the script is a local reader and a closure-running scratchpad. We do not pretend these surfaces are universal. They exist on the handle that needs them. Server-only side effects (Stripe calls, kicking peers) flow through Y.Map request entries the daemon observes, or run as typed actions over the daemon's optional `/run` HTTP RPC.
 
 The CLI is the same shape from a shell:
 
@@ -221,7 +199,7 @@ epicenter run savedTabs.create '{"url": "..."}'         # role C, fire-and-forge
 epicenter run tables.entries.getAllValid                # role C, read-back
 ```
 
-`epicenter run` opens an ephemeral peer per invocation (`attachIpcSyncClient` against the local daemon), invokes the action, and exits. The CLI is just a script-shaped peer with a shell-friendly argv parser. `epicenter peers` and `epicenter list` open a peer of the synthetic `system` workspace and read its Awareness / `workspaces` Y.Map.
+`epicenter run` dispatches a typed action against the daemon's `/run` HTTP RPC over `daemon.sock`. The CLI is a thin RPC client; it does not need to construct a Y.Doc just to fire an action. For commands that read `Y.Doc` state (`epicenter list`, `epicenter peers`), the CLI either uses `/run` queries the daemon answers from its in-memory state, or opens a script-shaped peer (`attachSync` + readonly persistence) when the daemon is not running.
 
 ## Materialized State Crosses by Filesystem, Not by RPC
 
@@ -265,22 +243,21 @@ What this gets you that an RPC mirror would not:
 
 What this **does not change**: writes still flow through `Y.Doc`. The CRDT is the single source of truth. The mirror is exactly that: a one-way projection the daemon maintains. A script that wants to write does it via `fuji.tables.X.set(...)`, not by `INSERT INTO entries ...`. (In fact, the mirror file is opened `readonly: true` for scripts, which means trying to write through it errors with a SQLite read-only failure rather than diverging from the CRDT silently.)
 
-## Why Three Transports
+## Why the Daemon Exists
 
-A reasonable instinct: "Why does the daemon exist? Couldn't a script just attach its own Y.Doc, its own SQLite, its own cloud sync, like the browser tab does?"
+A reasonable instinct: "Why does the daemon exist? Couldn't a script just attach its own Y.Doc and its own cloud sync, like the browser tab does?"
 
-It could, *for some workloads*. The daemon is load-bearing only when these failure modes apply:
+It can, and in fact it does. The script-side `openFuji` factory composes exactly that: `attachSync` + `attachSqliteReadonlyPersistence`. The daemon is load-bearing only for two roles:
 
-1. **SQLite single-writer when scripts also write the materializer.** Two processes calling `attachSqliteMaterializer` on the same file race on WAL checkpoints; the StructStore corrupts. y-sqlite serializes the StructStore as atomic blobs which makes this strictly worse. The whole "multi-process SQLite" answer in the ecosystem is a serializing process: libsql ships `sqld`; we ship the daemon. They are the same shape.
-2. **Cloud WebSocket fan-out for concurrent or long-lived peers.** Ten concurrent scripts mean ten WebSocket connections to the sync server. Cloudflare Durable Objects bill per connection (and even at near-zero per-connection cost, each open WS pins the DO to a colo and consumes its memory budget). Long-lived `peer.ts` watchers compound this. Sequential one-shot scripts do not: at any moment only one WS is open. The y-websocket / hocuspocus / partykit ecosystem is hub-and-spoke for this reason.
-3. **Encryption-key boundary.** The daemon holds the workspace's encryption keys. Forking that key material into every shell script is worse for security than keeping it in one long-lived process and granting filesystem-permissioned IPC.
+1. **Single-writer for the persistence file.** `attachSqlitePersistence` is append-only. Two processes calling it on the same file would race on WAL checkpoints and on the compaction debounce. The daemon claims sole-writer status; scripts open the file `{ readonly: true }`. SQLite's WAL mode lets N readers proceed concurrently with the writer, no `SQLITE_BUSY`, no coordination. Same shape libsql uses for multi-process SQLite (`sqld`).
+2. **Materializer side-effects.** `mirror.db` and `md/` are projections of the Y.Doc, written by the daemon as updates flow in. Scripts read these for fast SQL queries (Drizzle, FTS5) and direct file reads. Without a daemon, scripts wanting these projections would each have to maintain their own materializer, which defeats the warm-page-cache benefit.
 
 The two reasons that *sound* like daemon arguments but aren't:
 
-- **Cold-start hydration is not a daemon win.** A cold script that needs the full Y.Doc pays `Y.applyUpdate` on the whole state regardless of whether bytes come from local SQLite or from the daemon over a unix socket; the apply dominates and both paths pay it. The daemon does help long-lived peers and any peer that already has its own persistence (small state-vector diff over IPC), but a fresh script with no persistence sees no cold-start speedup from the daemon. Where the *mirror* helps cold scripts is on the *read path*: reading the mirror SQLite file skips Y.Doc construction entirely. That is a mirror property, not a daemon property; a daemon-less worker that maintains the same mirror would give scripts the same benefit.
+- **Cold-start hydration is not a daemon-IPC win.** A cold script paying `Y.applyUpdate` of the full state pays the same cost whether bytes come from local SQLite or from a daemon over IPC; the apply dominates either way. The persistence file gives scripts warm hydrate; cloud sync gives them deltas. There is no IPC sync wire because there is no benefit from one.
 - **clientID accumulation is fixed peer-side, not by the daemon.** Random `clientID` per `new Y.Doc()` accumulates one StructStore entry per process invocation forever. The fix is `hashClientId(Bun.main)` (`packages/workspace/src/shared/client-id.ts`): two invocations of the same script reuse the same clientID. This works whether or not there's a daemon.
 
-So the daemon exists to **serialize multi-process writes to the SQLite materializer**, **fan out one cloud WebSocket to many local peers**, and **own the encryption key material**. Scripts that only *read* state could in principle skip the daemon entirely (open the mirror SQLite directly, never construct a Y.Doc). Scripts that *write* must either (a) go through the daemon over the IPC sync transport, or (b) use the daemon-less model with their own short-lived cloud WS and accept that the materializer must be maintained by some long-lived process. Three transports, each carrying what it carries best, composed into one workspace handle with one call shape.
+So the daemon exists to **be the sole writer of the persistence and materializer files**. Cloud sync is the only sync wire. Scripts join the cloud session directly and read the daemon's files for warm hydrate and SQL/markdown queries. Two transports (cloud WebSocket plus shared filesystem), each carrying what it carries best, composed into one workspace handle with one call shape.
 
 ## Cross-References
 
@@ -290,8 +267,9 @@ So the daemon exists to **serialize multi-process writes to the SQLite materiali
 - [Device Identity](./device-identity.md): how peers and the daemon identify themselves to the cloud sync server and to each other.
 - [Security](./security.md): trust boundaries between processes, the cloud sync server, the unix socket, and the shared mirror files on disk.
 - `packages/cli/src/commands/serve.ts`: the daemon entry point.
-- `packages/workspace/src/daemon/sync-hub.ts`: `attachIpcSyncServer` (daemon side of the local sync transport).
-- `packages/workspace/src/client/sync-ipc.ts`: `attachIpcSyncClient` (script side).
+- `packages/workspace/src/document/attach-sqlite-persistence.ts`: daemon's sole writer of the CRDT log.
+- `packages/workspace/src/document/attach-sqlite-readonly-persistence.ts`: script-side reader for warm hydrate.
+- `packages/workspace/src/document/attach-sync.ts`: cloud Yjs sync (the only sync wire).
 - `packages/workspace/src/client/sqlite-mirror.ts`: `attachSqliteMirror` (script-side reader of `mirror.db`).
 - `packages/workspace/src/client/markdown-mirror.ts`: `attachMarkdownMirror` (script-side reader of the `md/` tree).
 - `packages/workspace/src/document/materializer/sqlite/`: `attachSqliteMaterializer` (writer).

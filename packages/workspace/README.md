@@ -290,7 +290,7 @@ Epicenter supports distributed sync where Y.Doc instances replicate across devic
                            Connect to multiple nodes
 ```
 
-Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest. On the laptop and desktop, a script peer (CLI, agent, scheduled job) attaches to the local daemon over a unix socket via `attachIpcSyncClient` and gets the same merged Y.Doc as the browser tab next to it. Daemon-only RPC (signed sends, peer kicks) rides the same unix socket as `MESSAGE_TYPE.RPC` frames; the script writes ordinary CRDT operations for everything else.
+Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest. On the laptop and desktop, a script peer (CLI, agent, scheduled job) opens its own short-lived cloud WebSocket via `attachSync` and reads the daemon's persistence file with `attachSqliteReadonlyPersistence` for warm hydrate. Cloud sync is the only sync wire; the daemon's role is to be the sole writer of the persistence and materializer files.
 
 ### How It All Fits Together
 
@@ -1323,7 +1323,7 @@ await handle.idb.whenDisposed;
 
 `@epicenter/workspace` is the core client/workspace library. The public root export does not currently ship a built-in server helper.
 
-Browser tab, daemon, and script peer are all "clients" of the cloud sync server in the same way: each runs the same builder, calls `attachSync` to reach the cloud, and holds a real `Y.Doc`. The script peer is additionally an IPC peer of the local daemon (it composes `attachIpcSyncClient(...)` providing Yjs sync over the daemon's unix socket on top of any cloud `attachSync`). There is no separate "thin client" or `Remote<T>` proxy; script-side code reads and writes the same `bundle.tables`, `bundle.kv`, etc. as everything else.
+Browser tab, daemon, and script peer are all "clients" of the cloud sync server in the same way: each runs the same builder, calls `attachSync` to reach the cloud, and holds a real `Y.Doc`. The script peer additionally calls `attachSqliteReadonlyPersistence` against the daemon's persistence file for warm hydrate (skipped if the file does not exist; falls through to a cold cloud sync). There is no IPC sync wire and no `Remote<T>` proxy; script-side code reads and writes the same `bundle.tables`, `bundle.kv`, etc. as everything else.
 
 What the package does give you for adapter authors is the raw material a server adapter needs:
 
