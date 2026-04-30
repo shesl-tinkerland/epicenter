@@ -1,15 +1,20 @@
 /**
  * SQLite materializer — mirrors workspace table rows into queryable SQLite tables.
  *
- * `attachSqliteMaterializer(ydoc, { db })` returns a chainable builder where
- * `.table(tableRef, config?)` opts in per table. Nothing materializes by default.
+ * `attachSqliteMaterializer(ydoc, { filePath })` returns a chainable builder
+ * where `.table(tableRef, config?)` opts in per table. Nothing materializes
+ * by default. The materializer owns the `Database` lifecycle: it opens the
+ * file (mkdir + WAL pragma) at construction and closes it on `ydoc.destroy()`.
  *
- * Teardown is hooked to the ydoc via `ydoc.once('destroy', ...)` — callers
- * never call a dispose method; destroying the ydoc cascades.
+ * Pass `filePath: ':memory:'` for tests; otherwise pass a real on-disk path
+ * (typically `sqlitePath(absDir, ydoc.guid)`). bun:sqlite is the only driver.
  *
  * @module
  */
 
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { Database } from 'bun:sqlite';
 import type { StandardJSONSchemaV1 } from '@standard-schema/spec';
 import Type from 'typebox';
 import {
@@ -17,15 +22,15 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { tryAsync } from 'wellcrafted/result';
+import { trySync } from 'wellcrafted/result';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '../../../shared/actions.js';
-import { createLogger, type Logger } from 'wellcrafted/logger';
 import { standardSchemaToJsonSchema } from '../../../shared/standard-schema.js';
 import type { BaseRow, Table, TableDefinition } from '../../attach-table.js';
 import { generateDdl, quoteIdentifier } from './ddl.js';
 import { ftsSearch, setupFtsTable } from './fts.js';
-import type { MirrorDatabase, SearchOptions, SearchResult } from './types.js';
+import type { SearchOptions, SearchResult } from './types.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: generic bound for heterogeneous table helpers
 type AnyTable = Table<any>;
@@ -38,11 +43,11 @@ export const SqliteMaterializerError = defineErrors({
 		cause,
 	}),
 	/**
-	 * Setting `PRAGMA journal_mode = WAL` failed. Non-fatal: in-memory drivers
-	 * (`:memory:`) and some test fakes do not honor the pragma. The
-	 * materializer proceeds with the driver default. Production daemons
-	 * should always run on a real on-disk file where WAL is supported, since
-	 * peer-side `attachSqliteMirror` relies on WAL for concurrent reads.
+	 * Setting `PRAGMA journal_mode = WAL` failed. Non-fatal: `:memory:` and
+	 * some test setups do not honor the pragma. The materializer proceeds
+	 * with the driver default. Production daemons should always run on a
+	 * real on-disk file where WAL is supported, since peer-side
+	 * `attachSqliteMirror` relies on WAL for concurrent reads.
 	 */
 	WalPragmaFailed: ({ cause }: { cause: unknown }) => ({
 		message: `[attachSqliteMaterializer] Failed to enable WAL journal mode: ${extractErrorMessage(cause)}`,
@@ -91,11 +96,10 @@ type RegisteredTable = {
  * ```ts
  * const ydoc = new Y.Doc({ guid: 'workspace' });
  * const tables = attachTables(ydoc, myTableDefs);
- * const idb = attachIndexedDb(ydoc);
  *
  * const sqlite = attachSqliteMaterializer(ydoc, {
- *   db: new Database('workspace.db'),
- *   waitFor: idb.whenLoaded,
+ *   filePath: sqlitePath(absDir, ydoc.guid),
+ *   waitFor: persistence.whenLoaded,
  * })
  *   .table(tables.posts, { fts: ['title', 'body'] })
  *   .table(tables.users);
@@ -104,11 +108,16 @@ type RegisteredTable = {
 export function attachSqliteMaterializer(
 	ydoc: Y.Doc,
 	{
-		db,
+		filePath,
 		waitFor,
 		log = createLogger('attachSqliteMaterializer'),
 	}: {
-		db: MirrorDatabase;
+		/**
+		 * Path to the SQLite file the materializer owns. Parent dir is
+		 * created; WAL is enabled; the handle is closed on `ydoc.destroy()`.
+		 * Pass `':memory:'` for tests.
+		 */
+		filePath: string;
 		/**
 		 * Gate: the materializer awaits this before the initial DDL + full-load.
 		 * Matches the `waitFor` convention used by `attachSync`. Omit for no gate.
@@ -121,6 +130,11 @@ export function attachSqliteMaterializer(
 		log?: Logger;
 	},
 ) {
+	if (filePath !== ':memory:') {
+		mkdirSync(dirname(filePath), { recursive: true });
+	}
+	const db = new Database(filePath);
+
 	const registered = new Map<string, RegisteredTable>();
 	let pendingSync = new Map<string, Set<string>>();
 	let syncQueue = Promise.resolve();
@@ -134,7 +148,7 @@ export function attachSqliteMaterializer(
 
 	// ── SQL primitives ───────────────────────────────────────────
 
-	async function insertRow(tableName: string, row: BaseRow) {
+	function insertRow(tableName: string, row: BaseRow) {
 		const config = registered.get(tableName)?.config;
 		const serialize = config?.serialize ?? serializeValue;
 		const keys = Object.keys(row);
@@ -142,20 +156,20 @@ export function attachSqliteMaterializer(
 		const values = keys.map((key) => serialize(row[key]));
 		const columns = keys.map(quoteIdentifier).join(', ');
 
-		const stmt = await db.prepare(
+		const stmt = db.prepare(
 			`INSERT OR REPLACE INTO ${quoteIdentifier(tableName)} (${columns}) VALUES (${placeholders})`,
 		);
-		await stmt.run(...values);
+		stmt.run(...(values as never[]));
 	}
 
-	async function deleteRow(tableName: string, id: string) {
-		const stmt = await db.prepare(
+	function deleteRow(tableName: string, id: string) {
+		const stmt = db.prepare(
 			`DELETE FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier('id')} = ?`,
 		);
-		await stmt.run(id);
+		stmt.run(id);
 	}
 
-	async function fullLoadTable(tableName: string, table: AnyTable) {
+	function fullLoadTable(tableName: string, table: AnyTable) {
 		const config = registered.get(tableName)?.config;
 		const serialize = config?.serialize ?? serializeValue;
 		const rows = table.getAllValid();
@@ -164,13 +178,13 @@ export function attachSqliteMaterializer(
 		const keys = Object.keys(rows[0]!);
 		const placeholders = keys.map(() => '?').join(', ');
 		const columns = keys.map(quoteIdentifier).join(', ');
-		const stmt = await db.prepare(
+		const stmt = db.prepare(
 			`INSERT OR REPLACE INTO ${quoteIdentifier(tableName)} (${columns}) VALUES (${placeholders})`,
 		);
 
 		for (const row of rows) {
 			const values = keys.map((key) => serialize(row[key]));
-			await stmt.run(...values);
+			stmt.run(...(values as never[]));
 		}
 	}
 
@@ -203,14 +217,14 @@ export function attachSqliteMaterializer(
 			});
 	}
 
-	async function flushPendingSync() {
+	function flushPendingSync() {
 		if (isDisposed) return;
 		if (pendingSync.size === 0) return;
 
 		const currentPending = pendingSync;
 		pendingSync = new Map<string, Set<string>>();
 
-		await db.run('BEGIN');
+		db.run('BEGIN');
 		try {
 			for (const [tableName, ids] of currentPending) {
 				const entry = registered.get(tableName);
@@ -220,16 +234,16 @@ export function attachSqliteMaterializer(
 					const { data: row, error } = entry.table.get(id);
 					if (error || row === null) {
 						// Invalid or missing → drop from mirror.
-						await deleteRow(tableName, id);
+						deleteRow(tableName, id);
 						continue;
 					}
-					await insertRow(tableName, row);
+					insertRow(tableName, row);
 				}
 			}
-			await db.run('COMMIT');
+			db.run('COMMIT');
 		} catch (error: unknown) {
 			try {
-				await db.run('ROLLBACK');
+				db.run('ROLLBACK');
 			} catch {
 				// Best-effort: if ROLLBACK itself fails (e.g. txn already aborted),
 				// surface the original cause, not the rollback noise.
@@ -240,11 +254,11 @@ export function attachSqliteMaterializer(
 
 	// ── Query / mutation surface ─────────────────────────────────
 
-	async function search(
+	function search(
 		tableName: string,
 		query: string,
 		options?: SearchOptions,
-	): Promise<SearchResult[]> {
+	): SearchResult[] {
 		if (isDisposed) return [];
 		const entry = registered.get(tableName);
 		const ftsColumns = entry?.config.fts;
@@ -252,20 +266,20 @@ export function attachSqliteMaterializer(
 		return ftsSearch(db, tableName, ftsColumns, query, options, log);
 	}
 
-	async function count(tableName: string): Promise<number> {
+	function count(tableName: string): number {
 		if (isDisposed) return 0;
 		try {
-			const stmt = await db.prepare(
+			const stmt = db.prepare(
 				`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
 			);
-			const row = (await stmt.get()) as Record<string, unknown> | null;
+			const row = stmt.get() as Record<string, unknown> | null;
 			return Number(row?.count ?? 0);
 		} catch {
 			return 0;
 		}
 	}
 
-	async function rebuild(tableName?: string): Promise<void> {
+	function rebuild(tableName?: string): void {
 		if (isDisposed) return;
 
 		if (tableName !== undefined) {
@@ -275,27 +289,27 @@ export function attachSqliteMaterializer(
 					`Cannot rebuild "${tableName}" — not in the materialized table set.`,
 				);
 			}
-			await db.run('BEGIN');
+			db.run('BEGIN');
 			try {
-				await db.run(`DELETE FROM ${quoteIdentifier(tableName)}`);
-				await fullLoadTable(tableName, entry.table);
-				await db.run('COMMIT');
+				db.run(`DELETE FROM ${quoteIdentifier(tableName)}`);
+				fullLoadTable(tableName, entry.table);
+				db.run('COMMIT');
 			} catch (error: unknown) {
-				await db.run('ROLLBACK');
+				db.run('ROLLBACK');
 				throw error;
 			}
 			return;
 		}
 
-		await db.run('BEGIN');
+		db.run('BEGIN');
 		try {
 			for (const [name] of registered)
-				await db.run(`DELETE FROM ${quoteIdentifier(name)}`);
+				db.run(`DELETE FROM ${quoteIdentifier(name)}`);
 			for (const [name, entry] of registered)
-				await fullLoadTable(name, entry.table);
-			await db.run('COMMIT');
+				fullLoadTable(name, entry.table);
+			db.run('COMMIT');
 		} catch (error: unknown) {
-			await db.run('ROLLBACK');
+			db.run('ROLLBACK');
 			throw error;
 		}
 	}
@@ -310,6 +324,12 @@ export function attachSqliteMaterializer(
 		isRegistrationOpen = false;
 		ydoc.off('afterTransaction', onAfterTransaction);
 		for (const entry of registered.values()) entry.unsubscribe?.();
+		try {
+			db.close();
+		} catch {
+			// Best-effort close; if the db was never opened (filePath threw
+			// upstream of construction) or already closed, ignore.
+		}
 	}
 
 	ydoc.once('destroy', dispose);
@@ -329,10 +349,10 @@ export function attachSqliteMaterializer(
 		// same file `{ readonly: true }` and run concurrent reads against
 		// snapshot pages while the daemon writes. Sequenced BEFORE DDL so
 		// the journal mode is set on the file header before any CREATE TABLE
-		// touches it. Failure is logged (typically `:memory:` in tests) and
-		// the materializer proceeds with the driver default.
-		const walResult = await tryAsync({
-			try: async () => db.run('PRAGMA journal_mode = WAL'),
+		// touches it. Failure is logged (`:memory:` always rejects) and the
+		// materializer proceeds with the driver default.
+		const walResult = trySync({
+			try: () => db.run('PRAGMA journal_mode = WAL'),
 			catch: (cause) => SqliteMaterializerError.WalPragmaFailed({ cause }),
 		});
 		if (walResult.error !== null) log.warn(walResult.error);
@@ -343,20 +363,20 @@ export function attachSqliteMaterializer(
 				entry.table.definition,
 				tableName,
 			);
-			await db.run(generateDdl(tableName, jsonSchema));
+			db.run(generateDdl(tableName, jsonSchema));
 			if (entry.config.fts && entry.config.fts.length > 0)
-				await setupFtsTable(db, tableName, entry.config.fts);
+				setupFtsTable(db, tableName, entry.config.fts);
 		}
 
 		if (isDisposed) return;
 
-		await db.run('BEGIN');
+		db.run('BEGIN');
 		try {
 			for (const [tableName, entry] of registered)
-				await fullLoadTable(tableName, entry.table);
-			await db.run('COMMIT');
+				fullLoadTable(tableName, entry.table);
+			db.run('COMMIT');
 		} catch (error: unknown) {
-			await db.run('ROLLBACK');
+			db.run('ROLLBACK');
 			throw error;
 		}
 

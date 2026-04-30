@@ -5,7 +5,6 @@
  * mirror reads the same file and asserts FTS5 lookups + raw row reads work.
  */
 
-import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,17 +41,16 @@ afterEach(() => {
 async function seedMirrorFile(filePath: string, rows: Array<{ id: string; title: string; body: string }>) {
 	const ydoc = new Y.Doc({ guid: 'test-mirror' });
 	const tables = attachTables(ydoc, { entries: entriesTable });
-	const writerDb = new Database(filePath);
 	const materializer = attachSqliteMaterializer(ydoc, {
-		db: writerDb,
+		filePath,
 	}).table(tables.entries, { fts: ['title', 'body'] });
 	await materializer.whenFlushed;
 	for (const row of rows) tables.entries.set({ ...row, _v: 1 });
 	// One tick lets the post-transact flush enqueued in `afterTransaction`
 	// drain through the materializer's syncQueue.
 	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+	// Destroying the ydoc closes the materializer's database.
 	ydoc.destroy();
-	writerDb.close();
 }
 
 describe('attachSqliteMirror', () => {
@@ -109,13 +107,11 @@ describe('attachSqliteMirror', () => {
 		// exists but `entries_fts` does not.
 		const ydoc = new Y.Doc({ guid: 'no-fts' });
 		const tables = attachTables(ydoc, { entries: entriesTable });
-		const writer = new Database(filePath);
-		const m = attachSqliteMaterializer(ydoc, { db: writer }).table(
+		const m = attachSqliteMaterializer(ydoc, { filePath }).table(
 			tables.entries,
 		);
 		await m.whenFlushed;
 		ydoc.destroy();
-		writer.close();
 
 		using mirror = attachSqliteMirror({ filePath });
 		const hits = await mirror.search('entries', 'anything');

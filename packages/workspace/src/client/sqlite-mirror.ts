@@ -92,9 +92,6 @@ export function attachSqliteMirror({
 
 	let isDisposed = false;
 
-	// `bun:sqlite` is synchronous; the `MirrorDatabase` shape `ftsSearch`
-	// expects `await`s every call internally, so the sync driver works
-	// without an adapter.
 	const ftsColumnsCache = new Map<string, string[]>();
 	function ftsColumnsFor(tableName: string): string[] {
 		const cached = ftsColumnsCache.get(tableName);

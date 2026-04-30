@@ -4,7 +4,7 @@
  * Tests the full attachSqliteMaterializer lifecycle: DDL generation, full load,
  * incremental sync, FTS5 search, rebuild, and dispose. Uses real Yjs documents
  * with defineTable schemas so the materializer exercises the actual workspace
- * observation path.
+ * observation path, and `:memory:` sqlite for hermetic isolation.
  *
  * Key behaviors:
  * - Materializer waits for `whenReady` before touching SQLite
@@ -12,7 +12,7 @@
  * - Observer-based sync upserts changed rows and deletes removed rows
  * - FTS5 search returns ranked results with snippets
  * - rebuild() drops and recreates all materialized data
- * - dispose() stops observers and clears timeouts
+ * - dispose() stops observers and closes the database
  */
 
 import { Database } from 'bun:sqlite';
@@ -25,7 +25,6 @@ import {
 	defineTable,
 } from '../../../index.js';
 import { attachSqliteMaterializer } from './sqlite.js';
-import type { MirrorDatabase } from './types.js';
 import { isAction, isMutation, isQuery } from '../../../shared/actions.js';
 
 const postsTable = defineTable(
@@ -38,33 +37,6 @@ const tableDefinitions = { posts: postsTable, notes: notesTable };
 
 const hasFts5 = canUseFts5();
 
-type TestDb = MirrorDatabase & {
-	raw: Database;
-	sqlCalls: string[];
-	close(): void;
-};
-
-function createTestDb(): TestDb {
-	const raw = new Database(':memory:');
-	const sqlCalls: string[] = [];
-
-	return {
-		raw,
-		sqlCalls,
-		close() {
-			raw.close();
-		},
-		run(sql: string) {
-			sqlCalls.push(sql);
-			return raw.run(sql);
-		},
-		prepare(sql: string) {
-			sqlCalls.push(sql);
-			return raw.prepare(sql);
-		},
-	};
-}
-
 type AttachedTables = ReturnType<
 	typeof attachTables<typeof tableDefinitions>
 >;
@@ -76,16 +48,18 @@ type TableRegistration = {
 
 type SetupOptions = {
 	tables?: (t: AttachedTables) => TableRegistration[];
+	waitFor?: Promise<unknown>;
 };
 
 function setup(options: SetupOptions = {}) {
-	const db = createTestDb();
-
 	const cache = createDisposableCache((id: string) => {
 		const ydoc = new Y.Doc({ guid: id });
 		const tables = attachTables(ydoc, tableDefinitions);
 
-		const materializer = attachSqliteMaterializer(ydoc, { db });
+		const materializer = attachSqliteMaterializer(ydoc, {
+			filePath: ':memory:',
+			waitFor: options.waitFor,
+		});
 
 		const registrations =
 			options.tables?.(tables) ??
@@ -105,7 +79,7 @@ function setup(options: SetupOptions = {}) {
 	}, { gcTime: 0 });
 
 	const workspace = cache.open('test');
-	return { db, workspace, cache };
+	return { workspace, cache };
 }
 
 function createDeferred() {
@@ -134,14 +108,14 @@ async function waitForSyncCycle() {
 	await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
-function getRows(db: TestDb, tableName: string) {
-	return db.raw
+function getRows(db: Database, tableName: string) {
+	return db
 		.prepare(`SELECT * FROM "${tableName}" ORDER BY "id"`)
 		.all() as Record<string, unknown>[];
 }
 
-function hasTable(db: TestDb, tableName: string) {
-	const row = db.raw
+function hasTable(db: Database, tableName: string) {
+	const row = db
 		.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
 		.get('table', tableName);
 	return row != null;
@@ -149,7 +123,6 @@ function hasTable(db: TestDb, tableName: string) {
 
 async function cleanup(setupResult: ReturnType<typeof setup>) {
 	setupResult.workspace[Symbol.dispose]();
-	setupResult.db.close();
 }
 
 // ============================================================================
@@ -159,45 +132,20 @@ async function cleanup(setupResult: ReturnType<typeof setup>) {
 describe('attachSqliteMaterializer', () => {
 	describe('readiness', () => {
 		test('waits for whenReady before touching SQLite', async () => {
-			const db = createTestDb();
 			const gate = createDeferred();
-
-			const cache = createDisposableCache((id: string) => {
-				const ydoc = new Y.Doc({ guid: id });
-				const tables = attachTables(ydoc, tableDefinitions);
-
-				const materializer = attachSqliteMaterializer(ydoc, {
-					db,
-					waitFor: gate.promise,
-				})
-					.table(tables.posts)
-					.table(tables.notes);
-
-				return {
-					ydoc,
-					tables,
-					sqlite: materializer,
-					[Symbol.dispose]() {
-						ydoc.destroy();
-					},
-				};
-			}, { gcTime: 0 });
-
-			const workspace = cache.open('ready-gated');
+			const testSetup = setup({ waitFor: gate.promise });
 
 			try {
 				await new Promise((resolve) => setTimeout(resolve, 25));
-				expect(db.sqlCalls).toHaveLength(0);
+				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(false);
 
 				gate.resolve();
-				await workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenFlushed;
 
-				expect(db.sqlCalls.length).toBeGreaterThan(0);
-				expect(hasTable(db, 'posts')).toBe(true);
+				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(true);
 			} finally {
 				gate.resolve();
-				workspace[Symbol.dispose]();
-				db.close();
+				await cleanup(testSetup);
 			}
 		});
 	});
@@ -225,7 +173,7 @@ describe('attachSqliteMaterializer', () => {
 
 				await testSetup.workspace.sqlite.whenFlushed;
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: 1, title: 'Hello mirror' },
 					{ id: 'post-2', _v: 1, published: null, title: 'Second row' },
 				]);
@@ -251,9 +199,9 @@ describe('attachSqliteMaterializer', () => {
 
 				await testSetup.workspace.sqlite.whenFlushed;
 
-				expect(hasTable(testSetup.db, 'posts')).toBe(true);
-				expect(hasTable(testSetup.db, 'notes')).toBe(false);
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(true);
+				expect(hasTable(testSetup.workspace.sqlite.db, 'notes')).toBe(false);
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: null, title: 'Mirrored post' },
 				]);
 			} finally {
@@ -282,7 +230,7 @@ describe('attachSqliteMaterializer', () => {
 
 				await waitForSyncCycle();
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: 1, title: 'Added later' },
 				]);
 			} finally {
@@ -305,7 +253,7 @@ describe('attachSqliteMaterializer', () => {
 
 				await waitForSyncCycle();
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([]);
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([]);
 			} finally {
 				await cleanup(testSetup);
 			}
@@ -331,7 +279,7 @@ describe('attachSqliteMaterializer', () => {
 
 				await waitForSyncCycle();
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: 0, title: 'After update' },
 				]);
 			} finally {
@@ -356,13 +304,13 @@ describe('attachSqliteMaterializer', () => {
 				});
 
 				await testSetup.workspace.sqlite.whenFlushed;
-				testSetup.db.run('DELETE FROM "posts"');
+				testSetup.workspace.sqlite.db.run('DELETE FROM "posts"');
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([]);
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([]);
 
 				await testSetup.workspace.sqlite.rebuild({});
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: null, title: 'Persisted in Yjs' },
 				]);
 			} finally {
@@ -386,17 +334,21 @@ describe('attachSqliteMaterializer', () => {
 				});
 
 				await testSetup.workspace.sqlite.whenFlushed;
-				testSetup.db.run('DELETE FROM "posts"');
+				testSetup.workspace.sqlite.db.run('DELETE FROM "posts"');
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([]);
-				expect(getRows(testSetup.db, 'notes')).toHaveLength(1);
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([]);
+				expect(
+					getRows(testSetup.workspace.sqlite.db, 'notes'),
+				).toHaveLength(1);
 
 				await testSetup.workspace.sqlite.rebuild({ table: 'posts' });
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([
+				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: null, title: 'Post row' },
 				]);
-				expect(getRows(testSetup.db, 'notes')).toHaveLength(1);
+				expect(
+					getRows(testSetup.workspace.sqlite.db, 'notes'),
+				).toHaveLength(1);
 			} finally {
 				await cleanup(testSetup);
 			}
@@ -470,30 +422,21 @@ describe('attachSqliteMaterializer', () => {
 	// ============================================================================
 
 	describe('dispose', () => {
-		test('dispose cancels queued sync and ignores later writes', async () => {
+		test('dispose closes the database without throwing', async () => {
 			const testSetup = setup();
+			await testSetup.workspace.sqlite.whenFlushed;
 
-			try {
-				await testSetup.workspace.sqlite.whenFlushed;
+			testSetup.workspace.tables.posts.set({
+				id: 'post-1',
+				title: 'Queued row',
+				_v: 1,
+			});
 
-				testSetup.workspace.tables.posts.set({
-					id: 'post-1',
-					title: 'Queued row',
-					_v: 1,
-				});
-				testSetup.workspace[Symbol.dispose]();
-
-				await waitForSyncCycle();
-
-				// The ydoc is destroyed, so further writes to tables are no-ops
-				// as far as materialization is concerned — the observer has been
-				// unsubscribed via materializer dispose.
-				await waitForSyncCycle();
-
-				expect(getRows(testSetup.db, 'posts')).toEqual([]);
-			} finally {
-				testSetup.db.close();
-			}
+			// Disposing the ydoc closes the materializer's database. Subsequent
+			// queries error at the driver layer; the test asserts the dispose
+			// path itself is clean.
+			expect(() => testSetup.workspace[Symbol.dispose]()).not.toThrow();
+			await waitForSyncCycle();
 		});
 	});
 

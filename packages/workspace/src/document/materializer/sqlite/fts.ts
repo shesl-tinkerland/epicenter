@@ -8,10 +8,11 @@
  * @module
  */
 
+import type { Database } from 'bun:sqlite';
 import type { Logger } from 'wellcrafted/logger';
 import { quoteIdentifier } from './ddl.js';
 import { SqliteMaterializerError } from './sqlite.js';
-import type { MirrorDatabase, SearchOptions, SearchResult } from './types.js';
+import type { SearchOptions, SearchResult } from './types.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // FTS SETUP
@@ -30,11 +31,11 @@ import type { MirrorDatabase, SearchOptions, SearchResult } from './types.js';
  * @param tableName - The source table name
  * @param columns - Column names to include in the FTS index
  */
-export async function setupFtsTable(
-	db: MirrorDatabase,
+export function setupFtsTable(
+	db: Database,
 	tableName: string,
 	columns: string[],
-): Promise<void> {
+): void {
 	const ftsTableName = `${tableName}_fts`;
 	const quotedColumns = columns.map(quoteIdentifier).join(', ');
 	const newValues = columns
@@ -47,12 +48,12 @@ export async function setupFtsTable(
 	const qt = quoteIdentifier(tableName);
 	const qfts = quoteIdentifier(ftsTableName);
 
-	await db.run(
+	db.run(
 		`CREATE VIRTUAL TABLE IF NOT EXISTS ${qfts}\n` +
 			`USING fts5(${quotedColumns}, content=${quoteString(tableName)}, content_rowid=rowid)`,
 	);
 
-	await db.run(
+	db.run(
 		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ai`)}\n` +
 			`AFTER INSERT ON ${qt} BEGIN\n` +
 			`  INSERT INTO ${qfts}(rowid, ${quotedColumns})\n` +
@@ -60,7 +61,7 @@ export async function setupFtsTable(
 			`END`,
 	);
 
-	await db.run(
+	db.run(
 		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ad`)}\n` +
 			`AFTER DELETE ON ${qt} BEGIN\n` +
 			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
@@ -68,7 +69,7 @@ export async function setupFtsTable(
 			`END`,
 	);
 
-	await db.run(
+	db.run(
 		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_au`)}\n` +
 			`AFTER UPDATE ON ${qt} BEGIN\n` +
 			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
@@ -97,14 +98,14 @@ export async function setupFtsTable(
  * @param options - Optional search configuration (limit, snippet column)
  * @returns Array of search results sorted by relevance
  */
-export async function ftsSearch(
-	db: MirrorDatabase,
+export function ftsSearch(
+	db: Database,
 	tableName: string,
 	ftsColumns: string[],
 	query: string,
 	options?: SearchOptions,
 	log?: Logger,
-): Promise<SearchResult[]> {
+): SearchResult[] {
 	const trimmed = query.trim();
 	if (!trimmed) {
 		return [];
@@ -119,7 +120,7 @@ export async function ftsSearch(
 	try {
 		const qt = quoteIdentifier(tableName);
 		const qfts = quoteIdentifier(ftsTableName);
-		const stmt = await db.prepare(
+		const stmt = db.prepare(
 			`SELECT ${qt}.${quoteIdentifier('id')} AS id,\n` +
 				`  snippet(${qfts}, ${snippetColumnIndex}, '<mark>', '</mark>', '...', 64) AS snippet,\n` +
 				`  rank\n` +
@@ -128,7 +129,7 @@ export async function ftsSearch(
 				`WHERE ${qfts} MATCH ?\n` +
 				`ORDER BY rank LIMIT ?`,
 		);
-		const rows = await stmt.all(trimmed, limit);
+		const rows = stmt.all(trimmed, limit);
 
 		return rows.map((row) => {
 			const r = row as Record<string, unknown>;

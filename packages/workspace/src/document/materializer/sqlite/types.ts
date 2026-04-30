@@ -1,65 +1,11 @@
 /**
  * Public type surface for the SQLite materializer.
  *
- * This module stays implementation-free on purpose. Consumers can import the
- * materializer's config types, search types, and injected database contract
- * without pulling in a specific SQLite driver.
+ * Search input/output types only. The materializer itself runs against
+ * `bun:sqlite` (`Database`) directly; there is no driver-injection layer.
  *
  * @packageDocumentation
  */
-
-import type { MaybePromise } from '../../../shared/types.js';
-
-/**
- * Minimal database interface for the SQLite materializer.
- *
- * Structurally compatible with sync drivers (`bun:sqlite`, `better-sqlite3`)
- * and async WASM drivers (`@tursodatabase/database-wasm`). The materializer
- * `await`s every call, so sync drivers work without any adapter.
- *
- * @example Sync driver (Bun/Node)
- * ```typescript
- * import { Database } from 'bun:sqlite';
- * const db: MirrorDatabase = new Database('materializer.db');
- * ```
- *
- * @example Async WASM driver (browser)
- * ```typescript
- * import { connect } from '@tursodatabase/database-wasm';
- * const db: MirrorDatabase = await connect(':memory:');
- * ```
- */
-export type MirrorDatabase = {
-	/** Execute raw SQL that does not return rows. */
-	run(sql: string): MaybePromise<unknown>;
-
-	/** Prepare a reusable statement for repeated reads or writes. */
-	prepare(sql: string): MaybePromise<MirrorStatement>;
-};
-
-/**
- * Minimal prepared statement interface used by the SQLite materializer.
- *
- * Structurally compatible with both sync (`bun:sqlite`) and async
- * (`@tursodatabase/database-wasm`) statement objects. The materializer
- * `await`s every method call internally.
- *
- * @example
- * ```typescript
- * const stmt = db.prepare('SELECT * FROM posts WHERE id = ?');
- * const row = await stmt.get('post_123');
- * ```
- */
-export type MirrorStatement = {
-	/** Run a statement that writes data or otherwise returns no rows. */
-	run(...params: unknown[]): MaybePromise<unknown>;
-
-	/** Fetch all matching rows as plain objects. */
-	all(...params: unknown[]): MaybePromise<unknown[]>;
-
-	/** Fetch the first matching row, or null if none found. */
-	get(...params: unknown[]): MaybePromise<unknown>;
-};
 
 /**
  * Optional arguments for FTS5 searches.

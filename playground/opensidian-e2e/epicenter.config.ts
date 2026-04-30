@@ -25,10 +25,9 @@
  *     -C playground/opensidian-e2e
  */
 
-import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { Database } from 'bun:sqlite';
+import { join } from 'node:path';
 import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
 import {
@@ -50,11 +49,8 @@ import { attachSqliteMaterializer } from '@epicenter/workspace/document/material
 import Type from 'typebox';
 import * as Y from 'yjs';
 
-const SERVER_URL = 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
 const WORKSPACE_ID = 'opensidian';
-const MIRROR_FILE = sqlitePath(import.meta.dir, WORKSPACE_ID);
-mkdirSync(dirname(MIRROR_FILE), { recursive: true });
 
 const sessions = createSessionStore();
 
@@ -69,16 +65,16 @@ const persistence = attachSqlitePersistence(ydoc, {
 
 const unlock = attachSessionUnlock(encryption, {
 	sessions,
-	serverUrl: SERVER_URL,
+	serverUrl: EPICENTER_API_URL,
 	waitFor: persistence.whenLoaded,
 });
 
 // Gate the first connection on local hydrate + unlock so the handshake
 // only exchanges the delta, not the whole document.
 const sync = attachSync(ydoc, {
-	url: toWsUrl(`${SERVER_URL}/workspaces/${WORKSPACE_ID}`),
+	url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${WORKSPACE_ID}`),
 	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
-	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+	getToken: async () => (await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
 });
 
 const whenReady = Promise.all([
@@ -157,7 +153,7 @@ const markdown = attachMarkdownMaterializer(ydoc, {
 });
 
 const sqlite = attachSqliteMaterializer(ydoc, {
-	db: new Database(MIRROR_FILE),
+	filePath: sqlitePath(import.meta.dir, WORKSPACE_ID),
 	waitFor: whenReady,
 }).table(tables.files, { fts: ['name'] });
 
