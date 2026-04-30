@@ -18,7 +18,7 @@
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'wellcrafted/logger';
 import { quoteIdentifier } from './ddl.js';
-import { AttachSqliteError } from './sqlite.js';
+import { AttachSqliteError } from '../attach-sqlite.js';
 import type { SearchOptions, SearchResult } from './types.js';
 
 /**

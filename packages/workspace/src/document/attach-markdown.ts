@@ -10,16 +10,25 @@ import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { defineMutation } from '@epicenter/sync';
 import { createLogger, type Logger } from 'wellcrafted/logger';
-import type { MaybePromise } from '../../../shared/types.js';
-import type { Kv } from '../../attach-kv.js';
+import type { MaybePromise } from '../shared/types.js';
+import type { Kv } from './attach-kv.js';
 import {
 	type BaseRow,
 	type Table,
 	type TableParseError,
-} from '../../attach-table.js';
-import type { SerializeResult } from './markdown.js';
-import { assembleMarkdown } from './markdown.js';
-import { parseMarkdownFile } from './parse-markdown-file.js';
+} from './attach-table.js';
+import type { SerializeResult } from './markdown/markdown.js';
+import { assembleMarkdown } from './markdown/markdown.js';
+import { parseMarkdownFile } from './markdown/parse-markdown-file.js';
+
+export { assembleMarkdown, type SerializeResult } from './markdown/markdown.js';
+export { parseMarkdownFile } from './markdown/parse-markdown-file.js';
+export { prepareMarkdownFiles } from './markdown/prepare-markdown-files.js';
+export {
+	slugFilename,
+	toIdFilename,
+	toSlugFilename,
+} from './markdown/serializers.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PUSH ERROR + EVENT TYPES

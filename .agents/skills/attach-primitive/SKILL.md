@@ -169,5 +169,5 @@ Use it whenever a primitive's startup must follow another's. Examples:
 - `packages/workspace/src/document/attach-sync.ts` — network variant with `whenConnected` + `waitFor`.
 - `packages/workspace/src/document/attach-encryption.ts` — state-owning coordinator; exposes `attachTable` / `attachTables` / `attachKv` as methods.
 - `packages/cli/src/primitives/attach-session-unlock.ts` — non-ydoc subject (cross-package exception).
-- `packages/workspace/src/document/materializer/markdown/materializer.ts` — chainable builder with `.table()/.kv()`.
+- `packages/workspace/src/document/attach-markdown.ts` — chainable builder with `.table()/.kv()`.
 - `apps/whispering/src/lib/client.ts` — full composition inside `createDocumentFactory`.

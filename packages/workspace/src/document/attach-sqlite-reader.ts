@@ -23,12 +23,12 @@
  */
 
 import { Database } from 'bun:sqlite';
-import { quoteIdentifier } from '../document/materializer/sqlite/ddl.js';
-import { ftsSearch } from '../document/materializer/sqlite/fts.js';
+import { quoteIdentifier } from './sqlite/ddl.js';
+import { ftsSearch } from './sqlite/fts.js';
 import type {
 	SearchOptions,
 	SearchResult,
-} from '../document/materializer/sqlite/types.js';
+} from './sqlite/types.js';
 
 /**
  * Options for {@link attachSqliteReader}.

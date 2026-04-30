@@ -117,7 +117,18 @@ export function attachYjsLog(
 			resetCompactionTimer();
 			ydoc.off('updateV2', updateHandler);
 			if (db) {
-				compactUpdateLog(db, ydoc);
+				try {
+					// Final compaction can throw on a corrupt write or a closed
+					// db. Swallowing silently inside teardown leaves no trace
+					// for debugging; log instead so the failure surfaces.
+					compactUpdateLog(db, ydoc);
+				} catch (cause) {
+					logger.warn(
+						new Error('Final compactUpdateLog failed during destroy', {
+							cause,
+						}),
+					);
+				}
 				db.close();
 				db = null;
 			}
@@ -128,10 +139,9 @@ export function attachYjsLog(
 
 	return {
 		whenLoaded,
-		clearLocal: () =>
-			Promise.resolve().then(() => {
-				db?.run('DELETE FROM updates');
-			}),
+		clearLocal: async () => {
+			db?.run('DELETE FROM updates');
+		},
 		whenDisposed,
 	};
 }

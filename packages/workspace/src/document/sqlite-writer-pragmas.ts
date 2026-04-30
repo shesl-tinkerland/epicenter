@@ -30,7 +30,7 @@ import { trySync } from 'wellcrafted/result';
  * with driver defaults rather than failing the attachment.
  */
 export const SqliteWriterPragmaError = defineErrors({
-	/** A specific PRAGMA failed to apply, or `journal_mode` silently fell back. */
+	/** A `PRAGMA` statement threw at execution time. */
 	PragmaSetupFailed: ({
 		pragma,
 		cause,
@@ -38,6 +38,18 @@ export const SqliteWriterPragmaError = defineErrors({
 		message: `[sqlite-writer-pragmas] PRAGMA ${pragma} failed: ${extractErrorMessage(cause)}`,
 		pragma,
 		cause,
+	}),
+	/**
+	 * `PRAGMA journal_mode = WAL` did not throw, but SQLite responded with
+	 * a different mode (silent fallback on filesystems that don't support
+	 * WAL, or on `:memory:`). Carry the actual mode so callers can
+	 * distinguish "rejected" from "errored."
+	 */
+	WalSilentFallback: ({ actualMode }: { actualMode: string | undefined }) => ({
+		message: `[sqlite-writer-pragmas] PRAGMA journal_mode = WAL returned '${
+			actualMode ?? 'undefined'
+		}', expected 'wal'`,
+		actualMode,
 	}),
 });
 export type SqliteWriterPragmaError = InferErrors<
@@ -77,11 +89,8 @@ export function applyWriterPragmas(db: Database, log: Logger): void {
 		log.warn(walResult.error);
 	} else if (walResult.data !== 'wal') {
 		log.warn(
-			SqliteWriterPragmaError.PragmaSetupFailed({
-				pragma: 'journal_mode = WAL',
-				cause: new Error(
-					`PRAGMA journal_mode returned '${walResult.data}', expected 'wal'`,
-				),
+			SqliteWriterPragmaError.WalSilentFallback({
+				actualMode: walResult.data,
 			}),
 		);
 	}

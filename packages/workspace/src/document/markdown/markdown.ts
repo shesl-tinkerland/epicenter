@@ -1,5 +1,5 @@
 import { YAML } from 'bun';
-import { convertEpicenterLinksToWikilinks } from '../../../links.js';
+import { convertEpicenterLinksToWikilinks } from '../../links.js';
 
 /**
  * Assemble a markdown string from YAML frontmatter and an optional body.

@@ -40,7 +40,7 @@ import {
 import {
 	attachMarkdown,
 	slugFilename,
-} from '@epicenter/workspace/document/materializer/markdown';
+} from '@epicenter/workspace/document/attach-markdown';
 import * as Y from 'yjs';
 
 const MARKDOWN_DIR = join(import.meta.dir, 'data');

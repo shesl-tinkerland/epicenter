@@ -25,12 +25,12 @@ import {
 	attachTables,
 	createDisposableCache,
 	defineTable,
-} from '../../../index.js';
+} from '../index.js';
 import {
 	attachMarkdown,
 	type MarkdownShape,
-} from './materializer.js';
-import { parseMarkdownFile } from './parse-markdown-file.js';
+} from './attach-markdown.js';
+import { parseMarkdownFile } from './markdown/parse-markdown-file.js';
 
 // ============================================================================
 // Test Table Definitions

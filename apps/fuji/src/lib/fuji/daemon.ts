@@ -25,8 +25,8 @@ import {
 import {
 	attachMarkdown,
 	slugFilename,
-} from '@epicenter/workspace/document/materializer/markdown';
-import { attachSqlite } from '@epicenter/workspace/document/materializer/sqlite';
+} from '@epicenter/workspace/document/attach-markdown';
+import { attachSqlite } from '@epicenter/workspace/document/attach-sqlite';
 import { openFuji as openFujiDoc } from './core.js';
 
 export async function openFuji({

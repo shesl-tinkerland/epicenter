@@ -25,12 +25,15 @@ import {
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '@epicenter/sync';
-import { standardSchemaToJsonSchema } from '../../../shared/standard-schema.js';
-import { applyWriterPragmas } from '../../sqlite-writer-pragmas.js';
-import type { BaseRow, Table, TableDefinition } from '../../attach-table.js';
-import { generateDdl, quoteIdentifier } from './ddl.js';
-import { ftsSearch } from './fts.js';
-import type { SearchOptions, SearchResult } from './types.js';
+import { standardSchemaToJsonSchema } from '../shared/standard-schema.js';
+import { applyWriterPragmas } from './sqlite-writer-pragmas.js';
+import type { BaseRow, Table, TableDefinition } from './attach-table.js';
+import { generateDdl, quoteIdentifier } from './sqlite/ddl.js';
+import { ftsSearch } from './sqlite/fts.js';
+import type { SearchOptions, SearchResult } from './sqlite/types.js';
+
+export { generateDdl } from './sqlite/ddl.js';
+export type { SearchOptions, SearchResult } from './sqlite/types.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: generic bound for heterogeneous table helpers
 type AnyTable = Table<any>;

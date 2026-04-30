@@ -26,7 +26,7 @@ import {
 	type FileContentDocs,
 	type FileId,
 } from '@epicenter/filesystem';
-import { assembleMarkdown } from '@epicenter/workspace/document/materializer/markdown';
+import { assembleMarkdown } from '@epicenter/workspace/document/attach-markdown';
 import { opensidianTables } from 'opensidian/workspace';
 import * as Y from 'yjs';
 import { pushFromMarkdown } from './push-from-markdown';

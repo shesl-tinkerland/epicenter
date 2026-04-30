@@ -44,8 +44,8 @@ import {
 	attachMarkdown,
 	prepareMarkdownFiles,
 	toSlugFilename,
-} from '@epicenter/workspace/document/materializer/markdown';
-import { attachSqlite } from '@epicenter/workspace/document/materializer/sqlite';
+} from '@epicenter/workspace/document/attach-markdown';
+import { attachSqlite } from '@epicenter/workspace/document/attach-sqlite';
 import Type from 'typebox';
 import * as Y from 'yjs';
 

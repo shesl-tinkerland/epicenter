@@ -2,10 +2,11 @@
 
 import { DEFAULT_RPC_TIMEOUT_MS } from '@epicenter/constants/timeouts';
 import {
+	type ActionManifest,
 	type Actions,
 	BEARER_SUBPROTOCOL_PREFIX,
+	buildRemoteProxy,
 	type DefaultRpcMap,
-	type PeerTransport,
 	decodeRpcPayload,
 	defineQuery,
 	describeActions,
@@ -21,10 +22,12 @@ import {
 	isRpcError,
 	MAIN_SUBPROTOCOL,
 	MESSAGE_TYPE,
+	type RemoteActions,
 	type RemoteCallOptions,
 	resolveActionPath,
 	type RpcActionMap,
 	RpcError,
+	type Sender,
 	SYNC_MESSAGE_TYPE,
 	SYNC_ORIGIN,
 	type SyncMessageType,

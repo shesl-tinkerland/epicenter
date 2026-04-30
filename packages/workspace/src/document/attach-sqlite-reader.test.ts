@@ -16,7 +16,7 @@ import {
 	attachTables,
 	defineTable,
 } from '../index.js';
-import { attachSqlite } from '../document/materializer/sqlite/sqlite.js';
+import { attachSqlite } from './attach-sqlite.js';
 import { attachSqliteReader } from './attach-sqlite-reader.js';
 
 const entriesTable = defineTable(

@@ -38,12 +38,13 @@ export {
 // Typed RPC map utilities for end-to-end-typed `rpc<TMap>()` call sites.
 export type { DefaultRpcMap, InferRpcMap, RpcActionMap } from './rpc-types';
 
-// Peer dispatch (cross-device action calling). `peer<T>(transport, deviceId)`
-// returns a proxy whose method calls dispatch via the transport's `rpc`. Any
-// `PeerTransport`-shaped object works; the typical caller passes
-// `workspace.sync` directly.
-export type { PeerTransport } from './peer';
-export { describePeer, peer } from './peer';
+// Remote-action proxy builder. The user-facing API for cross-device
+// dispatch lives on `SyncAttachment` in `@epicenter/workspace`
+// (`workspace.sync.peer<T>(deviceId)`); this is the low-level helper it
+// composes on top of, exported so other transports can build their own
+// typed proxies.
+export type { Sender } from './peer';
+export { buildRemoteProxy } from './peer';
 
 // Protocol (encode/decode for WS messages and HTTP sync requests)
 export {

@@ -307,7 +307,7 @@ export {
 	attachSqliteReader,
 	type SqliteMirror,
 	type SqliteMirrorOptions,
-} from './client/attach-sqlite-reader.js';
+} from './document/attach-sqlite-reader.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CLIENT-ID DERIVATION

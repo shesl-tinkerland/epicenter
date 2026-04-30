@@ -23,8 +23,8 @@ import {
 	attachTables,
 	createDisposableCache,
 	defineTable,
-} from '../../../index.js';
-import { attachSqlite } from './sqlite.js';
+} from '../index.js';
+import { attachSqlite } from './attach-sqlite.js';
 import { isAction, isMutation, isQuery } from '@epicenter/sync';
 
 const postsTable = defineTable(
