@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { extractErrorMessage } from 'wellcrafted/error';
 
-export type ParseInputOptions = {
+export type ParseInputConfig = {
 	/** Positional argument: inline JSON, or `@file.json` (curl convention) */
 	positional?: string;
 	/** Stdin content (undefined = no piped input) */
@@ -21,7 +21,7 @@ export type ParseInputOptions = {
  * equivalent.
  */
 export function parseJsonInput<T = unknown>(
-	options: ParseInputOptions,
+	options: ParseInputConfig,
 ): T | undefined {
 	if (options.positional) {
 		if (options.positional.startsWith('@')) {

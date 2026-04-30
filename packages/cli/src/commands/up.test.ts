@@ -69,11 +69,11 @@ afterEach(() => {
 	rmSync(workDir, { recursive: true, force: true });
 });
 
-type FakeOptions = {
+type FakeWorkspaceConfig = {
 	readyPromise?: Promise<unknown>;
 };
 
-function makeFakeWorkspace(opts: FakeOptions = {}): LoadedWorkspace {
+function makeFakeWorkspace(opts: FakeWorkspaceConfig = {}): LoadedWorkspace {
 	return {
 		actions: {},
 		[Symbol.dispose]() {

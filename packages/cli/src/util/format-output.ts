@@ -1,15 +1,13 @@
-import type { Options } from 'yargs';
-
 export const outputFormats = ['json', 'jsonl'] as const;
 export type OutputFormat = (typeof outputFormats)[number];
 
-export type FormatOptions = {
+export type OutputConfig = {
 	/** Override format (default: json, auto-pretty for TTY) */
 	format?: OutputFormat;
 };
 
 /** Format a single value as JSON: pretty on TTY unless `format: 'jsonl'`. */
-function formatJson(value: unknown, options: FormatOptions = {}): string {
+function formatJson(value: unknown, options: OutputConfig = {}): string {
 	const shouldPretty =
 		options.format !== 'jsonl' && (process.stdout.isTTY ?? false);
 	return JSON.stringify(value, null, shouldPretty ? 2 : undefined);
@@ -21,7 +19,7 @@ function formatJsonl(values: unknown[]): string {
 }
 
 /** Output data to stdout with appropriate formatting. */
-export function output(value: unknown, options: FormatOptions = {}): void {
+export function output(value: unknown, options: OutputConfig = {}): void {
 	if (options.format === 'jsonl') {
 		if (!Array.isArray(value)) {
 			throw new Error('JSONL format requires an array value');
@@ -39,11 +37,17 @@ export function outputError(message: string): void {
 	console.error(message);
 }
 
-/** Yargs options for the shared format flag. */
-export const formatOptions = {
+/** Shared format flag for commands that can emit machine-readable output. */
+export const formatArgs = {
 	format: {
-		type: 'string',
-		choices: outputFormats,
+		type: 'enum',
+		options: [...outputFormats] as ['json', 'jsonl'],
 		description: 'Output format (default: json, auto-pretty for TTY)',
 	},
-} satisfies Record<'format', Options>;
+} satisfies {
+	format: {
+		type: 'enum';
+		options: ['json', 'jsonl'];
+		description: string;
+	};
+};

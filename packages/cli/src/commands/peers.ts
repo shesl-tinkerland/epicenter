@@ -12,24 +12,28 @@
  */
 
 import { getDaemon, type PeerSnapshot } from '@epicenter/workspace/node';
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { defineCommand } from 'citty';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 import {
-	formatOptions,
+	formatArgs,
 	type OutputFormat,
 	output,
 	outputError,
 } from '../util/format-output.js';
 
-export const peersCommand = cmd({
-	command: 'peers',
-	describe: 'List connected peers (presence)',
-	builder: {
-		C: projectOption,
-		...formatOptions,
+export const peersCommand = defineCommand({
+	meta: {
+		name: 'peers',
+		description: 'List connected peers (presence)',
 	},
-	handler: async (argv) => {
-		const { data: daemon, error: daemonErr } = await getDaemon(argv.C);
+	args: {
+		project: projectArg,
+		...formatArgs,
+	},
+	run: async ({ args }) => {
+		const { data: daemon, error: daemonErr } = await getDaemon(
+			resolveProjectArg(args.project),
+		);
 		if (daemonErr) {
 			outputError(daemonErr.message);
 			process.exitCode = 1;
@@ -41,7 +45,7 @@ export const peersCommand = cmd({
 			process.exitCode = 1;
 			return;
 		}
-		emit(rows, argv.format);
+		emit(rows, args.format);
 	},
 });
 

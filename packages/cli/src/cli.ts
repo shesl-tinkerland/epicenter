@@ -1,4 +1,9 @@
-import yargs from 'yargs';
+import {
+	defineCommand,
+	renderUsage,
+	runCommand as runCittyCommand,
+	type CommandDef,
+} from 'citty';
 import { authCommand } from './commands/auth';
 import { downCommand } from './commands/down';
 import { listCommand } from './commands/list';
@@ -23,24 +28,89 @@ import { upCommand } from './commands/up';
  * surface), `specs/20260423T174126-cli-remote-peer-rpc.md` (`peers` + `--peer`).
  */
 export function createCLI() {
+	const mainCommand = defineCommand({
+		meta: {
+			name: 'epicenter',
+			description:
+				'Introspect and invoke Epicenter workspace actions locally or on a live peer.',
+		},
+		subCommands: {
+			auth: authCommand,
+			down: downCommand,
+			list: listCommand,
+			logs: logsCommand,
+			peers: peersCommand,
+			ps: psCommand,
+			run: runCommand,
+			up: upCommand,
+		},
+	});
+
 	return {
 		run: async (argv: string[]) => {
-			const cli = yargs()
-				.scriptName('epicenter')
-				.command(authCommand)
-				.command(downCommand)
-				.command(listCommand)
-				.command(logsCommand)
-				.command(peersCommand)
-				.command(psCommand)
-				.command(runCommand)
-				.command(upCommand)
-				.demandCommand(1)
-				.strict()
-				.exitProcess(false)
-				.help();
+			if (argv.includes('--help') || argv.includes('-h')) {
+				const [command, parent] = findHelpCommand(mainCommand, argv);
+				console.log(`${await renderUsage(command, parent)}\n`);
+				return;
+			}
 
-			await cli.parse(argv);
+			if (argv.length === 0) {
+				console.error(`${await renderUsage(mainCommand)}\n`);
+				throw new Error('No command specified.');
+			}
+
+			await runCittyCommand(mainCommand, { rawArgs: argv });
 		},
 	};
+}
+
+function findHelpCommand(
+	command: CommandDef,
+	argv: string[],
+	parent?: CommandDef,
+): [CommandDef, CommandDef | undefined] {
+	const subCommands = getStaticSubCommands(command);
+	if (!subCommands) return [command, parent];
+
+	for (const [index, arg] of argv.entries()) {
+		if (arg === '--help' || arg === '-h') continue;
+		if (arg.startsWith('-')) continue;
+
+		const subCommand = subCommands[arg];
+		if (subCommand) {
+			return findHelpCommand(
+				subCommand,
+				argv.slice(index + 1),
+				command,
+			);
+		}
+		return [command, parent];
+	}
+	return [command, parent];
+}
+
+function getStaticSubCommands(
+	command: CommandDef,
+): Record<string, CommandDef> | undefined {
+	const { subCommands } = command;
+	if (
+		subCommands === undefined ||
+		typeof subCommands === 'function' ||
+		subCommands instanceof Promise
+	) {
+		return undefined;
+	}
+
+	const staticSubCommands: Record<string, CommandDef> = {};
+	for (const [name, subCommand] of Object.entries(subCommands)) {
+		if (
+			subCommand === undefined ||
+			typeof subCommand === 'function' ||
+			subCommand instanceof Promise
+		) {
+			continue;
+		}
+		staticSubCommands[name] = subCommand;
+	}
+	return staticSubCommands;
 }

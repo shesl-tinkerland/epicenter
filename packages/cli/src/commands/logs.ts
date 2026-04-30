@@ -22,8 +22,8 @@ import {
 } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { logPathFor } from '@epicenter/workspace/node';
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { defineCommand } from 'citty';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 
 const DEFAULT_TAIL_LINES = 50;
 const FOLLOW_POLL_MS = 100;
@@ -120,11 +120,13 @@ export function followLog(path: string): () => void {
 	};
 }
 
-export const logsCommand = cmd({
-	command: 'logs',
-	describe: 'Tail the log file for a running daemon.',
-	builder: {
-		C: projectOption,
+export const logsCommand = defineCommand({
+	meta: {
+		name: 'logs',
+		description: 'Tail the log file for a running daemon.',
+	},
+	args: {
+		project: projectArg,
 		follow: {
 			type: 'boolean',
 			alias: 'f',
@@ -132,17 +134,17 @@ export const logsCommand = cmd({
 			description: 'Stream new lines as they are appended.',
 		},
 	},
-	handler: async (argv) => {
-		const logPath = logPathFor(argv.C);
+	run: async ({ args }) => {
+		const logPath = logPathFor(resolveProjectArg(args.project));
 
 		if (!existsSync(logPath) || statSync(logPath).size === 0) {
 			process.stderr.write(`(log file empty or missing: ${logPath})\n`);
-			if (!argv.follow) return;
+			if (!args.follow) return;
 		} else {
 			process.stdout.write(tailLines(logPath, DEFAULT_TAIL_LINES));
 		}
 
-		if (!argv.follow) return;
+		if (!args.follow) return;
 
 		const stop = followLog(logPath);
 		const stopAndExit = () => {

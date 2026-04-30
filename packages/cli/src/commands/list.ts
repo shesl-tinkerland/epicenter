@@ -13,40 +13,45 @@
 
 import type { ActionManifest } from '@epicenter/workspace';
 import { type DaemonError, getDaemon } from '@epicenter/workspace/node';
+import { defineCommand } from 'citty';
 import Type, { type TSchema } from 'typebox';
 import type { Result } from 'wellcrafted/result';
 
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 import {
-	formatOptions,
+	formatArgs,
 	type OutputFormat,
 	output,
 	outputError,
 } from '../util/format-output.js';
 
-export const listCommand = cmd({
-	command: 'list [path]',
-	describe: 'Tree view of exposed queries and mutations on this device',
-	builder: (yargs) =>
-		yargs
-			.positional('path', {
-				type: 'string',
-				describe: 'Optional dot-path to narrow the view',
-			})
-			.option('C', projectOption)
-			.options(formatOptions),
-	handler: async (argv) => {
-		const path = argv.path ?? '';
+export const listCommand = defineCommand({
+	meta: {
+		name: 'list',
+		description: 'Tree view of exposed queries and mutations on this device',
+	},
+	args: {
+		path: {
+			type: 'positional',
+			description: 'Optional dot-path to narrow the view',
+			required: false,
+		},
+		project: projectArg,
+		...formatArgs,
+	},
+	run: async ({ args }) => {
+		const path = args.path ?? '';
 
-		const { data: daemon, error: daemonErr } = await getDaemon(argv.C);
+		const { data: daemon, error: daemonErr } = await getDaemon(
+			resolveProjectArg(args.project),
+		);
 		if (daemonErr) {
 			outputError(daemonErr.message);
 			process.exitCode = 1;
 			return;
 		}
 		const result = await daemon.list();
-		renderResult(result, path, argv.format);
+		renderResult(result, path, args.format);
 	},
 });
 

@@ -27,13 +27,13 @@ import {
 	type RunError as DaemonRunError,
 	type RunRequest,
 } from '@epicenter/workspace/node';
+import { defineCommand } from 'citty';
 import { extractErrorMessage } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 import {
-	formatOptions,
+	formatArgs,
 	type OutputFormat,
 	output,
 	outputError,
@@ -42,56 +42,76 @@ import { parseJsonInput, readStdin } from '../util/parse-input.js';
 
 const DEFAULT_PEER_WAIT_MS = 5000;
 
-export const runCommand = cmd({
-	command: 'run <action> [input]',
-	describe:
-		'Invoke a defineQuery / defineMutation by dot-path, locally or on a remote peer (--peer)',
-	builder: (yargs) =>
-		yargs
-			.positional('action', {
-				type: 'string',
-				demandOption: true,
-				describe: 'Export-prefixed action path, e.g. notes.notes.add',
-			})
-			.positional('input', {
-				type: 'string',
-				describe: 'Inline JSON or @file.json',
-			})
-			.option('C', projectOption)
-			.option('peer', {
-				type: 'string',
-				description: 'Invoke on a remote peer by peer id',
-			})
-			.option('wait', {
-				type: 'number',
-				description: `Total ms to wait for peer resolution + RPC; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
-			})
-			.implies('wait', 'peer')
-			.options(formatOptions)
-			.strict(),
-	handler: async (argv) => {
+export const runCommand = defineCommand({
+	meta: {
+		name: 'run',
+		description:
+			'Invoke a defineQuery / defineMutation by dot-path, locally or on a remote peer (--peer)',
+	},
+	args: {
+		action: {
+			type: 'positional',
+			description: 'Export-prefixed action path, e.g. notes.notes.add',
+			required: true,
+		},
+		input: {
+			type: 'positional',
+			description: 'Inline JSON or @file.json',
+			required: false,
+		},
+		project: projectArg,
+		peer: {
+			type: 'string',
+			description: 'Invoke on a remote peer by peer id',
+			valueHint: 'peer',
+		},
+		wait: {
+			type: 'string',
+			description: `Total ms to wait for peer resolution and RPC; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
+			valueHint: 'ms',
+		},
+		...formatArgs,
+	},
+	run: async ({ args }) => {
 		const peerTarget =
-			argv.peer && argv.peer.length > 0 ? argv.peer : undefined;
-		const waitMs = argv.wait ?? DEFAULT_PEER_WAIT_MS;
-		const actionInput = await resolveInput(argv.input);
+			args.peer && args.peer.length > 0 ? args.peer : undefined;
+		const waitMs = parseWaitArg(args.wait, peerTarget);
+		const actionInput = await resolveInput(args.input);
 
 		const runRequest: RunRequest = {
-			actionPath: argv.action,
+			actionPath: args.action,
 			input: actionInput,
 			peerTarget,
 			waitMs,
 		};
 
-		const { data: daemon, error: daemonErr } = await getDaemon(argv.C);
+		const { data: daemon, error: daemonErr } = await getDaemon(
+			resolveProjectArg(args.project),
+		);
 		if (daemonErr) {
 			outputError(daemonErr.message);
 			process.exitCode = 1;
 			return;
 		}
 		const result = await daemon.run(runRequest);
-		renderRunResult(result, argv.format);
+		renderRunResult(result, args.format);
 	},
 });
+
+function parseWaitArg(
+	wait: string | undefined,
+	peerTarget: string | undefined,
+): number {
+	if (wait === undefined) return DEFAULT_PEER_WAIT_MS;
+	if (peerTarget === undefined) {
+		throw new Error('--wait requires --peer');
+	}
+	const waitMs = Number(wait);
+	if (!Number.isFinite(waitMs) || waitMs < 0) {
+		throw new Error('--wait must be a non-negative number of milliseconds');
+	}
+	return waitMs;
+}
 
 function renderRunResult(
 	result: Result<unknown, DaemonRunError | DaemonError>,

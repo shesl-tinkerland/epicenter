@@ -27,10 +27,10 @@
 		"@epicenter/workspace": "workspace:*",
 		"@hono/standard-validator": "catalog:",
 		"arktype": "catalog:",
+		"citty": "catalog:",
 		"hono": "catalog:",
 		"typebox": "catalog:",
 		"wellcrafted": "catalog:",
-		"yargs": "catalog:",
 		"yjs": "catalog:"
 	},
 	"devDependencies": {
@@ -38,7 +38,6 @@
 		"@epicenter/honeycrisp": "workspace:*",
 		"@epicenter/tab-manager": "workspace:*",
 		"@types/bun": "catalog:",
-		"@types/yargs": "catalog:",
 		"typescript": "catalog:"
 	},
 	"license": "MIT"

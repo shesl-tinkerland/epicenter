@@ -10,9 +10,9 @@
  * Self-hosters pass their own URL; everyone else omits it.
  */
 
+import { defineCommand } from 'citty';
 import { createAuthApi } from '../auth/api';
 import { createSessionStore } from '../auth/session-store';
-import { cmd } from '../util/cmd.js';
 
 const DEFAULT_SERVER = 'https://api.epicenter.so';
 
@@ -29,18 +29,22 @@ const sessions = createSessionStore();
  * epicenter auth logout
  * ```
  */
-const loginCommand = cmd({
-	command: 'login [server]',
-	describe: 'Log in to an Epicenter server (opens browser)',
-	builder: (yargs) =>
-		yargs.positional('server', {
-			type: 'string',
-			describe: `Server URL (default: ${DEFAULT_SERVER})`,
-		}),
-	handler: async (argv) => {
+const loginCommand = defineCommand({
+	meta: {
+		name: 'login',
+		description: 'Log in to an Epicenter server (opens browser)',
+	},
+	args: {
+		server: {
+			type: 'positional',
+			description: `Server URL (default: ${DEFAULT_SERVER})`,
+			required: false,
+		},
+	},
+	run: async ({ args }) => {
 		const serverUrl =
-			typeof argv.server === 'string' && argv.server.length > 0
-				? argv.server
+			typeof args.server === 'string' && args.server.length > 0
+				? args.server
 				: DEFAULT_SERVER;
 		const api = createAuthApi(serverUrl);
 		const codeData = await api.requestDeviceCode();
@@ -85,16 +89,20 @@ const loginCommand = cmd({
 	},
 });
 
-const logoutCommand = cmd({
-	command: 'logout [server]',
-	describe: 'Log out from an Epicenter server (default: most recent session)',
-	builder: (yargs) =>
-		yargs.positional('server', {
-			type: 'string',
-			describe: 'Server URL (default: most recent session)',
-		}),
-	handler: async (argv) => {
-		const server = typeof argv.server === 'string' ? argv.server : undefined;
+const logoutCommand = defineCommand({
+	meta: {
+		name: 'logout',
+		description: 'Log out from an Epicenter server (default: most recent session)',
+	},
+	args: {
+		server: {
+			type: 'positional',
+			description: 'Server URL (default: most recent session)',
+			required: false,
+		},
+	},
+	run: async ({ args }) => {
+		const server = typeof args.server === 'string' ? args.server : undefined;
 		const session = server
 			? await sessions.load(server)
 			: await sessions.loadDefault();
@@ -117,16 +125,20 @@ const logoutCommand = cmd({
 	},
 });
 
-const statusCommand = cmd({
-	command: 'status [server]',
-	describe: 'Show current authentication status (default: most recent session)',
-	builder: (yargs) =>
-		yargs.positional('server', {
-			type: 'string',
-			describe: 'Server URL (default: most recent session)',
-		}),
-	handler: async (argv) => {
-		const server = typeof argv.server === 'string' ? argv.server : undefined;
+const statusCommand = defineCommand({
+	meta: {
+		name: 'status',
+		description: 'Show current authentication status (default: most recent session)',
+	},
+	args: {
+		server: {
+			type: 'positional',
+			description: 'Server URL (default: most recent session)',
+			required: false,
+		},
+	},
+	run: async ({ args }) => {
+		const server = typeof args.server === 'string' ? args.server : undefined;
 		const session = server
 			? await sessions.load(server)
 			: await sessions.loadDefault();
@@ -159,14 +171,14 @@ const statusCommand = cmd({
 	},
 });
 
-export const authCommand = cmd({
-	command: 'auth <subcommand>',
-	describe: 'Manage authentication with Epicenter servers',
-	builder: (yargs) =>
-		yargs
-			.command(loginCommand)
-			.command(logoutCommand)
-			.command(statusCommand)
-			.demandCommand(1, 'Specify a subcommand: login, logout, or status'),
-	handler: () => {},
+export const authCommand = defineCommand({
+	meta: {
+		name: 'auth',
+		description: 'Manage authentication with Epicenter servers',
+	},
+	subCommands: {
+		login: loginCommand,
+		logout: logoutCommand,
+		status: statusCommand,
+	},
 });

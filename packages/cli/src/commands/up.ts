@@ -35,6 +35,7 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
+import { defineCommand } from 'citty';
 import {
 	CONFIG_FILENAME,
 	type LoadConfigResult,
@@ -42,8 +43,7 @@ import {
 	loadConfig,
 	type WorkspaceEntry,
 } from '../load-config.js';
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 
 /**
  * Hardcoded ceiling on how long any single workspace's `whenConnected`
@@ -77,7 +77,7 @@ function logSyncStatus(message: string): void {
 	process.stderr.write(`${message}\n`);
 }
 
-export type UpOptions = {
+export type UpConfig = {
 	projectDir: string;
 	quiet: boolean;
 	cliVersion?: string;
@@ -90,7 +90,7 @@ export type UpOptions = {
  *
  * Config-load failures come from {@link LoadError} (in `load-config.ts`)
  * and bind failures from {@link StartupError} (in `unix-socket.ts`); both
- * unioned into the return type rather than re-wrapped. The yargs handler
+ * unioned into the return type rather than re-wrapped. The CLI command
  * doesn't care which union it came from: `error.message` and exit-1
  * either way.
  */
@@ -125,7 +125,7 @@ export type UpHandle = {
 };
 
 /**
- * Surface for swapping out config/server construction in tests. The yargs
+ * Surface for swapping out config/server construction in tests. The CLI
  * handler passes the production defaults; `up.test.ts` passes fakes.
  */
 export type RunUpDeps = {
@@ -142,7 +142,7 @@ export type RunUpDeps = {
 /**
  * Daemon body. Idempotently sets up disk state, connects every workspace
  * the config exports, binds the IPC socket, and returns a handle. The
- * yargs `handler` calls this, prints the operator-facing banner, installs
+ * CLI command calls this, prints the operator-facing banner, installs
  * SIGINT/SIGTERM, and parks the process; tests call it directly and
  * assert on the returned handle.
  *
@@ -152,7 +152,7 @@ export type RunUpDeps = {
  * config.
  */
 export async function runUp(
-	options: UpOptions,
+	options: UpConfig,
 	deps: RunUpDeps = {},
 ): Promise<Result<UpHandle, RunUpError | LoadError | StartupError>> {
 	const projectDir = resolve(options.projectDir);
@@ -238,17 +238,19 @@ export async function runUp(
 }
 
 /**
- * Yargs `up` command. Thin glue: parses argv, calls {@link runUp}, prints
+ * `up` command. Thin glue: parses args, calls {@link runUp}, prints
  * the operator-facing banner + initial peers snapshot, wires SIGINT/SIGTERM,
  * subscribes to awareness/status across every loaded workspace, and parks
  * until a signal triggers teardown.
  */
-export const upCommand = cmd({
-	command: 'up',
-	describe:
-		'Bring this config online as a long-lived peer for every workspace it exports (foreground).',
-	builder: {
-		C: projectOption,
+export const upCommand = defineCommand({
+	meta: {
+		name: 'up',
+		description:
+			'Bring this config online as a long-lived peer for every workspace it exports (foreground).',
+	},
+	args: {
+		project: projectArg,
 		quiet: {
 			type: 'boolean',
 			default: false,
@@ -256,10 +258,10 @@ export const upCommand = cmd({
 				'Suppress awareness join/leave lines (sync state changes still print)',
 		},
 	},
-	handler: async (argv) => {
-		const options: UpOptions = {
-			projectDir: argv.C,
-			quiet: argv.quiet,
+	run: async ({ args }) => {
+		const options: UpConfig = {
+			projectDir: resolveProjectArg(args.project),
+			quiet: args.quiet,
 		};
 
 		const { data: handle, error } = await runUp(options);

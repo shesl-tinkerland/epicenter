@@ -21,9 +21,9 @@ import {
 	socketPathFor,
 	unlinkMetadata,
 } from '@epicenter/workspace/node';
+import { defineCommand } from 'citty';
 import type { Result } from 'wellcrafted/result';
-import { cmd } from '../util/cmd.js';
-import { projectOption } from '../util/common-options.js';
+import { projectArg, resolveProjectArg } from '../util/common-options.js';
 
 const SHUTDOWN_TIMEOUT_MS = 1000;
 
@@ -38,7 +38,7 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
-export type DownOptions = {
+export type DownConfig = {
 	projectDir: string;
 	all: boolean;
 };
@@ -105,9 +105,8 @@ async function shutdownOne(
 }
 
 /**
- * Daemon-stop body. Pure function over disk + IPC; the yargs handler wraps
- * this with terminal formatting. Tests inject `shutdown` and `kill` to stay
- * unit-level.
+ * Daemon-stop body. Pure function over disk + IPC; the CLI command wraps this
+ * with terminal formatting. Tests inject `shutdown` and `kill` to stay unit-level.
  *
  * Behavior:
  *   - `--all`: enumerate `<runtimeDir>/*.meta.json`, shut each down in
@@ -116,7 +115,7 @@ async function shutdownOne(
  *     if no metadata exists.
  */
 export async function runDown(
-	options: DownOptions,
+	options: DownConfig,
 	deps: RunDownDeps = {},
 ): Promise<DownResult> {
 	const resolved: Required<RunDownDeps> = {
@@ -142,21 +141,23 @@ export async function runDown(
 	return { outcomes: [outcome] };
 }
 
-export const downCommand = cmd({
-	command: 'down',
-	describe: 'Stop a running `epicenter up` daemon.',
-	builder: {
-		C: projectOption,
+export const downCommand = defineCommand({
+	meta: {
+		name: 'down',
+		description: 'Stop a running `epicenter up` daemon.',
+	},
+	args: {
+		project: projectArg,
 		all: {
 			type: 'boolean',
 			default: false,
 			description: 'Stop every running daemon for this user.',
 		},
 	},
-	handler: async (argv) => {
-		const options: DownOptions = {
-			projectDir: argv.C,
-			all: argv.all,
+	run: async ({ args }) => {
+		const options: DownConfig = {
+			projectDir: resolveProjectArg(args.project),
+			all: args.all,
 		};
 
 		const result = await runDown(options);

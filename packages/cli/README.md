@@ -53,7 +53,7 @@ epicenter auth logout                             # most recent session
 
 # up: bring every config export online as a callable peer (run once per session)
 epicenter up &
-epicenter up -C examples/notes-cross-peer/peer-b &
+epicenter up --project examples/notes-cross-peer/peer-b &
 
 # list: what actions are exposed on this device
 epicenter list                                      # full tree
@@ -69,7 +69,7 @@ epicenter run tabManager.tabs.list --peer 0xabc
 
 # peers: who is online right now (presence snapshot)
 epicenter peers
-epicenter peers -C examples/notes-cross-peer/peer-b
+epicenter peers --project examples/notes-cross-peer/peer-b
 ```
 
 `run` resolves the first path segment against the named exports of `epicenter.config.ts`; everything after walks through `workspace.actions` until it hits a `defineQuery` / `defineMutation` action. With `--peer`, the export prefix selects the local RPC attachment, then the inner path is sent to the remote peer.
@@ -91,7 +91,7 @@ Peer presence has a ~30s liveness window (inherited from Yjs awareness): a peer 
 
 | Flag | Alias | Commands | Purpose |
 | ---- | ----- | -------- | ------- |
-| `-C` | none | `up`, `down`, `logs`, `list`, `run`, `peers` | Start directory for project discovery. Defaults to the current directory. |
+| `--project` | `-C` | `up`, `down`, `logs`, `list`, `run`, `peers` | Start directory for project discovery. Defaults to the current directory. |
 | `--peer` | none | `run` | Address a remote peer by `deviceId`. Dispatches the invocation over the selected export's RPC channel. |
 | `--wait` | none | `run --peer` (default 5000) | Ms to wait for peer resolution and the RPC call. |
 | `--format` | none | `list`, `run`, `peers` | `json` or `jsonl`. Pretty-prints on TTY, compact when piped. Without it, commands emit their human-readable shape (tree / value / table). |
@@ -104,7 +104,7 @@ Scripts can distinguish these cases without parsing stderr:
 
 | Code | Meaning |
 | ---- | ------- |
-| `1` | Usage or setup error: unknown command, bad flag, missing config, unknown export, or action path does not exist. |
+| `1` | Usage or setup error: unknown command, missing config, unknown export, or action path does not exist. |
 | `2` | Runtime error: local action returned `Err`, or a remote RPC completed with a failure (ActionFailed, Timeout, PeerOffline, Disconnected). |
 | `3` | Peer miss: `--peer <target>` did not resolve within `--wait`. Distinct from `2` so scripts can retry or re-enumerate peers. |
 

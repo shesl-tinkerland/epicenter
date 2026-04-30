@@ -34,7 +34,6 @@
 		"catalog": {
 			"@types/node": "^24.0.0",
 			"@types/bun": "latest",
-			"@types/yargs": "^17.0.35",
 			"typescript": "^5.9.3",
 			"svelte": "^5.45.2",
 			"@sveltejs/kit": "^2.49.0",
@@ -63,7 +62,7 @@
 			"@biomejs/biome": "^2.4.10",
 			"turbo": "^2.6.1",
 			"wrangler": "^4.71.0",
-			"yargs": "^18.0.0",
+			"citty": "^0.2.2",
 			"@standard-schema/spec": "^1.1.0",
 			"hono": "^4.10.7",
 			"mime": "^4.0.6",

@@ -2,9 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import yargs from 'yargs';
 
-import { projectOption, resolveProjectDir } from './common-options.js';
+import { resolveProjectArg, resolveProjectDir } from './common-options.js';
 
 const roots: string[] = [];
 
@@ -38,11 +37,10 @@ describe('resolveProjectDir', () => {
 	});
 });
 
-describe('projectOption', () => {
-	test('lets yargs parse and coerce -C before the handler reads argv', () => {
+describe('resolveProjectArg', () => {
+	test('resolves the parsed project flag before daemon lookup', () => {
 		const { root, nested } = tempProject();
-		const argv = yargs().option('C', projectOption).parseSync(['-C', nested]);
 
-		expect(argv.C).toBe(root);
+		expect(resolveProjectArg(nested)).toBe(root);
 	});
 });

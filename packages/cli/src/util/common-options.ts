@@ -8,7 +8,6 @@
 import { resolve } from 'node:path';
 
 import { findEpicenterDir } from '@epicenter/workspace/node';
-import type { Options } from 'yargs';
 
 export function resolveProjectDir(start: string): string {
 	try {
@@ -18,10 +17,13 @@ export function resolveProjectDir(start: string): string {
 	}
 }
 
-export const projectOption = {
+export function resolveProjectArg(project: string | undefined): string {
+	return resolveProjectDir(project ?? process.cwd());
+}
+
+export const projectArg = {
 	type: 'string',
+	alias: 'C',
 	description: 'Start directory for Epicenter project discovery',
-	default: () => process.cwd(),
-	defaultDescription: 'current working directory',
-	coerce: resolveProjectDir,
-} satisfies Options;
+	valueHint: 'dir',
+} as const;
