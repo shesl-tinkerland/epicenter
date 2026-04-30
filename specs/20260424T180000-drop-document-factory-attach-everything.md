@@ -341,11 +341,10 @@ import {
   attachAwareness, attachEncryption, attachSync, dispatchAction,
 } from '@epicenter/workspace';
 import { attachSessionUnlock, createSessionStore, epicenterPaths } from '@epicenter/cli';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { attachSqlite } from '@epicenter/persistence-sqlite';
 import { createFujiActions, fujiTables } from '@epicenter/fuji';
 import * as Y from 'yjs';
-
-const SERVER_URL = 'https://api.epicenter.so';
 const sessions = createSessionStore();
 
 const ydoc = new Y.Doc({ guid: 'epicenter.fuji' });
@@ -361,17 +360,17 @@ const persistence = attachSqlite(ydoc, {
 
 const unlock = attachSessionUnlock(encryption, {
   sessions,
-  serverUrl: SERVER_URL,
+  serverUrl: EPICENTER_API_URL,
   waitFor: persistence.whenLoaded,
 });
 
 const actions = createFujiActions(tables);
 
 const sync = attachSync(ydoc, {
-  url: (id) => `${SERVER_URL}/workspaces/${id}`,
+  url: (id) => `${EPICENTER_API_URL}/workspaces/${id}`,
   waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
   awareness: awareness.raw,
-  getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+  getToken: async () => (await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
   dispatch: (method, input) => dispatchAction(actions, method, input),
 });
 

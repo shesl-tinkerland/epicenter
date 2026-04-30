@@ -48,8 +48,8 @@ The capability that scripts need from "syncing through the daemon" reduces to: *
 ├── .epicenter/
 │   ├── daemon.sock          ← IPC entry (sync + RPC, today)
 │   ├── daemon.pid
-│   ├── persistence/<id>.db  ← daemon writes (sole)
-│   ├── materializer/<id>.db ← daemon writes (sole)
+│   ├── yjs/<id>.db  ← daemon writes (sole)
+│   ├── sqlite/<id>.db ← daemon writes (sole)
 │   └── md/                  ← daemon writes (sole)
 └── scripts/
 
@@ -87,8 +87,8 @@ The capability that scripts need from "syncing through the daemon" reduces to: *
 ├── .epicenter/
 │   ├── daemon.pid                       (a second daemon refuses to start)
 │   ├── daemon.sock                      (only when /run RPC is enabled)
-│   ├── persistence/<id>.db   ← daemon WRITES; scripts READ
-│   ├── materializer/<id>.db  ← daemon WRITES; scripts READ
+│   ├── yjs/<id>.db   ← daemon WRITES; scripts READ
+│   ├── sqlite/<id>.db  ← daemon WRITES; scripts READ
 │   └── md/                   ← daemon WRITES; scripts READ
 └── scripts/
 
@@ -131,12 +131,12 @@ The third row dominates. It's the cheapest model that actually works.
 
 ## Per-workspace persistence: why, and the multi-folder same-ID case
 
-Persistence at `<workspaceDir>/.epicenter/persistence/<workspaceId>.db`, NOT at `~/.epicenter/persistence/<workspaceId>.db`. This is the existing layout; it stays.
+Persistence at `<workspaceDir>/.epicenter/yjs/<workspaceId>.db`, NOT at `~/.epicenter/yjs/<workspaceId>.db`. This is the existing layout; it stays.
 
 Two folders on the same machine with the same `workspaceId` are two **replicas**, not two views of one shared store:
 
 ```
-~/work/fuji/.epicenter/persistence/fuji.db    ~/personal/fuji/.epicenter/persistence/fuji.db
+~/work/fuji/.epicenter/yjs/fuji.db    ~/personal/fuji/.epicenter/yjs/fuji.db
    ▲                                              ▲
    daemon A is sole writer                        daemon B is sole writer
    │                                              │
@@ -170,7 +170,7 @@ These are per-USER state, not per-replica.
 // vault/scripts/tag-untagged.ts
 import { openFuji } from '@epicenter/fuji/script';
 
-await using fuji = await openFuji({ authToken });
+await using fuji = await openFuji({ getToken });
 
 const untagged = fuji.tables.entries
   .filter(e => !e.deletedAt && e.tags.length === 0);
@@ -182,11 +182,11 @@ fuji.batch(() => {
 });
 ```
 
-`apps/fuji/src/lib/fuji/script.ts` exports `openFuji({ authToken, absDir? })` that internally:
+`apps/fuji/src/lib/fuji/script.ts` exports `openFuji({ getToken, projectDir? })` that internally:
 
 1. Constructs `new Y.Doc({ clientID: hashClientId(Bun.main) })`.
-2. Calls `attachSqliteReadonlyPersistence(fuji.ydoc, { filePath })` against the daemon's persistence file at `<absDir>/.epicenter/persistence/fuji.db` if it exists. This applies all rows to the local Y.Doc and *does not* attach a write listener. Warm hydrate; ~tens of ms for typical sizes. Skipped silently if the file is absent.
-3. Calls `attachSync(fuji.ydoc, { url: CLOUD_URL, auth: authToken })` — the same cloud-sync attachment the daemon and browser tabs use.
+2. Calls `attachSqliteReadonlyPersistence(fuji.ydoc, { filePath })` against the daemon's persistence file at `<projectDir>/.epicenter/yjs/fuji.db` if it exists. This applies all rows to the local Y.Doc and *does not* attach a write listener. Warm hydrate; ~tens of ms for typical sizes. Skipped silently if the file is absent.
+3. Calls `attachSync(fuji.ydoc, { url: CLOUD_URL, getToken })` — the same cloud-sync attachment the daemon and browser tabs use.
 4. The script's writes flow through the cloud WS. The daemon (running its own `attachSync`) receives them, applies to its Y.Doc, writes to its persistence and materializer files.
 
 The script never opens a unix socket. Never touches IPC sync. Never needs the daemon to be running, but benefits from it if it is (warm hydrate via the persistence file).
@@ -197,23 +197,23 @@ The script never opens a unix socket. Never touches IPC sync. Never needs the da
 // vault/epicenter.config.ts
 import { openFuji } from '@epicenter/fuji/daemon';
 
-const absDir = import.meta.dir;
+const projectDir = import.meta.dir;
 
-export const fuji = openFuji({ authToken: daemonAuth, absDir });
+export const fuji = openFuji({ getToken: daemonAuth, projectDir });
 export const workspaces = [fuji];
 ```
 
-`apps/fuji/src/lib/fuji/daemon.ts` exports `openFuji({ authToken, absDir })` that internally:
+`apps/fuji/src/lib/fuji/daemon.ts` exports `openFuji({ getToken, projectDir })` that internally:
 
 1. Constructs `openFuji()` from the core (no IO).
-2. `attachSync(ydoc, { url: CLOUD_URL, auth: authToken })`.
-3. `attachSqlitePersistence(ydoc, { filePath: persistencePath(absDir, 'fuji') })` — sole writer, WAL mode (see Phase 0).
-4. `attachSqliteMaterializer(fuji, { db: materializerPath(absDir, 'fuji') })`.
-5. `attachMarkdownMaterializer(fuji, { dir: markdownPath(absDir, 'fuji') })`.
+2. `attachSync(ydoc, { url: CLOUD_URL, getToken })`.
+3. `attachSqlitePersistence(ydoc, { filePath: yjsPath(projectDir, 'fuji') })` — sole writer, WAL mode (see Phase 0).
+4. `attachSqliteMaterializer(fuji, { db: sqlitePath(projectDir, 'fuji') })`.
+5. `attachMarkdownMaterializer(fuji, { dir: markdownPath(projectDir, 'fuji') })`.
 
 `epicenter serve`:
 - Eagerly constructs each workspace from `epicenter.config.ts`.
-- Mounts the `/run` RPC server at `<absDir>/.epicenter/daemon.sock` (enabled by default; opt out with config).
+- Mounts the `/run` RPC server at `<projectDir>/.epicenter/daemon.sock` (enabled by default; opt out with config).
 - Stays up. Receives cloud broadcasts. Writes persistence + materializer files. Serves `/run` for typed action dispatch from CLI, scripts, browser, or curl.
 
 No `attachIpcSyncServer`. No supervisor god function for IPC peer routing. Cloud sync is the only sync wire.
@@ -238,7 +238,7 @@ These are testable lock-ins.
 2. **Daemon is sole writer of persistence and materializer files.** Scripts open these read-only. Multi-process write coordination is avoided by construction, not by locking.
 3. **Scripts use stable clientIDs.** `hashClientId(Bun.main)` for any peer that mutates. State-vector growth bounded by distinct mutating scripts, not invocation count.
 4. **`/run` RPC is preserved as an opt-in.** `connectDaemon<typeof openFuji>({ id })` returns a `Remote<W>` proxy that dispatches typed actions over the daemon's HTTP/JSON unix socket. Useful for the CLI and for tests; not the canonical script path.
-5. **Per-workspace `.epicenter/` layout is preserved.** Persistence at `<absDir>/.epicenter/persistence/<workspaceId>.db`. Materializer at `<absDir>/.epicenter/materializer/<workspaceId>.db`. Markdown at `<absDir>/.epicenter/md/`. Daemon socket at `<absDir>/.epicenter/daemon.sock` (when `/run` RPC is enabled).
+5. **Per-workspace `.epicenter/` layout is preserved.** Persistence at `<projectDir>/.epicenter/yjs/<workspaceId>.db`. Materializer at `<projectDir>/.epicenter/sqlite/<workspaceId>.db`. Markdown at `<projectDir>/.epicenter/md/`. Daemon socket at `<projectDir>/.epicenter/daemon.sock` (when `/run` RPC is enabled).
 6. **Per-user state stays at `~/.epicenter/`.** Auth, deviceId, encryption-key derivation.
 7. **Multiple folders with the same workspaceId on one machine = two replicas.** Each folder's daemon writes its own files; they reconcile through cloud. Same shape as cross-device replicas.
 8. **`epicenter serve` requires no IPC server config.** Removing `attachIpcSyncServer` removes a bootstrap option, not a runtime degradation.
@@ -274,12 +274,12 @@ Why a peer export and not a `readonly?: boolean` flag on the writer: the two pat
 
 Goal: make the cloud-direct script path possible without removing anything.
 
-1. **Add per-app `script.ts` factories.** Start with one app to validate the shape (`apps/fuji/src/lib/fuji/script.ts` or similar). Exports `openFuji({ authToken, absDir? }): Promise<FujiHandle>`. Internally:
+1. **Add per-app `script.ts` factories.** Start with one app to validate the shape (`apps/fuji/src/lib/fuji/script.ts` or similar). Exports `openFuji({ getToken, projectDir? }): Promise<FujiHandle>`. Internally:
    - `openFuji()` (the core IO-free factory).
-   - `attachSqliteReadonlyPersistence(ydoc, { filePath: persistencePath(absDir, 'fuji') })` if the file exists; skip if not.
-   - `attachSync(ydoc, { url: CLOUD_URL, auth: authToken })`.
+   - `attachSqliteReadonlyPersistence(ydoc, { filePath: yjsPath(projectDir, 'fuji') })` if the file exists; skip if not.
+   - `attachSync(ydoc, { url: CLOUD_URL, getToken })`.
    - Wire `hashClientId(Bun.main)` into the Y.Doc's `clientID` (verify `openFuji` core supports passing in clientID; if not, that's a small ergonomic addition).
-2. **Add per-app `daemon.ts` factories.** `apps/fuji/src/lib/fuji/daemon.ts` exports `openFuji({ authToken, absDir }): FujiHandle`. Same shape as the existing inline boot code in `epicenter.config.ts`, just refactored into a function so the config file becomes one line.
+2. **Add per-app `daemon.ts` factories.** `apps/fuji/src/lib/fuji/daemon.ts` exports `openFuji({ getToken, projectDir }): FujiHandle`. Same shape as the existing inline boot code in `epicenter.config.ts`, just refactored into a function so the config file becomes one line.
 3. **Migrate one consumer end-to-end.** Pick one `vault/scripts/*.ts` example. Switch its import from the (current, IPC-using) peer factory to the new `script.ts` factory. Verify it works against a running daemon (warm hydrate + cloud sync) and against no daemon (full cold sync).
 4. Tests at the workspace package level (not app level):
    - `attachSqliteReadonlyPersistence` round-trip and concurrent-with-writer (these are Phase 0 tests; they live with the readonly module).
@@ -405,7 +405,7 @@ First time using Epicenter:               In production:
                                               that don't need a Y.Doc.
 ```
 
-No "connect to a hub." No coordination dance. Just `openFuji({ authToken })` and use it.
+No "connect to a hub." No coordination dance. Just `openFuji({ getToken })` and use it.
 
 ## What this gains, plainly
 
@@ -577,7 +577,7 @@ CONTEXT (why this exists):
   importer chooses by path. See spec §"Vision" and §"Two patterns".
 
 CHANGE 1: apps/fuji/src/lib/fuji/daemon.ts (NEW FILE)
-  Exports `openFuji({ auth, device, absDir })` for `epicenter serve`.
+  Exports `openFuji({ auth, device, projectDir })` for `epicenter serve`.
   Internal sequence:
     1. Construct the core via `openFuji(...)` from ./index.ts. Pass any
        arguments the core accepts (read index.ts to see).
@@ -586,25 +586,25 @@ CHANGE 1: apps/fuji/src/lib/fuji/daemon.ts (NEW FILE)
        the same path browser.ts imports it from.
     3. attachSqlitePersistence(handle.ydoc, { filePath: <persistence path> }) where
        <persistence path> is computed via the existing path helper. Look
-       in packages/workspace/src/daemon/paths.ts for `persistencePath`,
-       `materializerPath`, `markdownPath`, etc. If a helper named
-       `persistencePath(absDir, workspaceId)` does NOT exist, add it
+       in packages/workspace/src/daemon/paths.ts for `yjsPath`,
+       `sqlitePath`, `markdownPath`, etc. If a helper named
+       `yjsPath(projectDir, workspaceId)` does NOT exist, add it
        there alongside the existing helpers (mirror the existing
        socketPathFor / mirrorPathFor signatures); the spec calls for the
-       layout `<absDir>/.epicenter/persistence/<workspaceId>.db`.
-    4. attachSqliteMaterializer(handle, { db: materializerPath(absDir, 'fuji') }).
-    5. attachMarkdownMaterializer(handle, { dir: markdownPath(absDir, 'fuji') }).
+       layout `<projectDir>/.epicenter/yjs/<workspaceId>.db`.
+    4. attachSqliteMaterializer(handle, { db: sqlitePath(projectDir, 'fuji') }).
+    5. attachMarkdownMaterializer(handle, { dir: markdownPath(projectDir, 'fuji') }).
     6. Return the handle with all attachments composed into it. Match the
        composition style browser.ts uses (Object.assign, spread, or
        whatever is idiomatic in that file).
 
-  Argument shape: copy browser.ts's signature exactly except add `absDir`.
+  Argument shape: copy browser.ts's signature exactly except add `projectDir`.
   If browser.ts is `openFuji(auth, device)`, then daemon.ts is
-  `openFuji({ auth, device, absDir })` or the same positional shape with
-  absDir appended. Stay consistent; do not invent a new style.
+  `openFuji({ auth, device, projectDir })` or the same positional shape with
+  projectDir appended. Stay consistent; do not invent a new style.
 
 CHANGE 2: apps/fuji/src/lib/fuji/script.ts (NEW FILE)
-  Exports `openFuji({ auth, absDir? })` for one-off scripts. Internal
+  Exports `openFuji({ auth, projectDir? })` for one-off scripts. Internal
   sequence:
     1. Compute clientID via `hashClientId(Bun.main)` from
        packages/workspace/src/shared/client-id.ts.
@@ -612,11 +612,11 @@ CHANGE 2: apps/fuji/src/lib/fuji/script.ts (NEW FILE)
        accept a `clientID` option today, add support for one as part of
        this change (small ergonomic addition; pass through to
        `new Y.Doc({ clientID })`).
-    3. Resolve absDir: if not provided, use a discovery helper. If the
+    3. Resolve projectDir: if not provided, use a discovery helper. If the
        codebase already has `findEpicenterDir()` or similar, use it.
        If not, default to `process.cwd()` and document the assumption
        in JSDoc.
-    4. Compute persistencePath(absDir, 'fuji'). Always call
+    4. Compute yjsPath(projectDir, 'fuji'). Always call
        `attachSqliteReadonlyPersistence(handle.ydoc, { filePath })` and
        await its `whenLoaded`. If the file is missing, the attachment
        rejects whenLoaded with `MissingFile { name, filePath }` —

@@ -6,7 +6,7 @@
  *
  * All sessions stored in the unified auth store at `$EPICENTER_HOME/auth/sessions.json`.
  *
- * Server URL is a positional with a default (`https://api.epicenter.so`).
+ * Server URL is a positional with a default of {@link EPICENTER_API_URL}.
  * Self-hosters pass their own URL; everyone else omits it.
  */
 

@@ -579,9 +579,8 @@ import {
 } from '@epicenter/cli';
 import { attachWebsocketSync } from '@epicenter/workspace/extensions/sync/websocket';
 import { attachSqlitePersistence } from '@epicenter/workspace/extensions/persistence/sqlite';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { type } from 'arktype';
-
-const SERVER_URL = 'https://api.epicenter.so';
 const sessions = createSessionStore();
 
 const SavedTab = defineTable(type({ id: 'string', title: 'string', url: 'string', _v: '1' }));
@@ -594,10 +593,10 @@ const tabManagerFactory = defineDocument(
     const persistence = attachSqlitePersistence(ydoc, {
       filePath: EPICENTER_PATHS.persistence(id),
     });
-    const unlock = attachCliUnlock(ydoc, { sessions, serverUrl: SERVER_URL });
+    const unlock = attachCliUnlock(ydoc, { sessions, serverUrl: EPICENTER_API_URL });
     const sync = attachWebsocketSync(ydoc, {
-      url: `${SERVER_URL}/workspaces/${id}`,
-      getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+      url: `${EPICENTER_API_URL}/workspaces/${id}`,
+      getToken: async () => (await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
     });
 
     const tables = attachTables(ydoc, { savedTabs: SavedTab, bookmarks: Bookmark });
