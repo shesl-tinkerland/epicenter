@@ -372,6 +372,15 @@ export type SyncAttachmentConfig = {
 	 */
 	getToken?: () => string | null | Promise<string | null>;
 	/**
+	 * WebSocket constructor. Defaults to `globalThis.WebSocket` (the runtime's
+	 * native or polyfilled implementation). Tests pass a stub here to avoid
+	 * dialing real servers without monkey-patching the global; production code
+	 * omits it. Must be structurally compatible with the WHATWG WebSocket
+	 * interface (`new WS(url, protocols)`, `readyState`, `send`, `close`,
+	 * `onopen`/`onclose`/`onerror`/`onmessage`).
+	 */
+	webSocketImpl?: typeof WebSocket;
+	/**
 	 * Logger for background supervisor failures (waitFor rejections, socket
 	 * close timeouts). Defaults to a console-backed logger with source
 	 * `attachSync`.
@@ -807,7 +816,8 @@ export function attachSync(
 		// carrier (which the server consumes and never echoes).
 		const subprotocols = [MAIN_SUBPROTOCOL];
 		if (token) subprotocols.push(`${BEARER_SUBPROTOCOL_PREFIX}${token}`);
-		const ws = new WebSocket(wsUrl, subprotocols);
+		const WS = config.webSocketImpl ?? globalThis.WebSocket;
+		const ws = new WS(wsUrl, subprotocols);
 		ws.binaryType = 'arraybuffer';
 		websocket = ws;
 
