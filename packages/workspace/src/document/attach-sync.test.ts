@@ -24,8 +24,9 @@ import {
 import * as decoding from 'lib0/decoding';
 import { Err, Ok } from 'wellcrafted/result';
 import * as Y from 'yjs';
+import { removeAwarenessStates } from 'y-protocols/awareness';
 import Type from 'typebox';
-import { defineMutation } from '@epicenter/sync';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import { attachSync } from './attach-sync.js';
 
 // ── Minimal WebSocket stub ───────────────────────────────────────────────
@@ -977,6 +978,89 @@ describe('attachSync presence', () => {
 		const bytes = JSON.stringify(local).length;
 		expect(bytes).toBeLessThan(200);
 		ydoc.destroy();
+	});
+});
+
+// Reference action shape used to type the peer<>() proxy in tests below.
+// Handlers never run; only the type flows through.
+const PeerTestActions = {
+	ping: defineQuery({ handler: (): unknown => undefined }),
+};
+type PeerTestActions = typeof PeerTestActions;
+
+describe('SyncAttachment.peer() peer-removed race', () => {
+	test('settles with PeerLeft when the matched peer drops mid-call', async () => {
+		const ydoc = new Y.Doc({ guid: 'peer-left-1' });
+		const sync = attachSync(ydoc, {
+			url: `ws://x/${ydoc.guid}`,
+			device: { id: 'self', name: 'self', platform: 'web' },
+		});
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+		ws.deliver(serverStep2Frame());
+		await sync.whenConnected;
+
+		// Inject a fake "remote" peer into local awareness so find() resolves.
+		// Both the state map and the meta map need entries: removeAwarenessStates
+		// reads `meta.get(clientID).clock` while encoding the change update.
+		const REMOTE_CLIENT_ID = 4242;
+		const awareness = sync.raw.awareness!;
+		awareness.getStates().set(REMOTE_CLIENT_ID, {
+			device: { id: 'remote', name: 'remote', platform: 'web' },
+		});
+		awareness.meta.set(REMOTE_CLIENT_ID, {
+			clock: 0,
+			lastUpdated: Date.now(),
+		});
+		expect(sync.find('remote')?.clientId).toBe(REMOTE_CLIENT_ID);
+
+		// The remote never responds, so this rpc would hang until its 5s
+		// default timeout. We expect it to settle with PeerLeft well before.
+		const callPromise = sync.peer<PeerTestActions>('remote').ping();
+
+		// Drop the peer mid-call; the awareness change event fires
+		// synchronously and the observer in peer()'s Sender catches it.
+		removeAwarenessStates(awareness, [REMOTE_CLIENT_ID], 'test-drop');
+
+		const result = await callPromise;
+		expect(result.error).not.toBeNull();
+		if (result.error && isRpcError(result.error)) {
+			expect(result.error.name).toBe('PeerLeft');
+		}
+
+		ydoc.destroy();
+		await sync.whenDisposed;
+	});
+
+	test('returns PeerNotFound without dispatching when deviceId is absent', async () => {
+		const ydoc = new Y.Doc({ guid: 'peer-not-found' });
+		const sync = attachSync(ydoc, {
+			url: `ws://x/${ydoc.guid}`,
+			device: { id: 'self', name: 'self', platform: 'web' },
+		});
+
+		const ws = await waitFor(() => FakeWebSocket.instances[0]);
+		await waitFor(() => ws.readyState === FakeWebSocket.OPEN);
+		ws.deliver(serverStep2Frame());
+		await sync.whenConnected;
+
+		const sentBefore = ws.sent.length;
+		const result = await sync.peer<PeerTestActions>('ghost').ping();
+
+		// No RPC frame should have been put on the wire.
+		const rpcFramesAfter = ws.sent
+			.slice(sentBefore)
+			.filter((f) => peekMessageType(f) === MESSAGE_TYPE.RPC);
+		expect(rpcFramesAfter).toHaveLength(0);
+
+		expect(result.error).not.toBeNull();
+		if (result.error && isRpcError(result.error)) {
+			expect(result.error.name).toBe('PeerNotFound');
+		}
+
+		ydoc.destroy();
+		await sync.whenDisposed;
 	});
 });
 

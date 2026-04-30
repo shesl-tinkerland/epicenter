@@ -41,10 +41,9 @@ export type { DefaultRpcMap, InferRpcMap, RpcActionMap } from './rpc-types';
 // Remote-action proxy builder. The user-facing API for cross-device
 // dispatch lives on `SyncAttachment` in `@epicenter/workspace`
 // (`workspace.sync.peer<T>(deviceId)`); this is the low-level helper it
-// composes on top of, exported so other transports can build their own
-// typed proxies.
-export type { Sender } from './peer';
-export { buildRemoteProxy } from './peer';
+// composes on top of.
+export type { Sender } from './remote-proxy';
+export { buildRemoteProxy } from './remote-proxy';
 
 // Protocol (encode/decode for WS messages and HTTP sync requests)
 export {

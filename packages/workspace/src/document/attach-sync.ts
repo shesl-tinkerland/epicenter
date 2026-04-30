@@ -1253,6 +1253,15 @@ export function attachSync(
 						}
 					});
 
+					// Close the find()/observe() TOCTOU window. If the peer left
+					// between our initial find() above and the observe() subscription
+					// here, the awareness change event has already passed and our
+					// observer would never fire. Re-check now that we're listening.
+					if (!attachment.find(deviceId)) {
+						settle(Err(RpcError.PeerLeft({ peer: deviceId }).error));
+						return;
+					}
+
 					attachment
 						.rpc(found.clientId, path, input, options)
 						.then((res) => settle(res as Result<unknown, RpcError>))
