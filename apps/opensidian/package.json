@@ -5,7 +5,11 @@
 	"version": "0.0.1",
 	"type": "module",
 	"exports": {
-		"./workspace": "./src/lib/workspace/index.ts"
+		"./workspace": "./src/lib/workspace/index.ts",
+		"./openOpensidian": "./src/lib/opensidian/index.ts",
+		"./browser": "./src/lib/opensidian/browser.ts",
+		"./daemon": "./src/lib/opensidian/daemon.ts",
+		"./script": "./src/lib/opensidian/script.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -15,6 +19,7 @@
 		"deploy": "bun run build && wrangler deploy",
 		"preview": "bun --bun vite preview",
 		"prepare": "svelte-kit sync || echo ''",
+		"test": "bun test ./src/lib/opensidian",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
 	"dependencies": {
