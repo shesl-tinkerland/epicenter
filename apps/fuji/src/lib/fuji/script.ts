@@ -26,7 +26,7 @@ import {
 } from '@epicenter/workspace';
 import { openFuji as openFujiDoc } from './core.js';
 
-export async function openFuji({
+export function openFuji({
 	getToken,
 	projectDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),

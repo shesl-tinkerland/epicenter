@@ -24,7 +24,7 @@ import {
 } from '@epicenter/workspace';
 import { openOpensidian as openOpensidianDoc } from './core.js';
 
-export async function openOpensidian({
+export function openOpensidian({
 	getToken,
 	device,
 	projectDir,

@@ -21,7 +21,7 @@ import {
 } from '@epicenter/workspace';
 import { openZhongwen as openZhongwenDoc } from './core.js';
 
-export async function openZhongwen({
+export function openZhongwen({
 	getToken,
 	projectDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),

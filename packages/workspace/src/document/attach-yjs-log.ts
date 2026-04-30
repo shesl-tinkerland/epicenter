@@ -118,7 +118,6 @@ export function attachYjsLog(
 
 	let bytesSinceCompaction = 0;
 	let compactionTimer: ReturnType<typeof setTimeout> | null = null;
-	let isClosed = false;
 
 	function resetCompactionTimer() {
 		if (compactionTimer) {
@@ -128,16 +127,13 @@ export function attachYjsLog(
 	}
 
 	const updateHandler = (update: Uint8Array) => {
-		if (isClosed) return;
 		db.run('INSERT INTO updates (data) VALUES (?)', [update]);
 
 		bytesSinceCompaction += update.byteLength;
 		if (bytesSinceCompaction > COMPACTION_BYTE_THRESHOLD) {
 			resetCompactionTimer();
 			compactionTimer = setTimeout(() => {
-				if (!isClosed && compactUpdateLog(db, ydoc)) {
-					bytesSinceCompaction = 0;
-				}
+				if (compactUpdateLog(db, ydoc)) bytesSinceCompaction = 0;
 			}, COMPACTION_DEBOUNCE_MS);
 		}
 	};
@@ -147,6 +143,9 @@ export function attachYjsLog(
 	const { promise: whenDisposed, resolve: resolveDisposed } =
 		Promise.withResolvers<void>();
 
+	// On destroy: timer is cleared and the updateV2 listener is detached
+	// before db.close(), so neither the timer callback nor the listener
+	// can fire after the handle is gone. No `isClosed` guard needed.
 	ydoc.once('destroy', () => {
 		try {
 			resetCompactionTimer();
@@ -171,7 +170,6 @@ export function attachYjsLog(
 			} catch (cause) {
 				logger.warn(new Error('db.close() failed during destroy', { cause }));
 			}
-			isClosed = true;
 		} finally {
 			resolveDisposed();
 		}

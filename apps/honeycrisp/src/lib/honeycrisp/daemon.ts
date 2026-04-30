@@ -21,7 +21,7 @@ import {
 } from '@epicenter/workspace';
 import { openHoneycrisp as openHoneycrispDoc } from './core.js';
 
-export async function openHoneycrisp({
+export function openHoneycrisp({
 	getToken,
 	device,
 	projectDir,

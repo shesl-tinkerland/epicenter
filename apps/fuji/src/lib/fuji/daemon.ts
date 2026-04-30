@@ -29,7 +29,7 @@ import {
 import { attachSqlite } from '@epicenter/workspace/document/attach-sqlite';
 import { openFuji as openFujiDoc } from './core.js';
 
-export async function openFuji({
+export function openFuji({
 	getToken,
 	device,
 	projectDir,

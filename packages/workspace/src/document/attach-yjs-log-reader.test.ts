@@ -51,7 +51,7 @@ describe('attachYjsLogReader', () => {
 		const readerDoc = new Y.Doc();
 		const reader = attachYjsLogReader(readerDoc, { filePath });
 
-		expect(await reader.fileExisted).toBe(true);
+		expect(reader.fileExisted).toBe(true);
 		const readerMap = readerDoc.getMap<number>('m');
 		expect(readerMap.size).toBe(1000);
 		expect(readerMap.get('k0')).toBe(0);
@@ -100,11 +100,11 @@ describe('attachYjsLogReader', () => {
 		await writer.whenDisposed;
 	});
 
-	test('missing file is a no-op: whenLoaded resolves, fileExisted is false, doc stays empty', async () => {
+	test('missing file is a no-op: fileExisted is false, doc stays empty', async () => {
 		const filePath = join(workdir, 'does-not-exist.sqlite');
 		const ydoc = new Y.Doc();
 		const att = attachYjsLogReader(ydoc, { filePath });
-		expect(await att.fileExisted).toBe(false);
+		expect(att.fileExisted).toBe(false);
 		expect(ydoc.getMap('m').size).toBe(0);
 		ydoc.destroy();
 		await att.whenDisposed;
