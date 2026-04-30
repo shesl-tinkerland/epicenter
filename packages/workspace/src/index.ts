@@ -166,7 +166,6 @@ export {
 	type SyncStatus,
 	type WaitForBarrier,
 	type WebSocketImpl,
-	type WebSocketLike,
 } from './document/attach-sync.js';
 
 export { NoopWebSocket } from './document/noop-ws.js';

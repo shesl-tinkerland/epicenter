@@ -292,11 +292,17 @@ export type SyncAttachment = {
 export type WaitForBarrier = Promise<unknown> | { whenLoaded: Promise<unknown> };
 
 /**
- * Minimum WebSocket-like instance the supervisor reads/writes. Subset of the
- * WHATWG `WebSocket` interface; both `globalThis.WebSocket` and the
- * `NoopWebSocket` test stub satisfy it without casts.
+ * Constructor matching `new WebSocket(url, protocols?)`. The instance shape
+ * is the minimum subset of the WHATWG WebSocket interface the supervisor
+ * reads and writes. Both `globalThis.WebSocket` and the `NoopWebSocket`
+ * test stub satisfy it structurally, no cast required. Pass via
+ * `webSocketImpl`; production omits the field and inherits
+ * `globalThis.WebSocket`.
  */
-export type WebSocketLike = {
+export type WebSocketImpl = new (
+	url: string,
+	protocols?: string | string[],
+) => {
 	readyState: number;
 	binaryType: 'arraybuffer' | 'blob';
 	onopen: ((ev?: unknown) => void) | null;
@@ -306,16 +312,6 @@ export type WebSocketLike = {
 	send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void;
 	close(code?: number, reason?: string): void;
 };
-
-/**
- * Constructor matching `new WebSocket(url, protocols?)`. Pass to
- * `attachSync` via `webSocketImpl`. Tests pass `NoopWebSocket`; production
- * code omits the field and inherits `globalThis.WebSocket`.
- */
-export type WebSocketImpl = new (
-	url: string,
-	protocols?: string | string[],
-) => WebSocketLike;
 
 /**
  * First arg of `attachSync`. Either a bare `Y.Doc` (content docs) or a
