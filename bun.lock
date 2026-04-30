@@ -107,6 +107,7 @@
         "@epicenter/auth-svelte": "workspace:*",
         "@epicenter/constants": "workspace:*",
         "@epicenter/svelte": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "@tanstack/svelte-table": "catalog:",
         "@tanstack/table-core": "9.0.0-alpha.10",
@@ -152,6 +153,7 @@
         "@epicenter/auth-svelte": "workspace:*",
         "@epicenter/constants": "workspace:*",
         "@epicenter/svelte": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "@tanstack/svelte-query": "catalog:",
         "@tanstack/svelte-query-devtools": "catalog:",
@@ -220,6 +222,7 @@
         "@epicenter/constants": "workspace:*",
         "@epicenter/skills": "workspace:*",
         "@epicenter/svelte": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@tanstack/ai": "catalog:",
         "@tanstack/ai-anthropic": "catalog:",
         "@tanstack/ai-client": "^0.7.2",
@@ -319,6 +322,7 @@
         "@epicenter/auth-svelte": "workspace:*",
         "@epicenter/constants": "workspace:*",
         "@epicenter/svelte": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@epicenter/ui": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "@lucide/svelte": "catalog:",
@@ -478,6 +482,7 @@
       "dependencies": {
         "@epicenter/cli": "workspace:*",
         "@epicenter/constants": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
         "typebox": "catalog:",
@@ -534,6 +539,7 @@
       },
       "dependencies": {
         "@epicenter/constants": "workspace:*",
+        "@epicenter/sync": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
         "picocolors": "^1.1.1",
@@ -589,6 +595,7 @@
       "name": "@epicenter/skills",
       "version": "0.1.0",
       "dependencies": {
+        "@epicenter/sync": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
         "typebox": "catalog:",
@@ -633,6 +640,7 @@
       "version": "0.1.0",
       "dependencies": {
         "lib0": "catalog:",
+        "typebox": "catalog:",
         "wellcrafted": "catalog:",
         "y-protocols": "catalog:",
       },
@@ -688,6 +696,7 @@
       "version": "0.2.0",
       "dependencies": {
         "@ark/json-schema": "^0.0.4",
+        "@epicenter/constants": "workspace:*",
         "@epicenter/sync": "workspace:*",
         "@hono/standard-validator": "catalog:",
         "@noble/ciphers": "^2.1.1",

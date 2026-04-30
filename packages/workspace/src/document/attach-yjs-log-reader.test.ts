@@ -1,5 +1,5 @@
 /**
- * Tests for `attachSqliteReadonlyPersistence` (the reader side of the
+ * Tests for `attachYjsLogReader` (the reader side of the
  * SQLite persistence pair). Covers: round-trip from a writer file,
  * concurrent open against an active writer (WAL snapshot reads),
  * missing-file no-op via `fileExisted`, and the no-write-listener invariant.
@@ -11,13 +11,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { attachSqlitePersistence } from './attach-sqlite-persistence.js';
-import { attachSqliteReadonlyPersistence } from './attach-sqlite-readonly-persistence.js';
+import { attachYjsLog } from './attach-yjs-log.js';
+import { attachYjsLogReader } from './attach-yjs-log-reader.js';
 
 let workdir: string;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'attach-sqlite-readonly-persistence-'));
+	workdir = mkdtempSync(join(tmpdir(), 'attach-yjs-log-reader-'));
 });
 
 afterEach(() => {
@@ -36,12 +36,12 @@ function countRows(filePath: string): number {
 	}
 }
 
-describe('attachSqliteReadonlyPersistence', () => {
+describe('attachYjsLogReader', () => {
 	test('replays writer state into the reader Y.Doc', async () => {
 		const filePath = join(workdir, 'roundtrip.sqlite');
 
 		const writerDoc = new Y.Doc();
-		const writer = attachSqlitePersistence(writerDoc, { filePath });
+		const writer = attachYjsLog(writerDoc, { filePath });
 		await writer.whenLoaded;
 
 		const map = writerDoc.getMap<number>('m');
@@ -50,7 +50,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		});
 
 		const readerDoc = new Y.Doc();
-		const reader = attachSqliteReadonlyPersistence(readerDoc, { filePath });
+		const reader = attachYjsLogReader(readerDoc, { filePath });
 		await reader.whenLoaded;
 
 		expect(await reader.fileExisted).toBe(true);
@@ -69,7 +69,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		const filePath = join(workdir, 'concurrent.sqlite');
 
 		const writerDoc = new Y.Doc();
-		const writer = attachSqlitePersistence(writerDoc, { filePath });
+		const writer = attachYjsLog(writerDoc, { filePath });
 		await writer.whenLoaded;
 
 		const map = writerDoc.getMap<number>('m');
@@ -88,7 +88,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		})();
 
 		const readerDoc = new Y.Doc();
-		const reader = attachSqliteReadonlyPersistence(readerDoc, { filePath });
+		const reader = attachYjsLogReader(readerDoc, { filePath });
 		await reader.whenLoaded;
 
 		const readerMap = readerDoc.getMap<number>('m');
@@ -107,7 +107,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 	test('missing file is a no-op: whenLoaded resolves, fileExisted is false, doc stays empty', async () => {
 		const filePath = join(workdir, 'does-not-exist.sqlite');
 		const ydoc = new Y.Doc();
-		const att = attachSqliteReadonlyPersistence(ydoc, { filePath });
+		const att = attachYjsLogReader(ydoc, { filePath });
 		await att.whenLoaded;
 		expect(await att.fileExisted).toBe(false);
 		expect(ydoc.getMap('m').size).toBe(0);
@@ -119,7 +119,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		const filePath = join(workdir, 'no-write.sqlite');
 
 		const writerDoc = new Y.Doc();
-		const writer = attachSqlitePersistence(writerDoc, { filePath });
+		const writer = attachYjsLog(writerDoc, { filePath });
 		await writer.whenLoaded;
 		writerDoc.getMap<number>('m').set('seed', 1);
 		writerDoc.destroy();
@@ -128,7 +128,7 @@ describe('attachSqliteReadonlyPersistence', () => {
 		const baselineRows = countRows(filePath);
 
 		const readerDoc = new Y.Doc();
-		const reader = attachSqliteReadonlyPersistence(readerDoc, { filePath });
+		const reader = attachYjsLogReader(readerDoc, { filePath });
 		await reader.whenLoaded;
 
 		// Mutate the readonly-attached doc. No write listener means no INSERT.

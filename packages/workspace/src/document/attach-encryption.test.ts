@@ -1,12 +1,12 @@
 /**
- * attachEncryption tests — registration, fingerprint dedup, key application,
+ * attachEncryption tests: registration, fingerprint dedup, key application,
  * key rotation, re-encryption of plaintext, late-register auto-activation,
  * disposal cascade, reentrance guard.
  *
  * These tests exercise the attachment directly (without a workspace client)
  * to pin its contract independently of the workspace builder. Stores are
  * constructed with `createEncryptedYkvLww` and registered via
- * `encryption.register(store)` — the same pathway used by
+ * `encryption.register(store)`: the same pathway used by
  * `encryption.attachTable` / `encryption.attachKv`.
  */
 
@@ -92,7 +92,7 @@ describe('attachEncryption', () => {
 		const encryption = attachEncryption(ydoc);
 		encryption.applyKeys(toEncryptionKeys(randomBytes(32)));
 
-		// Register after applyKeys — the store must receive the cached keyring
+		// Register after applyKeys: the store must receive the cached keyring
 		// so subsequent writes are encrypted from the start.
 		const lateStore = createEncryptedYkvLww<{ title: string }>(ydoc, 'late');
 		encryption.register(lateStore);

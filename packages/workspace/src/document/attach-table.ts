@@ -1,5 +1,5 @@
 /**
- * attachTable() — Bind a TableDefinition to a Y.Doc.
+ * attachTable(): Bind a TableDefinition to a Y.Doc.
  *
  * Constructs an unencrypted `YKeyValueLww` on `ydoc.getArray('table:<name>')`
  * and wraps it with a typed `Table`. Provides CRUD operations with
@@ -40,7 +40,7 @@ import {
 	defineQuery,
 	type Mutation,
 	type Query,
-} from '../shared/actions.js';
+} from '@epicenter/sync';
 import { partialUpdate } from '../shared/schema-partial.js';
 import { standardSchemaToJsonSchema } from '../shared/standard-schema.js';
 import { TableKey } from './keys.js';
@@ -187,7 +187,7 @@ export type Table<TRow extends BaseRow> = {
 	 * attached with. Exposed for consumers that need the raw schema, e.g.,
 	 * the sqlite materializer generating DDL.
 	 */
-	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
+	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly: defineTable already constrains schemas
 	definition: TableDefinition<any>;
 
 	/**
@@ -296,7 +296,7 @@ export type Tables<TTableDefinitions extends TableDefinitions> = {
  * @param definition - The table definition with schema and migration
  */
 export function attachTable<
-	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
+	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly: defineTable already constrains schemas
 	TTableDefinition extends TableDefinition<any>,
 >(
 	ydoc: Y.Doc,
@@ -351,7 +351,7 @@ function toTSchema<T>(schema: CombinedStandardSchema): TUnsafe<T> {
  * over its encrypted store wrapper.
  */
 export function createTable<
-	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
+	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly: defineTable already constrains schemas
 	TTableDefinition extends TableDefinition<any>,
 >(
 	ykv: ObservableKvStore<unknown>,

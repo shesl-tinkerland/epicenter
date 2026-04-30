@@ -11,9 +11,9 @@
  * composing these tables with `attachTables` inside `openHoneycrisp`.
  */
 
+import { defineMutation } from '@epicenter/sync';
 import {
 	DateTimeString,
-	defineMutation,
 	defineTable,
 	type InferTableRow,
 	type Tables,

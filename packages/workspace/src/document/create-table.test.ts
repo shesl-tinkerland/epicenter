@@ -1,5 +1,5 @@
 /**
- * createTable — CRUD, query, observation, and migration over EncryptedYKeyValueLww.
+ * createTable: CRUD, query, observation, and migration over EncryptedYKeyValueLww.
  */
 
 import { describe, expect, test } from 'bun:test';

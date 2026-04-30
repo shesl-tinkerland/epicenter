@@ -6,6 +6,7 @@
 	"dependencies": {
 		"@epicenter/cli": "workspace:*",
 		"@epicenter/constants": "workspace:*",
+		"@epicenter/sync": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"arktype": "catalog:",
 		"typebox": "catalog:",

@@ -42,7 +42,7 @@ attachRichText(ydoc) / attachPlainText(ydoc) / attachTimeline(ydoc)
 **Chainable return is allowed** when per-entity configuration is incremental. Materializers follow the same `attachX(ydoc, opts)` shape — the builder registers specific table/kv references via `.table(ref, cfg)`:
 
 ```ts
-attachMarkdownMaterializer(ydoc, { dir, waitFor })
+attachMarkdown(ydoc, { dir, waitFor })
   .table(tables.files, {
     filename: slugFilename('title'),
     // Most real tables store body content in a separate Y.Doc (via
@@ -56,7 +56,7 @@ attachMarkdownMaterializer(ydoc, { dir, waitFor })
   })
   .kv(kv);
 
-attachSqliteMaterializer(ydoc, { db, waitFor })
+attachSqlite(ydoc, { db, waitFor })
   .table(tables.posts, { fts: ['title'] });
 ```
 
@@ -127,7 +127,7 @@ const factory = createDocumentFactory((id: string) => {
     url, getToken,
     waitFor: Promise.all([idb.whenLoaded, unlock.whenChecked]),
   });
-  const markdown   = attachMarkdownMaterializer(ydoc, {           // chainable return
+  const markdown   = attachMarkdown(ydoc, {           // chainable return
     dir, waitFor: sync.whenConnected,
   }).table(tables.posts, { filename: slugFilename('title') });
 

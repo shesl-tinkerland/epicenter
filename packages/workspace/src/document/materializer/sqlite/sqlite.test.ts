@@ -1,7 +1,7 @@
 /**
  * SQLite Materializer Tests
  *
- * Tests the full attachSqliteMaterializer lifecycle: DDL generation, full load,
+ * Tests the full attachSqlite lifecycle: DDL generation, full load,
  * incremental sync, FTS5 search, rebuild, and dispose. Uses real Yjs documents
  * with defineTable schemas so the materializer exercises the actual workspace
  * observation path, and `:memory:` sqlite for hermetic isolation.
@@ -24,8 +24,8 @@ import {
 	createDisposableCache,
 	defineTable,
 } from '../../../index.js';
-import { attachSqliteMaterializer } from './sqlite.js';
-import { isAction, isMutation, isQuery } from '../../../shared/actions.js';
+import { attachSqlite } from './sqlite.js';
+import { isAction, isMutation, isQuery } from '@epicenter/sync';
 
 const postsTable = defineTable(
 	type({ id: 'string', _v: '1', title: 'string', 'published?': 'boolean' }),
@@ -40,7 +40,7 @@ const hasFts5 = canUseFts5();
 type AttachedTables = ReturnType<
 	typeof attachTables<typeof tableDefinitions>
 >;
-type Materializer = ReturnType<typeof attachSqliteMaterializer>;
+type Materializer = ReturnType<typeof attachSqlite>;
 type TableRegistration = {
 	table: Parameters<Materializer['table']>[0];
 	config?: Parameters<Materializer['table']>[1];
@@ -56,7 +56,7 @@ function setup(options: SetupOptions = {}) {
 		const ydoc = new Y.Doc({ guid: id });
 		const tables = attachTables(ydoc, tableDefinitions);
 
-		const materializer = attachSqliteMaterializer(ydoc, {
+		const materializer = attachSqlite(ydoc, {
 			filePath: ':memory:',
 			waitFor: options.waitFor,
 		});
@@ -129,7 +129,7 @@ async function cleanup(setupResult: ReturnType<typeof setup>) {
 // READINESS Tests
 // ============================================================================
 
-describe('attachSqliteMaterializer', () => {
+describe('attachSqlite', () => {
 	describe('readiness', () => {
 		test('waits for whenReady before touching SQLite', async () => {
 			const gate = createDeferred();
@@ -140,7 +140,7 @@ describe('attachSqliteMaterializer', () => {
 				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(false);
 
 				gate.resolve();
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(true);
 			} finally {
@@ -171,7 +171,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([
 					{ id: 'post-1', _v: 1, published: 1, title: 'Hello mirror' },
@@ -197,7 +197,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(hasTable(testSetup.workspace.sqlite.db, 'posts')).toBe(true);
 				expect(hasTable(testSetup.workspace.sqlite.db, 'notes')).toBe(false);
@@ -219,7 +219,7 @@ describe('attachSqliteMaterializer', () => {
 			const testSetup = setup();
 
 			try {
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				testSetup.workspace.tables.posts.set({
 					id: 'post-1',
@@ -248,7 +248,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 				testSetup.workspace.tables.posts.delete('post-1');
 
 				await waitForSyncCycle();
@@ -270,7 +270,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 				testSetup.workspace.tables.posts.update({
 					id: 'post-1',
 					title: 'After update',
@@ -303,7 +303,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 				testSetup.workspace.sqlite.db.run('DELETE FROM "posts"');
 
 				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([]);
@@ -333,7 +333,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 				testSetup.workspace.sqlite.db.run('DELETE FROM "posts"');
 
 				expect(getRows(testSetup.workspace.sqlite.db, 'posts')).toEqual([]);
@@ -358,7 +358,7 @@ describe('attachSqliteMaterializer', () => {
 			const testSetup = setup();
 
 			try {
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(() =>
 					testSetup.workspace.sqlite.rebuild({
@@ -387,7 +387,7 @@ describe('attachSqliteMaterializer', () => {
 					_v: 1,
 				});
 
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(
 					await testSetup.workspace.sqlite.count({ table: 'posts' }),
@@ -400,17 +400,15 @@ describe('attachSqliteMaterializer', () => {
 			}
 		});
 
-		test('count returns 0 for non-existent table', async () => {
+		test('count throws on a table that was never registered', async () => {
 			const testSetup = setup();
 
 			try {
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
-				expect(
-					await testSetup.workspace.sqlite.count({
-						table: 'nonexistent',
-					}),
-				).toBe(0);
+				expect(() =>
+					testSetup.workspace.sqlite.count({ table: 'nonexistent' }),
+				).toThrow(/not in the materialized table set/);
 			} finally {
 				await cleanup(testSetup);
 			}
@@ -424,7 +422,7 @@ describe('attachSqliteMaterializer', () => {
 	describe('dispose', () => {
 		test('dispose closes the database without throwing', async () => {
 			const testSetup = setup();
-			await testSetup.workspace.sqlite.whenFlushed;
+			await testSetup.workspace.sqlite.whenLoaded;
 
 			testSetup.workspace.tables.posts.set({
 				id: 'post-1',
@@ -449,7 +447,7 @@ describe('attachSqliteMaterializer', () => {
 			const testSetup = setup();
 
 			try {
-				await testSetup.workspace.sqlite.whenFlushed;
+				await testSetup.workspace.sqlite.whenLoaded;
 
 				expect(
 					await testSetup.workspace.sqlite.search({
@@ -483,7 +481,7 @@ describe('attachSqliteMaterializer', () => {
 						_v: 1,
 					});
 
-					await testSetup.workspace.sqlite.whenFlushed;
+					await testSetup.workspace.sqlite.whenLoaded;
 
 					const results = (await testSetup.workspace.sqlite.search({
 						table: 'posts',

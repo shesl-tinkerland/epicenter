@@ -4,7 +4,7 @@ import { createDisposableCache } from './disposable-cache.js';
 
 /**
  * Helper: a minimal Disposable wrapping a Y.Doc. Y.Doc is the most common
- * real-world value, but the cache itself is generic — these tests exercise
+ * real-world value, but the cache itself is generic: these tests exercise
  * the cache through Y.Doc only because Y.Doc.isDestroyed gives an easy
  * "did dispose actually run?" assertion.
  */
@@ -59,7 +59,7 @@ describe('open / cache identity', () => {
 	});
 
 	test('build closure runs without coupling to a parent context', () => {
-		// Pure builder — no closures, no module-scope state. The cache calls
+		// Pure builder: no closures, no module-scope state. The cache calls
 		// it with just an id and gets back a Disposable.
 		const cache = createDisposableCache((id: string) => ({
 			ydoc: new Y.Doc({ guid: id }),
@@ -92,7 +92,7 @@ describe('throwing build closure', () => {
 
 		expect(() => cache.open('foo')).toThrow('boom');
 		expect(cache.has('foo')).toBe(false);
-		// The second attempt must run the closure again — no poisoned entry.
+		// The second attempt must run the closure again: no poisoned entry.
 		const handle = cache.open('foo');
 		expect(calls).toBe(2);
 		expect(handle.ydoc.guid).toBe('foo');
@@ -273,7 +273,7 @@ describe('cache[Symbol.dispose]', () => {
 		});
 		cache.open('a');
 
-		// No await — cache dispose returns void and cascades synchronously.
+		// No await: cache dispose returns void and cascades synchronously.
 		cache[Symbol.dispose]();
 
 		await sentinel;
@@ -281,7 +281,7 @@ describe('cache[Symbol.dispose]', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// open / dispose — refcount, grace-period disposal, disposable protocol
+// open / dispose: refcount, grace-period disposal, disposable protocol
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('open / dispose', () => {
@@ -310,7 +310,7 @@ describe('open / dispose', () => {
 		expect(h1.ydoc.isDestroyed).toBe(true);
 	});
 
-	test('using h = cache.open(id) — disposes on scope exit', async () => {
+	test('using h = cache.open(id): disposes on scope exit', async () => {
 		const cache = makeYDocCache({ gcTime: 10 });
 		let ydocRef: Y.Doc;
 		{
@@ -348,7 +348,7 @@ describe('open / dispose', () => {
 		expect(h.ydoc.isDestroyed).toBe(true);
 	});
 
-	test('gcTime: 0 — last dispose tears down synchronously', () => {
+	test('gcTime: 0: last dispose tears down synchronously', () => {
 		const cache = makeYDocCache({ gcTime: 0 });
 		const h1 = cache.open('a');
 		const h2 = cache.open('a');
@@ -358,7 +358,7 @@ describe('open / dispose', () => {
 		expect(h1.ydoc.isDestroyed).toBe(true);
 	});
 
-	test('gcTime: Infinity — entry stays live indefinitely; cache dispose forces teardown', async () => {
+	test('gcTime: Infinity: entry stays live indefinitely; cache dispose forces teardown', async () => {
 		const cache = makeYDocCache({ gcTime: Number.POSITIVE_INFINITY });
 		const h = cache.open('a');
 		const ydoc = h.ydoc;
@@ -374,14 +374,14 @@ describe('open / dispose', () => {
 		expect(ydoc.isDestroyed).toBe(true);
 	});
 
-	test('default gcTime is finite (5s) — teardown eventually fires without explicit cache dispose', async () => {
+	test('default gcTime is finite (5s): teardown eventually fires without explicit cache dispose', async () => {
 		// Guards the documented default. A bug that flipped the default back
 		// to Infinity would make this test hang past the assertion window.
 		const cache = makeYDocCache(); // default
 		const h = cache.open('a');
 		const ydoc = h.ydoc;
 		h[Symbol.dispose]();
-		// Not waiting the full 5s here — just confirm the timer was armed by
+		// Not waiting the full 5s here: just confirm the timer was armed by
 		// looking up has(). It should be true (in grace), not absent.
 		expect(cache.has('a')).toBe(true);
 		expect(ydoc.isDestroyed).toBe(false);

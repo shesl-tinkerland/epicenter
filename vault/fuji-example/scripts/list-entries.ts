@@ -13,7 +13,7 @@
  *   the local Y.Doc; cloud sync then exchanges only a state-vector delta.
  *
  *   Mode B (cold path): with no daemon running, the persistence file may
- *   not exist. `attachSqliteReadonlyPersistence` rejects with `MissingFile`,
+ *   not exist. `attachYjsLogReader` rejects with `MissingFile`,
  *   the factory swallows it, and `attachSync` carries the full document
  *   over a fresh cloud WS. Entries print after a short sync delay.
  */

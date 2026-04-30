@@ -8,7 +8,8 @@
  * @module
  */
 
-import { defineQuery, type DisposableCache, type Table } from '@epicenter/workspace';
+import { defineQuery } from '@epicenter/sync';
+import type { DisposableCache, Table } from '@epicenter/workspace';
 import Type from 'typebox';
 import type { ReferenceContentDoc } from './reference-content-docs.js';
 import type { SkillInstructionsDoc } from './skill-instructions-docs.js';

@@ -12,7 +12,7 @@ type TimelineYMap = Y.Map<unknown>;
 // ── Entry types ──────────────────────────────────────────────────────────
 
 /**
- * Timeline entry shapes — a discriminated union on 'type'.
+ * Timeline entry shapes: a discriminated union on 'type'.
  * These describe the extracted, typed form of what's stored in Y.Maps.
  * At runtime, entries are Y.Map instances; push functions construct them
  * and readEntry validates/extracts them into these shapes.
@@ -44,7 +44,7 @@ export type Timeline = {
 	/**
 	 * The current (last) entry, validated and typed. Returns `null` if no entries exist.
 	 *
-	 * Recomputed on every access—each call parses the underlying Y.Map and
+	 * Recomputed on every access: each call parses the underlying Y.Map and
 	 * returns a fresh object. Do not rely on reference equality between calls.
 	 */
 	readonly currentEntry: TimelineEntry | null;
@@ -81,7 +81,7 @@ export type Timeline = {
 	 * **WARNING: Lossy on non-text entries.** If the current entry is richtext or
 	 * sheet, this method reads the content as a plain string (stripping all
 	 * formatting, structure, column metadata, etc.), concatenates the new text,
-	 * and pushes a **new text entry** — permanently converting the document to
+	 * and pushes a **new text entry**: permanently converting the document to
 	 * plain text. All prior richtext formatting or sheet data is lost.
 	 *
 	 * If you need to append to a richtext document without losing formatting,
@@ -144,12 +144,12 @@ export type Timeline = {
 	restoreFromSnapshot(snapshotBinary: Uint8Array): void;
 
 	/**
-	 * Watch for structural timeline changes—entries added or removed.
+	 * Watch for structural timeline changes: entries added or removed.
 	 *
 	 * Fires when the entry list changes (e.g., a new entry is pushed via
 	 * `write()`, `asText()`, `asRichText()`, `asSheet()`, or `restoreFromSnapshot()`).
 	 * Does **not** fire when `write()` replaces content in-place (same type).
-	 * Does NOT fire when content within an existing entry changes—edits to
+	 * Does NOT fire when content within an existing entry changes: edits to
 	 * Y.Text, Y.XmlFragment, or Y.Map are handled by those shared types directly.
 	 * Editors already bind to the CRDT handle and receive updates natively.
 	 *
@@ -321,7 +321,7 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 					return;
 				}
 				if (entry.type === 'text') {
-					// Append directly to existing Y.Text—no new entry, no mode change
+					// Append directly to existing Y.Text: no new entry, no mode change
 					entry.content.insert(entry.content.length, text);
 				} else {
 					// Flatten current content (richtext or sheet) + append as new text entry
@@ -394,7 +394,7 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 				// timeline using the same helpers that write() and as*() use.
 				switch (entry.type) {
 					case 'text': {
-						// Y.Text can't transfer between docs—extract the raw string.
+						// Y.Text can't transfer between docs: extract the raw string.
 						// If live doc is text, overwrite in-place; otherwise push new entry.
 						const text = entry.content.toString();
 						const current = this.currentEntry;

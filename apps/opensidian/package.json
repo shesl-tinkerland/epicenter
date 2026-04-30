@@ -28,6 +28,7 @@
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/skills": "workspace:*",
 		"@epicenter/svelte": "workspace:*",
+		"@epicenter/sync": "workspace:*",
 		"@tanstack/ai": "catalog:",
 		"@tanstack/ai-anthropic": "catalog:",
 		"@tanstack/ai-client": "^0.7.2",

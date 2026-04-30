@@ -6,7 +6,7 @@
  * workspace — Chrome is the sole authority. See `browser-state.svelte.ts`.
  */
 
-import { defineMutation, defineQuery } from '@epicenter/workspace';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import Type from 'typebox';
 import {
 	defineErrors,

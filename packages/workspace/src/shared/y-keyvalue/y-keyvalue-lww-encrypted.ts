@@ -1,5 +1,5 @@
 /**
- * # Encrypted KV-LWW—Composition Wrapper
+ * # Encrypted KV-LWW: Composition Wrapper
  *
  * Transparent encryption layer over `YKeyValueLww`. All CRDT logic (timestamps,
  * conflict resolution, pending/map architecture) stays in `YKeyValueLww`; this
@@ -9,7 +9,7 @@
  *
  * Yjs `ContentAny` stores entry objects by **reference**. `YKeyValueLww` relies
  * on `indexOf()` (strict `===`) to find entries in the Y.Array during conflict
- * resolution. A fork that decrypts into new objects breaks `indexOf`—the map
+ * resolution. A fork that decrypts into new objects breaks `indexOf`: the map
  * entries are no longer the same JS objects as the yarray entries.
  *
  * See `docs/articles/yjs-reference-equality-why-we-compose-encrypted-crdts.md`.
@@ -26,13 +26,13 @@
  * ```
  *
  * There is no plaintext cache. Every read decrypts from the inner store.
- * XChaCha20-Poly1305 decrypt of a small JSON blob is microseconds—caching
+ * XChaCha20-Poly1305 decrypt of a small JSON blob is microseconds: caching
  * adds complexity (dual-map sync, diffAndEmit, transaction-gap fallback)
  * for negligible performance gain.
  *
  * ## Encryption Lifecycle
  *
- * Encryption is **one-way** by API surface—there is no
+ * Encryption is **one-way** by API surface: there is no
  * `deactivateEncryption()`. Once `activateEncryption()` is called, the
  * `encryption` state is set and no method clears it. The only reset
  * path is destroying the wrapper via `clearLocalData()`.
@@ -55,8 +55,8 @@
  *
  * ## Related Modules
  *
- * - {@link ../crypto/index.ts}—Encryption primitives (encryptValue, decryptValue, isEncryptedBlob)
- * - {@link ./y-keyvalue-lww.ts}—Inner CRDT that handles conflict resolution (unaware of encryption)
+ * - {@link ../crypto/index.ts}: Encryption primitives (encryptValue, decryptValue, isEncryptedBlob)
+ * - {@link ./y-keyvalue-lww.ts}: Inner CRDT that handles conflict resolution (unaware of encryption)
  *
  * @module
  */
@@ -80,7 +80,7 @@ import {
 
 /**
  * Errors emitted when the encrypted observer fails to decrypt an entry.
- * Silent-data-loss territory — we log and continue, but the log is the only
+ * Silent-data-loss territory: we log and continue, but the log is the only
  * record this happened, so it's typed so apps can aggregate/count.
  */
 export const EncryptedKvError = defineErrors({
@@ -109,7 +109,7 @@ type EncryptionState = {
  * (`activateEncryption`, `unreadableEntryCount`), disposal, and direct access
  * to the underlying `yarray` / `doc` for sync providers.
  *
- * All values exposed through the `ObservableKvStore` surface are **plaintext** —
+ * All values exposed through the `ObservableKvStore` surface are **plaintext**
  * encryption is transparent to consumers.
  */
 export type EncryptedYKeyValueLww<T> = ObservableKvStore<T> & {
@@ -118,7 +118,7 @@ export type EncryptedYKeyValueLww<T> = ObservableKvStore<T> & {
 	 * becomes the current key for new encryptions. Decryption reads
 	 * `getKeyVersion(blob)` to select the correct key from the keyring.
 	 *
-	 * There is no deactivation path — this is one-way by API surface. Calling
+	 * There is no deactivation path: this is one-way by API surface. Calling
 	 * again with a new keyring updates the active keys AND re-encrypts any
 	 * entries that aren't already at the current key version.
 	 *
@@ -163,7 +163,7 @@ export type EncryptedYKeyValueLww<T> = ObservableKvStore<T> & {
  * `YKeyValueLww` remains the single source for conflict resolution; this wrapper
  * only transforms values at the boundary (`set` encrypts, `get`/observer decrypts).
  *
- * Construction always starts in passthrough mode — zero overhead, identical to
+ * Construction always starts in passthrough mode: zero overhead, identical to
  * a plain `YKeyValueLww<T>`. Call `activateEncryption(keyring)` when the key
  * becomes available (typically post-login) to enable encryption and upgrade
  * any existing plaintext or old-version entries.
@@ -188,7 +188,7 @@ export function createEncryptedYkvLww<T>(
 ): EncryptedYKeyValueLww<T> {
 	const yarray = ydoc.getArray<YKeyValueLwwEntry<EncryptedBlob | T>>(arrayKey);
 	/**
-	 * The inner LWW store. It sees `EncryptedBlob | T` as its value type—it
+	 * The inner LWW store. It sees `EncryptedBlob | T` as its value type: it
 	 * doesn't know or care that some values are ciphertext. Timestamps, conflict
 	 * resolution, and observer mechanics all live here.
 	 */
@@ -205,7 +205,7 @@ export function createEncryptedYkvLww<T>(
 	 * - Blob + no state (passthrough mode) → undefined (unreadable).
 	 * - Blob + state → try currentKey, fall back to the blob's recorded version.
 	 *
-	 * Silent on failure — callers decide what to do with `undefined`.
+	 * Silent on failure: callers decide what to do with `undefined`.
 	 *
 	 * @param state Defaults to the closure's `encryption`. Overridden by
 	 *   `activateEncryption()` to decrypt against `nextEncryption` without
@@ -221,7 +221,7 @@ export function createEncryptedYkvLww<T>(
 		try {
 			return JSON.parse(decryptValue(stored, state.currentKey, aad)) as T;
 		} catch {
-			// Current key didn't work — try the blob's recorded key version
+			// Current key didn't work: try the blob's recorded key version
 		}
 		const versionKey = state.keyring.get(getKeyVersion(stored));
 		if (!versionKey || versionKey === state.currentKey) return undefined;
@@ -348,7 +348,7 @@ export function createEncryptedYkvLww<T>(
 			//
 			// Newly-readable entries (decryptable under nextEncryption but whose
 			// version was NOT in previousEncryption's keyring) get a synthetic
-			// `add` event so observers catch up. The check is a map lookup —
+			// `add` event so observers catch up. The check is a map lookup
 			// under authenticated crypto with immutable key versions,
 			// "version was in previous keyring" ⇔ "was decryptable before",
 			// for entries that decrypt under the new keyring.
@@ -370,7 +370,7 @@ export function createEncryptedYkvLww<T>(
 			}
 
 			// One transaction for the whole pass. Filtered by observers via
-			// REENCRYPT_ORIGIN — downstream consumers don't see re-encryption
+			// REENCRYPT_ORIGIN: downstream consumers don't see re-encryption
 			// as a change (the decrypted value didn't change).
 			if (toRewrite.length > 0) {
 				inner.doc.transact(() => {

@@ -14,7 +14,7 @@
  * // data is { closedCount: number } | null — fully inferred
  * ```
  */
-import type { InferRpcMap } from '@epicenter/workspace';
+import type { InferRpcMap } from '@epicenter/sync';
 import type { tabManager } from '../tab-manager/client';
 
 type Actions = typeof tabManager.actions;

@@ -8,7 +8,7 @@
  *   attachPersistence: (ydoc) => attachIndexedDb(ydoc),
  *
  *   // desktop / CLI — caller closes over a directory
- *   attachPersistence: (ydoc) => attachSqlitePersistence(ydoc, {
+ *   attachPersistence: (ydoc) => attachYjsLog(ydoc, {
  *     filePath: join(contentDir, `${ydoc.guid}.db`),
  *   }),
  *

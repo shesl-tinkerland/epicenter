@@ -1,8 +1,14 @@
 /// <reference lib="dom" />
 
+import { DEFAULT_RPC_TIMEOUT_MS } from '@epicenter/constants/timeouts';
 import {
+	type Actions,
 	BEARER_SUBPROTOCOL_PREFIX,
+	type DefaultRpcMap,
+	type PeerTransport,
 	decodeRpcPayload,
+	defineQuery,
+	describeActions,
 	encodeAwareness,
 	encodeAwarenessStates,
 	encodeRpcRequest,
@@ -11,13 +17,18 @@ import {
 	encodeSyncStep1,
 	encodeSyncUpdate,
 	handleSyncPayload,
+	invokeAction,
 	isRpcError,
 	MAIN_SUBPROTOCOL,
 	MESSAGE_TYPE,
+	type RemoteCallOptions,
+	resolveActionPath,
+	type RpcActionMap,
 	RpcError,
 	SYNC_MESSAGE_TYPE,
 	SYNC_ORIGIN,
 	type SyncMessageType,
+	type SystemActions,
 } from '@epicenter/sync';
 import * as decoding from 'lib0/decoding';
 import {
@@ -34,16 +45,6 @@ import {
 	removeAwarenessStates,
 } from 'y-protocols/awareness';
 import * as Y from 'yjs';
-import type { DefaultRpcMap, RpcActionMap } from '../rpc/types.js';
-import {
-	type Actions,
-	type RemoteCallOptions,
-	type SystemActions,
-	defineQuery,
-	describeActions,
-	invokeAction,
-	resolveActionPath,
-} from '../shared/actions.js';
 import {
 	type Awareness as TypedAwareness,
 	createAwareness,
@@ -56,7 +57,7 @@ import {
 } from './standard-awareness-defs.js';
 
 /**
- * Minimal Y.Doc sync attachment — connects a Y.Doc to a WebSocket sync server.
+ * Minimal Y.Doc sync attachment: connects a Y.Doc to a WebSocket sync server.
  *
  * This is a low-level primitive for `packages/document`. It handles the
  * Y.Doc sync protocol (STEP1/STEP2/UPDATE), optional awareness, supervisor
@@ -70,7 +71,7 @@ import {
  * calls are made via the returned `rpc()` method.
  *
  * Register persistence (`attachIndexedDb`) first and pass its `whenLocalReady`
- * as `waitFor` so the supervisor connects only after local state hydrates —
+ * as `waitFor` so the supervisor connects only after local state hydrates
  * the handshake then exchanges only the delta, not the full document.
  *
  * `SYNC_ORIGIN` is imported from `@epicenter/sync` so every sync layer
@@ -118,7 +119,7 @@ export type SyncFailedError = InferErrors<typeof SyncFailedError>;
 export const SyncSupervisorError = defineErrors({
 	/**
 	 * The `waitFor` barrier (typically IndexedDB hydration) rejected before
-	 * the supervisor started. Sync proceeds anyway — better to try syncing
+	 * the supervisor started. Sync proceeds anyway: better to try syncing
 	 * than to stay silently offline because persistence failed.
 	 */
 	WaitForRejected: ({ cause }: { cause: unknown }) => ({
@@ -219,7 +220,7 @@ export type SyncAttachment = {
 	reconnect: () => void;
 	/**
 	 * Resolves after the ydoc is destroyed and the websocket teardown completes.
-	 * Named symmetrically with `whenConnected` — both are promises.
+	 * Named symmetrically with `whenConnected`: both are promises.
 	 */
 	whenDisposed: Promise<unknown>;
 	/**
@@ -277,16 +278,21 @@ export type SyncAttachment = {
 	 */
 	observe(callback: () => void): () => void;
 	/**
-	 * Escape hatch — the underlying y-protocols handles. Use for advanced
+	 * Escape hatch: the underlying y-protocols handles. Use for advanced
 	 * cases (custom event listeners, integrations expecting raw types).
 	 * `awareness` is `null` when no presence was configured.
 	 */
 	raw: { awareness: YAwareness | null };
 };
 
+// Compile-time assertion: SyncAttachment must structurally satisfy PeerTransport.
+// If SyncAttachment.rpc or find ever drifts from PeerTransport's contract, this
+// line will produce a type error before any runtime mismatch surfaces.
+void ((_s: SyncAttachment): PeerTransport => _s);
+
 /**
  * Anything with a `.whenLoaded` promise (typically `attachIndexedDb` or
- * `attachSqlitePersistence` results). Lets `waitFor` accept the attachment directly
+ * `attachYjsLog` results). Lets `waitFor` accept the attachment directly
  * rather than reaching into `.whenLoaded`.
  */
 export type WaitForBarrier = Promise<unknown> | { whenLoaded: Promise<unknown> };
@@ -341,11 +347,11 @@ export type SyncAttachmentConfig = {
 	 * `find()` / `observe()` become meaningful.
 	 *
 	 * Workspace docs pass this; content docs (entries, notes, files) omit
-	 * it — they sync but don't publish identity.
+	 * it: they sync but don't publish identity.
 	 *
-	 * Mutually exclusive with `awareness` (an external instance) — pass one.
+	 * Mutually exclusive with `awareness` (an external instance): pass one.
 	 *
-	 * Awareness carries presence only — no action manifest. Consumers that
+	 * Awareness carries presence only: no action manifest. Consumers that
 	 * need to enumerate a peer's actions call
 	 * `describePeer(sync, deviceId)` to fetch the full local
 	 * `ActionManifest` on demand via the runtime-injected `system.describe`
@@ -356,7 +362,7 @@ export type SyncAttachmentConfig = {
 	 * External awareness instance. Escape hatch for custom presence schemas
 	 * (cursors on content docs, typing indicators). When provided, sync
 	 * carries presence over the wire but does NOT type the `peers()` /
-	 * `find()` surface — those return empty/undefined since the schema is
+	 * `find()` surface: those return empty/undefined since the schema is
 	 * unknown to sync. Use the awareness's own typed wrapper instead.
 	 *
 	 * Standard "I am a device" presence: pass `device` instead.
@@ -368,7 +374,7 @@ export type SyncAttachmentConfig = {
 	 * throws become `Err(ActionFailed)`, existing `Result`s pass through.
 	 *
 	 * Wrapping the dispatch path (auth gates, audit logs, rate limits) is
-	 * an upstream concern — compose the action tree itself before passing
+	 * an upstream concern: compose the action tree itself before passing
 	 * it here. Userland helpers like `withAuthGate(actions, ...)` are the
 	 * right home for that, not a callback in this config.
 	 *
@@ -384,13 +390,13 @@ export type SyncAttachmentConfig = {
 	 * an `auth` error state until a subsequent `reconnect()` (or backoff
 	 * iteration) finds a non-null token.
 	 *
-	 * May be sync or async — the supervisor `await`s either way. Sync returns
+	 * May be sync or async: the supervisor `await`s either way. Sync returns
 	 * skip the microtask hop in the common case where the token is already in
 	 * memory.
 	 *
 	 * Providing this callback IS the declaration that the connection is
 	 * authenticated. Omit it for unauthenticated providers (tests, public
-	 * rooms) — `attachSync` then connects without a bearer subprotocol.
+	 * rooms): `attachSync` then connects without a bearer subprotocol.
 	 */
 	getToken?: () => string | null | Promise<string | null>;
 	/**
@@ -398,7 +404,7 @@ export type SyncAttachmentConfig = {
 	 * native or polyfilled implementation). Tests pass a stub here to avoid
 	 * dialing real servers without monkey-patching the global; production code
 	 * omits it. The type is the minimum interface the supervisor uses, not
-	 * the full WHATWG `WebSocket` — that lets `NoopWebSocket` (in
+	 * the full WHATWG `WebSocket`: that lets `NoopWebSocket` (in
 	 * `noop-ws.ts`) satisfy it without an `as unknown as typeof WebSocket`
 	 * cast. The native `globalThis.WebSocket` constructor is structurally
 	 * assignable.
@@ -416,7 +422,6 @@ export type SyncAttachmentConfig = {
 // Constants
 // ============================================================================
 
-const DEFAULT_RPC_TIMEOUT_MS = 5_000;
 const BASE_DELAY_MS = 500;
 const MAX_DELAY_MS = 30_000;
 const PING_INTERVAL_MS = 60_000;
@@ -476,7 +481,7 @@ export function attachSync(
 
 	if (userActions && 'system' in userActions) {
 		throw new Error(
-			"User actions cannot define the 'system.*' namespace — it's reserved " +
+			"User actions cannot define the 'system.*' namespace: it's reserved " +
 				"for runtime-injected meta operations. Use 'app', 'settings', " +
 				"'config', or another app-specific noun.",
 		);
@@ -509,7 +514,7 @@ export function attachSync(
 	if (config.device && config.awareness) {
 		throw new Error(
 			'[attachSync] pass either `device` (standard presence) or `awareness` ' +
-				'(external instance for custom schemas) — not both.',
+				'(external instance for custom schemas): not both.',
 		);
 	}
 
@@ -584,7 +589,7 @@ export function attachSync(
 
 	/**
 	 * Whether this connection is authenticated. Inferred from the presence of
-	 * `getToken` — supplying that callback IS the declaration that a token is
+	 * `getToken`: supplying that callback IS the declaration that a token is
 	 * required. Without it, the supervisor connects unauthenticated.
 	 */
 	const requiresToken = typeof config.getToken === 'function';
@@ -595,7 +600,7 @@ export function attachSync(
 	/**
 	 * Monotonic counter bumped by goOffline() and reconnect(). The supervisor
 	 * loop captures this at the top of each iteration and `continue`s when the
-	 * snapshot no longer matches — restarting with a fresh token.
+	 * snapshot no longer matches: restarting with a fresh token.
 	 */
 	let runId = 0;
 
@@ -611,7 +616,7 @@ export function attachSync(
 	 * `localVersion` increments on every local doc update. After a debounce
 	 * quiet period, the client sends `encodeSyncStatus(localVersion)`; the
 	 * server echoes the same payload back. The echoed value lands in
-	 * `ackedVersion` — when `localVersion > ackedVersion`, there's local work
+	 * `ackedVersion`: when `localVersion > ackedVersion`, there's local work
 	 * the server hasn't confirmed yet.
 	 *
 	 * Both counters reset to 0 on each fresh connection (the server has no
@@ -737,7 +742,7 @@ export function attachSync(
 		// expected to echo any inbound message via `liveness.touch()`, so
 		// this also probes "is the wire actually responsive?" beyond what
 		// the 60s PING_INTERVAL_MS keepalive covers. If the server doesn't
-		// echo strings, focus events become a no-op for liveness — the
+		// echo strings, focus events become a no-op for liveness: the
 		// 90s LIVENESS_TIMEOUT_MS still catches a dead wire eventually.
 		if (websocket?.readyState === WebSocket.OPEN) {
 			websocket.send('ping');
@@ -773,7 +778,7 @@ export function attachSync(
 		while (desired === 'online' && !permanentFailure) {
 			const myRunId = runId;
 
-			// Pending RPCs from the previous connection will never resolve —
+			// Pending RPCs from the previous connection will never resolve
 			// clear them before starting a new attempt.
 			clearPendingRequests();
 
@@ -1051,7 +1056,7 @@ export function attachSync(
 	}
 
 	// Gate the first connection on `waitFor` (typically idb.whenLocalReady).
-	// If `waitFor` rejects, log but still start — better to try syncing than
+	// If `waitFor` rejects, log but still start: better to try syncing than
 	// silently stay offline because persistence failed.
 	void (async () => {
 		try {
@@ -1073,7 +1078,7 @@ export function attachSync(
 		torn = true;
 		// Reject `whenConnected` if dispose lands before the first handshake
 		// (permanent failure: dead URL, denied auth). Callers awaiting it
-		// would otherwise hang forever — the doc is gone, the promise must
+		// would otherwise hang forever: the doc is gone, the promise must
 		// settle. Attach a no-op catch BEFORE rejecting so the rejection
 		// isn't unhandled when no consumer awaits.
 		whenConnected.catch(() => {});
@@ -1208,7 +1213,7 @@ export function attachSync(
 			if (target === ydoc.clientID) {
 				return RpcError.ActionFailed({
 					action,
-					cause: 'Cannot RPC to self — call the action directly',
+					cause: 'Cannot RPC to self: call the action directly',
 				});
 			}
 
@@ -1261,7 +1266,7 @@ export function attachSync(
 							);
 						} else {
 							// Trust-the-wire cast: both RPC sides are in the same monorepo.
-							// Same pattern as tRPC/Eden Treaty — structural type safety, not
+							// Same pattern as tRPC/Eden Treaty: structural type safety, not
 							// runtime. Unavoidable without output schemas on actions.
 							resolve(Ok(result.data as TMap[TAction]['output']));
 						}
@@ -1336,7 +1341,7 @@ function createLivenessMonitor(ws: WebSocket) {
  * Await a WebSocket's `close` event, with a timeout safeguard.
  *
  * Resolves immediately if the socket is null or already CLOSED. Otherwise
- * attaches a one-shot `close` listener and races it against `timeoutMs` —
+ * attaches a one-shot `close` listener and races it against `timeoutMs`
  * a misbehaving server that never sends a close frame shouldn't block
  * teardown indefinitely.
  */

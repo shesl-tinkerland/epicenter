@@ -3,11 +3,11 @@
  *
  * TanStack AI needs tools in two places:
  *
- * 1. **In the browser** — `createChat({ tools })` expects an array of
+ * 1. **In the browser**: `createChat({ tools })` expects an array of
  *    `AnyClientTool` objects with `execute` functions so the `ChatClient`
  *    can run tool calls locally without a server round-trip.
  *
- * 2. **On the server** — the HTTP request body needs a JSON-serializable
+ * 2. **On the server**: the HTTP request body needs a JSON-serializable
  *    description of each tool (name, description, input schema) so the
  *    server can forward them to the AI provider. Functions like `execute`
  *    can't travel over the wire.
@@ -19,9 +19,13 @@
  * @module
  */
 
+import {
+	type Action,
+	type Actions,
+	invokeAction,
+	isAction,
+} from '@epicenter/sync';
 import type { AnyClientTool, JSONSchema } from '@tanstack/ai';
-import type { Action, Actions } from '../shared/actions';
-import { invokeAction, isAction } from '../shared/actions';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -53,7 +57,7 @@ type ActionNames<T extends Actions> = {
 
 /**
  * JSON-serializable description of a tool, sent to the server in the HTTP
- * request body. This is what the AI provider sees—it tells the LLM what
+ * request body. This is what the AI provider sees: it tells the LLM what
  * tools exist, what arguments they accept, and whether they need user
  * approval before running.
  *
@@ -85,12 +89,12 @@ export type ToolDefinition = {
  *
  * ### What you get
  *
- * - **`.tools`** — Pass these to `createChat({ tools })`. They're TanStack AI
+ * - **`.tools`**: Pass these to `createChat({ tools })`. They're TanStack AI
  *   `AnyClientTool` objects with `execute` wired to your action handlers.
  *   When the LLM calls a tool, `ChatClient` runs the matching `execute`
- *   function in the browser automatically—no server round-trip needed.
+ *   function in the browser automatically: no server round-trip needed.
  *
- * - **`.definitions`** — Send these to the server in your HTTP request body.
+ * - **`.definitions`**: Send these to the server in your HTTP request body.
  *   They're the same tools minus `execute` (which can't be serialized to
  *   JSON), plus normalized input schemas. The server forwards them to the AI
  *   provider so the LLM knows what tools are available. Each definition also
@@ -167,7 +171,7 @@ export function actionsToAiTools<TActions extends Actions>(
 		},
 	}));
 
-	// Derive wire definitions directly from actions—avoids the type-widening
+	// Derive wire definitions directly from actions: avoids the type-widening
 	// round-trip through AnyClientTool that required `as JSONSchema` casts.
 	const definitions: ToolDefinition[] = entries.map(([action, path]) => ({
 		name: path.join(ACTION_NAME_SEPARATOR),
@@ -200,7 +204,7 @@ export function actionsToAiTools<TActions extends Actions>(
 const ACTION_NAME_SEPARATOR = '_';
 
 /**
- * Walk an `Actions` tree, yielding each leaf with its key path. Local helper —
+ * Walk an `Actions` tree, yielding each leaf with its key path. Local helper
  * the CLI has its own `walkActions` that yields the dotted-path form it wants;
  * this one yields path arrays so the AI bridge can join with its own
  * separator. The `Actions` type guarantees nodes are either `Action` callables

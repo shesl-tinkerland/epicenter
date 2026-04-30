@@ -29,6 +29,7 @@
 	},
 	"dependencies": {
 		"lib0": "catalog:",
+		"typebox": "catalog:",
 		"wellcrafted": "catalog:",
 		"y-protocols": "catalog:"
 	},

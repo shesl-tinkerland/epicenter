@@ -6,14 +6,14 @@
  *
  * - **Storage format**: `"2024-01-01T20:00:00.000Z|America/New_York"`
  * - **Sortable**: UTC instant comes first, so lexicographic sort = chronological sort
- * - **Lossless**: Preserves the original timezone—unlike bare ISO strings that discard it
+ * - **Lossless**: Preserves the original timezone: unlike bare ISO strings that discard it
  * - **Portable**: Plain text, no binary encoding, grepable in any tool
  *
- * The pipe `|` separator is intentional—it never appears in valid ISO 8601 strings
+ * The pipe `|` separator is intentional: it never appears in valid ISO 8601 strings
  * or IANA timezone names, so parsing is always an unambiguous `split('|')`.
  *
  * The `DateTimeString` export is both an arktype validator (for `defineTable` schemas)
- * and a companion object with `parse`, `stringify`, `is`, and `now` methods—modeled
+ * and a companion object with `parse`, `stringify`, `is`, and `now` methods: modeled
  * after `JSON.parse` / `JSON.stringify` for familiarity.
  */
 import { type } from 'arktype';
@@ -41,7 +41,7 @@ const TIMEZONE_ID_REGEX = /[A-Za-z][A-Za-z0-9_/+-]*/;
 /**
  * Full DateTimeString validation pattern.
  *
- * Anchored match of `<ISO_UTC_EXACT>|<TIMEZONE_ID>` — rejects malformed
+ * Anchored match of `<ISO_UTC_EXACT>|<TIMEZONE_ID>`: rejects malformed
  * strings that a bare `indexOf('|')` check would accept (e.g. `"hello|world"`).
  */
 const DATE_TIME_STRING_REGEX = new RegExp(
@@ -141,7 +141,7 @@ const validator = type('string').pipe((s): DateTimeString => {
  * Arktype validator and companion object for {@link DateTimeString}.
  *
  * Works as an arktype schema in `defineTable` (it IS a `Type`), and also
- * provides `parse`, `stringify`, `is`, and `now` methods—modeled after
+ * provides `parse`, `stringify`, `is`, and `now` methods: modeled after
  * `JSON.parse` / `JSON.stringify`.
  *
  * @example
@@ -158,7 +158,7 @@ const validator = type('string').pipe((s): DateTimeString => {
  */
 export const DateTimeString = Object.assign(validator, {
 	/**
-	 * Type guard—check if a value is a valid {@link DateTimeString}.
+	 * Type guard: check if a value is a valid {@link DateTimeString}.
 	 *
 	 * Uses strict regex validation: 24-char UTC ISO prefix + pipe + valid IANA
 	 * timezone characters. Rejects malformed strings that a bare `indexOf('|')`
@@ -207,7 +207,7 @@ export const DateTimeString = Object.assign(validator, {
 	/**
 	 * Build a {@link DateTimeString} from an ISO UTC instant and timezone.
 	 *
-	 * The inverse of `parse`—takes the two components and joins them with `|`.
+	 * The inverse of `parse`: takes the two components and joins them with `|`.
 	 *
 	 * @param iso - ISO 8601 UTC string (e.g. from `Date.toISOString()`).
 	 * @param timezone - IANA timezone identifier.
@@ -252,7 +252,7 @@ export const DateTimeString = Object.assign(validator, {
 	 * Convert a {@link DateTimeString} to a native `Date` object.
 	 *
 	 * Extracts the ISO UTC instant and constructs a `Date`. The timezone
-	 * component is discarded—use `parse()` when you need it.
+	 * component is discarded: use `parse()` when you need it.
 	 *
 	 * @param str - A DateTimeString (or any string in the expected format).
 	 * @returns A native `Date` representing the UTC instant.

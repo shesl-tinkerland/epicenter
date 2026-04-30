@@ -7,7 +7,7 @@
  * wraps that into a single callable.
  *
  * The returned function computes the value on the first call, then returns the cached
- * result on all subsequent calls. The cache lives as long as the returned function does—
+ * result on all subsequent calls. The cache lives as long as the returned function does: 
  * if you create it inside a callback, it's scoped to that callback's lifetime and gets
  * garbage collected when the callback finishes.
  *

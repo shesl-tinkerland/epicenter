@@ -1,10 +1,9 @@
 import { createSessionStore } from '@epicenter/cli';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import {
 	attachSync,
 	attachTables,
-	defineMutation,
-	defineQuery,
 	defineTable,
 	type DeviceDescriptor,
 	toWsUrl,

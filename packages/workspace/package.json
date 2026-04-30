@@ -27,6 +27,7 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
+		"./core": "./src/core/index.ts",
 		"./shared/crypto": "./src/shared/crypto/index.ts",
 		"./document/materializer/markdown": "./src/document/materializer/markdown/index.ts",
 		"./ai": "./src/ai/index.ts",

@@ -1,7 +1,7 @@
 /**
  * Tests for the action system primitives in `actions.ts`.
  *
- * Currently focused on `invokeAction` — the canonical "given an action
+ * Currently focused on `invokeAction`: the canonical "given an action
  * and an input, return Promise<Result<T, RpcError>>" util used by every
  * consumer that doesn't know the handler shape ahead of time (AI bridge,
  * CLI dispatch, inbound RPC handler).
@@ -10,16 +10,12 @@
 import { describe, expect, test } from 'bun:test';
 import Type from 'typebox';
 import { Err, Ok } from 'wellcrafted/result';
-import { isRpcError } from '@epicenter/sync';
-import {
-	defineMutation,
-	defineQuery,
-	invokeAction,
-} from './actions.js';
+import { defineMutation, defineQuery, invokeAction } from './actions';
+import { isRpcError } from './rpc-errors';
 
-// ────────────────────────────────────────────────────────────────────────────
+// ------------------------------------------------------------
 // invokeAction
-// ────────────────────────────────────────────────────────────────────────────
+// ------------------------------------------------------------
 
 describe('invokeAction', () => {
 	describe('return shape normalization', () => {
@@ -59,16 +55,16 @@ describe('invokeAction', () => {
 			const result = await invokeAction(action);
 			expect(result.data).toBeNull();
 			// The handler's typed Err leaks through invokeAction's
-			// declared `RpcError` error type — that's the cost of generic
+			// declared `RpcError` error type: that's the cost of generic
 			// normalization. Cast to compare structurally.
 			expect(result.error as unknown).toEqual(customError);
 		});
 
-		test('isResult discrimination is structural — any {data,error}-shaped value passes through unchanged', async () => {
+		test('isResult discrimination is structural: any {data,error}-shaped value passes through unchanged', async () => {
 			// wellcrafted's isResult is structural: any object with both
 			// `data` and `error` properties is treated as a Result. There
 			// is no brand. So a {data,error}-shaped return passes through
-			// to the caller as-is — invokeAction does NOT double-wrap.
+			// to the caller as-is: invokeAction does NOT double-wrap.
 			const lookalike = { data: 'fake', error: null };
 			const action = defineMutation({
 				handler: () => lookalike as unknown as ReturnType<typeof Ok>,
@@ -162,11 +158,7 @@ describe('invokeAction', () => {
 					throw new Error('x');
 				},
 			});
-			const result = await invokeAction(
-				action,
-				undefined,
-				'tabs.close',
-			);
+			const result = await invokeAction(action, undefined, 'tabs.close');
 			expect(result.error?.name).toBe('ActionFailed');
 			if (result.error?.name === 'ActionFailed') {
 				expect(result.error.action).toBe('tabs.close');

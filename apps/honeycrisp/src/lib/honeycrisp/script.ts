@@ -10,7 +10,7 @@
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
-	attachSqliteReadonlyPersistence,
+	attachYjsLogReader,
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
@@ -58,7 +58,7 @@ export async function openHoneycrisp({
 }) {
 	const doc = openHoneycrispDoc({ clientID });
 
-	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, {
+	const persistence = attachYjsLogReader(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 

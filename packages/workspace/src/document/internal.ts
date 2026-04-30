@@ -1,9 +1,9 @@
 /**
- * Internal subpath — not part of `@epicenter/workspace`'s public API.
+ * Internal subpath: not part of `@epicenter/workspace`'s public API.
  *
  * Exports the `create*` factories that wrap a pre-constructed `ObservableKvStore`.
  * External consumers should use `attachTable` / `attachKv` from the package
- * root — those are the public Y.Doc-wiring entry points.
+ * root: those are the public Y.Doc-wiring entry points.
  *
  * The encrypted attachments in this same package reach in here because they
  * construct their own encrypted store and need the factory logic without the

@@ -1,11 +1,11 @@
 /**
- * Tests for `attachSqlitePersistence` (the writer side of the SQLite
+ * Tests for `attachYjsLog` (the writer side of the SQLite
  * persistence pair). Covers: WAL pragma is applied to the file so
  * concurrent readers can open `{ readonly: true }` without `SQLITE_BUSY`,
  * and the basic load/replay/clear/dispose round-trip.
  *
  * Read-only consumer behavior is tested in
- * `attach-sqlite-readonly-persistence.test.ts`.
+ * `attach-yjs-log-reader.test.ts`.
  */
 
 import { Database } from 'bun:sqlite';
@@ -14,12 +14,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { attachSqlitePersistence } from './attach-sqlite-persistence.js';
+import { attachYjsLog } from './attach-yjs-log.js';
 
 let workdir: string;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'attach-sqlite-persistence-'));
+	workdir = mkdtempSync(join(tmpdir(), 'attach-yjs-log-'));
 });
 
 afterEach(() => {
@@ -38,11 +38,11 @@ function readJournalMode(filePath: string): string {
 	}
 }
 
-describe('attachSqlitePersistence', () => {
+describe('attachYjsLog', () => {
 	test('writer enables WAL journal mode on the file', async () => {
 		const filePath = join(workdir, 'wal.sqlite');
 		const ydoc = new Y.Doc();
-		const att = attachSqlitePersistence(ydoc, { filePath });
+		const att = attachYjsLog(ydoc, { filePath });
 		await att.whenLoaded;
 
 		expect(readJournalMode(filePath).toLowerCase()).toBe('wal');
@@ -55,7 +55,7 @@ describe('attachSqlitePersistence', () => {
 		const filePath = join(workdir, 'roundtrip.sqlite');
 
 		const writerDoc = new Y.Doc();
-		const writer = attachSqlitePersistence(writerDoc, { filePath });
+		const writer = attachYjsLog(writerDoc, { filePath });
 		await writer.whenLoaded;
 		writerDoc.transact(() => {
 			const m = writerDoc.getMap<number>('m');
@@ -65,7 +65,7 @@ describe('attachSqlitePersistence', () => {
 		await writer.whenDisposed;
 
 		const reopenDoc = new Y.Doc();
-		const reopen = attachSqlitePersistence(reopenDoc, { filePath });
+		const reopen = attachYjsLog(reopenDoc, { filePath });
 		await reopen.whenLoaded;
 		const reopened = reopenDoc.getMap<number>('m');
 		expect(reopened.size).toBe(100);
@@ -78,7 +78,7 @@ describe('attachSqlitePersistence', () => {
 	test('clearLocal drops all updates from the file', async () => {
 		const filePath = join(workdir, 'clear.sqlite');
 		const writerDoc = new Y.Doc();
-		const writer = attachSqlitePersistence(writerDoc, { filePath });
+		const writer = attachYjsLog(writerDoc, { filePath });
 		await writer.whenLoaded;
 		writerDoc.getMap<number>('m').set('k', 1);
 		await writer.clearLocal();
@@ -87,7 +87,7 @@ describe('attachSqlitePersistence', () => {
 
 		// Reopening should see no rehydrated state.
 		const reopenDoc = new Y.Doc();
-		const reopen = attachSqlitePersistence(reopenDoc, { filePath });
+		const reopen = attachYjsLog(reopenDoc, { filePath });
 		await reopen.whenLoaded;
 		expect(reopenDoc.getMap<number>('m').size).toBe(0);
 		reopenDoc.destroy();

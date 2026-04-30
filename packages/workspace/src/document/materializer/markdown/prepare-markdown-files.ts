@@ -19,7 +19,7 @@ type PrepareResult = {
  * two or more files share the same `id`, it returns an error listing every
  * conflict and modifies nothing.
  *
- * Only reads top-level `.md` files—does not recurse into subdirectories.
+ * Only reads top-level `.md` files: does not recurse into subdirectories.
  *
  * @example
  * ```typescript

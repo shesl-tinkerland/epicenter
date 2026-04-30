@@ -1,7 +1,7 @@
 /**
- * Tests for `attachSqliteMirror` (the script-side read-only handle on the
+ * Tests for `attachSqliteReader` (the script-side read-only handle on the
  * daemon's SQLite materializer file). The daemon side is exercised via a real
- * `attachSqliteMaterializer` writing to an on-disk WAL file in a tmpdir; the
+ * `attachSqlite` writing to an on-disk WAL file in a tmpdir; the
  * mirror reads the same file and asserts FTS5 lookups + raw row reads work.
  */
 
@@ -16,8 +16,8 @@ import {
 	attachTables,
 	defineTable,
 } from '../index.js';
-import { attachSqliteMaterializer } from '../document/materializer/sqlite/sqlite.js';
-import { attachSqliteMirror } from './sqlite-mirror.js';
+import { attachSqlite } from '../document/materializer/sqlite/sqlite.js';
+import { attachSqliteReader } from './attach-sqlite-reader.js';
 
 const entriesTable = defineTable(
 	type({
@@ -31,7 +31,7 @@ const entriesTable = defineTable(
 let workDir: string;
 
 beforeEach(() => {
-	workDir = mkdtempSync(join(tmpdir(), 'sqlite-mirror-'));
+	workDir = mkdtempSync(join(tmpdir(), 'attach-sqlite-reader-'));
 });
 
 afterEach(() => {
@@ -41,10 +41,10 @@ afterEach(() => {
 async function seedMirrorFile(filePath: string, rows: Array<{ id: string; title: string; body: string }>) {
 	const ydoc = new Y.Doc({ guid: 'test-mirror' });
 	const tables = attachTables(ydoc, { entries: entriesTable });
-	const materializer = attachSqliteMaterializer(ydoc, {
+	const materializer = attachSqlite(ydoc, {
 		filePath,
 	}).table(tables.entries, { fts: ['title', 'body'] });
-	await materializer.whenFlushed;
+	await materializer.whenLoaded;
 	for (const row of rows) tables.entries.set({ ...row, _v: 1 });
 	// One tick lets the post-transact flush enqueued in `afterTransaction`
 	// drain through the materializer's syncQueue.
@@ -53,7 +53,7 @@ async function seedMirrorFile(filePath: string, rows: Array<{ id: string; title:
 	ydoc.destroy();
 }
 
-describe('attachSqliteMirror', () => {
+describe('attachSqliteReader', () => {
 	test('opens the file read-only and reads materialized rows', async () => {
 		const filePath = join(workDir, 'mirror.db');
 		await seedMirrorFile(filePath, [
@@ -61,7 +61,7 @@ describe('attachSqliteMirror', () => {
 			{ id: 'b', title: 'Beta', body: 'second entry' },
 		]);
 
-		using mirror = attachSqliteMirror({ filePath });
+		using mirror = attachSqliteReader({ filePath });
 		const rows = mirror.db
 			.prepare('SELECT id, title FROM entries ORDER BY id')
 			.all() as Array<{ id: string; title: string }>;
@@ -77,7 +77,7 @@ describe('attachSqliteMirror', () => {
 			{ id: 'a', title: 'Alpha', body: 'first' },
 		]);
 
-		using mirror = attachSqliteMirror({ filePath });
+		using mirror = attachSqliteReader({ filePath });
 		expect(() =>
 			mirror.db.run("INSERT INTO entries (id, title, body) VALUES ('c', 't', 'b')"),
 		).toThrow();
@@ -91,7 +91,7 @@ describe('attachSqliteMirror', () => {
 			{ id: 'c', title: 'Hello again', body: 'morning followup' },
 		]);
 
-		using mirror = attachSqliteMirror({ filePath });
+		using mirror = attachSqliteReader({ filePath });
 		const hits = await mirror.search('entries', 'hello');
 		const ids = hits.map((h) => h.id).sort();
 		expect(ids).toEqual(['a', 'c']);
@@ -107,13 +107,13 @@ describe('attachSqliteMirror', () => {
 		// exists but `entries_fts` does not.
 		const ydoc = new Y.Doc({ guid: 'no-fts' });
 		const tables = attachTables(ydoc, { entries: entriesTable });
-		const m = attachSqliteMaterializer(ydoc, { filePath }).table(
+		const m = attachSqlite(ydoc, { filePath }).table(
 			tables.entries,
 		);
-		await m.whenFlushed;
+		await m.whenLoaded;
 		ydoc.destroy();
 
-		using mirror = attachSqliteMirror({ filePath });
+		using mirror = attachSqliteReader({ filePath });
 		const hits = await mirror.search('entries', 'anything');
 		expect(hits).toEqual([]);
 	});
@@ -124,7 +124,7 @@ describe('attachSqliteMirror', () => {
 			{ id: 'a', title: 'Alpha', body: 'first' },
 		]);
 
-		const mirror = attachSqliteMirror({ filePath });
+		const mirror = attachSqliteReader({ filePath });
 		mirror[Symbol.dispose]();
 		// Subsequent search short-circuits without throwing.
 		const hits = await mirror.search('entries', 'alpha');

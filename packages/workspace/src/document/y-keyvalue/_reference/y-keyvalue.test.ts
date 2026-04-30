@@ -812,7 +812,7 @@ describe('YKeyValue', () => {
 				});
 
 				// After transaction, observer has fired and cleared pendingDeletes
-				// Verify by setting a new value — if pendingDeletes wasn't cleared,
+				// Verify by setting a new value: if pendingDeletes wasn't cleared,
 				// has() would still return false incorrectly
 				kv.set('foo', 'baz');
 				expect(kv.has('foo')).toBe(true);
@@ -824,7 +824,7 @@ describe('YKeyValue', () => {
 				const yarray = ydoc.getArray<YKeyValueEntry<string>>('data');
 				const kv = new YKeyValue(yarray);
 
-				// set then delete in same batch — entry added+deleted from yarray
+				// set then delete in same batch: entry added+deleted from yarray
 				ydoc.transact(() => {
 					kv.set('foo', 'bar');
 					kv.delete('foo');
@@ -860,7 +860,7 @@ describe('YKeyValue', () => {
 				// Sync client 2's update to client 1
 				Y.applyUpdate(ydoc1, Y.encodeStateAsUpdate(ydoc2));
 
-				// Client 1 should see the remote value — pendingDeletes must not mask it
+				// Client 1 should see the remote value: pendingDeletes must not mask it
 				expect(kv1.has('foo')).toBe(true);
 				expect(kv1.get('foo')).toBe('remote-value');
 			});
@@ -924,7 +924,7 @@ describe('YKeyValue', () => {
 				// After batch: two set() calls in same batch push two entries to yarray.
 				// delete() only removes the first matching entry via findIndex().
 				// The second entry survives, and the observer processes it as an add.
-				// This is a known edge case — the second set's entry "wins".
+				// This is a known edge case: the second set's entry "wins".
 				expect(kv.has('foo')).toBe(true);
 				expect(kv.get('foo')).toBe('second');
 			});
@@ -934,7 +934,7 @@ describe('YKeyValue', () => {
 				const yarray = ydoc.getArray<YKeyValueEntry<string>>('data');
 				const kv = new YKeyValue(yarray);
 
-				// Delete a key that was never set — should not throw
+				// Delete a key that was never set: should not throw
 				kv.delete('never-existed');
 				expect(kv.has('never-existed')).toBe(false);
 				expect(kv.get('never-existed')).toBeUndefined();
@@ -994,7 +994,7 @@ describe('YKeyValue', () => {
 				// Sync client 2's update to client 1
 				Y.applyUpdate(ydoc1, Y.encodeStateAsUpdate(ydoc2));
 
-				// 'a' should still be deleted — the remote add of 'c' should not affect it
+				// 'a' should still be deleted: the remote add of 'c' should not affect it
 				expect(kv1.has('a')).toBe(false);
 				expect(kv1.get('a')).toBeUndefined();
 				// 'c' should be visible

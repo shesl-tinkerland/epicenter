@@ -11,7 +11,7 @@
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
-	attachSqlitePersistence,
+	attachYjsLog,
 	attachSync,
 	type DeviceDescriptor,
 	type ProjectDir,
@@ -58,7 +58,7 @@ export async function openZhongwen({
 }) {
 	const doc = openZhongwenDoc();
 
-	const persistence = attachSqlitePersistence(doc.ydoc, {
+	const persistence = attachYjsLog(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 

@@ -23,10 +23,10 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { defineMutation } from '@epicenter/sync';
 import {
 	attachEncryption,
 	createDisposableCache,
-	defineMutation,
 	generateId,
 } from '@epicenter/workspace';
 import Type from 'typebox';

@@ -30,22 +30,22 @@ import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { createFileContentDoc } from '@epicenter/filesystem';
 import { opensidianTables } from 'opensidian/workspace';
+import { defineMutation } from '@epicenter/sync';
 import {
 	attachEncryption,
-	attachSqlitePersistence,
+	attachYjsLog,
 	attachSync,
 	createDisposableCache,
-	defineMutation,
 	yjsPath,
 	sqlitePath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import {
-	attachMarkdownMaterializer,
+	attachMarkdown,
 	prepareMarkdownFiles,
 	toSlugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
-import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
+import { attachSqlite } from '@epicenter/workspace/document/materializer/sqlite';
 import Type from 'typebox';
 import * as Y from 'yjs';
 
@@ -59,7 +59,7 @@ const encryption = attachEncryption(ydoc);
 const tables = encryption.attachTables(ydoc, opensidianTables);
 const kv = encryption.attachKv(ydoc, {});
 
-const persistence = attachSqlitePersistence(ydoc, {
+const persistence = attachYjsLog(ydoc, {
 	filePath: yjsPath(import.meta.dir, WORKSPACE_ID),
 });
 
@@ -84,7 +84,7 @@ const whenReady = Promise.all([
 ]);
 
 /**
- * Per-file content persistence via `attachSqlitePersistence`. Each content
+ * Per-file content persistence via `attachYjsLog`. Each content
  * Y.Doc writes its own `{guid}.db` under `<projectDir>/.epicenter/yjs/{workspaceId}/content/`,
  * nested under the workspace's yjs folder so per-file logs sit alongside
  * the main workspace log.
@@ -103,7 +103,7 @@ const fileContentDocs = createDisposableCache(
 			workspaceId: WORKSPACE_ID,
 			filesTable: tables.files,
 			attachPersistence: (contentDoc) =>
-				attachSqlitePersistence(contentDoc, {
+				attachYjsLog(contentDoc, {
 					filePath: join(CONTENT_DIR, `${contentDoc.guid}.db`),
 				}),
 		}),
@@ -116,7 +116,7 @@ async function readContent(rowId: string): Promise<string | undefined> {
 	return handle.content.read();
 }
 
-const markdown = attachMarkdownMaterializer(ydoc, {
+const markdown = attachMarkdown(ydoc, {
 	dir: MARKDOWN_DIR,
 	waitFor: whenReady,
 }).table(tables.files, {
@@ -152,7 +152,7 @@ const markdown = attachMarkdownMaterializer(ydoc, {
 	},
 });
 
-const sqlite = attachSqliteMaterializer(ydoc, {
+const sqlite = attachSqlite(ydoc, {
 	filePath: sqlitePath(import.meta.dir, WORKSPACE_ID),
 	waitFor: whenReady,
 }).table(tables.files, { fts: ['name'] });

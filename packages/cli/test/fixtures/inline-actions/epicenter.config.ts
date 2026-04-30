@@ -8,7 +8,7 @@
  * end-to-end without depending on any attach primitive.
  */
 
-import { defineMutation, defineQuery } from '@epicenter/workspace';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import Type from 'typebox';
 import * as Y from 'yjs';
 

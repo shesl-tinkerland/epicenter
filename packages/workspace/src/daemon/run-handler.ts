@@ -21,7 +21,7 @@ import {
 	invokeAction,
 	resolveActionPath,
 	walkActions,
-} from '../shared/actions.js';
+} from '@epicenter/sync';
 import { Ok } from 'wellcrafted/result';
 
 import type { WorkspaceEntry } from './types.js';

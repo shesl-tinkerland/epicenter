@@ -1,5 +1,5 @@
 import type { Static, TSchema } from 'typebox';
-import type { Action } from '../shared/actions.js';
+import type { Action } from './actions';
 
 /**
  * Flattens a nested actions tree into a flat map of dot-path string keys
@@ -31,7 +31,7 @@ export type InferRpcMap<TActions> = FlattenToIntersection<
 	FlattenActions<TActions>
 >;
 
-// ─── Internal helpers ───────────────────────────────────────────────────────
+// --- Internal helpers -------------------------------------------------------
 
 /**
  * Walk the actions tree. For each leaf (Action), emit a Record<dotPath, { input, output }>.
@@ -72,7 +72,8 @@ export type DefaultRpcMap = Record<string, { input: unknown; output: unknown }>;
  * Constraint for the TMap generic parameter on `rpc()`.
  *
  * Uses `any` (not `unknown`) for input/output because generic constraints
- * need covariant compatibility — `{ input: string }` must extend
+ * need covariant compatibility: `{ input: string }` must extend
  * `{ input: any }` but does NOT extend `{ input: unknown }`.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type RpcActionMap = Record<string, { input: any; output: any }>;

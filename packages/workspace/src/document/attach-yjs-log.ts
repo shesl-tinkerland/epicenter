@@ -5,14 +5,14 @@
  * Every Y.Doc `updateV2` becomes a row; on load the rows are replayed in id
  * order; periodically the log is compacted into a single state-as-update
  * row. Pairs with `attachSync` for cross-machine convergence; pairs with
- * `attachSqliteReadonlyPersistence` for read-only consumers (script-side
+ * `attachYjsLogReader` for read-only consumers (script-side
  * mirrors, the daemon-as-materializer-worker design).
  *
- * Distinct from `attachSqliteMaterializer`, which writes a different file
+ * Distinct from `attachSqlite`, which writes a different file
  * with derived per-table rows for SQL queries. This module is the
  * Y.Doc-update-log persistence layer; that one is the projection layer.
  *
- * The on-disk format is shared with `attachSqliteReadonlyPersistence`. If
+ * The on-disk format is shared with `attachYjsLogReader`. If
  * you change the schema or the replay invariants here, change them there
  * too. WAL is enabled so a readonly consumer can open the same file
  * concurrently and read snapshot pages without `SQLITE_BUSY`.
@@ -21,7 +21,6 @@
 import { Database } from 'bun:sqlite';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { createLogger } from 'wellcrafted/logger';
 import * as Y from 'yjs';
 import {
@@ -29,27 +28,11 @@ import {
 	COMPACTION_DEBOUNCE_MS,
 	compactUpdateLog,
 } from './sqlite-update-log.js';
+import { applyWriterPragmas } from './sqlite-writer-pragmas.js';
 
-const logger = createLogger('attachSqlitePersistence');
+const logger = createLogger('attachYjsLog');
 
-/** Errors surfaced by `attachSqlitePersistence`, both at the boundary and via the logger. */
-export const AttachSqlitePersistenceError = defineErrors({
-	/**
-	 * `PRAGMA journal_mode = WAL` failed. Logged, not thrown: drivers like
-	 * `:memory:` legitimately reject WAL, and the writer can proceed with
-	 * the default journal mode (concurrent readers just lose snapshot
-	 * isolation). Mirrors the materializer's `WalPragmaFailed`.
-	 */
-	WalPragmaFailed: ({ cause }: { cause: unknown }) => ({
-		message: '[attachSqlitePersistence] PRAGMA journal_mode = WAL failed',
-		cause,
-	}),
-});
-export type AttachSqlitePersistenceError = InferErrors<
-	typeof AttachSqlitePersistenceError
->;
-
-export type SqlitePersistenceAttachment = {
+export type YjsLogAttachment = {
 	/**
 	 * Resolves when the SQLite file's existing rows have replayed into the
 	 * Y.Doc: "your draft is in memory, edits are safe." Not CRDT
@@ -67,10 +50,10 @@ export type SqlitePersistenceAttachment = {
 	whenDisposed: Promise<unknown>;
 };
 
-export function attachSqlitePersistence(
+export function attachYjsLog(
 	ydoc: Y.Doc,
 	{ filePath }: { filePath: string },
-): SqlitePersistenceAttachment {
+): YjsLogAttachment {
 	let db: Database | null = null;
 	let bytesSinceCompaction = 0;
 	let compactionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,25 +83,26 @@ export function attachSqlitePersistence(
 		await mkdir(path.dirname(filePath), { recursive: true });
 
 		db = new Database(filePath);
-		// Enable WAL so `attachSqliteReadonlyPersistence` can open the same
-		// file `{ readonly: true }` and run snapshot reads concurrently with
-		// this writer. Some drivers (`:memory:`, certain test setups) reject
-		// WAL: log and continue with the driver default rather than failing
-		// the attachment. Mirrors the materializer's WAL pragma.
-		try {
-			db.run('PRAGMA journal_mode = WAL');
-		} catch (cause) {
-			logger.warn(AttachSqlitePersistenceError.WalPragmaFailed({ cause }));
-		}
+		// Concurrency PRAGMAs for the daemon-as-sole-writer setup: WAL lets
+		// `attachYjsLogReader` snapshot-read this file
+		// concurrently; synchronous = NORMAL is the canonical durability
+		// tradeoff under WAL; busy_timeout keeps writes patient when a reader
+		// holds a snapshot through a checkpoint. Each pragma is best-effort:
+		// `:memory:` rejects WAL and we just continue with the driver default
+		// rather than failing the attachment.
+		applyWriterPragmas(db, logger);
+
 		db.run(
 			'CREATE TABLE IF NOT EXISTS updates (id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL)',
 		);
 
+		// bun:sqlite returns BLOB columns as Uint8Array; Y.applyUpdateV2
+		// accepts Uint8Array directly.
 		const rows = db.query('SELECT data FROM updates ORDER BY id').all() as {
-			data: Buffer;
+			data: Uint8Array;
 		}[];
 		for (const row of rows) {
-			Y.applyUpdateV2(ydoc, new Uint8Array(row.data));
+			Y.applyUpdateV2(ydoc, row.data);
 		}
 
 		compactUpdateLog(db, ydoc);
@@ -151,3 +135,4 @@ export function attachSqlitePersistence(
 		whenDisposed,
 	};
 }
+

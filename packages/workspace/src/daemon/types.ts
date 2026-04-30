@@ -5,7 +5,7 @@
  * to satisfy: the `[Symbol.dispose]` discriminator, plus the optional
  * `whenReady` and `sync` fields the daemon reads when present. The
  * workspace's branded actions live as named leaves on the bundle itself
- * (at any depth), not under a fixed `actions` slot — `walkActions(workspace)`
+ * (at any depth), not under a fixed `actions` slot: `walkActions(workspace)`
  * discovers them at runtime.
  *
  * `WorkspaceEntry` is one named entry the daemon hosts. The CLI's config

@@ -1,9 +1,16 @@
 /**
- * FTS5 full-text search setup for the SQLite materializer.
+ * FTS5 search query for materialized SQLite tables.
  *
- * Pure functions that generate FTS5 virtual tables and content-sync triggers,
- * plus the search query builder. Separated from the main materializer so
- * FTS concerns don't pollute the core sync logic.
+ * Two consumers share this function: the daemon-side materializer
+ * (`sqlite.ts`) and the script-side reader (`client/attach-sqlite-reader.ts`).
+ * Source-of-truth motivation: the SELECT shape (snippet format, rank
+ * field, JOIN against the base table by rowid) is one project decision.
+ * If we change the snippet markers or the result schema, both consumers
+ * must change in lockstep, so the function lives in one place.
+ *
+ * The DDL that creates the FTS5 virtual table and triggers is NOT here;
+ * it lives inline in `sqlite.ts` (the only writer). DDL is the
+ * materializer's setup contract, not a shared rule.
  *
  * @module
  */
@@ -11,78 +18,8 @@
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'wellcrafted/logger';
 import { quoteIdentifier } from './ddl.js';
-import { SqliteMaterializerError } from './sqlite.js';
+import { AttachSqliteError } from './sqlite.js';
 import type { SearchOptions, SearchResult } from './types.js';
-
-// ════════════════════════════════════════════════════════════════════════════
-// FTS SETUP
-// ════════════════════════════════════════════════════════════════════════════
-
-/**
- * Create FTS5 virtual table and content-sync triggers for a materializer table.
- *
- * Sets up:
- * 1. `CREATE VIRTUAL TABLE IF NOT EXISTS {table}_fts USING fts5(...)` with content sync
- * 2. AFTER INSERT trigger to index new rows
- * 3. AFTER DELETE trigger to remove deleted rows
- * 4. AFTER UPDATE trigger to re-index changed rows
- *
- * @param db - The mirror database to execute DDL against
- * @param tableName - The source table name
- * @param columns - Column names to include in the FTS index
- */
-export function setupFtsTable(
-	db: Database,
-	tableName: string,
-	columns: string[],
-): void {
-	const ftsTableName = `${tableName}_fts`;
-	const quotedColumns = columns.map(quoteIdentifier).join(', ');
-	const newValues = columns
-		.map((column) => `new.${quoteIdentifier(column)}`)
-		.join(', ');
-	const oldValues = columns
-		.map((column) => `old.${quoteIdentifier(column)}`)
-		.join(', ');
-
-	const qt = quoteIdentifier(tableName);
-	const qfts = quoteIdentifier(ftsTableName);
-
-	db.run(
-		`CREATE VIRTUAL TABLE IF NOT EXISTS ${qfts}\n` +
-			`USING fts5(${quotedColumns}, content=${quoteString(tableName)}, content_rowid=rowid)`,
-	);
-
-	db.run(
-		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ai`)}\n` +
-			`AFTER INSERT ON ${qt} BEGIN\n` +
-			`  INSERT INTO ${qfts}(rowid, ${quotedColumns})\n` +
-			`  VALUES (new.rowid, ${newValues});\n` +
-			`END`,
-	);
-
-	db.run(
-		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ad`)}\n` +
-			`AFTER DELETE ON ${qt} BEGIN\n` +
-			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
-			`  VALUES('delete', old.rowid, ${oldValues});\n` +
-			`END`,
-	);
-
-	db.run(
-		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_au`)}\n` +
-			`AFTER UPDATE ON ${qt} BEGIN\n` +
-			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
-			`  VALUES('delete', old.rowid, ${oldValues});\n` +
-			`  INSERT INTO ${qfts}(rowid, ${quotedColumns})\n` +
-			`  VALUES (new.rowid, ${newValues});\n` +
-			`END`,
-	);
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// FTS SEARCH
-// ════════════════════════════════════════════════════════════════════════════
 
 /**
  * Execute a FTS5 search query against a materialized table.
@@ -145,16 +82,8 @@ export function ftsSearch(
 		});
 	} catch (cause: unknown) {
 		log?.warn(
-			SqliteMaterializerError.FtsSearchFailed({ tableName, query: trimmed, cause }),
+			AttachSqliteError.FtsSearchFailed({ tableName, query: trimmed, cause }),
 		);
 		return [];
 	}
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// PRIVATE HELPERS
-// ════════════════════════════════════════════════════════════════════════════
-
-function quoteString(value: string) {
-	return `'${value.replaceAll("'", "''")}'`;
 }

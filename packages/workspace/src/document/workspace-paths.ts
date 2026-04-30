@@ -47,8 +47,8 @@ export function yjsPath(projectDir: string, workspaceId: string): string {
  * Path to a workspace's SQLite mirror file (the queryable SQL surface).
  *
  * Convention: `<projectDir>/.epicenter/sqlite/<workspaceId>.db`. The daemon's
- * `attachSqliteMaterializer` writes this file (in WAL journal mode); script
- * peers open the same path read-only via `attachSqliteMirror`.
+ * `attachSqlite` writes this file (in WAL journal mode); script
+ * peers open the same path read-only via `attachSqliteReader`.
  *
  * Distinct from `yjsPath`: the yjs file is the role (durability of the
  * Y.Doc update log; SQLite is implementation detail and you never open it
@@ -70,9 +70,9 @@ export function sqlitePath(projectDir: string, workspaceId: string): string {
  * Root directory for a workspace's markdown materializer tree.
  *
  * Convention: `<projectDir>/.epicenter/md/<workspaceId>/`. The daemon's
- * `attachMarkdownMaterializer` writes per-table subdirectories of `.md`
- * files under this root; script peers walk the same tree read-only via
- * `attachMarkdownMirror`.
+ * `attachMarkdown` writes per-table subdirectories of `.md` files under
+ * this root. Read it with your editor; there is no markdown reader
+ * primitive (markdown is itself the user-facing surface).
  *
  * @example
  * ```ts

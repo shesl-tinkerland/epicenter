@@ -41,7 +41,7 @@ export type StandardSchemaError = InferErrors<typeof StandardSchemaError>;
  * Arktype-aware JSON Schema conversion for Standard Schemas.
  *
  * The shared `CombinedStandardSchema` type is re-exported from
- * `@epicenter/workspace` — import it from there when you need the constraint.
+ * `@epicenter/workspace`: import it from there when you need the constraint.
  *
  * @see https://standardschema.dev
  * @see https://github.com/standard-schema/standard-schema
@@ -51,7 +51,7 @@ export type StandardSchemaError = InferErrors<typeof StandardSchemaError>;
  * Arktype fallback handlers for JSON Schema conversion.
  *
  * Arktype represents optional properties as `T | undefined` internally.
- * JSON Schema doesn't have an `undefined` type — it handles optionality via
+ * JSON Schema doesn't have an `undefined` type: it handles optionality via
  * the `required` array. The `unit` handler strips `undefined` from unions
  * so the conversion succeeds.
  *

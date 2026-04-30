@@ -1,13 +1,13 @@
 /// <reference lib="dom" />
 
 /**
- * attachSync — SYNC_STATUS `hasLocalChanges` round-trip.
+ * attachSync: SYNC_STATUS `hasLocalChanges` round-trip.
  *
  * The meaningful SYNC_STATUS behavior is narrow: every local doc update
  * bumps `localVersion`, a debounced probe sends the counter to the server,
  * the server echoes it back, and the echo drives `hasLocalChanges` toward
  * `false`. This test drives that loop with a minimal in-process WebSocket
- * stub — enough to observe the probe on the wire and inject the ack.
+ * stub: enough to observe the probe on the wire and inject the ack.
  */
 
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -25,7 +25,7 @@ import * as decoding from 'lib0/decoding';
 import { Err, Ok } from 'wellcrafted/result';
 import * as Y from 'yjs';
 import Type from 'typebox';
-import { defineMutation } from '../shared/actions.js';
+import { defineMutation } from '@epicenter/sync';
 import { attachSync } from './attach-sync.js';
 
 // ── Minimal WebSocket stub ───────────────────────────────────────────────
@@ -76,7 +76,7 @@ class FakeWebSocket {
 		)
 			return;
 		this.readyState = FakeWebSocket.CLOSED;
-		// 1005 = "no status received" — the spec value when JS calls close()
+		// 1005 = "no status received": the spec value when JS calls close()
 		// with no code, matching real browser behavior.
 		this.onclose?.({ code: code ?? 1005, reason: reason ?? '' });
 	}
@@ -325,7 +325,7 @@ describe('attachSync hasLocalChanges', () => {
 			url: `ws://x/${ydoc.guid}`,
 			actions: {
 				tabs: {
-					// Return a raw value — attachSync's handler is responsible for
+					// Return a raw value: attachSync's handler is responsible for
 					// normalizing it into a `{data, error}` envelope on the wire.
 					close: defineMutation({
 						input: Type.Object({ tabIds: Type.Array(Type.Number()) }),
@@ -424,7 +424,7 @@ describe('attachSync hasLocalChanges', () => {
 		const parsed = decodeRpcPayload(dec);
 		expect(parsed.type).toBe('response');
 		if (parsed.type !== 'response') throw new Error('unreachable');
-		// The typed error survives on the wire — the handler's own Err shape
+		// The typed error survives on the wire: the handler's own Err shape
 		// reaches the remote caller, not a wrapped RpcError.
 		expect(parsed.result.data).toBeNull();
 		expect(parsed.result.error).toEqual({
@@ -490,7 +490,7 @@ describe('attachSync hasLocalChanges', () => {
 		await sync.whenDisposed;
 	});
 
-	// ── Outbound rpc() — caller-side response handling ────────────────────
+	// ── Outbound rpc(): caller-side response handling ────────────────────
 	//
 	// These tests drive the client half of the wire: call `sync.rpc()`,
 	// pluck the emitted request frame to learn the requestId, then inject
@@ -562,7 +562,7 @@ describe('attachSync hasLocalChanges', () => {
 		const parsed = decodeRpcPayload(dec);
 		if (parsed.type !== 'request') throw new Error('expected request');
 
-		// Remote side emitted a recognizable RpcError — the outbound handler
+		// Remote side emitted a recognizable RpcError: the outbound handler
 		// must recognize it via isRpcError and pass it through, not re-wrap.
 		ws.deliver(
 			encodeRpcResponse({
@@ -585,7 +585,7 @@ describe('attachSync hasLocalChanges', () => {
 		// This is the "type erasure" path: a peer returns a typed Err that
 		// isn't an RpcError variant. The client-side handler re-wraps it as
 		// ActionFailed with the original error as `cause`. This is a property
-		// of the legacy sync.rpc() API — createRemoteActions preserves E.
+		// of the legacy sync.rpc() API: createRemoteActions preserves E.
 		const ydoc = new Y.Doc({ guid: 'outbound-wrap' });
 		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
 
@@ -631,7 +631,7 @@ describe('attachSync hasLocalChanges', () => {
 		expect(err.cause).toEqual(typedErr);
 	});
 
-	// ── End-to-end loopback — proves the full wire protocol works ─────────
+	// ── End-to-end loopback: proves the full wire protocol works ─────────
 	//
 	// Two attachSync peers, their FakeWebSockets cross-wired so a frame sent
 	// by one gets delivered to the other's `onmessage`. This simulates the
@@ -672,7 +672,7 @@ describe('attachSync hasLocalChanges', () => {
 		await aliceSync.whenConnected;
 		await bobSync.whenConnected;
 
-		// Fire the RPC — Alice doesn't know where her frames "go" from the
+		// Fire the RPC: Alice doesn't know where her frames "go" from the
 		// FakeWebSocket's perspective, so the test plays broker by polling
 		// her sent queue and redelivering to Bob.
 		const aliceSentBefore = aliceWs.sent.length;
@@ -716,7 +716,7 @@ describe('attachSync hasLocalChanges', () => {
 		await bobSync.whenDisposed;
 	});
 
-	test('fresh connection resets version counters — prior unacked writes do not leak state', async () => {
+	test('fresh connection resets version counters: prior unacked writes do not leak state', async () => {
 		const ydoc = new Y.Doc({ guid: 'test-doc-3' });
 		const sync = attachSync(ydoc, { url: `ws://x/${ydoc.guid}` });
 

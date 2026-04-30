@@ -1,5 +1,5 @@
 /**
- * attachKv() — Bind KV definitions to a Y.Doc.
+ * attachKv(): Bind KV definitions to a Y.Doc.
  *
  * Constructs an unencrypted `YKeyValueLww` on `ydoc.getArray('kv')` and
  * wraps it with a typed `Kv`. KV uses validate-or-default semantics:

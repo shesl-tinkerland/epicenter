@@ -1,5 +1,5 @@
 /**
- * `Remote<T>` — derive the remote (RPC) call shape of an in-process workspace
+ * `Remote<T>`: derive the remote (RPC) call shape of an in-process workspace
  * by walking its type and keeping only branded `defineQuery` /
  * `defineMutation` leaves.
  *
@@ -12,7 +12,7 @@
  * - non-branded functions (plain methods, callbacks, class methods) drop
  * - objects containing no branded descendants drop
  * - `Y.Doc` and other class-instance properties drop because they bottom
- *   out before reaching a branded leaf — see the depth bound below
+ *   out before reaching a branded leaf: see the depth bound below
  *
  * ## The depth bound
  *
@@ -24,8 +24,8 @@
  * short enough to keep tsc fast and forget about Y.Doc's internal graph.
  */
 
+import type { Action, WrapAction } from '@epicenter/sync';
 import type { Simplify } from '../shared/types.js';
-import type { Action, WrapAction } from '../shared/actions.js';
 
 /**
  * Recursion depth bound for `Remote<T>` and its helpers. Counted as a

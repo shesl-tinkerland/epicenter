@@ -17,9 +17,9 @@ The pattern: a vanilla `openX()` function constructs the workspace's `Y.Doc`, co
 │  attachTable / attachTables / attachKv                     │ ← Data attachments
 │  attachEncryption → .attachTable / .attachTables / .attachKv
 │  attachAwareness                                           │ ← Presence
-│  attachIndexedDb / attachSqlitePersistence / attachBroadcastChannel │ ← Persistence + cross-tab
+│  attachIndexedDb / attachYjsLog / attachBroadcastChannel │ ← Persistence + cross-tab
 │  attachSync                                                │ ← WebSocket sync
-│  attachSqliteMaterializer                                  │ ← Queryable mirror
+│  attachSqlite                                  │ ← Queryable mirror
 ├────────────────────────────────────────────────────────────┤
 │  Y.Doc (raw CRDT)                                          │ ← Escape hatch
 └────────────────────────────────────────────────────────────┘

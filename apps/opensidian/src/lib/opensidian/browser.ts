@@ -6,13 +6,12 @@ import {
 	createSqliteIndex,
 	type FileId,
 } from '@epicenter/filesystem';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import {
 	attachBroadcastChannel,
 	attachIndexedDb,
 	attachSync,
 	createDisposableCache,
-	defineMutation,
-	defineQuery,
 	type DeviceDescriptor,
 	toWsUrl,
 } from '@epicenter/workspace';

@@ -16,7 +16,7 @@
  */
 
 import { sValidator } from '@hono/standard-validator';
-import { describeActions } from '../shared/actions.js';
+import { describeActions } from '@epicenter/sync';
 import { PeerDevice } from '../document/standard-awareness-defs.js';
 import { type } from 'arktype';
 import { Hono } from 'hono';

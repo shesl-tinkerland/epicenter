@@ -1,21 +1,24 @@
 /// <reference lib="dom" />
 
 /**
- * `system.describe` — runtime-injected meta RPC that returns the local
+ * `system.describe`: runtime-injected meta RPC that returns the local
  * `ActionManifest` (full dot-path → ActionMeta map with input schemas).
  * Verifies:
  *   - argless `system.describe` resolves through the same RPC pipe as
  *     user actions and returns the live action manifest.
- *   - User code cannot publish a top-level `system` namespace — `attachSync`
+ *   - User code cannot publish a top-level `system` namespace: `attachSync`
  *     throws at bootstrap.
  *   - `describePeer(sync, deviceId)` round-trips between two attachments
  *     and returns the remote manifest.
- *   - Awareness carries no manifest — only the device descriptor.
+ *   - Awareness carries no manifest: only the device descriptor.
  */
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
 	decodeRpcPayload,
+	defineMutation,
+	defineQuery,
+	describePeer,
 	encodeRpcRequest,
 	encodeSyncStep2,
 	MESSAGE_TYPE,
@@ -23,8 +26,6 @@ import {
 import * as decoding from 'lib0/decoding';
 import Type from 'typebox';
 import * as Y from 'yjs';
-import { defineMutation, defineQuery } from '../shared/actions.js';
-import { describePeer } from '../rpc/peer.js';
 import { attachSync } from './attach-sync.js';
 
 // ── Minimal WebSocket stub (mirrors attach-sync.test.ts) ─────────────────
@@ -204,7 +205,7 @@ describe('system.describe', () => {
 		ydoc.destroy();
 	});
 
-	test('awareness carries device identity only — no offers/manifest field', async () => {
+	test('awareness carries device identity only: no offers/manifest field', async () => {
 		const ydoc = new Y.Doc({ guid: 'sd-awareness' });
 		const sync = attachSync(ydoc, {
 			url: `ws://x/${ydoc.guid}`,

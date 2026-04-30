@@ -27,38 +27,20 @@
  */
 
 // ════════════════════════════════════════════════════════════════════════════
-// ACTION SYSTEM
+// ACTION SYSTEM + RPC + PEER DISPATCH
 // ════════════════════════════════════════════════════════════════════════════
-
-export type {
-	Action,
-	ActionManifest,
-	ActionMeta,
-	Actions,
-	Mutation,
-	Query,
-	RemoteActions,
-} from './shared/actions';
-export {
-	defineMutation,
-	defineQuery,
-	describeActions,
-	invokeAction,
-	isAction,
-	resolveActionPath,
-	walkActions,
-} from './shared/actions';
-
-// ════════════════════════════════════════════════════════════════════════════
-// RPC + PEER DISPATCH
-// ════════════════════════════════════════════════════════════════════════════
-
-export type { InferRpcMap, RpcActionMap } from './rpc/types';
-export { isRpcError, RpcError } from '@epicenter/sync';
-
-// Peer dispatch (cross-device action calling) — see `peer<T>(workspace, deviceId)`.
-export { peer, describePeer } from './rpc/peer.js';
-export type { RemoteCallOptions } from './shared/actions.js';
+//
+// All typed-RPC primitives now live in `@epicenter/sync` (alongside
+// `RpcError`, `isRpcError`, and the wire codec). Import them directly
+// from there:
+//
+//   import {
+//     defineQuery, defineMutation, peer, describePeer,
+//     RpcError, isRpcError,
+//   } from '@epicenter/sync';
+//
+// Workspace deliberately does not re-export them: keeping the boundary
+// visible makes it obvious which package owns the contract.
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEVICE IDENTITY
@@ -116,8 +98,8 @@ export type {
 export { DateTimeString } from './shared/datetime-string';
 
 // ════════════════════════════════════════════════════════════════════════════
-// DOCUMENT PRIMITIVES — attach*, define*, createDisposableCache, encryption,
-// timeline, storage keys, types — everything in src/document/ + src/cache/
+// DOCUMENT PRIMITIVES: attach*, define*, createDisposableCache, encryption,
+// timeline, storage keys, types: everything in src/document/ + src/cache/
 // flows through its barrel.
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -127,15 +109,16 @@ export {
 } from './document/attach-indexed-db.js';
 
 export {
-	AttachSqlitePersistenceError,
-	attachSqlitePersistence,
-	type SqlitePersistenceAttachment,
-} from './document/attach-sqlite-persistence.js';
+	attachYjsLog,
+	type YjsLogAttachment,
+} from './document/attach-yjs-log.js';
+
+export { SqliteWriterPragmaError } from './document/sqlite-writer-pragmas.js';
 
 export {
-	attachSqliteReadonlyPersistence,
-	type SqliteReadonlyPersistenceAttachment,
-} from './document/attach-sqlite-readonly-persistence.js';
+	attachYjsLogReader,
+	type YjsLogReaderAttachment,
+} from './document/attach-yjs-log-reader.js';
 
 export {
 	attachBroadcastChannel,
@@ -340,17 +323,10 @@ export { connectDaemon } from './client/connect-daemon.js';
 export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export type { Remote } from './client/remote-workspace-types.js';
 export {
-	attachSqliteMirror,
-	type AttachSqliteMirrorOptions,
-	type SqliteMirrorAttachment,
-} from './client/sqlite-mirror.js';
-export {
-	attachMarkdownMirror,
-	type AttachMarkdownMirrorOptions,
-	type MarkdownFileEntry,
-	type MarkdownListOptions,
-	type MarkdownMirrorAttachment,
-} from './client/markdown-mirror.js';
+	attachSqliteReader,
+	type AttachSqliteReaderOptions,
+	type SqliteReaderAttachment,
+} from './client/attach-sqlite-reader.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CLIENT-ID DERIVATION

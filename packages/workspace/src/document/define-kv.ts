@@ -1,7 +1,7 @@
 /**
  * defineKv() for creating KV definitions with required defaults.
  *
- * KV stores use validate-or-default semantics—no migration step.
+ * KV stores use validate-or-default semantics: no migration step.
  * Invalid stored data falls back to `defaultValue`.
  *
  * Use dot-namespaced keys for logical groupings of scalar values:
@@ -31,7 +31,7 @@ import type { CombinedStandardSchema } from './standard-schema.js';
  *
  * The `defaultValue` serves dual duty: it is returned both when the key has
  * never been set (initial state) and when the stored value fails schema
- * validation (corrupt or outdated data). It is never written to storage—
+ * validation (corrupt or outdated data). It is never written to storage: 
  * it exists only at read time.
  *
  * Schema output must be JSON-serializable (`JsonValue`).

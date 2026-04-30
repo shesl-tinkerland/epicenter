@@ -1,11 +1,11 @@
 /**
- * `createDisposableCache` — refcounted cache for disposable resources.
+ * `createDisposableCache`: refcounted cache for disposable resources.
  *
  * Same id → same instance shared across consumers; teardown is debounced after
  * the last consumer leaves. Solves three coupled problems:
  *
  * 1. **Concurrent consumers of the same id must share ONE instance.** Otherwise
- *    local state diverges — two editors mounted on the same Y.Doc would only
+ *    local state diverges: two editors mounted on the same Y.Doc would only
  *    see each other's edits after a sync round-trip.
  * 2. **Sequential mount/unmount shouldn't rebuild expensive resources.**
  *    Route swaps, HMR, conditional rendering, split-pane close-then-reopen all
@@ -14,7 +14,7 @@
  * 3. **Page exit / workspace teardown needs explicit disposal.** The cache
  *    itself is `Disposable`; `cache[Symbol.dispose]()` flushes every entry.
  *
- * The value type is opaque — anything `Disposable`. Y.Docs are the most common
+ * The value type is opaque: anything `Disposable`. Y.Docs are the most common
  * case in this codebase; audio decoders, worker connections, MediaStreams, and
  * native window handles fit the same shape and should use this primitive
  * rather than reinventing refcount+grace.
@@ -42,7 +42,7 @@
  *   return () => handle[Symbol.dispose]();
  * });
  *
- * // Workspace teardown — flush everything immediately.
+ * // Workspace teardown: flush everything immediately.
  * cache[Symbol.dispose]();
  * ```
  *
@@ -80,14 +80,14 @@ export const DisposableCacheError = defineErrors({
 export type DisposableCacheError = InferErrors<typeof DisposableCacheError>;
 
 /**
- * Refcounted cache returned by `createDisposableCache`. Itself `Disposable` —
+ * Refcounted cache returned by `createDisposableCache`. Itself `Disposable`
  * `cache[Symbol.dispose]()` flushes every entry immediately.
  */
 export interface DisposableCache<Id, T> extends Disposable {
 	/**
 	 * Open a handle. Increments the refcount for `id`. The returned handle
 	 * prototype-chains to the underlying `T`, plus its own `[Symbol.dispose]`
-	 * that decrements *this handle's* refcount — it does NOT destroy the
+	 * that decrements *this handle's* refcount: it does NOT destroy the
 	 * underlying `T` directly. The underlying `T[Symbol.dispose]()` is called
 	 * once, by the cache, when the refcount reaches zero after `gcTime`.
 	 *
@@ -110,7 +110,7 @@ type CacheEntry<T extends Disposable> = {
  *
  * @param build - Closure invoked on cache miss. Returns a `T extends Disposable`.
  *                Runs synchronously; if it throws, the cache is unchanged
- *                (next `open(sameId)` re-runs the closure — no poisoned entry).
+ *                (next `open(sameId)` re-runs the closure: no poisoned entry).
  * @param opts  - `gcTime` (default `5_000`ms): milliseconds to wait after the
  *                refcount reaches zero before tearing down the underlying value.
  *                `0` = synchronous teardown, no timer. `Infinity` = never
@@ -153,7 +153,7 @@ export function createDisposableCache<
 			let entry = entries.get(id);
 			if (entry === undefined) {
 				// User closure runs synchronously. If it throws, we DON'T insert
-				// into the cache — next `open(sameId)` re-runs the closure (no
+				// into the cache: next `open(sameId)` re-runs the closure (no
 				// poisoned entry). The caller sees the thrown error.
 				const value = build(id);
 				entry = { value, openCount: 0, gcTimer: null, disposed: false };

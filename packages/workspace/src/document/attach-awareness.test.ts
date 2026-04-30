@@ -171,7 +171,7 @@ describe('attachAwareness', () => {
 		expect(awareness.getLocal()).toEqual({ name: 'alice', score: 7 });
 	});
 
-	test('empty defs — works as a structural slot', () => {
+	test('empty defs: works as a structural slot', () => {
 		const ydoc = new Y.Doc();
 		const awareness = attachAwareness(ydoc, {}, {});
 
@@ -179,7 +179,7 @@ describe('attachAwareness', () => {
 		expect(awareness.raw).toBeInstanceOf(YAwareness);
 
 		// With zero defined fields, every state vacuously validates and
-		// surfaces as `{}` — no fields to project.
+		// surfaces as `{}`: no fields to project.
 		awareness.raw.getStates().set(777, { anything: 'goes' });
 		expect(awareness.getAll().get(777)).toEqual({});
 	});

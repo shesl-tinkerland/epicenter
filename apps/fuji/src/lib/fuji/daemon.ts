@@ -12,7 +12,7 @@
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
-	attachSqlitePersistence,
+	attachYjsLog,
 	attachSync,
 	type DeviceDescriptor,
 	markdownPath,
@@ -23,10 +23,10 @@ import {
 	type WebSocketImpl,
 } from '@epicenter/workspace';
 import {
-	attachMarkdownMaterializer,
+	attachMarkdown,
 	slugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
-import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
+import { attachSqlite } from '@epicenter/workspace/document/materializer/sqlite';
 import { openFuji as openFujiDoc } from './core.js';
 
 export async function openFuji({
@@ -66,7 +66,7 @@ export async function openFuji({
 }) {
 	const doc = openFujiDoc();
 
-	const persistence = attachSqlitePersistence(doc.ydoc, {
+	const persistence = attachYjsLog(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
@@ -78,12 +78,12 @@ export async function openFuji({
 		webSocketImpl,
 	});
 
-	const sqlite = attachSqliteMaterializer(doc.ydoc, {
+	const sqlite = attachSqlite(doc.ydoc, {
 		filePath: sqlitePath(projectDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries);
 
-	const markdown = attachMarkdownMaterializer(doc.ydoc, {
+	const markdown = attachMarkdown(doc.ydoc, {
 		dir: markdownPath(projectDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries, { filename: slugFilename('title') });

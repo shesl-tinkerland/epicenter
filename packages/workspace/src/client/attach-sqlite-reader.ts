@@ -1,9 +1,9 @@
 /**
  * Read-only handle on the daemon's materialized SQLite mirror file.
  *
- * `attachSqliteMaterializer` runs on the daemon side and writes the mirror
+ * `attachSqlite` runs on the daemon side and writes the mirror
  * in WAL journal mode (one writer, many readers, MVCC snapshots). Script
- * peers open the same file via `attachSqliteMirror({ filePath })`, get a
+ * peers open the same file via `attachSqliteReader({ filePath })`, get a
  * read-only `Database` handle plus an FTS5 `search()` helper symmetric
  * with the writer's, and skip the cold-start cost of computing the index
  * themselves.
@@ -23,6 +23,7 @@
  */
 
 import { Database } from 'bun:sqlite';
+import { quoteIdentifier } from '../document/materializer/sqlite/ddl.js';
 import { ftsSearch } from '../document/materializer/sqlite/fts.js';
 import type {
 	SearchOptions,
@@ -30,9 +31,9 @@ import type {
 } from '../document/materializer/sqlite/types.js';
 
 /**
- * Options for {@link attachSqliteMirror}.
+ * Options for {@link attachSqliteReader}.
  */
-export type AttachSqliteMirrorOptions = {
+export type AttachSqliteReaderOptions = {
 	/**
 	 * Absolute path to the daemon's mirror SQLite file. Typically
 	 * `sqlitePath(projectDir, ydoc.guid)`.
@@ -41,13 +42,13 @@ export type AttachSqliteMirrorOptions = {
 };
 
 /**
- * Read-only handle returned by {@link attachSqliteMirror}.
+ * Read-only handle returned by {@link attachSqliteReader}.
  *
  * Disposable via the explicit-resource-management protocol: declare with
- * `using mirror = attachSqliteMirror(...)` and the underlying database
+ * `using mirror = attachSqliteReader(...)` and the underlying database
  * handle closes on scope exit.
  */
-export type SqliteMirrorAttachment = {
+export type SqliteReaderAttachment = {
 	/**
 	 * The opened SQLite database handle. Read-only; `query_only` PRAGMA is
 	 * set so accidental writes fail at the driver layer.
@@ -77,18 +78,22 @@ export type SqliteMirrorAttachment = {
  *
  * @example
  * ```ts
- * using mirror = attachSqliteMirror({
+ * using mirror = attachSqliteReader({
  *   filePath: sqlitePath(projectDir, fuji.ydoc.guid),
  * });
  * const hits = await mirror.search('entries', 'hello world', { limit: 25 });
  * const drizzleDb = drizzle(mirror.db, { schema });
  * ```
  */
-export function attachSqliteMirror({
+export function attachSqliteReader({
 	filePath,
-}: AttachSqliteMirrorOptions): SqliteMirrorAttachment {
+}: AttachSqliteReaderOptions): SqliteReaderAttachment {
 	const db = new Database(filePath, { readonly: true });
-	db.exec('PRAGMA query_only = ON');
+	db.run('PRAGMA query_only = ON');
+	// Wait up to 5s on SQLITE_BUSY when a reader opens during a checkpoint
+	// instead of surfacing the error to callers. The writer
+	// (`attachSqlite`) sets the same value.
+	db.run('PRAGMA busy_timeout = 5000');
 
 	let isDisposed = false;
 
@@ -100,7 +105,7 @@ export function attachSqliteMirror({
 		// in declaration order. Defaults to an empty list if the FTS table
 		// does not exist (the search call below will then short-circuit).
 		const rows = db
-			.prepare(`PRAGMA table_info(${quoteIdentifier(`${tableName}_fts`)})`)
+			.query(`PRAGMA table_info(${quoteIdentifier(`${tableName}_fts`)})`)
 			.all() as Array<{ name: string }>;
 		const columns = rows.map((row) => row.name);
 		ftsColumnsCache.set(tableName, columns);
@@ -131,11 +136,3 @@ export function attachSqliteMirror({
 	};
 }
 
-/**
- * Wrap an identifier in double quotes for safe interpolation into SQL.
- * Local copy of `ddl.quoteIdentifier` to avoid pulling materializer
- * internals into the client-side surface.
- */
-function quoteIdentifier(identifier: string): string {
-	return `"${identifier.replaceAll('"', '""')}"`;
-}

@@ -1,12 +1,12 @@
 /**
- * attachRichText() — Bind a `Y.XmlFragment` slot on a Y.Doc to a typed handle.
+ * attachRichText(): Bind a `Y.XmlFragment` slot on a Y.Doc to a typed handle.
  *
  * Reserves `ydoc.getXmlFragment(key)` and hands back `{ binding, read, write }`.
  * The `binding` is what you feed into a ProseMirror/Tiptap Yjs extension; `read`
- * flattens the fragment to plain text (block-aware — paragraphs, headings, and
+ * flattens the fragment to plain text (block-aware: paragraphs, headings, and
  * other block elements produce newlines between them); `write` replaces the
  * fragment with a single paragraph of plain text (useful for programmatic
- * seed/reset, not for editor input — the editor mutates `binding` directly).
+ * seed/reset, not for editor input: the editor mutates `binding` directly).
  *
  * Handle-style attachment: synchronous, no async teardown. Destroying the
  * `Y.Doc` releases the fragment along with the rest of the doc.
@@ -22,7 +22,7 @@
 import * as Y from 'yjs';
 
 export type RichTextAttachment = {
-	/** `Y.XmlFragment` — pass this to a ProseMirror/Tiptap Yjs binding. */
+	/** `Y.XmlFragment`: pass this to a ProseMirror/Tiptap Yjs binding. */
 	binding: Y.XmlFragment;
 	/** Flatten the fragment to plain text (block-aware newlines). */
 	read: () => string;
@@ -79,7 +79,7 @@ const BLOCK_ELEMENTS = new Set([
  * Extract plaintext from a Y.XmlFragment.
  *
  * Walks the tree recursively, collecting text from Y.XmlText nodes. Block-level
- * elements produce a newline between them so paragraphs don't smash together —
+ * elements produce a newline between them so paragraphs don't smash together
  * `<paragraph>Hello</paragraph><paragraph>World</paragraph>` returns `"Hello\nWorld"`.
  */
 export function xmlFragmentToPlaintext(fragment: Y.XmlFragment): string {

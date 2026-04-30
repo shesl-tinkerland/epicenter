@@ -1,5 +1,5 @@
 /**
- * `partialUpdate(schema)` — derive an arktype schema for table update inputs.
+ * `partialUpdate(schema)`: derive an arktype schema for table update inputs.
  *
  * Builds `{ id, ...Partial<Rest> }`: the `id` field stays required, every
  * other column becomes optional. Used as the input shape for the branded

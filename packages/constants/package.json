@@ -12,6 +12,8 @@
 	},
 	"exports": {
 		"./apps": "./src/apps.ts",
+		"./paths": "./src/paths.ts",
+		"./timeouts": "./src/timeouts.ts",
 		"./vite": "./src/vite.ts",
 		"./versions": "./src/versions.ts",
 		"./ai-chat-errors": "./src/ai-chat-errors.ts"

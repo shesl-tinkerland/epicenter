@@ -1,5 +1,5 @@
 /**
- * `buildRemoteProxy` — typed proxy that turns a `DaemonClient` into a
+ * `buildRemoteProxy`: typed proxy that turns a `DaemonClient` into a
  * workspace-shaped facade. Local call sites use the same dotted path they
  * would in-process (`tables.X.set(...)`, `savedTabs.create(...)`); each
  * call dispatches over the unix socket via `client.run`.
@@ -19,11 +19,9 @@
  * serve both directions.
  */
 
+import { DEFAULT_RPC_TIMEOUT_MS } from '@epicenter/constants/timeouts';
 import type { DaemonClient } from '../daemon/client.js';
 import type { Remote } from './remote-workspace-types.js';
-
-/** Default `waitMs` value we send on every `/run` request. */
-const DEFAULT_WAIT_MS = 5000;
 
 /**
  * Recursive proxy rooted at the workspace. Property access produces another
@@ -49,7 +47,7 @@ function buildRemoteProxy(client: DaemonClient, workspaceName: string): unknown 
 					workspace: workspaceName,
 					actionPath: path.join('.'),
 					input,
-					waitMs: DEFAULT_WAIT_MS,
+					waitMs: DEFAULT_RPC_TIMEOUT_MS,
 				});
 			},
 		});

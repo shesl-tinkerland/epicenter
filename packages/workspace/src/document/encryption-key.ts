@@ -7,7 +7,7 @@
  *
  * Used by:
  * - Session response (`encryptionKeys` field)
- * - `workspace.applyEncryptionKeys(keys)` — public API
+ * - `workspace.applyEncryptionKeys(keys)`: public API
  * - Auth session cache deserialization (runtime validation)
  * @module
  */
@@ -46,7 +46,7 @@ export type EncryptionKeys = typeof EncryptionKeys.infer;
  * entries by version ascending and joining as `version:base64` pairs. This
  * mirrors the `ENCRYPTION_SECRETS` wire format (`1:secret,2:secret`).
  *
- * Used by `applyEncryptionKeys()` for same-key dedup — if the fingerprint
+ * Used by `applyEncryptionKeys()` for same-key dedup: if the fingerprint
  * hasn't changed since the last call, the expensive derivation + activation
  * is skipped entirely.
  *

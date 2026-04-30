@@ -17,6 +17,7 @@
  *   3: peer-miss (`--peer <target>` didn't resolve within `--wait`)
  */
 
+import { DEFAULT_RPC_TIMEOUT_MS } from '@epicenter/constants/timeouts';
 import {
 	type DaemonError,
 	getDaemon,
@@ -44,8 +45,6 @@ import {
 } from '../util/format-output';
 import { parseJsonInput, readStdin } from '../util/parse-input';
 
-const DEFAULT_PEER_WAIT_MS = 5000;
-
 const peerOption: Options = {
 	type: 'string',
 	description: 'Invoke on a remote peer by deviceId',
@@ -53,7 +52,7 @@ const peerOption: Options = {
 
 const waitOption: Options = {
 	type: 'number',
-	default: DEFAULT_PEER_WAIT_MS,
+	default: DEFAULT_RPC_TIMEOUT_MS,
 	description: 'Total ms to wait for peer resolution + RPC; requires --peer.',
 };
 

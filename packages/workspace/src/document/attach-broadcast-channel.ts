@@ -6,7 +6,7 @@ export { BC_ORIGIN };
 export type BroadcastChannelAttachment = {
 	/**
 	 * Resolves after the Y.Doc is destroyed AND the BroadcastChannel is closed.
-	 * Named symmetrically with `attachIndexedDb`'s `whenDisposed` — opt-in signal
+	 * Named symmetrically with `attachIndexedDb`'s `whenDisposed`: opt-in signal
 	 * for tests and CLIs flushing before exit.
 	 */
 	whenDisposed: Promise<unknown>;
@@ -23,7 +23,7 @@ export type BroadcastChannelAttachment = {
  * (via `BC_ORIGIN`) and, when paired with another transport, updates that
  * arrived from that transport (via `transportOrigin`). Without the second
  * guard, transport-delivered updates would be re-broadcast to other tabs,
- * and those tabs would re-send them — creating an echo loop.
+ * and those tabs would re-send them: creating an echo loop.
  *
  * No-ops gracefully when `BroadcastChannel` is unavailable (Node.js, SSR,
  * older browsers).

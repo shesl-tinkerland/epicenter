@@ -10,7 +10,7 @@ metadata:
 
 Systematic approach to auditing and improving code. Every change is evidence-based—count callers, show diffs, commit surgically.
 
-> **Related Skills**: See `control-flow` for linearizing conditionals and guard clauses. See `factory-function-composition` for the four-zone factory anatomy. See `method-shorthand-jsdoc` for when to use `this.method()` vs direct calls.
+> **Related Skills**: See `control-flow` for linearizing conditionals and guard clauses. See `factory-function-composition` for the four-zone factory anatomy. See `method-shorthand-jsdoc` for when to use `this.method()` vs direct calls. See `source-of-truth` for *why* we extract: extraction is justified by single-source-of-truth, not by DRY (visible duplication can be a coincidence, not a code smell).
 
 ## When to Apply This Skill
 

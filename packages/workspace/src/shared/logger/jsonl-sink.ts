@@ -1,9 +1,9 @@
 /**
- * JSONL file sink — Bun/Node-only. One JSON object per line, `\n`-terminated.
+ * JSONL file sink: Bun/Node-only. One JSON object per line, `\n`-terminated.
  *
  * Caller decides the path. Parent directory is auto-created. Bun's
  * `FileSink` buffers writes; call the sink's `[Symbol.asyncDispose]` (via
- * `await using`) to flush + end at scope exit — otherwise pending writes
+ * `await using`) to flush + end at scope exit: otherwise pending writes
  * may be lost on process termination.
  *
  * ```ts
@@ -31,7 +31,7 @@ function serializeEvent(event: LogEvent): string {
 		message,
 		...(data === undefined ? {} : { data }),
 	};
-	// The replacer handles native Error instances at every depth — the
+	// The replacer handles native Error instances at every depth: the
 	// top-level `data` and any nested `cause`/sub-errors all go through here.
 	return `${JSON.stringify(line, (_key, val) => normalizeForJson(val))}\n`;
 }

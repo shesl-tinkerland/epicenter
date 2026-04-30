@@ -121,8 +121,8 @@ Mirrors Rust's `.inspect_err` and Effect's `tapErrorCause`. No message argument 
 No module-level logger registry. No `setDefaultLogger()`. Each attach primitive takes an optional `log?: Logger` option and defaults to `createLogger(<source>)` (console sink). Caller wires sinks explicitly.
 
 ```ts
-const markdown = attachMarkdownMaterializer(ydoc, { dir, log });
-const sqlite   = attachSqliteMaterializer(ydoc, { db, log });
+const markdown = attachMarkdown(ydoc, { dir, log });
+const sqlite   = attachSqlite(ydoc, { db, log });
 const sync     = attachSync(ydoc, { url, log });
 ```
 
@@ -131,8 +131,8 @@ Share one sink across loggers (avoids interleaved writes on the same file):
 ```ts
 await using fileSink = jsonlFileSink(path);
 const sink = composeSinks(consoleSink, fileSink);
-const markdown = attachMarkdownMaterializer(ydoc, { dir, log: createLogger('markdown', sink) });
-const sqlite   = attachSqliteMaterializer(ydoc, { db, log: createLogger('sqlite', sink) });
+const markdown = attachMarkdown(ydoc, { dir, log: createLogger('markdown', sink) });
+const sqlite   = attachSqlite(ydoc, { db, log: createLogger('sqlite', sink) });
 ```
 
 ## Browser

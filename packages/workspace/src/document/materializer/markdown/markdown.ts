@@ -7,7 +7,7 @@ import { convertEpicenterLinksToWikilinks } from '../../../links.js';
  * When a body is provided, epicenter links are automatically converted to
  * wikilinks before serialization.
  *
- * Pure function — no I/O. Uses `Bun.YAML.stringify` for spec-compliant
+ * Pure function: no I/O. Uses `Bun.YAML.stringify` for spec-compliant
  * serialization (handles quoting of booleans, numeric strings, special
  * characters, newlines, etc.). Undefined frontmatter values are stripped
  * (missing key); null values are preserved (YAML `null`) so nullable

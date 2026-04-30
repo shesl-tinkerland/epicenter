@@ -1,9 +1,9 @@
 /**
- * attachAwareness() — Bind awareness definitions to a Y.Doc.
+ * attachAwareness(): Bind awareness definitions to a Y.Doc.
  *
  * Constructs a fresh y-protocols `Awareness` instance over `ydoc` and wraps
  * it with a typed `Awareness<TDefs>` helper. Awareness cleanup is handled by
- * y-protocols — its constructor registers `doc.on('destroy', () => this.destroy())`,
+ * y-protocols: its constructor registers `doc.on('destroy', () => this.destroy())`,
  * so destroying the ydoc tears down the Awareness automatically.
  *
  * To wire awareness into a sync attachment, pass `awareness.raw` (the
@@ -42,7 +42,7 @@ export type InferAwarenessValue<T> =
  * `initial` value for every defined field and publishes it synchronously
  * before returning, so any state on the wire (including the local one) is
  * guaranteed to carry every defined field. If you define a field, you publish
- * a value — there is no "field defined but not yet set" window.
+ * a value: there is no "field defined but not yet set" window.
  */
 export type AwarenessState<TDefs extends AwarenessDefinitions> = {
 	[K in keyof TDefs]: InferAwarenessValue<TDefs[K]>;
@@ -85,7 +85,7 @@ export type Awareness<TDefs extends AwarenessDefinitions> = {
  *
  * `initial` carries the starting value for every defined field. It is set
  * synchronously before the function returns, so the local state on the wire
- * is well-formed from the first frame — no consumer ever observes a peer
+ * is well-formed from the first frame: no consumer ever observes a peer
  * with a field defined but unset.
  *
  * Fields can still be updated later via `setLocal` / `setLocalField`.
@@ -111,7 +111,7 @@ export function attachAwareness<TDefs extends AwarenessDefinitions>(
 /**
  * Wrap an existing y-protocols `Awareness` instance with a typed helper.
  *
- * Exported so `@epicenter/workspace` can reuse the same logic — the
+ * Exported so `@epicenter/workspace` can reuse the same logic: the
  * workspace owns its own Awareness instance for sync extension wiring.
  */
 export function createAwareness<TDefs extends AwarenessDefinitions>(
@@ -121,7 +121,7 @@ export function createAwareness<TDefs extends AwarenessDefinitions>(
 	const defEntries = Object.entries(definitions);
 
 	/**
-	 * Validate awareness state — every defined field must be present and
+	 * Validate awareness state: every defined field must be present and
 	 * pass its schema. Returns `null` if any field is missing or invalid.
 	 * This matches the publish-time invariant from `attachAwareness`: a
 	 * peer that publishes any state publishes all defined fields.

@@ -27,6 +27,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@epicenter/sync": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"arktype": "catalog:",
 		"typebox": "catalog:",

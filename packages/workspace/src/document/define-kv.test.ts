@@ -2,7 +2,7 @@
  * defineKv Tests
  *
  * Verifies that `defineKv(schema, defaultValue)` produces correct KvDefinitions
- * with validate-or-default semantics. No migration—invalid data falls back to default.
+ * with validate-or-default semantics. No migration: invalid data falls back to default.
  *
  * Key behaviors:
  * - Schema validates values correctly

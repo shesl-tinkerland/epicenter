@@ -1,7 +1,7 @@
 /**
- * Read-only hydrator for an `attachSqlitePersistence` file.
+ * Read-only hydrator for an `attachYjsLog` file.
  *
- * Opens a file the writer (`attachSqlitePersistence`) owns, replays every
+ * Opens a file the writer (`attachYjsLog`) owns, replays every
  * `updates` row into the Y.Doc once, and stops there: no `updateV2`
  * listener, no compaction timer, no writes. The reader's Y.Doc can mutate
  * freely afterwards; mutations stay in memory and never flow back to disk.
@@ -21,7 +21,7 @@
 import { Database } from 'bun:sqlite';
 import * as Y from 'yjs';
 
-export type SqliteReadonlyPersistenceAttachment = {
+export type YjsLogReaderAttachment = {
 	/**
 	 * Resolves once any existing rows have replayed. If the file did not
 	 * exist at open time, resolves immediately with no replay (the Y.Doc
@@ -42,10 +42,10 @@ export type SqliteReadonlyPersistenceAttachment = {
 	whenDisposed: Promise<unknown>;
 };
 
-export function attachSqliteReadonlyPersistence(
+export function attachYjsLogReader(
 	ydoc: Y.Doc,
 	{ filePath }: { filePath: string },
-): SqliteReadonlyPersistenceAttachment {
+): YjsLogReaderAttachment {
 	let db: Database | null = null;
 
 	const fileExisted: Promise<boolean> = Bun.file(filePath).exists();
@@ -53,14 +53,18 @@ export function attachSqliteReadonlyPersistence(
 	const whenLoaded = (async () => {
 		if (!(await fileExisted)) return;
 		db = new Database(filePath, { readonly: true });
-		// File is owned by the writer. No CREATE TABLE, no WAL pragma (the
-		// writer set it), no updateV2 listener, no compaction: pure snapshot
-		// consumer.
+		// File is owned by the writer. No CREATE TABLE, no journal_mode pragma
+		// (the writer set WAL), no updateV2 listener, no compaction: pure
+		// snapshot consumer. We do set `busy_timeout` so a reader opening
+		// mid-checkpoint waits instead of surfacing SQLITE_BUSY.
+		db.run('PRAGMA busy_timeout = 5000');
+		// bun:sqlite returns BLOB columns as Uint8Array; Y.applyUpdateV2
+		// accepts Uint8Array directly.
 		const rows = db.query('SELECT data FROM updates ORDER BY id').all() as {
-			data: Buffer;
+			data: Uint8Array;
 		}[];
 		for (const row of rows) {
-			Y.applyUpdateV2(ydoc, new Uint8Array(row.data));
+			Y.applyUpdateV2(ydoc, row.data);
 		}
 	})();
 

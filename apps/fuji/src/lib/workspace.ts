@@ -7,9 +7,9 @@
  * for collaborative editing via ProseMirror + y-prosemirror.
  */
 
+import { defineMutation } from '@epicenter/sync';
 import {
 	DateTimeString,
-	defineMutation,
 	defineTable,
 	generateId,
 	type InferTableRow,

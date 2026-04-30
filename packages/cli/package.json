@@ -25,6 +25,7 @@
 	},
 	"dependencies": {
 		"@epicenter/constants": "workspace:*",
+		"@epicenter/sync": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"arktype": "catalog:",
 		"picocolors": "^1.1.1",

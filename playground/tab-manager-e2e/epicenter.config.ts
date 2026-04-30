@@ -32,13 +32,13 @@ import {
 } from '@epicenter/tab-manager/workspace';
 import {
 	attachEncryption,
-	attachSqlitePersistence,
+	attachYjsLog,
 	attachSync,
 	toWsUrl,
 	yjsPath,
 } from '@epicenter/workspace';
 import {
-	attachMarkdownMaterializer,
+	attachMarkdown,
 	slugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
 import * as Y from 'yjs';
@@ -56,7 +56,7 @@ const tables = encryption.attachTables(ydoc, tabManagerTables);
 // materializer's `.kv()` call has something to observe.
 const kv = encryption.attachKv(ydoc, {});
 
-const persistence = attachSqlitePersistence(ydoc, {
+const persistence = attachYjsLog(ydoc, {
 	filePath: yjsPath(import.meta.dir, WORKSPACE_ID),
 });
 
@@ -80,7 +80,7 @@ const whenReady = Promise.all([
 	sync.whenConnected,
 ]);
 
-const markdown = attachMarkdownMaterializer(ydoc, {
+const markdown = attachMarkdown(ydoc, {
 	dir: MARKDOWN_DIR,
 	waitFor: whenReady,
 })

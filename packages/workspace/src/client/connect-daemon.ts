@@ -1,5 +1,5 @@
 /**
- * `connectDaemon` — front door for talking to a workspace hosted by a
+ * `connectDaemon`: front door for talking to a workspace hosted by a
  * running daemon. The single entry point shared by vault scripts and
  * every CLI command that dispatches a workspace action.
  *
@@ -22,7 +22,7 @@
  * ```
  *
  * Daemon-scope calls (peers, list across workspaces) live on `DaemonClient`
- * directly — construct one with `daemonClient(socketPathFor(projectDir))` and
+ * directly: construct one with `daemonClient(socketPathFor(projectDir))` and
  * call `.peers()` / `.list()` against the same socket. They are not
  * reachable through this workspace handle.
  */

@@ -35,7 +35,7 @@ const WORKSPACE = 'demo';
 describe('buildRemoteWorkspace tables', () => {
 	test('tables.X.get dispatches tables.X.get over /run', async () => {
 		const { client, calls } = makeStubClient();
-		// biome-ignore lint/suspicious/noExplicitAny: smoke test — shape is irrelevant
+		// biome-ignore lint/suspicious/noExplicitAny: smoke test: shape is irrelevant
 		const ws: any = buildRemoteWorkspace(client, WORKSPACE);
 
 		await ws.tables.entries.get('xyz');

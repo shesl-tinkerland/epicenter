@@ -1,7 +1,7 @@
 /**
- * SQLite materializer — mirrors workspace table rows into queryable SQLite tables.
+ * SQLite materializer: mirrors workspace table rows into queryable SQLite tables.
  *
- * `attachSqliteMaterializer(ydoc, { filePath })` returns a chainable builder
+ * `attachSqlite(ydoc, { filePath })` returns a chainable builder
  * where `.table(tableRef, config?)` opts in per table. Nothing materializes
  * by default. The materializer owns the `Database` lifecycle: it opens the
  * file (mkdir + WAL pragma) at construction and closes it on `ydoc.destroy()`.
@@ -22,39 +22,24 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { trySync } from 'wellcrafted/result';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
-import { defineMutation, defineQuery } from '../../../shared/actions.js';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import { standardSchemaToJsonSchema } from '../../../shared/standard-schema.js';
+import { applyWriterPragmas } from '../../sqlite-writer-pragmas.js';
 import type { BaseRow, Table, TableDefinition } from '../../attach-table.js';
 import { generateDdl, quoteIdentifier } from './ddl.js';
-import { ftsSearch, setupFtsTable } from './fts.js';
+import { ftsSearch } from './fts.js';
 import type { SearchOptions, SearchResult } from './types.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: generic bound for heterogeneous table helpers
 type AnyTable = Table<any>;
 
 /** Errors surfaced by the SQLite materializer's async background sync loop. */
-export const SqliteMaterializerError = defineErrors({
+export const AttachSqliteError = defineErrors({
 	/** Per-transact flush of pending row writes to the mirror database failed. */
 	SyncFailed: ({ cause }: { cause: unknown }) => ({
-		message: `[attachSqliteMaterializer] Failed to sync SQLite materializer: ${extractErrorMessage(cause)}`,
-		cause,
-	}),
-	/**
-	 * Concurrency-related PRAGMA setup failed (WAL mode, synchronous, or
-	 * busy_timeout). Non-fatal: the materializer proceeds with driver
-	 * defaults. Production daemons should always run on a real on-disk
-	 * file where these are honored, since peer-side `attachSqliteMirror`
-	 * relies on WAL for concurrent reads.
-	 */
-	PragmaSetupFailed: ({
-		pragma,
-		cause,
-	}: { pragma: string; cause: unknown }) => ({
-		message: `[attachSqliteMaterializer] Failed to set ${pragma}: ${extractErrorMessage(cause)}`,
-		pragma,
+		message: `[attachSqlite] Failed to sync SQLite materializer: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
 	/** An FTS5 MATCH query raised inside the mirror database. */
@@ -67,13 +52,13 @@ export const SqliteMaterializerError = defineErrors({
 		query: string;
 		cause: unknown;
 	}) => ({
-		message: `[attachSqliteMaterializer] FTS search failed on table "${tableName}" for query "${query}": ${extractErrorMessage(cause)}`,
+		message: `[attachSqlite] FTS search failed on table "${tableName}" for query "${query}": ${extractErrorMessage(cause)}`,
 		tableName,
 		query,
 		cause,
 	}),
 });
-export type SqliteMaterializerError = InferErrors<typeof SqliteMaterializerError>;
+export type AttachSqliteError = InferErrors<typeof AttachSqliteError>;
 
 /**
  * Per-table configuration, generic over the specific row type so `fts` narrows
@@ -88,7 +73,7 @@ type TableConfig<TRow extends BaseRow> = {
 
 type RegisteredTable = {
 	table: AnyTable;
-	// biome-ignore lint/suspicious/noExplicitAny: internal storage — variance across heterogeneous row types
+	// biome-ignore lint/suspicious/noExplicitAny: internal storage: variance across heterogeneous row types
 	config: TableConfig<any>;
 	unsubscribe?: () => void;
 };
@@ -101,7 +86,7 @@ type RegisteredTable = {
  * const ydoc = new Y.Doc({ guid: 'workspace' });
  * const tables = attachTables(ydoc, myTableDefs);
  *
- * const sqlite = attachSqliteMaterializer(ydoc, {
+ * const sqlite = attachSqlite(ydoc, {
  *   filePath: sqlitePath(projectDir, ydoc.guid),
  *   waitFor: persistence.whenLoaded,
  * })
@@ -109,12 +94,12 @@ type RegisteredTable = {
  *   .table(tables.users);
  * ```
  */
-export function attachSqliteMaterializer(
+export function attachSqlite(
 	ydoc: Y.Doc,
 	{
 		filePath,
 		waitFor,
-		log = createLogger('attachSqliteMaterializer'),
+		log = createLogger('attachSqlite'),
 	}: {
 		/**
 		 * Path to the SQLite file the materializer owns. Parent dir is
@@ -129,7 +114,7 @@ export function attachSqliteMaterializer(
 		waitFor?: Promise<unknown>;
 		/**
 		 * Logger for background failures (per-transact sync flush, FTS query).
-		 * Defaults to a console-backed logger with source `attachSqliteMaterializer`.
+		 * Defaults to a console-backed logger with source `attachSqlite`.
 		 */
 		log?: Logger;
 	},
@@ -145,7 +130,7 @@ export function attachSqliteMaterializer(
 	let isDisposed = false;
 	/**
 	 * Closed once `initialize()` commits (past `await waitFor`). Any `.table()`
-	 * call after this throws — the materializer is past the point where late
+	 * call after this throws: the materializer is past the point where late
 	 * registrations would be picked up for DDL + full-load.
 	 */
 	let isRegistrationOpen = true;
@@ -220,7 +205,7 @@ export function attachSqliteMaterializer(
 		syncQueue = syncQueue
 			.then(() => flushPendingSync())
 			.catch((cause: unknown) => {
-				log.error(SqliteMaterializerError.SyncFailed({ cause }));
+				log.error(AttachSqliteError.SyncFailed({ cause }));
 			});
 	}
 
@@ -272,16 +257,15 @@ export function attachSqliteMaterializer(
 
 	function count(tableName: string): number {
 		if (isDisposed) return 0;
-		try {
-			const row = db
-				.query(
-					`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
-				)
-				.get() as Record<string, unknown> | null;
-			return Number(row?.count ?? 0);
-		} catch {
-			return 0;
+		if (!registered.has(tableName)) {
+			throw new Error(
+				`Cannot count "${tableName}": not in the materialized table set.`,
+			);
 		}
+		const row = db
+			.query(`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`)
+			.get() as Record<string, unknown> | null;
+		return Number(row?.count ?? 0);
 	}
 
 	const rebuildOneTx = db.transaction((name: string, table: AnyTable) => {
@@ -303,7 +287,7 @@ export function attachSqliteMaterializer(
 			const entry = registered.get(tableName);
 			if (entry === undefined) {
 				throw new Error(
-					`Cannot rebuild "${tableName}" — not in the materialized table set.`,
+					`Cannot rebuild "${tableName}": not in the materialized table set.`,
 				);
 			}
 			rebuildOneTx(tableName, entry.table);
@@ -359,7 +343,7 @@ export function attachSqliteMaterializer(
 			);
 			db.run(generateDdl(tableName, jsonSchema));
 			if (entry.config.fts && entry.config.fts.length > 0)
-				setupFtsTable(db, tableName, entry.config.fts);
+				createFtsTable(db, tableName, entry.config.fts);
 		}
 
 		if (isDisposed) return;
@@ -384,12 +368,12 @@ export function attachSqliteMaterializer(
 		enqueueFlush();
 	}
 
-	const whenFlushed = initialize();
+	const whenLoaded = initialize();
 
 	// ── Builder ──────────────────────────────────────────────────
 
 	const api = {
-		whenFlushed,
+		whenLoaded,
 		db,
 		search: defineQuery({
 			title: 'Full-text search',
@@ -423,7 +407,7 @@ export function attachSqliteMaterializer(
 		 * `fts` and `serialize` are narrowed to the specific row type, so typos
 		 * in column names become compile errors.
 		 *
-		 * Must be called synchronously after construction, before `whenFlushed`
+		 * Must be called synchronously after construction, before `whenLoaded`
 		 * resolves. Calls after the initial flush throw.
 		 */
 		table<TRow extends BaseRow>(
@@ -437,7 +421,7 @@ export function attachSqliteMaterializer(
 		table(table, config) {
 			if (!isRegistrationOpen)
 				throw new Error(
-					`attachSqliteMaterializer: .table("${table.name}") called after initial flush. All .table() registrations must happen synchronously after construction.`,
+					`attachSqlite: .table("${table.name}") called after initial flush. All .table() registrations must happen synchronously after construction.`,
 				);
 			registered.set(table.name, {
 				table: table as AnyTable,
@@ -455,69 +439,66 @@ export function attachSqliteMaterializer(
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Apply the standard concurrency PRAGMAs for the writer side of a
- * many-readers + one-writer SQLite setup:
- *
- *   journal_mode = WAL    enables MVCC snapshot reads while we write.
- *   synchronous = NORMAL  the canonical durability tradeoff under WAL.
- *   busy_timeout = 5000   keeps writes patient when a reader holds a
- *                         snapshot during a checkpoint, instead of
- *                         surfacing SQLITE_BUSY to callers.
- *
- * `journal_mode = WAL` does not throw on silent fallback (e.g. on a
- * filesystem that doesn't support WAL); it just returns the mode that
- * actually got set. We read the result and warn if it isn't `'wal'`.
+ * Create the `<table>_fts` virtual table and the three triggers that keep
+ * it synchronized with the materialized base table (insert, delete,
+ * update). Only the materializer's initial DDL pass calls this; the
+ * triggers do all the work after that.
  */
-function applyWriterPragmas(db: Database, log: Logger): void {
-	const walResult = trySync({
-		try: () =>
-			(
-				db
-					.query('PRAGMA journal_mode = WAL')
-					.get() as { journal_mode?: string } | null
-			)?.journal_mode,
-		catch: (cause) =>
-			SqliteMaterializerError.PragmaSetupFailed({
-				pragma: 'journal_mode = WAL',
-				cause,
-			}),
-	});
-	if (walResult.error !== null) {
-		log.warn(walResult.error);
-	} else if (walResult.data !== 'wal') {
-		log.warn(
-			SqliteMaterializerError.PragmaSetupFailed({
-				pragma: 'journal_mode = WAL',
-				cause: new Error(
-					`PRAGMA journal_mode returned '${walResult.data}', expected 'wal'`,
-				),
-			}),
-		);
-	}
+function createFtsTable(
+	db: Database,
+	tableName: string,
+	columns: string[],
+): void {
+	const ftsTableName = `${tableName}_fts`;
+	const quotedColumns = columns.map(quoteIdentifier).join(', ');
+	const newValues = columns
+		.map((column) => `new.${quoteIdentifier(column)}`)
+		.join(', ');
+	const oldValues = columns
+		.map((column) => `old.${quoteIdentifier(column)}`)
+		.join(', ');
 
-	const syncResult = trySync({
-		try: () => db.run('PRAGMA synchronous = NORMAL'),
-		catch: (cause) =>
-			SqliteMaterializerError.PragmaSetupFailed({
-				pragma: 'synchronous = NORMAL',
-				cause,
-			}),
-	});
-	if (syncResult.error !== null) log.warn(syncResult.error);
+	const qt = quoteIdentifier(tableName);
+	const qfts = quoteIdentifier(ftsTableName);
 
-	const busyResult = trySync({
-		try: () => db.run('PRAGMA busy_timeout = 5000'),
-		catch: (cause) =>
-			SqliteMaterializerError.PragmaSetupFailed({
-				pragma: 'busy_timeout = 5000',
-				cause,
-			}),
-	});
-	if (busyResult.error !== null) log.warn(busyResult.error);
+	db.run(
+		`CREATE VIRTUAL TABLE IF NOT EXISTS ${qfts}\n` +
+			`USING fts5(${quotedColumns}, content=${quoteSqlString(tableName)}, content_rowid=rowid)`,
+	);
+
+	db.run(
+		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ai`)}\n` +
+			`AFTER INSERT ON ${qt} BEGIN\n` +
+			`  INSERT INTO ${qfts}(rowid, ${quotedColumns})\n` +
+			`  VALUES (new.rowid, ${newValues});\n` +
+			`END`,
+	);
+
+	db.run(
+		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_ad`)}\n` +
+			`AFTER DELETE ON ${qt} BEGIN\n` +
+			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
+			`  VALUES('delete', old.rowid, ${oldValues});\n` +
+			`END`,
+	);
+
+	db.run(
+		`CREATE TRIGGER IF NOT EXISTS ${quoteIdentifier(`${tableName}_fts_au`)}\n` +
+			`AFTER UPDATE ON ${qt} BEGIN\n` +
+			`  INSERT INTO ${qfts}(${qfts}, rowid, ${quotedColumns})\n` +
+			`  VALUES('delete', old.rowid, ${oldValues});\n` +
+			`  INSERT INTO ${qfts}(rowid, ${quotedColumns})\n` +
+			`  VALUES (new.rowid, ${newValues});\n` +
+			`END`,
+	);
+}
+
+function quoteSqlString(value: string): string {
+	return `'${value.replaceAll("'", "''")}'`;
 }
 
 function tableDefinitionToJsonSchema(
-	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
+	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly: defineTable already constrains schemas
 	definition: TableDefinition<any>,
 	tableName: string,
 ): Record<string, unknown> {

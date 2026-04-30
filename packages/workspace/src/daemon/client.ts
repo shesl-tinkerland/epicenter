@@ -19,9 +19,10 @@
  * gets a typed 400 instead of a confusing downstream cast failure.
  */
 
+import { CONFIG_FILENAME } from '@epicenter/constants/paths';
 import { join } from 'node:path';
 
-import type { ActionManifest } from '../shared/actions.js';
+import type { ActionManifest } from '@epicenter/sync';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -33,13 +34,6 @@ import type { ResolveError } from './resolve-entry.js';
 import type { ListInput, PeerSnapshot, RunInput } from './app.js';
 import { socketPathFor } from './paths.js';
 import type { RunError } from './run-errors.js';
-
-/**
- * Filename of the workspace config the daemon expects. Hard-coded here so
- * `getDaemon` can surface a clean `MissingConfig` error without pulling
- * the CLI's `load-config` module into the workspace package.
- */
-const CONFIG_FILENAME = 'epicenter.config.ts';
 
 /**
  * Resolved `--dir` + `--workspace` for a single command invocation. The CLI

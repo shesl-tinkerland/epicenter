@@ -16,11 +16,8 @@
  * Without one, the handler errors with a hint pointing at `epicenter serve`.
  */
 
-import {
-	type ActionManifest,
-	getDaemon,
-	type ResolveError,
-} from '@epicenter/workspace';
+import type { ActionManifest } from '@epicenter/sync';
+import { getDaemon, type ResolveError } from '@epicenter/workspace';
 import pc from 'picocolors';
 import Type, { type TSchema } from 'typebox';
 import type { Result } from 'wellcrafted/result';

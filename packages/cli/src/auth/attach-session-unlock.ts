@@ -10,7 +10,7 @@
  * @example
  * ```ts
  * const encryption = attachEncryption(ydoc);
- * const persistence = attachSqlitePersistence(ydoc, { filePath });
+ * const persistence = attachYjsLog(ydoc, { filePath });
  * const unlock = attachSessionUnlock(encryption, {
  *   sessions,
  *   serverUrl: SERVER_URL,

@@ -290,7 +290,7 @@ Epicenter supports distributed sync where Y.Doc instances replicate across devic
                            Connect to multiple nodes
 ```
 
-Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest. On the laptop and desktop, a script peer (CLI, agent, scheduled job) opens its own short-lived cloud WebSocket via `attachSync` and reads the daemon's persistence file with `attachSqliteReadonlyPersistence` for warm hydrate. Cloud sync is the only sync wire; the daemon's role is to be the sole writer of the persistence and materializer files.
+Yjs supports multiple providers simultaneously. A phone can connect to desktop, laptop, and cloud at the same time; CRDT merge semantics do the rest. On the laptop and desktop, a script peer (CLI, agent, scheduled job) opens its own short-lived cloud WebSocket via `attachSync` and reads the daemon's persistence file with `attachYjsLogReader` for warm hydrate. Cloud sync is the only sync wire; the daemon's role is to be the sole writer of the persistence and materializer files.
 
 ### How It All Fits Together
 
@@ -839,7 +839,7 @@ import {
 	defineTable,
 } from '@epicenter/workspace';
 import {
-	attachMarkdownMaterializer,
+	attachMarkdown,
 	slugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
 
@@ -853,7 +853,7 @@ function openNotes() {
 	const sqlite = attachSqlite(ydoc, {
 		filePath: '/tmp/epicenter/notes-workspace.db',
 	});
-	const markdown = attachMarkdownMaterializer(
+	const markdown = attachMarkdown(
 		{ ydoc, tables },
 		{ dir: '/tmp/epicenter/markdown' },
 	).table('notes', { filename: slugFilename('title') });
@@ -884,7 +884,7 @@ import {
 	attachTables,
 	defineTable,
 } from '@epicenter/workspace';
-import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
+import { attachSqlite } from '@epicenter/workspace/document/materializer/sqlite';
 import { type } from 'arktype';
 
 const posts = defineTable(
@@ -901,7 +901,7 @@ function openBlog() {
 	const ydoc = new Y.Doc({ guid: 'epicenter.blog' });
 	const tables = attachTables(ydoc, { posts });
 	const sqlite = attachSqlite(ydoc, { filePath: '/tmp/epicenter/blog.db' });
-	const mirror = attachSqliteMaterializer(
+	const mirror = attachSqlite(
 		{ ydoc, tables },
 		{ db: new Database('/tmp/epicenter/blog.db') },
 	).table('posts', { fts: ['title', 'body'] });
@@ -1209,8 +1209,8 @@ All attachments, schema definitions, and `createDocumentFactory` live at the pac
 | Import path | What it exports | Public today |
 | --- | --- | --- |
 | `@epicenter/workspace` | `createDocumentFactory`, `defineTable`, `defineKv`, every `attach*` (tables, kv, indexeddb, sqlite, sync, broadcast-channel, awareness, encryption, rich-text, plain-text, timeline), action helpers, `onLocalUpdate`, `docGuid`, ids, dates, types | Yes |
-| `@epicenter/workspace/document/materializer/markdown` | `attachMarkdownMaterializer`, serializers | Yes |
-| `@epicenter/workspace/document/materializer/sqlite` | `attachSqliteMaterializer`, `generateDdl`, types | Yes |
+| `@epicenter/workspace/document/materializer/markdown` | `attachMarkdown`, serializers | Yes |
+| `@epicenter/workspace/document/materializer/sqlite` | `attachSqlite`, `generateDdl`, types | Yes |
 | `@epicenter/workspace/ai` | `actionsToAiTools` (TanStack AI bindings) | Yes |
 | `@epicenter/workspace/shared/crypto` | Lower-level crypto primitives for encryption attachments | Yes |
 
@@ -1323,7 +1323,7 @@ await handle.idb.whenDisposed;
 
 `@epicenter/workspace` is the core client/workspace library. The public root export does not currently ship a built-in server helper.
 
-Browser tab, daemon, and script peer are all "clients" of the cloud sync server in the same way: each runs the same builder, calls `attachSync` to reach the cloud, and holds a real `Y.Doc`. The script peer additionally calls `attachSqliteReadonlyPersistence` against the daemon's persistence file for warm hydrate (skipped if the file does not exist; falls through to a cold cloud sync). There is no IPC sync wire and no `Remote<T>` proxy; script-side code reads and writes the same `bundle.tables`, `bundle.kv`, etc. as everything else.
+Browser tab, daemon, and script peer are all "clients" of the cloud sync server in the same way: each runs the same builder, calls `attachSync` to reach the cloud, and holds a real `Y.Doc`. The script peer additionally calls `attachYjsLogReader` against the daemon's persistence file for warm hydrate (skipped if the file does not exist; falls through to a cold cloud sync). There is no IPC sync wire and no `Remote<T>` proxy; script-side code reads and writes the same `bundle.tables`, `bundle.kv`, etc. as everything else.
 
 What the package does give you for adapter authors is the raw material a server adapter needs:
 

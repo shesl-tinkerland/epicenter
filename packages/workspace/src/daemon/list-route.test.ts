@@ -12,10 +12,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Result } from 'wellcrafted/result';
 
-import {
-	type ActionManifest,
-	defineQuery,
-} from '../shared/actions.js';
+import { type ActionManifest, defineQuery } from '@epicenter/sync';
 import { buildApp } from './app';
 import type { ResolveError } from './resolve-entry.js';
 import type { LoadedWorkspace, WorkspaceEntry } from './types.js';

@@ -1,7 +1,7 @@
 /**
  * Markdown Materializer Bidirectional Sync Tests
  *
- * Tests the `push` and `pull` mutations on `attachMarkdownMaterializer`.
+ * Tests the `push` and `pull` mutations on `attachMarkdown`.
  * Uses real temp directories and Yjs workspaces so the materializer
  * exercises actual table set/get and filesystem paths.
  *
@@ -27,7 +27,7 @@ import {
 	defineTable,
 } from '../../../index.js';
 import {
-	attachMarkdownMaterializer,
+	attachMarkdown,
 	type MarkdownShape,
 } from './materializer.js';
 import { parseMarkdownFile } from './parse-markdown-file.js';
@@ -77,7 +77,7 @@ async function listTestDir(relativePath: string) {
 }
 
 type AttachedTables = ReturnType<typeof attachTables<typeof tableDefinitions>>;
-type Materializer = ReturnType<typeof attachMarkdownMaterializer>;
+type Materializer = ReturnType<typeof attachMarkdown>;
 type TableRegistration = {
 	table: Parameters<Materializer['table']>[0];
 	config?: Parameters<Materializer['table']>[1];
@@ -90,7 +90,7 @@ async function setup(options?: {
 		const ydoc = new Y.Doc({ guid: id });
 		const tables = attachTables(ydoc, tableDefinitions);
 
-		const materializer = attachMarkdownMaterializer(ydoc, {
+		const materializer = attachMarkdown(ydoc, {
 			dir: TEST_DIR,
 		});
 
@@ -105,7 +105,7 @@ async function setup(options?: {
 			ydoc,
 			tables,
 			materializer,
-			whenReady: materializer.whenFlushed,
+			whenReady: materializer.whenLoaded,
 			[Symbol.dispose]() {
 				ydoc.destroy();
 			},
@@ -187,7 +187,7 @@ describe('push', () => {
 
 	test('silently skips tables whose directories do not exist', async () => {
 		const { workspace } = await setup({ tables: (t) => [{ table: t.posts }] });
-		// Don't create the posts directory — it should not exist
+		// Don't create the posts directory: it should not exist
 		const result = await workspace.materializer.push({});
 
 		expect(result.imported).toBe(0);
@@ -199,7 +199,7 @@ describe('push', () => {
 
 	test('emits error event when frontmatter fails schema validation', async () => {
 		const { workspace } = await setup({ tables: (t) => [{ table: t.posts }] });
-		// Valid frontmatter structure but wrong type — title must be a string,
+		// Valid frontmatter structure but wrong type: title must be a string,
 		// here it's a number. `fromMarkdown` happily returns it; `table.parse()`
 		// catches the schema violation.
 		await writeTestFile(
@@ -567,7 +567,7 @@ describe('rebuild', () => {
 		expect(result.deleted).toBe(1); // p1.md
 		expect(result.written).toBe(1); // p1 re-written
 
-		// notes/ is untouched — orphan still there
+		// notes/ is untouched: orphan still there
 		const notesEntries = await listTestDir('notes');
 		expect(notesEntries).toContain('orphan.md');
 
@@ -583,7 +583,7 @@ describe('rebuild', () => {
 		workspace[Symbol.dispose]();
 	});
 
-	test('is idempotent — rebuild twice produces identical filesystem state', async () => {
+	test('is idempotent: rebuild twice produces identical filesystem state', async () => {
 		const { workspace } = await setup({ tables: (t) => [{ table: t.posts }] });
 		workspace.tables.posts.set({
 			id: 'p1',
@@ -633,14 +633,14 @@ describe('round-trip', () => {
 		const cache1 = createDisposableCache((id: string) => {
 			const ydoc = new Y.Doc({ guid: id });
 			const tables = attachTables(ydoc, tableDefinitions);
-			const materializer = attachMarkdownMaterializer(ydoc, {
+			const materializer = attachMarkdown(ydoc, {
 				dir: TEST_DIR,
 			}).table(tables.posts);
 			return {
 				ydoc,
 				tables,
 				materializer,
-				whenReady: materializer.whenFlushed,
+				whenReady: materializer.whenLoaded,
 				[Symbol.dispose]() {
 					ydoc.destroy();
 				},
@@ -676,14 +676,14 @@ describe('round-trip', () => {
 		const cache2 = createDisposableCache((id: string) => {
 			const ydoc = new Y.Doc({ guid: id });
 			const tables = attachTables(ydoc, tableDefinitions);
-			const materializer = attachMarkdownMaterializer(ydoc, {
+			const materializer = attachMarkdown(ydoc, {
 				dir: TEST_DIR,
 			}).table(tables.posts);
 			return {
 				ydoc,
 				tables,
 				materializer,
-				whenReady: materializer.whenFlushed,
+				whenReady: materializer.whenLoaded,
 				[Symbol.dispose]() {
 					ydoc.destroy();
 				},
@@ -707,7 +707,7 @@ describe('round-trip', () => {
 		workspace2[Symbol.dispose]();
 	});
 
-	test('fromMarkdown(toMarkdown(row)) preserves row — MarkdownShape round-trip', async () => {
+	test('fromMarkdown(toMarkdown(row)) preserves row: MarkdownShape round-trip', async () => {
 		// Explicit toMarkdown / fromMarkdown pair over the shared MarkdownShape
 		// type, so the compiler guarantees one is the inverse of the other.
 		const toMarkdownFn = (row: {
@@ -755,7 +755,7 @@ describe('round-trip', () => {
 	test('inline field-to-body pair round-trips over MarkdownShape', async () => {
 		// Most real apps store body content in a separate Y.Doc (via
 		// createDisposableCache). This test covers the simpler case where body IS a
-		// row field — `notes.body` here. Inline callbacks keep the intent
+		// row field: `notes.body` here. Inline callbacks keep the intent
 		// at the call site; no helper abstracts the destructure.
 		const { workspace } = await setup({
 			tables: (t) =>

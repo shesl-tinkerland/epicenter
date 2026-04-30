@@ -1,10 +1,10 @@
 /**
- * Tool bridge tests — verifies the mapping between workspace actions and
+ * Tool bridge tests: verifies the mapping between workspace actions and
  * TanStack AI tool representations.
  */
 
 import { describe, expect, test } from 'bun:test';
-import { defineMutation, defineQuery } from '@epicenter/workspace';
+import { defineMutation, defineQuery } from '@epicenter/sync';
 import { Err, Ok } from 'wellcrafted/result';
 import { actionsToAiTools } from './tool-bridge.js';
 

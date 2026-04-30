@@ -23,15 +23,15 @@ Every Epicenter process plays one of three roles relative to a given workspace. 
 │  (e.g. fuji) │  attachSync (cloud WebSocket)                                │
 │              │  attachAwareness                                             │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│  Daemon      │  attachSqlitePersistence (sole writer; durable CRDT log)     │
+│  Daemon      │  attachYjsLog (sole writer; durable CRDT log)     │
 │  (epicenter  │  attachSync (cloud WebSocket)                                │
-│   serve)     │  attachSqliteMaterializer (writes mirror.db, WAL mode)       │
-│              │  attachMarkdownMaterializer (writes md/ tree)                │
+│   serve)     │  attachSqlite (writes mirror.db, WAL mode)       │
+│              │  attachMarkdown (writes md/ tree)                │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│  Script peer │  attachSqliteReadonlyPersistence (reads daemon's persistence)│
+│  Script peer │  attachYjsLogReader (reads daemon's persistence)│
 │  (CLI / bun) │  attachSync (own cloud WebSocket)                            │
-│              │  attachSqliteMirror (read-only; opens daemon's mirror.db)    │
-│              │  attachMarkdownMirror (read-only; reads daemon's md/ tree)   │
+│              │  attachSqliteReader (read-only; opens daemon's mirror.db)    │
+│              │  (removed) (read-only; reads daemon's md/ tree)   │
 └──────────────┴──────────────────────────────────────────────────────────────┘
 ```
 
@@ -93,9 +93,9 @@ fuji.tables.X        Pure local Y.Doc surface. CRDT writes / reads /
                      materializer files. CRDT is the source of truth.
 
 fuji.sqlite.X        Shared SQLite read. The daemon's
-                     attachSqliteMaterializer writes mirror.db with
+                     attachSqlite writes mirror.db with
                      PRAGMA journal_mode = WAL. The script opens the
-                     SAME file via attachSqliteMirror with
+                     SAME file via attachSqliteReader with
                      { readonly: true } and gets the full menu: Drizzle
                      for typed query building, raw SQL, FTS5 over the
                      daemon's pre-populated index. Zero round trips,
@@ -103,9 +103,9 @@ fuji.sqlite.X        Shared SQLite read. The daemon's
                      warm index page cache.
 
 fuji.markdown.X      Shared markdown tree. The daemon's
-                     attachMarkdownMaterializer writes a flat md/ tree
+                     attachMarkdown writes a flat md/ tree
                      under the workspace dir. The script's
-                     attachMarkdownMirror walks that tree (globs,
+                     (removed) walks that tree (globs,
                      watches, reads) without going through the daemon.
                      Useful for editor integrations and for any tool
                      that wants to consume Epicenter content as plain
@@ -149,7 +149,7 @@ export const fuji = openFuji({
 export const workspaces = [fuji];
 ```
 
-`@epicenter/fuji/daemon` internally composes `attachSqlitePersistence` (sole writer; WAL mode), `attachSync` (cloud WebSocket), `attachSqliteMaterializer` (writes mirror.db, WAL), and `attachMarkdownMaterializer` (writes md/ tree). `epicenter serve` loads the config, awaits `whenReady`, and parks. From the outside, it serves three things on the filesystem: the persistence file (readable by scripts), the SQLite materializer file in WAL mode (readable by any process), and the markdown tree (readable by any process). An optional `/run` HTTP RPC server on `daemon.sock` is mounted when enabled (typed action dispatch from CLI, scripts, or curl).
+`@epicenter/fuji/daemon` internally composes `attachYjsLog` (sole writer; WAL mode), `attachSync` (cloud WebSocket), `attachSqlite` (writes mirror.db, WAL), and `attachMarkdown` (writes md/ tree). `epicenter serve` loads the config, awaits `whenReady`, and parks. From the outside, it serves three things on the filesystem: the persistence file (readable by scripts), the SQLite materializer file in WAL mode (readable by any process), and the markdown tree (readable by any process). An optional `/run` HTTP RPC server on `daemon.sock` is mounted when enabled (typed action dispatch from CLI, scripts, or curl).
 
 The daemon has no `fuji.sqlite.*` or `fuji.markdown.*` namespace because it doesn't need to read its own materialized state through that path: it owns the `Y.Doc` directly, so it queries via `tables.X` and projects through the materializer. The mirror is for *readers*.
 
@@ -186,7 +186,7 @@ const matches = await fuji.sqlite.search('entries', 'rust async');
 const files = await fuji.markdown.list({ prefix: 'inbox/' });
 ```
 
-The script's `fuji.tables.entries.set(...)` is **a direct mutation of the script's local Y.Doc**, identical to the browser tab. The script's own `attachSync` observes that mutation and ships it to the cloud sync server. The daemon's `attachSync` receives the update, applies it (its `Y.Doc` advances), the daemon's `attachSqlitePersistence` writes the update to disk, the daemon's `attachSqliteMaterializer` projects it into `mirror.db`, and the daemon's `attachMarkdownMaterializer` writes the new markdown file. Other connected peers (browser tabs, other scripts) see the update through their own cloud sync sessions.
+The script's `fuji.tables.entries.set(...)` is **a direct mutation of the script's local Y.Doc**, identical to the browser tab. The script's own `attachSync` observes that mutation and ships it to the cloud sync server. The daemon's `attachSync` receives the update, applies it (its `Y.Doc` advances), the daemon's `attachYjsLog` writes the update to disk, the daemon's `attachSqlite` projects it into `mirror.db`, and the daemon's `attachMarkdown` writes the new markdown file. Other connected peers (browser tabs, other scripts) see the update through their own cloud sync sessions.
 
 Calls that have no equivalent on the browser tab (`fuji.sqlite.*`, `fuji.markdown.*`) reflect the asymmetry of the actual deployment: the daemon is the local writer of materializer outputs; the script is a local reader and a closure-running scratchpad. We do not pretend these surfaces are universal. They exist on the handle that needs them. Server-only side effects (Stripe calls, kicking peers) flow through Y.Map request entries the daemon observes, or run as typed actions over the daemon's optional `/run` HTTP RPC.
 
@@ -207,7 +207,7 @@ This is the structural choice that lets a script feel as fast as the browser tab
 ```
 Daemon side                       Script side
 ───────────                       ───────────
-attachSqliteMaterializer    ───►  attachSqliteMirror
+attachSqlite    ───►  attachSqliteReader
   (writer)                          (reader, readonly: true)
    │                                 │
    ▼                                 ▼
@@ -220,7 +220,7 @@ attachSqliteMaterializer    ───►  attachSqliteMirror
    └─ WAL allows N concurrent readers + 1 writer with no
       blocking; OS page cache is shared
 
-attachMarkdownMaterializer  ───►  attachMarkdownMirror
+attachMarkdown  ───►  (removed)
   (writer)                          (reader, file walks)
    │                                 │
    ▼                                 ▼
@@ -246,9 +246,9 @@ What this **does not change**: writes still flow through `Y.Doc`. The CRDT is th
 
 A reasonable instinct: "Why does the daemon exist? Couldn't a script just attach its own Y.Doc and its own cloud sync, like the browser tab does?"
 
-It can, and in fact it does. The script-side `openFuji` factory composes exactly that: `attachSync` + `attachSqliteReadonlyPersistence`. The daemon is load-bearing only for two roles:
+It can, and in fact it does. The script-side `openFuji` factory composes exactly that: `attachSync` + `attachYjsLogReader`. The daemon is load-bearing only for two roles:
 
-1. **Single-writer for the persistence file.** `attachSqlitePersistence` is append-only. Two processes calling it on the same file would race on WAL checkpoints and on the compaction debounce. The daemon claims sole-writer status; scripts open the file `{ readonly: true }`. SQLite's WAL mode lets N readers proceed concurrently with the writer, no `SQLITE_BUSY`, no coordination. Same shape libsql uses for multi-process SQLite (`sqld`).
+1. **Single-writer for the persistence file.** `attachYjsLog` is append-only. Two processes calling it on the same file would race on WAL checkpoints and on the compaction debounce. The daemon claims sole-writer status; scripts open the file `{ readonly: true }`. SQLite's WAL mode lets N readers proceed concurrently with the writer, no `SQLITE_BUSY`, no coordination. Same shape libsql uses for multi-process SQLite (`sqld`).
 2. **Materializer side-effects.** `mirror.db` and `md/` are projections of the Y.Doc, written by the daemon as updates flow in. Scripts read these for fast SQL queries (Drizzle, FTS5) and direct file reads. Without a daemon, scripts wanting these projections would each have to maintain their own materializer, which defeats the warm-page-cache benefit.
 
 The two reasons that *sound* like daemon arguments but aren't:
@@ -269,7 +269,7 @@ So the daemon exists to **be the sole writer of the persistence and materializer
 - `packages/workspace/src/document/attach-sqlite-persistence.ts`: daemon's sole writer of the CRDT log.
 - `packages/workspace/src/document/attach-sqlite-readonly-persistence.ts`: script-side reader for warm hydrate.
 - `packages/workspace/src/document/attach-sync.ts`: cloud Yjs sync (the only sync wire).
-- `packages/workspace/src/client/sqlite-mirror.ts`: `attachSqliteMirror` (script-side reader of `mirror.db`).
-- `packages/workspace/src/client/markdown-mirror.ts`: `attachMarkdownMirror` (script-side reader of the `md/` tree).
-- `packages/workspace/src/document/materializer/sqlite/`: `attachSqliteMaterializer` (writer).
-- `packages/workspace/src/document/materializer/markdown/`: `attachMarkdownMaterializer` (writer).
+- `packages/workspace/src/client/sqlite-mirror.ts`: `attachSqliteReader` (script-side reader of `mirror.db`).
+- `packages/workspace/src/client/markdown-mirror.ts`: `(removed)` (script-side reader of the `md/` tree).
+- `packages/workspace/src/document/materializer/sqlite/`: `attachSqlite` (writer).
+- `packages/workspace/src/document/materializer/markdown/`: `attachMarkdown` (writer).

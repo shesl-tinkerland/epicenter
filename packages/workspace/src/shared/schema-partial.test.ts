@@ -48,7 +48,7 @@ describe('partialUpdate', () => {
 		_ok.title = 'a';
 		_ok.tags = ['t'];
 
-		// @ts-expect-error — bare string must not assign to a branded id output.
+		// @ts-expect-error: bare string must not assign to a branded id output.
 		const _bad: Out = { id: 'plain-string' };
 		void _bad;
 		expect(true).toBe(true);

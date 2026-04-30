@@ -1,7 +1,7 @@
 /**
  * Actions: typed queries (reads) and mutations (writes) authored as a nested
  * tree of closures. `defineQuery`/`defineMutation` attach metadata to the
- * handler and return it — the action callable IS the handler, so local
+ * handler and return it: the action callable IS the handler, so local
  * callers see exactly what the author wrote (sync stays sync, `Result` stays
  * `Result`).
  *
@@ -18,7 +18,7 @@
  *
  * Functions don't serialize, so the wire form drops them and keeps just the
  * metadata. Both shapes are public; `describeActions(tree)` converts.
- * `walkActions(tree)` is the underlying iterator — yields live `[path, Action]`
+ * `walkActions(tree)` is the underlying iterator: yields live `[path, Action]`
  * pairs for callers that want to filter, invoke, or count instead of
  * materializing the full record.
  *
@@ -31,10 +31,10 @@
  * @module
  */
 
-import { RpcError } from '@epicenter/sync';
 import type { Static, TSchema } from 'typebox';
 import type { Result } from 'wellcrafted/result';
 import { Ok, isResult } from 'wellcrafted/result';
+import { RpcError } from './rpc-errors';
 
 // ════════════════════════════════════════════════════════════════════════════
 // ACTION DEFINITION TYPES
@@ -45,11 +45,11 @@ import { Ok, isResult } from 'wellcrafted/result';
  *
  * Uses variadic tuple args instead of conditional function signatures so that
  * when the type flows through `Action` (via the `Actions` constraint), `any`
- * distributes over both branches giving `[input: any] | []` — which correctly
+ * distributes over both branches giving `[input: any] | []`: which correctly
  * allows calling with 0 arguments for no-input actions.
  *
  * Parameterized on `R` (the handler's actual return type) rather than splitting
- * `TOutput`/`TError` — keeps the action's callable signature exactly equal to
+ * `TOutput`/`TError`: keeps the action's callable signature exactly equal to
  * the handler's, so passthrough preserves precision (no widening to a
  * `T | Result<T, E> | Promise<...>` union).
  */
@@ -75,7 +75,7 @@ type ActionConfig<TInput extends TSchema | undefined, R> = {
  * Metadata properties attached to a callable action.
  *
  * `input` (a live `TSchema`) is present whenever the action defines one.
- * Action discovery returns this shape directly — there is no separate
+ * Action discovery returns this shape directly: there is no separate
  * wire form.
  */
 export type ActionMeta<TInput extends TSchema | undefined = TSchema | undefined> = {
@@ -155,17 +155,17 @@ export type SystemActions = {
 /**
  * Define a query (read operation) with full type inference.
  *
- * Returns the handler with metadata attached — the action callable IS the
+ * Returns the handler with metadata attached: the action callable IS the
  * handler. Local callers see whatever the handler returns (sync if sync,
  * raw if raw, `Result` if explicit). Remote/AI/CLI consumers see uniform
  * `Promise<Result>` via the boundary normalizers (`peer()` for the wire,
  * `invokeAction` for in-process).
  */
-/** No input — `TInput` is explicitly `undefined`. */
+/** No input: `TInput` is explicitly `undefined`. */
 export function defineQuery<R>(
 	config: ActionConfig<undefined, R>,
 ): Query<undefined, R>;
-/** With input — `TInput` inferred from the schema. */
+/** With input: `TInput` inferred from the schema. */
 export function defineQuery<TInput extends TSchema, R>(
 	config: ActionConfig<TInput, R>,
 ): Query<TInput, R>;
@@ -180,15 +180,15 @@ export function defineQuery({ handler, ...rest }: any): Query {
 /**
  * Define a mutation (write operation) with full type inference.
  *
- * Returns the handler with metadata attached — the action callable IS the
+ * Returns the handler with metadata attached: the action callable IS the
  * handler. Local callers see whatever the handler returns; remote/AI/CLI
  * consumers see uniform `Promise<Result>` via the boundary normalizers.
  */
-/** No input — `TInput` is explicitly `undefined`. */
+/** No input: `TInput` is explicitly `undefined`. */
 export function defineMutation<R>(
 	config: ActionConfig<undefined, R>,
 ): Mutation<undefined, R>;
-/** With input — `TInput` inferred from the schema. */
+/** With input: `TInput` inferred from the schema. */
 export function defineMutation<TInput extends TSchema, R>(
 	config: ActionConfig<TInput, R>,
 ): Mutation<TInput, R>;
@@ -203,7 +203,7 @@ export function defineMutation({ handler, ...rest }: any): Mutation {
 /**
  * Type guard to check if a value is an action definition.
  *
- * Structural check — anything callable with a `type` of `'query'` or
+ * Structural check: anything callable with a `type` of `'query'` or
  * `'mutation'` is an action.
  */
 export function isAction(value: unknown): value is Action {
@@ -292,7 +292,7 @@ export function* walkActions(
 }
 
 /**
- * Walk an `Actions` tree into its flat `ActionManifest` — the wire form
+ * Walk an `Actions` tree into its flat `ActionManifest`: the wire form
  * returned by `system.describe`. Live `input` schemas are retained;
  * functions are dropped. Pairs with `describePeer(sync, id)`, which
  * returns the same shape from a remote peer.
@@ -320,7 +320,7 @@ function toMeta({ type, input, title, description }: Action): ActionMeta {
  *
  * The single canonical normalize: raw values get `Ok`-wrapped, existing
  * `Result`s pass through, and thrown errors become `Err(ActionFailed)`. Used
- * by every consumer that doesn't know the handler shape ahead of time —
+ * by every consumer that doesn't know the handler shape ahead of time
  * AI tool bridge, CLI dispatch, and the inbound RPC handler.
  *
  * The `errorLabel` (defaulting to `action.title` or `'anonymous'`) appears
@@ -362,8 +362,8 @@ export async function invokeAction<T = unknown>(
 /**
  * Transport-layer error for actions invoked over RPC.
  *
- * Sourced from `@epicenter/sync`'s `RpcError` so the wire and the remote-action
- * type surface share a single nominal `ActionFailed` — no re-wrapping between
+ * Sourced from this package's `RpcError` so the wire and the remote-action
+ * type surface share a single nominal `ActionFailed`: no re-wrapping between
  * layers, one `name` discriminant to match on.
  */
 export type ActionFailed = Extract<RpcError, { name: 'ActionFailed' }>;
@@ -374,11 +374,11 @@ export type ActionFailed = Extract<RpcError, { name: 'ActionFailed' }>;
 
 /**
  * Per-remote-call options, threaded through every wrapped leaf as a trailing
- * optional argument. The proxy passes these to `sync.rpc(...)` directly —
+ * optional argument. The proxy passes these to `sync.rpc(...)` directly
  * same shape, same name, single source of truth.
  *
  * Currently just `timeout`. Cancellation via `AbortSignal` is deliberately
- * out — the underlying transport doesn't support it (a real cancel requires
+ * out: the underlying transport doesn't support it (a real cancel requires
  * a CANCEL frame the server understands). Add when plumbed through.
  */
 export type RemoteCallOptions = {
