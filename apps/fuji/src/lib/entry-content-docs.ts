@@ -57,7 +57,7 @@ export function createEntryContentDoc({
 	attachSync(ydoc, {
 		url: toWsUrl(`${apiUrl}/docs/${ydoc.guid}`),
 		waitFor: idb.whenLoaded,
-		getToken: () => auth.getToken(),
+		getToken: async () => auth.getToken(),
 	});
 
 	onLocalUpdate(ydoc, () => {

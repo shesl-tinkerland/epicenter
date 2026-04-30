@@ -111,7 +111,7 @@ export function openFuji({
 		url: toWsUrl(/* ... */),
 		waitFor: idb.whenLoaded,
 		awareness: doc.awareness.raw,
-		getToken: () => auth.getToken(),
+		getToken: async () => auth.getToken(),
 		actions: doc.actions,
 	});
 	doc.awareness.setLocal({

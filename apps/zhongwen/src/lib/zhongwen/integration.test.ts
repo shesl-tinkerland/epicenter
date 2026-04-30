@@ -34,7 +34,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// sees the file on stable WAL pages.
 		{
 			using daemon = openZhongwenDaemon({
-				getToken: () => 'fake-token',
+				getToken: async () => 'fake-token',
 				device: {
 					id: 'test-daemon',
 					name: 'Zhongwen Daemon (test)',
@@ -66,7 +66,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		}
 
 		using script = openZhongwenScript({
-			getToken: () => 'fake-token',
+			getToken: async () => 'fake-token',
 			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});

@@ -33,7 +33,7 @@ export function openFuji({
 	apiUrl = EPICENTER_API_URL,
 	webSocketImpl,
 }: {
-	getToken: () => string | null | Promise<string | null>;
+	getToken: () => Promise<string | null>;
 	/**
 	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
 	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via

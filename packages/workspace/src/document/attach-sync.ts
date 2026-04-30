@@ -418,15 +418,11 @@ export type SyncAttachmentConfig = {
 	 * an `auth` error state until a subsequent `reconnect()` (or backoff
 	 * iteration) finds a non-null token.
 	 *
-	 * May be sync or async: the supervisor `await`s either way. Sync returns
-	 * skip the microtask hop in the common case where the token is already in
-	 * memory.
-	 *
 	 * Providing this callback IS the declaration that the connection is
 	 * authenticated. Omit it for unauthenticated providers (tests, public
 	 * rooms): `attachSync` then connects without a bearer subprotocol.
 	 */
-	getToken?: () => string | null | Promise<string | null>;
+	getToken?: () => Promise<string | null>;
 	/**
 	 * WebSocket constructor. Defaults to `globalThis.WebSocket` (the runtime's
 	 * native or polyfilled implementation). Tests pass a stub here to avoid
@@ -620,7 +616,7 @@ export function attachSync(
 	 * `getToken`: supplying that callback IS the declaration that a token is
 	 * required. Without it, the supervisor connects unauthenticated.
 	 */
-	const requiresToken = typeof config.getToken === 'function';
+	const requiresToken = config.getToken !== undefined;
 
 	/** User intent: should we be connected? */
 	let desired: 'online' | 'offline' = 'offline';

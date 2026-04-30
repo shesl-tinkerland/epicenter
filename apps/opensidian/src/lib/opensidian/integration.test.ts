@@ -37,7 +37,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// writer commits and closes before the reader opens.
 		{
 			using daemon = openOpensidianDaemon({
-				getToken: () => 'fake-token',
+				getToken: async () => 'fake-token',
 				device: {
 					id: 'test-daemon',
 					name: 'Opensidian Daemon (test)',
@@ -72,7 +72,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		// 2. Script opens the same projectDir and replays the persistence file.
 		using script = openOpensidianScript({
-			getToken: () => 'fake-token',
+			getToken: async () => 'fake-token',
 			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});

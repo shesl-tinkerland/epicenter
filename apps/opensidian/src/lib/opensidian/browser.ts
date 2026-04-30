@@ -184,7 +184,7 @@ export function openOpensidian({
 			url: toWsUrl(`${APP_URLS.API}/workspaces/${doc.ydoc.guid}`),
 			waitFor: idb,
 			device,
-			getToken: () => auth.getToken(),
+			getToken: async () => auth.getToken(),
 		},
 	);
 

@@ -43,7 +43,7 @@ export async function openTabManager({
 		url: toWsUrl(`${APP_URLS.API}/workspaces/${doc.ydoc.guid}`),
 		waitFor: idb,
 		device: resolvedDevice,
-		getToken: () => auth.getToken(),
+		getToken: async () => auth.getToken(),
 	});
 
 	return {

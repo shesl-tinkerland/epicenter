@@ -43,7 +43,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// attachment sees the file on stable WAL pages.
 		{
 			using daemon = openFujiDaemon({
-				getToken: () => 'fake-token',
+				getToken: async () => 'fake-token',
 				device: {
 					id: 'test-daemon',
 					name: 'Fuji Daemon (test)',
@@ -81,7 +81,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		// 2. Script opens the same projectDir and replays the persistence file.
 		using script = openFujiScript({
-			getToken: () => 'fake-token',
+			getToken: async () => 'fake-token',
 			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});

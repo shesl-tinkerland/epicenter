@@ -36,7 +36,7 @@ export function openFuji({
 	apiUrl = EPICENTER_API_URL,
 	webSocketImpl,
 }: {
-	getToken: () => string | null | Promise<string | null>;
+	getToken: () => Promise<string | null>;
 	/**
 	 * Required: a long-lived materializer worker should always show up in
 	 * awareness so peers can see "the daemon is up" and can RPC-route to it

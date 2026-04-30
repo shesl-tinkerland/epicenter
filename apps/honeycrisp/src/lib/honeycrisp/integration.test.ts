@@ -38,7 +38,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// sees the file on stable WAL pages.
 		{
 			using daemon = openHoneycrispDaemon({
-				getToken: () => 'fake-token',
+				getToken: async () => 'fake-token',
 				device: {
 					id: 'test-daemon',
 					name: 'Honeycrisp Daemon (test)',
@@ -70,7 +70,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		}
 
 		using script = openHoneycrispScript({
-			getToken: () => 'fake-token',
+			getToken: async () => 'fake-token',
 			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});
