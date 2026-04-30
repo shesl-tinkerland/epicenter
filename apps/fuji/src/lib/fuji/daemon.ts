@@ -31,10 +31,17 @@ export function openFuji({
 	getToken,
 	device,
 	absDir,
+	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
 	absDir: string;
+	/**
+	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
+	 * dialing real servers; production omits it (defaults to
+	 * `globalThis.WebSocket`).
+	 */
+	webSocketImpl?: typeof WebSocket;
 }) {
 	const doc = openFujiDoc();
 
@@ -47,6 +54,7 @@ export function openFuji({
 		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
+		webSocketImpl,
 	});
 
 	const sqliteFile = sqlitePath(absDir, doc.ydoc.guid);

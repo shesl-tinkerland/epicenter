@@ -34,10 +34,11 @@ function resolveDir(): string {
 	}
 }
 
-export function openFuji({
+export async function openFuji({
 	getToken,
 	absDir,
 	clientID = hashClientId(Bun.main),
+	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	/**
@@ -55,6 +56,11 @@ export function openFuji({
 	 * or scripts that genuinely want a fresh peer identity per run.
 	 */
 	clientID?: number;
+	/**
+	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
+	 * dialing real servers; production omits it.
+	 */
+	webSocketImpl?: typeof WebSocket;
 }) {
 	const resolvedDir = absDir ?? resolveDir();
 
@@ -63,22 +69,27 @@ export function openFuji({
 	const filePath = persistencePath(resolvedDir, doc.ydoc.guid);
 	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, { filePath });
 
-	// `whenReady` swallows `MissingFile` (no daemon has written here yet:
-	// fall through to cold cloud sync) and re-throws every other error.
-	const whenReady = persistence.whenLoaded.catch((err: unknown) => {
+	// Swallow `MissingFile` (no daemon has written here yet: fall through to
+	// cold cloud sync); re-throw every other error.
+	const hydrate = persistence.whenLoaded.catch((err: unknown) => {
 		if (!isMissingFile(err)) throw err;
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
-		waitFor: whenReady,
+		waitFor: hydrate,
 		getToken,
+		webSocketImpl,
 	});
+
+	// Await hydrate inside the factory: callers get a fully-hydrated handle
+	// without remembering to await `whenReady`. The first WS handshake still
+	// gates on the same promise via `waitFor`, so the cloud delta-only.
+	await hydrate;
 
 	return {
 		...doc,
 		persistence,
 		sync,
-		whenReady,
 	};
 }
