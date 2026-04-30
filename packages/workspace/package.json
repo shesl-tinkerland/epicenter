@@ -32,7 +32,8 @@
 		"./ai": "./src/ai/index.ts",
 		"./document/materializer/sqlite": "./src/document/materializer/sqlite/index.ts",
 		"./encryption-key": "./src/document/encryption-key.ts",
-		"./logger/jsonl-sink": "./src/shared/logger/jsonl-sink.ts"
+		"./logger/jsonl-sink": "./src/shared/logger/jsonl-sink.ts",
+		"./test-utils": "./src/shared/test-utils.ts"
 	},
 	"license": "MIT",
 	"scripts": {
@@ -44,6 +45,7 @@
 		"@ark/json-schema": "^0.0.4",
 		"@hono/standard-validator": "catalog:",
 		"@tanstack/ai": "catalog:",
+		"@epicenter/constants": "workspace:*",
 		"@epicenter/sync": "workspace:*",
 		"@noble/ciphers": "^2.1.1",
 		"@noble/hashes": "^2.0.1",

@@ -144,7 +144,7 @@ import { openFuji } from '@epicenter/fuji/daemon';
 
 export const fuji = openFuji({
   authToken: () => sessionStore.token,
-  absDir: import.meta.dir,
+  projectDir: import.meta.dir,
 });
 export const workspaces = [fuji];
 ```

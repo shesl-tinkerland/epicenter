@@ -11,11 +11,10 @@
  * peers, sharing a SQLite WAL persistence file.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { NoopWebSocket, type ProjectDir } from '@epicenter/workspace';
+import { mintTestProjectDir } from '@epicenter/workspace/test-utils';
 import { type FileId, generateFileId } from '@epicenter/filesystem';
 import { openOpensidian as openOpensidianDaemon } from './daemon.js';
 import { openOpensidian as openOpensidianScript } from './script.js';
@@ -23,9 +22,7 @@ import { openOpensidian as openOpensidianScript } from './script.js';
 let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(
-		join(tmpdir(), 'opensidian-integration-'),
-	) as ProjectDir;
+	workdir = mintTestProjectDir('opensidian-integration-');
 });
 
 afterEach(() => {
@@ -41,6 +38,11 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openOpensidianDaemon({
 				getToken: () => 'fake-token',
+				device: {
+					id: 'test-daemon',
+					name: 'Opensidian Daemon (test)',
+					platform: 'linux',
+				},
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});

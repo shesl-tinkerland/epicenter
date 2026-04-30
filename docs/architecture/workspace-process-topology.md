@@ -99,7 +99,7 @@ The script never holds a workspace. The daemon's workspace is the source of trut
 
 ## The single-writer constraint
 
-There is at most one workspace process per `(absDir, workspaceId)` pair on a machine.
+There is at most one workspace process per `(projectDir, workspaceId)` pair on a machine.
 
 CRDTs tolerate many writers, but the layers above CRDTs do not:
 
@@ -120,7 +120,7 @@ workspaceId       — the logical workspace (e.g. 'epicenter.fuji')
                     Multiple folders on one machine can hold replicas of the
                     same workspaceId.
 
-absDir            — where this local replica lives
+projectDir            — where this local replica lives
                     The folder containing epicenter.config.ts. Determines
                     the daemon's socket path and the local persistence path.
                     Two folders = two replicas, even if same workspaceId.
@@ -148,7 +148,7 @@ In the peer list, this surfaces as `MacBook Pro [vault-prod]`. Useful when you r
 State splits cleanly along one axis: is it about a specific workspace replica, or about the user / machine?
 
 ```
-LOCAL — <absDir>/.epicenter/
+LOCAL — <projectDir>/.epicenter/
 
   persistence/<workspaceId>.db    Y.Doc updates (the CRDT itself)
   materializer/<workspaceId>.db   sqlite mirror outputs
@@ -212,7 +212,7 @@ import { openFuji } from '@epicenter/fuji/workspace';
 
 using fuji = await connectDaemon<ReturnType<typeof openFuji>>({
   id: 'epicenter.fuji',
-  absDir: '/Users/braden/Code/vault',  // optional; defaults to upward search
+  projectDir: '/Users/braden/Code/vault',  // optional; defaults to upward search
 });
 
 const entries = await fuji.tables.entries.getAllValid();
@@ -221,7 +221,7 @@ await fuji.actions.entries.update({ id, title: 'New' });
 
 `ReturnType<typeof openFuji>` is type-only at runtime. TypeScript reads `openFuji`'s return type to shape the remote client; the function body never executes in the script process. The script holds a unix socket and a typed RPC stub: no Y.Doc, no SQLite, no sync session locally.
 
-`absDir` is optional. If omitted, `connectDaemon` walks parent directories from `process.cwd()` looking for an `epicenter.config.ts` or `.epicenter/` marker, the way `git` finds the repo root. Pass it explicitly when you need to address a workspace outside the cwd's tree.
+`projectDir` is optional. If omitted, `connectDaemon` walks parent directories from `process.cwd()` looking for an `epicenter.config.ts` or `.epicenter/` marker, the way `git` finds the repo root. Pass it explicitly when you need to address a workspace outside the cwd's tree.
 
 There is **no** `transport: 'remote' | 'local'` discriminator. In-process is a fundamentally different operation from connecting over a socket: in-process is `new`, connecting is RPC. The system reflects that. There is no `connectLocal`. If you want an in-process workspace, you call your builder directly:
 
@@ -288,12 +288,12 @@ The escape hatch is not a different API; it's calling your builder yourself:
 import { openFuji } from '@epicenter/fuji/workspace';
 // ... plus whatever IO this tool needs (SQLite, sync, materializers) ...
 
-using fuji = bootFujiInProcess({ absDir: import.meta.dir, /* ... */ });
+using fuji = bootFujiInProcess({ projectDir: import.meta.dir, /* ... */ });
 await fuji.whenReady;
 // full in-process workspace: observe, documents, filter all work
 ```
 
-The constraint: **no daemon may be running on the same `(absDir, workspaceId)` while an in-process workspace is active.** SQLite file locking will surface this as a clean error if you try.
+The constraint: **no daemon may be running on the same `(projectDir, workspaceId)` while an in-process workspace is active.** SQLite file locking will surface this as a clean error if you try.
 
 ## The server is a function
 
@@ -304,7 +304,7 @@ import { createWorkspaceServer } from '@epicenter/workspace';
 import { fuji, tabManager, workspaces } from './epicenter.config';
 
 const server = await createWorkspaceServer({
-  absDir: import.meta.dir,
+  projectDir: import.meta.dir,
   workspaces,  // [fuji, tabManager], pre-constructed by the config file
 });
 
@@ -322,7 +322,7 @@ Not every workspace needs a daemon. The daemon earns its keep when there's a hea
 | use case                                                            | daemon? |
 |---------------------------------------------------------------------|---------|
 | vault: markdown materializer, sqlite mirror, no UI app              | yes     |
-| CLI scripting against live data from a known absDir                 | yes     |
+| CLI scripting against live data from a known projectDir                 | yes     |
 | sharing workspace state across multiple short-lived bun processes   | yes     |
 | whispering on its own (the app is the workspace host)               | no      |
 | dashboard / honeycrisp / other web apps on their own                | no      |
@@ -350,9 +350,9 @@ In a monorepo, daemon and client share the same version automatically. The versi
 - **Apps and daemons are peers**, both syncing to the cloud. They don't talk to each other directly.
 - **The daemon is the headless workspace host.** Same role as an app, no UI.
 - **Scripts and the CLI are clients of the daemon**, connecting via unix socket.
-- **One workspace process per `(absDir, workspaceId)`**, enforced by SQLite file lock.
+- **One workspace process per `(projectDir, workspaceId)`**, enforced by SQLite file lock.
 - **Per-workspace state is local; per-user identity is global.**
-- **`connectDaemon<typeof openX>({ id, absDir? })`** is the front door for talking to a remote workspace. There is no front door for in-process: you call your builder directly.
+- **`connectDaemon<typeof openX>({ id, projectDir? })`** is the front door for talking to a remote workspace. There is no front door for in-process: you call your builder directly.
 - **`defineMutation` and `defineQuery` are the only wire-level contract.** Tables auto-generate their CRUD wrappers; users add more. Built-in queries (`peers`, `list`) flow through the same `/run` route.
 - **Three operations stay in-process only**: `filter` (with predicate), `observe`, `documents.open`. Throw `RemoteNotSupported` over the wire.
 - **No auto-spawn.** Daemon is started explicitly with `epicenter serve`.

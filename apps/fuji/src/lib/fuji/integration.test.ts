@@ -13,9 +13,7 @@
  * the readonly replay diverges from the writer format, this test breaks.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
 	DateTimeString,
@@ -23,13 +21,14 @@ import {
 	NoopWebSocket,
 	type ProjectDir,
 } from '@epicenter/workspace';
+import { mintTestProjectDir } from '@epicenter/workspace/test-utils';
 import { openFuji as openFujiDaemon } from './daemon.js';
 import { openFuji as openFujiScript } from './script.js';
 
 let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'fuji-integration-')) as ProjectDir;
+	workdir = mintTestProjectDir('fuji-integration-');
 });
 
 afterEach(() => {
@@ -45,6 +44,11 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openFujiDaemon({
 				getToken: () => 'fake-token',
+				device: {
+					id: 'test-daemon',
+					name: 'Fuji Daemon (test)',
+					platform: 'linux',
+				},
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});

@@ -5,11 +5,10 @@
  * peers, sharing a SQLite WAL persistence file.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { NoopWebSocket, type ProjectDir } from '@epicenter/workspace';
+import { mintTestProjectDir } from '@epicenter/workspace/test-utils';
 import {
 	type ConversationId,
 	generateConversationId,
@@ -20,7 +19,7 @@ import { openZhongwen as openZhongwenScript } from './script.js';
 let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(join(tmpdir(), 'zhongwen-integration-')) as ProjectDir;
+	workdir = mintTestProjectDir('zhongwen-integration-');
 });
 
 afterEach(() => {
@@ -36,6 +35,11 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openZhongwenDaemon({
 				getToken: () => 'fake-token',
+				device: {
+					id: 'test-daemon',
+					name: 'Zhongwen Daemon (test)',
+					platform: 'linux',
+				},
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});

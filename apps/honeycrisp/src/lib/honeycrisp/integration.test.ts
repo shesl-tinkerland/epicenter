@@ -8,15 +8,14 @@
  * persistence file.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
 	DateTimeString,
 	NoopWebSocket,
 	type ProjectDir,
 } from '@epicenter/workspace';
+import { mintTestProjectDir } from '@epicenter/workspace/test-utils';
 import { type NoteId } from '../workspace.js';
 import { openHoneycrisp as openHoneycrispDaemon } from './daemon.js';
 import { openHoneycrisp as openHoneycrispScript } from './script.js';
@@ -24,9 +23,7 @@ import { openHoneycrisp as openHoneycrispScript } from './script.js';
 let workdir: ProjectDir;
 
 beforeEach(() => {
-	workdir = mkdtempSync(
-		join(tmpdir(), 'honeycrisp-integration-'),
-	) as ProjectDir;
+	workdir = mintTestProjectDir('honeycrisp-integration-');
 });
 
 afterEach(() => {
@@ -42,6 +39,11 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openHoneycrispDaemon({
 				getToken: () => 'fake-token',
+				device: {
+					id: 'test-daemon',
+					name: 'Honeycrisp Daemon (test)',
+					platform: 'linux',
+				},
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});

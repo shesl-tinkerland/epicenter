@@ -27,16 +27,23 @@ import {
 	slugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
-import { openFuji as openFujiDoc } from './index.js';
+import { openFuji as openFujiDoc } from './core.js';
 
 export function openFuji({
 	getToken,
 	device,
 	projectDir,
+	apiUrl = EPICENTER_API_URL,
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
-	device?: DeviceDescriptor;
+	/**
+	 * Required: a long-lived materializer worker should always show up in
+	 * awareness so peers can see "the daemon is up" and can RPC-route to it
+	 * via `peer(workspace, deviceId)`. Mint via `getOrCreateDeviceId()` or
+	 * read from `~/.epicenter/deviceId`.
+	 */
+	device: DeviceDescriptor;
 	/**
 	 * Project root (where `epicenter.config.ts` lives). Required: the daemon
 	 * is the sole writer of `<projectDir>/.epicenter/yjs/<guid>.db`, so there
@@ -44,6 +51,12 @@ export function openFuji({
 	 * to brand a discovered path as `ProjectDir`.
 	 */
 	projectDir: ProjectDir;
+	/**
+	 * Epicenter API base URL. Defaults to `EPICENTER_API_URL` (production).
+	 * Override for self-hosted instances, staging deployments, or
+	 * integration tests routing to a local fake.
+	 */
+	apiUrl?: string;
 	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it (defaults to
@@ -58,7 +71,7 @@ export function openFuji({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
@@ -81,14 +94,7 @@ export function openFuji({
 		sync,
 		sqlite,
 		markdown,
-		/**
-		 * Resolves once the daemon's yjs file has replayed into the Y.Doc:
-		 * the durable state is in memory and writes are safe. Does NOT
-		 * gate the materializers' initial flush (they `waitFor` the same
-		 * signal but their first row writes happen after this resolves) or
-		 * the cloud WS handshake (offline-tolerant by design). Compose with
-		 * `sync.whenConnected` if you need "fully online before proceeding."
-		 */
+		/** Workspace `whenReady` convention: yjs file replayed into the Y.Doc. */
 		whenReady: persistence.whenLoaded,
 	};
 }
