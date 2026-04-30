@@ -37,7 +37,7 @@ afterEach(() => {
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates entries the daemon wrote', async () => {
 		// 1. Daemon owns the persistence file: write a few entries through it.
-		const daemon = openFujiDaemon({ authToken: 'fake-token', absDir: workdir });
+		const daemon = openFujiDaemon({ getToken: () => 'fake-token', absDir: workdir });
 		await daemon.whenReady;
 
 		const now = DateTimeString.now();
@@ -72,7 +72,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		// 2. Script opens the same absDir and replays the persistence file.
 		const script = openFujiScript({
-			authToken: 'fake-token',
+			getToken: () => 'fake-token',
 			absDir: workdir,
 		});
 		try {
