@@ -25,6 +25,7 @@ import {
 	attachSessionUnlock,
 	createSessionStore,
 } from '@epicenter/cli';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	tabManagerAwarenessDefs,
 	tabManagerTables,
@@ -41,7 +42,6 @@ import {
 } from '@epicenter/workspace/document/materializer/markdown';
 import * as Y from 'yjs';
 
-const SERVER_URL = 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
 const WORKSPACE_ID = 'epicenter.tab-manager';
 
@@ -61,16 +61,16 @@ const persistence = attachSqlitePersistence(ydoc, {
 
 const unlock = attachSessionUnlock(encryption, {
 	sessions,
-	serverUrl: SERVER_URL,
+	serverUrl: EPICENTER_API_URL,
 	waitFor: persistence.whenLoaded,
 });
 
 const sync = attachSync(ydoc, {
-	url: (docId) => `${SERVER_URL}/workspaces/${docId}`,
+	url: (docId) => `${EPICENTER_API_URL}/workspaces/${docId}`,
 	// Gate connection on local hydrate + unlock so the handshake only exchanges
 	// the delta, not the whole document.
 	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
-	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+	getToken: async () => (await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
 });
 
 const whenReady = Promise.all([

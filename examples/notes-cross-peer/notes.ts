@@ -1,4 +1,5 @@
 import { createSessionStore } from '@epicenter/cli';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachSync,
 	attachTables,
@@ -12,7 +13,6 @@ import { type } from 'arktype';
 import Type from 'typebox';
 import * as Y from 'yjs';
 
-const SERVER_URL = 'https://api.epicenter.so';
 const WORKSPACE_ID = 'epicenter.notes-repro';
 
 // `_v: '1'` here is arktype syntax for the literal NUMBER 1 (numeric strings
@@ -41,11 +41,11 @@ export function openNotes(device: DeviceDescriptor) {
 
 	const sessions = createSessionStore();
 	const sync = attachSync(ydoc, {
-		url: toWsUrl(`${SERVER_URL}/workspaces/${WORKSPACE_ID}`),
+		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${WORKSPACE_ID}`),
 		actions,
 		device,
 		getToken: async () =>
-			(await sessions.load(SERVER_URL))?.accessToken ?? null,
+			(await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
 	});
 
 	return {

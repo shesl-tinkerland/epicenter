@@ -19,8 +19,9 @@
 
 import { openFuji } from '@epicenter/fuji/daemon';
 import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 
-const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
+const SERVER_URL = process.env.EPICENTER_SERVER ?? EPICENTER_API_URL;
 
 const sessions = createSessionStore();
 

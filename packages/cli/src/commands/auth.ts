@@ -10,12 +10,11 @@
  * Self-hosters pass their own URL; everyone else omits it.
  */
 
+import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import pc from 'picocolors';
 import type { Argv, CommandModule } from 'yargs';
 import { createAuthApi } from '../auth/api';
 import { createSessionStore } from '../auth/session-store';
-
-const DEFAULT_SERVER = 'https://api.epicenter.so';
 
 const sessions = createSessionStore();
 
@@ -42,7 +41,7 @@ export const authCommand: CommandModule = {
 					y
 						.positional('server', {
 							type: 'string',
-							default: DEFAULT_SERVER,
+							default: EPICENTER_API_URL,
 							describe: 'Server URL (override for self-hosted)',
 						})
 						.example('$0 auth login', 'Log in to the public Epicenter server')

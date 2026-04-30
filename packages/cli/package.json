@@ -24,6 +24,7 @@
 		"epicenter": "./bin/epicenter.mjs"
 	},
 	"dependencies": {
+		"@epicenter/constants": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"arktype": "catalog:",
 		"picocolors": "^1.1.1",

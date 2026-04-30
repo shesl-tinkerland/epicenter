@@ -477,6 +477,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@epicenter/cli": "workspace:*",
+        "@epicenter/constants": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
         "typebox": "catalog:",
@@ -532,6 +533,7 @@
         "epicenter": "./bin/epicenter.mjs",
       },
       "dependencies": {
+        "@epicenter/constants": "workspace:*",
         "@epicenter/workspace": "workspace:*",
         "arktype": "catalog:",
         "picocolors": "^1.1.1",
@@ -730,6 +732,7 @@
       "name": "fuji-example",
       "dependencies": {
         "@epicenter/cli": "workspace:*",
+        "@epicenter/constants": "workspace:*",
         "@epicenter/fuji": "workspace:*",
         "@epicenter/workspace": "workspace:*",
       },
