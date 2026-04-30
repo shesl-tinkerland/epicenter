@@ -1,6 +1,8 @@
 # Sync-as-peer: scripts hold a real workspace, the daemon is a sync hub
 
-**Status**: proposal, not yet implemented
+> **SUPERSEDED** by [`specs/20260429T235500-daemon-as-materializer-worker.md`](./20260429T235500-daemon-as-materializer-worker.md). The IPC Yjs-sync wire described here was deleted in Phase 2 of the successor spec; scripts now open their own cloud WebSocket and read the daemon's persistence file readonly for warm hydrate. Preserved for history.
+
+**Status**: SUPERSEDED (was: proposal, not yet implemented)
 **Date**: 2026-04-29
 **Author**: Braden, drafted with Claude
 **Companion docs**:
