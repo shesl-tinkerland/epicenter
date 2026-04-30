@@ -12,9 +12,7 @@
  * @module
  */
 
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { Database } from 'bun:sqlite';
+import type { Database } from 'bun:sqlite';
 import type { StandardJSONSchemaV1 } from '@standard-schema/spec';
 import Type from 'typebox';
 import {
@@ -26,7 +24,7 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '@epicenter/sync';
 import { standardSchemaToJsonSchema } from '../shared/standard-schema.js';
-import { applyWriterPragmas } from './sqlite-writer-pragmas.js';
+import { openWriterSqlite } from './sqlite-writer.js';
 import type { BaseRow, Table, TableDefinition } from './attach-table.js';
 import { generateDdl, quoteIdentifier } from './sqlite/ddl.js';
 import { ftsSearch } from './sqlite/fts.js';
@@ -122,10 +120,7 @@ export function attachSqlite(
 		log?: Logger;
 	},
 ) {
-	if (filePath !== ':memory:') {
-		mkdirSync(dirname(filePath), { recursive: true });
-	}
-	const db = new Database(filePath);
+	const db = openWriterSqlite({ filePath, log });
 
 	const registered = new Map<string, RegisteredTable>();
 	let pendingSync = new Map<string, Set<string>>();
@@ -267,8 +262,8 @@ export function attachSqlite(
 		}
 		const row = db
 			.query(`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`)
-			.get() as Record<string, unknown> | null;
-		return Number(row?.count ?? 0);
+			.get() as { count: number };
+		return row.count;
 	}
 
 	const rebuildOneTx = db.transaction((name: string, table: AnyTable) => {
@@ -329,14 +324,6 @@ export function attachSqlite(
 		// Close the registration window: any further `.table()` call throws,
 		// even if init errors or disposes mid-flight below.
 		isRegistrationOpen = false;
-		if (isDisposed) return;
-
-		// Concurrency PRAGMAs for the daemon-as-sole-writer + many-readonly-readers
-		// design. Sequenced BEFORE DDL so the journal mode is set on the file
-		// header before any CREATE TABLE touches it. Skipped for `:memory:`
-		// where `journal_mode = WAL` is not honored by SQLite (it returns the
-		// existing `memory` mode); the companion pragmas are no-ops there too.
-		if (filePath !== ':memory:') applyWriterPragmas(db, log);
 		if (isDisposed) return;
 
 		for (const [tableName, entry] of registered) {

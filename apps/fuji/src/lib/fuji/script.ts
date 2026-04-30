@@ -63,22 +63,19 @@ export async function openFuji({
 }) {
 	const doc = openFujiDoc({ clientID });
 
+	// `attachYjsLogReader` constructs synchronously: existsSync + open +
+	// replay all run on the calling tick. The Y.Doc is fully hydrated by
+	// the time this line returns, so `attachSync` needs no `waitFor` and
+	// the cloud handshake is delta-only when the file existed.
 	const persistence = attachYjsLogReader(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
-		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,
 	});
-
-	// Await hydrate inside the factory: callers get a fully-hydrated handle
-	// without remembering to await `whenReady`. The first WS handshake still
-	// gates on the same promise via `waitFor`, so the cloud handshake is
-	// delta-only when the file existed.
-	await persistence.whenLoaded;
 
 	return {
 		...doc,

@@ -107,7 +107,7 @@ export {
 	type YjsLogAttachment,
 } from './document/attach-yjs-log.js';
 
-export { SqliteWriterPragmaError } from './document/sqlite-writer-pragmas.js';
+export { SqliteWriterError } from './document/sqlite-writer.js';
 
 export {
 	attachYjsLogReader,

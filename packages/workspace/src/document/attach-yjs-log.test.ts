@@ -43,7 +43,6 @@ describe('attachYjsLog', () => {
 		const filePath = join(workdir, 'wal.sqlite');
 		const ydoc = new Y.Doc();
 		const att = attachYjsLog(ydoc, { filePath });
-		await att.whenLoaded;
 
 		expect(readJournalMode(filePath).toLowerCase()).toBe('wal');
 
@@ -56,7 +55,6 @@ describe('attachYjsLog', () => {
 
 		const writerDoc = new Y.Doc();
 		const writer = attachYjsLog(writerDoc, { filePath });
-		await writer.whenLoaded;
 		writerDoc.transact(() => {
 			const m = writerDoc.getMap<number>('m');
 			for (let i = 0; i < 100; i++) m.set(`k${i}`, i);
@@ -66,7 +64,6 @@ describe('attachYjsLog', () => {
 
 		const reopenDoc = new Y.Doc();
 		const reopen = attachYjsLog(reopenDoc, { filePath });
-		await reopen.whenLoaded;
 		const reopened = reopenDoc.getMap<number>('m');
 		expect(reopened.size).toBe(100);
 		expect(reopened.get('k0')).toBe(0);
@@ -79,16 +76,14 @@ describe('attachYjsLog', () => {
 		const filePath = join(workdir, 'clear.sqlite');
 		const writerDoc = new Y.Doc();
 		const writer = attachYjsLog(writerDoc, { filePath });
-		await writer.whenLoaded;
 		writerDoc.getMap<number>('m').set('k', 1);
-		await writer.clearLocal();
+		writer.clearLocal();
 		writerDoc.destroy();
 		await writer.whenDisposed;
 
 		// Reopening should see no rehydrated state.
 		const reopenDoc = new Y.Doc();
 		const reopen = attachYjsLog(reopenDoc, { filePath });
-		await reopen.whenLoaded;
 		expect(reopenDoc.getMap<number>('m').size).toBe(0);
 		reopenDoc.destroy();
 		await reopen.whenDisposed;

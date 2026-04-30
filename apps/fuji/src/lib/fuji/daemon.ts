@@ -66,13 +66,15 @@ export async function openFuji({
 }) {
 	const doc = openFujiDoc();
 
+	// `attachYjsLog` constructs synchronously (mkdirSync + open + replay).
+	// By the time this line returns, the Y.Doc is fully hydrated, so the
+	// downstream attachments need no `waitFor` gate.
 	const persistence = attachYjsLog(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
-		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
 		webSocketImpl,
@@ -80,17 +82,11 @@ export async function openFuji({
 
 	const sqlite = attachSqlite(doc.ydoc, {
 		filePath: sqlitePath(projectDir, doc.ydoc.guid),
-		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries);
 
 	const markdown = attachMarkdown(doc.ydoc, {
 		dir: markdownPath(projectDir, doc.ydoc.guid),
-		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries, { filename: slugFilename('title') });
-
-	// Await hydration before returning so callers receive a fully-loaded
-	// handle. Drop the `whenReady` field: the `await` here is the contract.
-	await persistence.whenLoaded;
 
 	return {
 		...doc,

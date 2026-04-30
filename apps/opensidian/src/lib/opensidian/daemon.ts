@@ -61,21 +61,19 @@ export async function openOpensidian({
 }) {
 	const doc = openOpensidianDoc();
 
+	// `attachYjsLog` constructs synchronously (mkdirSync + open + replay).
+	// By the time this line returns, the Y.Doc is fully hydrated, so the
+	// downstream attachments need no `waitFor` gate.
 	const persistence = attachYjsLog(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
-		waitFor: persistence.whenLoaded,
 		device,
 		getToken,
 		webSocketImpl,
 	});
-
-	// Await hydration before returning so callers receive a fully-loaded
-	// handle. Drop the `whenReady` field: the `await` here is the contract.
-	await persistence.whenLoaded;
 
 	return {
 		...doc,

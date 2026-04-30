@@ -10,22 +10,25 @@
  * daemon-as-materializer-worker design at
  * `specs/20260429T235500-daemon-as-materializer-worker.md`).
  *
- * Missing files are a no-op: `whenLoaded` resolves immediately with no
- * replay (the Y.Doc stays empty). `fileExisted` distinguishes the warm
- * path (file was there, rows replayed) from the cold path (file absent,
- * caller falls through to cloud sync). The writer is expected to have set
- * WAL on the file so concurrent readers get snapshot pages without
- * `SQLITE_BUSY`.
+ * Missing files are a no-op: `fileExisted` resolves `false` with no
+ * replay (the Y.Doc stays empty) so the caller falls through to cloud
+ * sync. The writer is expected to have set WAL on the file so concurrent
+ * readers get snapshot pages without `SQLITE_BUSY`.
+ *
+ * Construction is synchronous: `existsSync` + open + replay all run on
+ * the calling tick. `whenLoaded` resolves immediately and exists only
+ * for parity with `DocPersistence`.
  */
 
+import { existsSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 import * as Y from 'yjs';
 
 export type YjsLogReaderAttachment = {
 	/**
-	 * Resolves once any existing rows have replayed. If the file did not
-	 * exist at open time, resolves immediately with no replay (the Y.Doc
-	 * stays empty). Pair with `fileExisted` to detect which path ran.
+	 * Resolves once any existing rows have replayed. Construction is
+	 * synchronous, so this resolves immediately; the field exists for
+	 * parity with `DocPersistence`.
 	 */
 	whenLoaded: Promise<unknown>;
 	/**
@@ -46,12 +49,10 @@ export function attachYjsLogReader(
 	ydoc: Y.Doc,
 	{ filePath }: { filePath: string },
 ): YjsLogReaderAttachment {
-	let db: Database | null = null;
+	const fileExisted = existsSync(filePath);
+	let db: Database | undefined;
 
-	const fileExisted: Promise<boolean> = Bun.file(filePath).exists();
-
-	const whenLoaded = (async () => {
-		if (!(await fileExisted)) return;
+	if (fileExisted) {
 		db = new Database(filePath, { readonly: true });
 		// File is owned by the writer. No CREATE TABLE, no journal_mode pragma
 		// (the writer set WAL), no updateV2 listener, no compaction: pure
@@ -66,21 +67,22 @@ export function attachYjsLogReader(
 		for (const row of rows) {
 			Y.applyUpdateV2(ydoc, row.data);
 		}
-	})();
+	}
 
 	const { promise: whenDisposed, resolve: resolveDisposed } =
 		Promise.withResolvers<void>();
 
 	ydoc.once('destroy', () => {
 		try {
-			if (db) {
-				db.close();
-				db = null;
-			}
+			db?.close();
 		} finally {
 			resolveDisposed();
 		}
 	});
 
-	return { whenLoaded, fileExisted, whenDisposed };
+	return {
+		whenLoaded: Promise.resolve(),
+		fileExisted: Promise.resolve(fileExisted),
+		whenDisposed,
+	};
 }

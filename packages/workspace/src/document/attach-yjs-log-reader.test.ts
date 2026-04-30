@@ -42,7 +42,6 @@ describe('attachYjsLogReader', () => {
 
 		const writerDoc = new Y.Doc();
 		const writer = attachYjsLog(writerDoc, { filePath });
-		await writer.whenLoaded;
 
 		const map = writerDoc.getMap<number>('m');
 		writerDoc.transact(() => {
@@ -51,7 +50,6 @@ describe('attachYjsLogReader', () => {
 
 		const readerDoc = new Y.Doc();
 		const reader = attachYjsLogReader(readerDoc, { filePath });
-		await reader.whenLoaded;
 
 		expect(await reader.fileExisted).toBe(true);
 		const readerMap = readerDoc.getMap<number>('m');
@@ -70,7 +68,6 @@ describe('attachYjsLogReader', () => {
 
 		const writerDoc = new Y.Doc();
 		const writer = attachYjsLog(writerDoc, { filePath });
-		await writer.whenLoaded;
 
 		const map = writerDoc.getMap<number>('m');
 		writerDoc.transact(() => {
@@ -89,7 +86,6 @@ describe('attachYjsLogReader', () => {
 
 		const readerDoc = new Y.Doc();
 		const reader = attachYjsLogReader(readerDoc, { filePath });
-		await reader.whenLoaded;
 
 		const readerMap = readerDoc.getMap<number>('m');
 		expect(readerMap.get('seed0')).toBe(0);
@@ -108,7 +104,6 @@ describe('attachYjsLogReader', () => {
 		const filePath = join(workdir, 'does-not-exist.sqlite');
 		const ydoc = new Y.Doc();
 		const att = attachYjsLogReader(ydoc, { filePath });
-		await att.whenLoaded;
 		expect(await att.fileExisted).toBe(false);
 		expect(ydoc.getMap('m').size).toBe(0);
 		ydoc.destroy();
@@ -120,7 +115,6 @@ describe('attachYjsLogReader', () => {
 
 		const writerDoc = new Y.Doc();
 		const writer = attachYjsLog(writerDoc, { filePath });
-		await writer.whenLoaded;
 		writerDoc.getMap<number>('m').set('seed', 1);
 		writerDoc.destroy();
 		await writer.whenDisposed;
@@ -129,7 +123,6 @@ describe('attachYjsLogReader', () => {
 
 		const readerDoc = new Y.Doc();
 		const reader = attachYjsLogReader(readerDoc, { filePath });
-		await reader.whenLoaded;
 
 		// Mutate the readonly-attached doc. No write listener means no INSERT.
 		readerDoc.getMap<number>('m').set('mutation', 999);

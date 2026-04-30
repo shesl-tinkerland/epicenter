@@ -58,18 +58,18 @@ export async function openZhongwen({
 }) {
 	const doc = openZhongwenDoc({ clientID });
 
+	// `attachYjsLogReader` constructs synchronously: existsSync + open +
+	// replay all run on the calling tick. The Y.Doc is fully hydrated by
+	// the time this line returns, so `attachSync` needs no `waitFor`.
 	const persistence = attachYjsLogReader(doc.ydoc, {
 		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
-		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,
 	});
-
-	await persistence.whenLoaded;
 
 	return {
 		...doc,
