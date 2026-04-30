@@ -11,5 +11,5 @@ export {
 	createSessionStore,
 	type SessionStore,
 } from './auth/session-store';
-export { createCLI } from './cli';
+export { mainCommand, runCli } from './cli';
 export { type LoadConfigResult, loadConfig } from './load-config';

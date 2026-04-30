@@ -242,7 +242,8 @@ Scripts are strictly more powerful than the CLI: you get the full Table/Kv APIs,
 
 ```ts
 import {
-    createCLI,              // binary entry (used by bin.ts)
+    runCli,                 // binary entry (used by bin.ts)
+    mainCommand,            // citty command registry
     loadConfig,             // { entries: [{ name, handle }], dispose() }
     createSessionStore,     // device-code session persistence
     createAuthApi,          // typed Better Auth client

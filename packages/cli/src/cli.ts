@@ -13,55 +13,43 @@ import { psCommand } from './commands/ps';
 import { runCommand } from './commands/run';
 import { upCommand } from './commands/up';
 
+export const mainCommand = defineCommand({
+	meta: {
+		name: 'epicenter',
+		description:
+			'Introspect and invoke Epicenter workspace actions locally or on a live peer.',
+	},
+	subCommands: {
+		auth: authCommand,
+		down: downCommand,
+		list: listCommand,
+		logs: logsCommand,
+		peers: peersCommand,
+		ps: psCommand,
+		run: runCommand,
+		up: upCommand,
+	},
+});
+
 /**
- * Create the Epicenter CLI instance.
+ * Run the Epicenter CLI with already-sliced user arguments.
  *
- * Introspect and invoke `defineQuery` / `defineMutation` actions in
- * `epicenter.config.ts`, either locally or on a peer that's online right now.
- *
- *   - `auth`:  manage Epicenter server sessions (pre-workspace)
- *   - `list`:  tree view of runnable actions (local schema is authoritative)
- *   - `run`:   invoke one by dot-path; `--peer` dispatches over RPC
- *   - `peers`: enumerate other clients currently online via Yjs awareness
- *
- * Specs: `specs/20260421T155436-cli-scripting-first-redesign.md` (base
- * surface), `specs/20260423T174126-cli-remote-peer-rpc.md` (`peers` + `--peer`).
+ * `bin.ts` passes `process.argv.slice(2)`, while tests pass explicit arrays.
+ * This keeps the CLI testable without letting citty call `process.exit()`.
  */
-export function createCLI() {
-	const mainCommand = defineCommand({
-		meta: {
-			name: 'epicenter',
-			description:
-				'Introspect and invoke Epicenter workspace actions locally or on a live peer.',
-		},
-		subCommands: {
-			auth: authCommand,
-			down: downCommand,
-			list: listCommand,
-			logs: logsCommand,
-			peers: peersCommand,
-			ps: psCommand,
-			run: runCommand,
-			up: upCommand,
-		},
-	});
+export async function runCli(argv: string[]): Promise<void> {
+	if (argv.includes('--help') || argv.includes('-h')) {
+		const [command, parent] = findHelpCommand(mainCommand, argv);
+		console.log(`${await renderUsage(command, parent)}\n`);
+		return;
+	}
 
-	return {
-		run: async (argv: string[]) => {
-			if (argv.includes('--help') || argv.includes('-h')) {
-				const [command, parent] = findHelpCommand(mainCommand, argv);
-				console.log(`${await renderUsage(command, parent)}\n`);
-				return;
-			}
+	if (argv.length === 0) {
+		console.error(`${await renderUsage(mainCommand)}\n`);
+		throw new Error('No command specified.');
+	}
 
-			if (argv.length === 0) {
-				console.error(`${await renderUsage(mainCommand)}\n`);
-				throw new Error('No command specified.');
-			}
-
-			await runCittyCommand(mainCommand, { rawArgs: argv });
-		},
-	};
+	await runCittyCommand(mainCommand, { rawArgs: argv });
 }
 
 function findHelpCommand(

@@ -6,7 +6,7 @@
  * command semantics.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
-import { createCLI } from './cli';
+import { mainCommand, runCli } from './cli';
 
 async function captureCliOutput(argv: string[]): Promise<string> {
 	const chunks: string[] = [];
@@ -17,7 +17,7 @@ async function captureCliOutput(argv: string[]): Promise<string> {
 		chunks.push(args.map((a) => String(a)).join(' '));
 	});
 	try {
-		await createCLI().run(argv);
+		await runCli(argv);
 	} catch {
 		// Some usage paths render help and then reject.
 	} finally {
@@ -27,17 +27,18 @@ async function captureCliOutput(argv: string[]): Promise<string> {
 	return chunks.join('\n');
 }
 
-describe('createCLI', () => {
-	test('returns an object with a run method', () => {
-		const cli = createCLI();
-		expect(typeof cli.run).toBe('function');
+describe('runCli', () => {
+	test('exports a citty main command and a runner function', () => {
+		expect(mainCommand.meta).toEqual(
+			expect.objectContaining({ name: 'epicenter' }),
+		);
+		expect(typeof runCli).toBe('function');
 	});
 
 	test('rejects with usage when no arguments provided', async () => {
-		const cli = createCLI();
 		const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 
-		await expect(cli.run([])).rejects.toThrow('No command specified');
+		await expect(runCli([])).rejects.toThrow('No command specified');
 
 		const errorOutput = errorSpy.mock.calls.flat().join(' ');
 		expect(errorOutput).toContain('epicenter');
@@ -76,7 +77,7 @@ describe('createCLI', () => {
 
 	test('run rejects --wait without --peer before daemon lookup', async () => {
 		await expect(
-			createCLI().run(['run', 'notes.list', '--wait', '1000']),
+			runCli(['run', 'notes.list', '--wait', '1000']),
 		).rejects.toThrow('--wait requires --peer');
 	});
 });
