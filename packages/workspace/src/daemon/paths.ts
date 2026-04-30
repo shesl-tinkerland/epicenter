@@ -14,6 +14,7 @@
  * anywhere without worrying about filesystem mutation.
  */
 
+import { EPICENTER_USER_DIR_NAME } from '@epicenter/constants/paths';
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -21,7 +22,7 @@ import { join } from 'node:path';
 
 /** `$EPICENTER_HOME` env, then `~/.epicenter/`. */
 function epicenterHome(): string {
-	return Bun.env.EPICENTER_HOME ?? join(homedir(), '.epicenter');
+	return Bun.env.EPICENTER_HOME ?? join(homedir(), EPICENTER_USER_DIR_NAME);
 }
 
 /**

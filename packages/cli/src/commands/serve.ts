@@ -133,18 +133,18 @@ export async function runServe(
 	if (loadResult.error) return loadResult;
 	const config = loadResult.data;
 
-	// Wait for every workspace's "ready to accept RPC" gate concurrently.
-	// One bad workspace fails the whole server; see runServe's docstring.
-	// `whenConnected` rejects with `SyncFailedError` on permanent auth
-	// failure (close code 4401), so no wallclock timer is needed here.
+	// Wait for every workspace's optional `whenReady` gate. Daemon factories
+	// (`openFuji`, etc.) await hydration internally before returning, so
+	// they don't expose `whenReady` and this loop is a no-op for them.
+	// Custom `epicenter.config.ts` exports that compose their own
+	// `whenReady` (e.g. `Promise.all([persistence.whenLoaded, unlock,
+	// sync.whenConnected])`) still gate startup here. One bad workspace
+	// fails the whole server; see runServe's docstring.
 	const connectResult = await tryAsync({
 		try: () =>
 			Promise.all(
 				config.entries.map(
-					(entry) =>
-						entry.workspace.whenReady ??
-						entry.workspace.sync?.whenConnected ??
-						Promise.resolve(),
+					(entry) => entry.workspace.whenReady ?? Promise.resolve(),
 				),
 			),
 		catch: (cause) => ServeError.ConnectFailed({ cause }),

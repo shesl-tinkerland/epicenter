@@ -37,7 +37,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// close (via `}`) before the reader opens so the readonly attachment
 		// sees the file on stable WAL pages.
 		{
-			using daemon = openHoneycrispDaemon({
+			await using daemon = await openHoneycrispDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',
@@ -47,7 +47,6 @@ describe('daemon -> script handoff via persistence file', () => {
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});
-			await daemon.whenReady;
 
 			const now = DateTimeString.now();
 			const seed: { id: NoteId; title: string }[] = [

@@ -21,7 +21,7 @@ import {
 } from '@epicenter/workspace';
 import { openHoneycrisp as openHoneycrispDoc } from './core.js';
 
-export function openHoneycrisp({
+export async function openHoneycrisp({
 	getToken,
 	device,
 	projectDir,
@@ -70,11 +70,13 @@ export function openHoneycrisp({
 		webSocketImpl,
 	});
 
+	// Await hydration before returning so callers receive a fully-loaded
+	// handle. Drop the `whenReady` field: the `await` here is the contract.
+	await persistence.whenLoaded;
+
 	return {
 		...doc,
 		persistence,
 		sync,
-		/** Workspace `whenReady` convention: yjs file replayed into the Y.Doc. */
-		whenReady: persistence.whenLoaded,
 	};
 }

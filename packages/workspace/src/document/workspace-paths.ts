@@ -18,6 +18,7 @@
  * own `mkdir` (or rely on the attachments to do it).
  */
 
+import { EPICENTER_PROJECT_DIR_NAME } from '@epicenter/constants/paths';
 import { join } from 'node:path';
 
 /**
@@ -39,7 +40,7 @@ import { join } from 'node:path';
  * ```
  */
 export function yjsPath(projectDir: string, workspaceId: string): string {
-	return join(projectDir, '.epicenter', 'yjs', `${workspaceId}.db`);
+	return join(projectDir, EPICENTER_PROJECT_DIR_NAME, 'yjs', `${workspaceId}.db`);
 }
 
 /**
@@ -62,7 +63,7 @@ export function yjsPath(projectDir: string, workspaceId: string): string {
  * ```
  */
 export function sqlitePath(projectDir: string, workspaceId: string): string {
-	return join(projectDir, '.epicenter', 'sqlite', `${workspaceId}.db`);
+	return join(projectDir, EPICENTER_PROJECT_DIR_NAME, 'sqlite', `${workspaceId}.db`);
 }
 
 /**
@@ -80,5 +81,5 @@ export function sqlitePath(projectDir: string, workspaceId: string): string {
  * ```
  */
 export function markdownPath(projectDir: string, workspaceId: string): string {
-	return join(projectDir, '.epicenter', 'md', workspaceId);
+	return join(projectDir, EPICENTER_PROJECT_DIR_NAME, 'md', workspaceId);
 }

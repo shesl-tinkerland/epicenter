@@ -19,8 +19,8 @@
  * @example
  * ```ts
  * // epicenter.config.ts
- * import { openFuji } from '@my/app/server';
- * export const fuji = openFuji({ auth, device });
+ * import { openFuji } from '@my/app/daemon';
+ * export const fuji = await openFuji({ getToken, device, projectDir });
  * ```
  *
  * Then on the consumer side:
@@ -35,6 +35,7 @@
  * ```
  */
 
+import { CONFIG_FILENAME } from '@epicenter/constants/paths';
 import type {
 	LoadedWorkspace,
 	PeerAwarenessState,
@@ -48,7 +49,7 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 
-export const CONFIG_FILENAME = 'epicenter.config.ts';
+export { CONFIG_FILENAME };
 
 export type { LoadedWorkspace, WorkspaceEntry };
 

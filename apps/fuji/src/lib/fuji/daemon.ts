@@ -29,7 +29,7 @@ import {
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import { openFuji as openFujiDoc } from './core.js';
 
-export function openFuji({
+export async function openFuji({
 	getToken,
 	device,
 	projectDir,
@@ -88,13 +88,15 @@ export function openFuji({
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries, { filename: slugFilename('title') });
 
+	// Await hydration before returning so callers receive a fully-loaded
+	// handle. Drop the `whenReady` field: the `await` here is the contract.
+	await persistence.whenLoaded;
+
 	return {
 		...doc,
 		persistence,
 		sync,
 		sqlite,
 		markdown,
-		/** Workspace `whenReady` convention: yjs file replayed into the Y.Doc. */
-		whenReady: persistence.whenLoaded,
 	};
 }

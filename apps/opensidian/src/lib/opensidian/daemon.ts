@@ -24,7 +24,7 @@ import {
 } from '@epicenter/workspace';
 import { openOpensidian as openOpensidianDoc } from './core.js';
 
-export function openOpensidian({
+export async function openOpensidian({
 	getToken,
 	device,
 	projectDir,
@@ -73,11 +73,13 @@ export function openOpensidian({
 		webSocketImpl,
 	});
 
+	// Await hydration before returning so callers receive a fully-loaded
+	// handle. Drop the `whenReady` field: the `await` here is the contract.
+	await persistence.whenLoaded;
+
 	return {
 		...doc,
 		persistence,
 		sync,
-		/** Workspace `whenReady` convention: yjs file replayed into the Y.Doc. */
-		whenReady: persistence.whenLoaded,
 	};
 }

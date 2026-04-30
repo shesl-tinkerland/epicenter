@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { ProjectDir } from '../shared/types.js';
 import { findEpicenterDir } from './find-epicenter-dir.js';
 
 let root: string;
@@ -24,19 +25,21 @@ afterEach(() => {
 describe('findEpicenterDir', () => {
 	test('finds via epicenter.config.ts marker', () => {
 		writeFileSync(join(root, 'epicenter.config.ts'), '');
-		expect<string>(findEpicenterDir(root)).toBe(root);
+		// Cast on the expected side: after the marker is written, `root`
+		// genuinely is a project root, so claiming the brand is honest.
+		expect(findEpicenterDir(root)).toBe(root as ProjectDir);
 	});
 
 	test('finds via .epicenter directory marker', () => {
 		mkdirSync(join(root, '.epicenter'));
-		expect<string>(findEpicenterDir(root)).toBe(root);
+		expect(findEpicenterDir(root)).toBe(root as ProjectDir);
 	});
 
 	test('walks up from a nested subdirectory', () => {
 		writeFileSync(join(root, 'epicenter.config.ts'), '');
 		const nested = join(root, 'a', 'b', 'c');
 		mkdirSync(nested, { recursive: true });
-		expect<string>(findEpicenterDir(nested)).toBe(root);
+		expect(findEpicenterDir(nested)).toBe(root as ProjectDir);
 	});
 
 	test('throws if no marker is found', () => {

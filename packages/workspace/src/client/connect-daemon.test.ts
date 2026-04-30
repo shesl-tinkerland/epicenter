@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { DaemonError } from '../daemon/client.js';
 import type { ProjectDir } from '../shared/types.js';
 import { connectDaemon } from './connect-daemon.js';
 
@@ -33,7 +34,7 @@ describe('connectDaemon', () => {
 			caught = err;
 		}
 		expect(caught).toBeDefined();
-		const e = caught as { name: string; projectDir: string; id?: string };
+		const e = caught as Extract<DaemonError, { name: 'Required' }>;
 		expect(e.name).toBe('Required');
 		expect(e.projectDir).toBe(root);
 		expect(e.id).toBe('demo');

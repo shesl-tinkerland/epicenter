@@ -33,7 +33,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// close (via `}`) before the reader opens so the readonly attachment
 		// sees the file on stable WAL pages.
 		{
-			using daemon = openZhongwenDaemon({
+			await using daemon = await openZhongwenDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',
@@ -43,7 +43,6 @@ describe('daemon -> script handoff via persistence file', () => {
 				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});
-			await daemon.whenReady;
 
 			const now = Date.now();
 			const seed: { id: ConversationId; title: string }[] = [
