@@ -31,34 +31,37 @@ const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates notes the daemon wrote', async () => {
-		const daemon = openHoneycrispDaemon({
-			getToken: () => 'fake-token',
-			absDir: workdir,
-			webSocketImpl: wsImpl,
-		});
-		await daemon.persistence.whenLoaded;
+		// Daemon owns the persistence file inside this block: the writer must
+		// close (via `}`) before the reader opens so the readonly attachment
+		// sees the file on stable WAL pages.
+		{
+			using daemon = openHoneycrispDaemon({
+				getToken: () => 'fake-token',
+				absDir: workdir,
+				webSocketImpl: wsImpl,
+			});
+			await daemon.persistence.whenLoaded;
 
-		const now = DateTimeString.now();
-		const seed: { id: NoteId; title: string }[] = [
-			{ id: 'a' as NoteId, title: 'first' },
-			{ id: 'b' as NoteId, title: 'second' },
-			{ id: 'c' as NoteId, title: 'third' },
-		];
-		daemon.batch(() => {
-			for (const { id, title } of seed) {
-				daemon.tables.notes.set({
-					id,
-					title,
-					preview: '',
-					pinned: false,
-					createdAt: now,
-					updatedAt: now,
-					_v: 1 as const,
-				});
-			}
-		});
-
-		daemon[Symbol.dispose]();
+			const now = DateTimeString.now();
+			const seed: { id: NoteId; title: string }[] = [
+				{ id: 'a' as NoteId, title: 'first' },
+				{ id: 'b' as NoteId, title: 'second' },
+				{ id: 'c' as NoteId, title: 'third' },
+			];
+			daemon.batch(() => {
+				for (const { id, title } of seed) {
+					daemon.tables.notes.set({
+						id,
+						title,
+						preview: '',
+						pinned: false,
+						createdAt: now,
+						updatedAt: now,
+						_v: 1 as const,
+					});
+				}
+			});
+		}
 
 		using script = await openHoneycrispScript({
 			getToken: () => 'fake-token',

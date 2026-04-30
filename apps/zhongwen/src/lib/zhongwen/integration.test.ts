@@ -31,34 +31,37 @@ const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates conversations the daemon wrote', async () => {
-		const daemon = openZhongwenDaemon({
-			getToken: () => 'fake-token',
-			absDir: workdir,
-			webSocketImpl: wsImpl,
-		});
-		await daemon.persistence.whenLoaded;
+		// Daemon owns the persistence file inside this block: the writer must
+		// close (via `}`) before the reader opens so the readonly attachment
+		// sees the file on stable WAL pages.
+		{
+			using daemon = openZhongwenDaemon({
+				getToken: () => 'fake-token',
+				absDir: workdir,
+				webSocketImpl: wsImpl,
+			});
+			await daemon.persistence.whenLoaded;
 
-		const now = Date.now();
-		const seed: { id: ConversationId; title: string }[] = [
-			{ id: generateConversationId(), title: 'first' },
-			{ id: generateConversationId(), title: 'second' },
-			{ id: generateConversationId(), title: 'third' },
-		];
-		daemon.batch(() => {
-			for (const { id, title } of seed) {
-				daemon.tables.conversations.set({
-					id,
-					title,
-					provider: 'openai',
-					model: 'gpt-4',
-					createdAt: now,
-					updatedAt: now,
-					_v: 1 as const,
-				});
-			}
-		});
-
-		daemon[Symbol.dispose]();
+			const now = Date.now();
+			const seed: { id: ConversationId; title: string }[] = [
+				{ id: generateConversationId(), title: 'first' },
+				{ id: generateConversationId(), title: 'second' },
+				{ id: generateConversationId(), title: 'third' },
+			];
+			daemon.batch(() => {
+				for (const { id, title } of seed) {
+					daemon.tables.conversations.set({
+						id,
+						title,
+						provider: 'openai',
+						model: 'gpt-4',
+						createdAt: now,
+						updatedAt: now,
+						_v: 1 as const,
+					});
+				}
+			});
+		}
 
 		using script = await openZhongwenScript({
 			getToken: () => 'fake-token',

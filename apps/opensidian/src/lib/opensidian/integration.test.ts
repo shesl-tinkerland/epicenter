@@ -34,38 +34,39 @@ const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
 
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates files the daemon wrote', async () => {
-		// 1. Daemon owns the persistence file: write a few files through it.
-		const daemon = openOpensidianDaemon({
-			getToken: () => 'fake-token',
-			absDir: workdir,
-			webSocketImpl: wsImpl,
-		});
-		await daemon.persistence.whenLoaded;
+		// 1. Daemon owns the persistence file inside this block: write a few
+		// files, then let the block-scoped `using` dispose at `}` so the
+		// writer commits and closes before the reader opens.
+		{
+			using daemon = openOpensidianDaemon({
+				getToken: () => 'fake-token',
+				absDir: workdir,
+				webSocketImpl: wsImpl,
+			});
+			await daemon.persistence.whenLoaded;
 
-		const now = Date.now();
-		const seed: { id: FileId; name: string }[] = [
-			{ id: generateFileId(), name: 'first.md' },
-			{ id: generateFileId(), name: 'second.md' },
-			{ id: generateFileId(), name: 'third.md' },
-		];
-		daemon.batch(() => {
-			for (const { id, name } of seed) {
-				daemon.tables.files.set({
-					id,
-					name,
-					parentId: null,
-					type: 'file',
-					size: 0,
-					createdAt: now,
-					updatedAt: now,
-					trashedAt: null,
-					_v: 1 as const,
-				});
-			}
-		});
-
-		// Force the writer to commit + close before the reader opens.
-		daemon[Symbol.dispose]();
+			const now = Date.now();
+			const seed: { id: FileId; name: string }[] = [
+				{ id: generateFileId(), name: 'first.md' },
+				{ id: generateFileId(), name: 'second.md' },
+				{ id: generateFileId(), name: 'third.md' },
+			];
+			daemon.batch(() => {
+				for (const { id, name } of seed) {
+					daemon.tables.files.set({
+						id,
+						name,
+						parentId: null,
+						type: 'file',
+						size: 0,
+						createdAt: now,
+						updatedAt: now,
+						trashedAt: null,
+						_v: 1 as const,
+					});
+				}
+			});
+		}
 
 		// 2. Script opens the same absDir and replays the persistence file.
 		using script = await openOpensidianScript({
