@@ -42,7 +42,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// must close (via `}`) before the reader opens so the readonly
 		// attachment sees the file on stable WAL pages.
 		{
-			using daemon = await openFujiDaemon({
+			using daemon = openFujiDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',
@@ -80,7 +80,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		}
 
 		// 2. Script opens the same projectDir and replays the persistence file.
-		using script = await openFujiScript({
+		using script = openFujiScript({
 			getToken: () => 'fake-token',
 			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,

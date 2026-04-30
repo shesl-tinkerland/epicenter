@@ -18,9 +18,10 @@
  * and read snapshot pages without `SQLITE_BUSY`.
  *
  * Construction is synchronous: `mkdirSync` + open + replay all run on
- * the calling tick. `whenLoaded` resolves immediately and exists only to
- * structurally satisfy the `DocPersistence` contract that
- * `attachIndexedDb` (genuinely async) also implements.
+ * the calling tick. The Y.Doc is fully hydrated by the time this
+ * function returns, so the attachment carries no `whenLoaded` field.
+ * Browser code uses `attachIndexedDb`, which is genuinely async and
+ * does carry `whenLoaded`; that asymmetry is real, not vestigial.
  */
 
 import type { Database } from 'bun:sqlite';
@@ -79,18 +80,11 @@ function compactUpdateLog(db: Database, ydoc: Y.Doc): boolean {
 }
 
 export type YjsLogAttachment = {
-	/**
-	 * Resolves once existing rows have replayed into the Y.Doc. Construction
-	 * is synchronous, so this resolves immediately; it exists for parity
-	 * with `attachIndexedDb`'s `DocPersistence` contract.
-	 */
-	whenLoaded: Promise<unknown>;
 	/** `DELETE FROM updates`. Drops the durable log without destroying the Y.Doc. */
 	clearLocal: () => void;
 	/**
 	 * Resolves after `ydoc.destroy()` AND a final compaction + DB close.
-	 * Opt-in: tests and CLIs flushing before exit await this. Named
-	 * symmetrically with `whenLoaded`: both are promises.
+	 * Opt-in: tests and CLIs flushing before exit await this.
 	 */
 	whenDisposed: Promise<unknown>;
 };
@@ -176,7 +170,6 @@ export function attachYjsLog(
 	});
 
 	return {
-		whenLoaded: Promise.resolve(),
 		clearLocal: () => {
 			db.run('DELETE FROM updates');
 		},

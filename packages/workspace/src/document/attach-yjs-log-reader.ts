@@ -16,8 +16,8 @@
  * readers get snapshot pages without `SQLITE_BUSY`.
  *
  * Construction is synchronous: `existsSync` + open + replay all run on
- * the calling tick. `whenLoaded` resolves immediately and exists only
- * for parity with `DocPersistence`.
+ * the calling tick. The Y.Doc is fully hydrated by the time this
+ * function returns; no `whenLoaded` field.
  */
 
 import { existsSync } from 'node:fs';
@@ -25,12 +25,6 @@ import { Database } from 'bun:sqlite';
 import * as Y from 'yjs';
 
 export type YjsLogReaderAttachment = {
-	/**
-	 * Resolves once any existing rows have replayed. Construction is
-	 * synchronous, so this resolves immediately; the field exists for
-	 * parity with `DocPersistence`.
-	 */
-	whenLoaded: Promise<unknown>;
 	/**
 	 * `true` if the file existed at open time and rows were replayed;
 	 * `false` if the daemon has not written here yet. Snapshot value,
@@ -87,7 +81,6 @@ export function attachYjsLogReader(
 	});
 
 	return {
-		whenLoaded: Promise.resolve(),
 		fileExisted,
 		whenDisposed,
 	};

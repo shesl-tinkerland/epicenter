@@ -26,18 +26,19 @@ const SERVER_URL = process.env.EPICENTER_SERVER ?? EPICENTER_API_URL;
 
 const sessions = createSessionStore();
 
-export const fuji = await openFuji({
+// `openFuji` is synchronous: persistence is fully hydrated before it
+// returns. No top-level await needed.
+export const fuji = openFuji({
 	projectDir: import.meta.dir as ProjectDir,
 	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
 });
 
-// Activate encryption keys once the daemon's persistence has hydrated. The
-// daemon factory does not unlock encryption itself (it just constructs the
-// raw bundle), so we layer `attachSessionUnlock` on top here. Scripts read
-// the persistence file directly and do not need to unlock for plaintext
-// reads in this example, but this matches the production-ready shape.
+// Activate encryption keys. The daemon factory does not unlock encryption
+// itself (it just constructs the raw bundle), so we layer
+// `attachSessionUnlock` on top here. Scripts read the persistence file
+// directly and do not need to unlock for plaintext reads in this example,
+// but this matches the production-ready shape.
 attachSessionUnlock(fuji.encryption, {
 	sessions,
 	serverUrl: SERVER_URL,
-	waitFor: fuji.persistence.whenLoaded,
 });

@@ -37,7 +37,13 @@ export type FileContentDoc = {
 	ydoc: Y.Doc;
 	content: ReturnType<typeof attachTimeline>;
 	persistence: DocPersistence | undefined;
-	whenReady: Promise<unknown>;
+	/**
+	 * Persistence's `whenLoaded` if it has one (e.g. `attachIndexedDb`),
+	 * otherwise `undefined` (e.g. `attachYjsLog`, which constructs sync).
+	 * `await handle.whenReady` is safe in both cases — `await undefined`
+	 * resolves to `undefined`.
+	 */
+	whenReady: Promise<unknown> | undefined;
 	[Symbol.dispose](): void;
 };
 
@@ -77,7 +83,7 @@ export function createFileContentDoc({
 		ydoc,
 		content: attachTimeline(ydoc),
 		persistence,
-		whenReady: persistence?.whenLoaded ?? Promise.resolve(),
+		whenReady: persistence?.whenLoaded,
 		[Symbol.dispose]() {
 			ydoc.destroy();
 		},

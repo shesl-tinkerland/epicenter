@@ -73,7 +73,7 @@ function createTestClient() {
 		ydoc,
 		tables,
 		kv,
-		whenReady: persistence.whenLoaded,
+		whenReady: undefined,
 		async dispose() {
 			ydoc.destroy();
 			await persistence.whenDisposed;
@@ -237,7 +237,7 @@ describe('e2e: opensidian pushFromMarkdown', () => {
 			ydoc,
 			tables,
 			kv,
-			whenReady: persistence.whenLoaded,
+			whenReady: undefined,
 			async dispose() {
 				ydoc.destroy();
 				await persistence.whenDisposed;

@@ -23,7 +23,12 @@ export type SkillInstructionsDoc = {
 	ydoc: Y.Doc;
 	instructions: ReturnType<typeof attachPlainText>;
 	persistence: DocPersistence | undefined;
-	whenReady: Promise<unknown>;
+	/**
+	 * Persistence's `whenLoaded` if it has one (e.g. `attachIndexedDb`),
+	 * otherwise `undefined`. `await handle.whenReady` is safe in both
+	 * cases — `await undefined` resolves to `undefined`.
+	 */
+	whenReady: Promise<unknown> | undefined;
 	[Symbol.dispose](): void;
 };
 
@@ -55,7 +60,7 @@ export function createSkillInstructionsDoc({
 		ydoc,
 		instructions: attachPlainText(ydoc),
 		persistence,
-		whenReady: persistence?.whenLoaded ?? Promise.resolve(),
+		whenReady: persistence?.whenLoaded,
 		[Symbol.dispose]() {
 			ydoc.destroy();
 		},

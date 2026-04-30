@@ -56,6 +56,9 @@ const tables = encryption.attachTables(ydoc, tabManagerTables);
 // materializer's `.kv()` call has something to observe.
 const kv = encryption.attachKv(ydoc, {});
 
+// `attachYjsLog` constructs synchronously (mkdirSync + open + replay), so
+// the Y.Doc is fully hydrated by the time this line returns. No
+// `whenLoaded` promise to thread through downstream `waitFor` gates.
 const persistence = attachYjsLog(ydoc, {
 	filePath: yjsPath(import.meta.dir, WORKSPACE_ID),
 });
@@ -63,22 +66,17 @@ const persistence = attachYjsLog(ydoc, {
 const unlock = attachSessionUnlock(encryption, {
 	sessions,
 	serverUrl: EPICENTER_API_URL,
-	waitFor: persistence.whenLoaded,
 });
 
 const sync = attachSync(ydoc, {
 	url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${WORKSPACE_ID}`),
-	// Gate connection on local hydrate + unlock so the handshake only exchanges
-	// the delta, not the whole document.
-	waitFor: Promise.all([persistence.whenLoaded, unlock.whenChecked]),
+	// Gate connection on unlock so the handshake only exchanges the delta,
+	// not the whole document. (Hydration is already complete above.)
+	waitFor: unlock.whenChecked,
 	getToken: async () => (await sessions.load(EPICENTER_API_URL))?.accessToken ?? null,
 });
 
-const whenReady = Promise.all([
-	persistence.whenLoaded,
-	unlock.whenChecked,
-	sync.whenConnected,
-]);
+const whenReady = Promise.all([unlock.whenChecked, sync.whenConnected]);
 
 const markdown = attachMarkdown(ydoc, {
 	dir: MARKDOWN_DIR,
