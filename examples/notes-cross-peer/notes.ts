@@ -20,7 +20,7 @@ const WORKSPACE_ID = 'epicenter.notes-repro';
 // below passes `_v: 1` — same value, two different syntax conventions.
 const Note = defineTable(type({ id: 'string', body: 'string', _v: '1' }));
 
-export function openNotes(device: DeviceDescriptor) {
+export function openNotes({ device }: { device: DeviceDescriptor }) {
 	const ydoc = new Y.Doc({ guid: WORKSPACE_ID });
 	const tables = attachTables(ydoc, { notes: Note });
 
