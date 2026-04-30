@@ -1,14 +1,18 @@
 /**
- * No-op WebSocket for factory tests.
+ * No-op WebSocket for `attachSync` tests.
  *
- * Pass this as `webSocketImpl` to a factory under test (or to `attachSync`
- * directly) to keep the supervisor parked on connect without dialing real
- * servers. The stub never opens, never errors, never delivers messages;
- * `ydoc.destroy()` triggers a clean teardown via `close()`.
+ * Pass this as `webSocketImpl` to `attachSync` (or to a per-app factory
+ * that threads it through) to keep the supervisor parked on connect
+ * without dialing real servers. The stub never opens, never errors,
+ * never delivers messages; `ydoc.destroy()` triggers a clean teardown
+ * via `close()`.
  *
  * Structurally compatible with the WHATWG WebSocket interface that
  * `attachSync` consumes (constructor signature, `readyState`, `onopen`/
  * `onclose`/`onerror`/`onmessage`, `send`, `close`).
+ *
+ * Intended for tests only. Production code uses `globalThis.WebSocket`
+ * (the runtime's native or polyfilled implementation).
  */
 
 export class NoopWebSocket {

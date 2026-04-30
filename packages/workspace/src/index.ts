@@ -169,6 +169,8 @@ export {
 	type WaitForBarrier,
 } from './document/attach-sync.js';
 
+export { NoopWebSocket } from './document/noop-ws.js';
+
 export {
 	attachTable,
 	attachTables,

@@ -16,9 +16,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { DateTimeString, generateId } from '@epicenter/workspace';
+import {
+	DateTimeString,
+	generateId,
+	NoopWebSocket,
+} from '@epicenter/workspace';
 import { openFuji as openFujiDaemon } from './daemon.js';
-import { NoopWebSocket } from './noop-ws.js';
 import { openFuji as openFujiScript } from './script.js';
 
 let workdir: string;
