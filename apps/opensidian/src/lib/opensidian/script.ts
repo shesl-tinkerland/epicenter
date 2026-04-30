@@ -19,12 +19,13 @@ import {
 	yjsPath,
 	type WebSocketImpl,
 } from '@epicenter/workspace';
-import { openOpensidian as openOpensidianDoc } from './index.js';
+import { openOpensidian as openOpensidianDoc } from './core.js';
 
 export async function openOpensidian({
 	getToken,
 	projectDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),
+	apiUrl = EPICENTER_API_URL,
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
@@ -44,6 +45,12 @@ export async function openOpensidian({
 	 */
 	clientID?: number;
 	/**
+	 * Epicenter API base URL. Defaults to `EPICENTER_API_URL` (production).
+	 * Override for self-hosted instances, staging deployments, or
+	 * integration tests routing to a local fake.
+	 */
+	apiUrl?: string;
+	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it.
 	 */
@@ -56,7 +63,7 @@ export async function openOpensidian({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,

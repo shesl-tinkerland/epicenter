@@ -19,12 +19,13 @@ import {
 	yjsPath,
 	type WebSocketImpl,
 } from '@epicenter/workspace';
-import { openHoneycrisp as openHoneycrispDoc } from './index.js';
+import { openHoneycrisp as openHoneycrispDoc } from './core.js';
 
 export async function openHoneycrisp({
 	getToken,
 	projectDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),
+	apiUrl = EPICENTER_API_URL,
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
@@ -44,6 +45,12 @@ export async function openHoneycrisp({
 	 */
 	clientID?: number;
 	/**
+	 * Epicenter API base URL. Defaults to `EPICENTER_API_URL` (production).
+	 * Override for self-hosted instances, staging deployments, or
+	 * integration tests routing to a local fake.
+	 */
+	apiUrl?: string;
+	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it.
 	 */
@@ -56,7 +63,7 @@ export async function openHoneycrisp({
 	});
 
 	const sync = attachSync(doc, {
-		url: toWsUrl(`${EPICENTER_API_URL}/workspaces/${doc.ydoc.guid}`),
+		url: toWsUrl(`${apiUrl}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,
