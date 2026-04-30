@@ -22,7 +22,10 @@ import {
 	yjsPath,
 	type WebSocketImpl,
 } from '@epicenter/workspace';
-import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
+import {
+	attachMarkdownMaterializer,
+	slugFilename,
+} from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import { openFuji as openFujiDoc } from './index.js';
 
@@ -70,7 +73,7 @@ export function openFuji({
 	const markdown = attachMarkdownMaterializer(doc.ydoc, {
 		dir: markdownPath(projectDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
-	});
+	}).table(doc.tables.entries, { filename: slugFilename('title') });
 
 	return {
 		...doc,

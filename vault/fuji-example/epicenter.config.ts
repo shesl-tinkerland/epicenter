@@ -20,13 +20,14 @@
 import { openFuji } from '@epicenter/fuji/daemon';
 import { attachSessionUnlock, createSessionStore } from '@epicenter/cli';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
+import type { ProjectDir } from '@epicenter/workspace';
 
 const SERVER_URL = process.env.EPICENTER_SERVER ?? EPICENTER_API_URL;
 
 const sessions = createSessionStore();
 
 export const fuji = openFuji({
-	projectDir: import.meta.dir,
+	projectDir: import.meta.dir as ProjectDir,
 	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
 });
 
