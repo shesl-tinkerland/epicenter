@@ -49,12 +49,12 @@ export function openFuji({
 		getToken,
 	});
 
-	const mirrorFile = sqlitePath(absDir, doc.ydoc.guid);
+	const sqliteFile = sqlitePath(absDir, doc.ydoc.guid);
 	// `attachSqliteMaterializer` takes a Database, not a path, so it can't
 	// create its own parent dir. `attachSqlitePersistence` mkdirs its own.
-	mkdirSync(path.dirname(mirrorFile), { recursive: true });
+	mkdirSync(path.dirname(sqliteFile), { recursive: true });
 	const sqlite = attachSqliteMaterializer(doc.ydoc, {
-		db: new Database(mirrorFile),
+		db: new Database(sqliteFile),
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries);
 
