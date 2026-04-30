@@ -1,10 +1,12 @@
 /**
  * Tests for the script-side Fuji factory.
  *
- * Coverage: missing-file fall-through. The `MissingFile` swallow inside the
- * factory is non-obvious behavior worth pinning. Everything else (clientID
- * derivation, attachment wiring, replay correctness) is either enforced by
- * TypeScript or covered end-to-end by `integration.test.ts`.
+ * Coverage: missing-file fall-through. `attachSqliteReadonlyPersistence`
+ * silently no-ops when the file is absent; the factory's contract is that
+ * a missing daemon yields an empty handle (cloud sync would populate it
+ * in real use). Everything else (clientID derivation, attachment wiring,
+ * replay correctness) is either enforced by TypeScript or covered
+ * end-to-end by `integration.test.ts`.
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -26,11 +28,10 @@ afterEach(() => {
 
 describe('openFuji (script)', () => {
 	test('handles missing persistence file silently', async () => {
-		// No daemon has written to `workdir`; the readonly persistence rejects
-		// with `MissingFile`, the factory swallows it, hydrate resolves to
-		// empty. The handle's `tables.entries` is empty until cloud sync
-		// would (in real use) populate it.
-		await using handle = await openFuji({
+		// No daemon has written to `workdir`; the readonly attachment skips
+		// replay and resolves immediately. The handle's `tables.entries` is
+		// empty until cloud sync (in real use) populates it.
+		using handle = await openFuji({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: NoopWebSocket as unknown as typeof WebSocket,

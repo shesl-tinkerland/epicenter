@@ -2,11 +2,12 @@
  * Daemon-side factory for the Fuji workspace.
  *
  * Wires the long-lived materializer worker: cloud sync over WebSocket plus
- * sole-writer SQLite persistence plus SQLite + markdown materializer
- * projections. Constructed once per `epicenter serve` process.
+ * sole-writer SQLite persistence (the yjs update log) plus SQLite +
+ * markdown materializer projections. Constructed once per `epicenter
+ * serve` process.
  *
- * Pairs with `script.ts` (short-lived peers that read this daemon's
- * persistence file and sync via cloud) and `browser.ts` (Svelte UI).
+ * Pairs with `script.ts` (short-lived peers that read this daemon's yjs
+ * file and sync via cloud) and `browser.ts` (Svelte UI).
  */
 
 import { mkdirSync } from 'node:fs';
@@ -17,9 +18,9 @@ import {
 	attachSync,
 	type DeviceDescriptor,
 	markdownPath,
-	persistencePath,
 	sqlitePath,
 	toWsUrl,
+	yjsPath,
 } from '@epicenter/workspace';
 import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
@@ -46,7 +47,7 @@ export function openFuji({
 	const doc = openFujiDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: persistencePath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
@@ -78,9 +79,9 @@ export function openFuji({
 		sqlite,
 		markdown,
 		/**
-		 * Resolves once the daemon's persistence file has replayed into the
-		 * Y.Doc: the durable state is in memory and writes are safe. Does
-		 * NOT gate the materializers' initial flush (they `waitFor` the same
+		 * Resolves once the daemon's yjs file has replayed into the Y.Doc:
+		 * the durable state is in memory and writes are safe. Does NOT
+		 * gate the materializers' initial flush (they `waitFor` the same
 		 * signal but their first row writes happen after this resolves) or
 		 * the cloud WS handshake (offline-tolerant by design). Compose with
 		 * `sync.whenConnected` if you need "fully online before proceeding."

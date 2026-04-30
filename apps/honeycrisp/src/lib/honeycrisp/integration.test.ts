@@ -60,7 +60,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		daemon[Symbol.dispose]();
 
-		await using script = await openHoneycrispScript({
+		using script = await openHoneycrispScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: wsImpl,

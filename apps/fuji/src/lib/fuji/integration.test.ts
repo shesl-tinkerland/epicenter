@@ -8,7 +8,7 @@
  *
  * Pins the on-disk contract Phase 1 leans on: a sole-writer daemon plus
  * many readonly script peers, sharing a SQLite WAL persistence file. If
- * `persistencePath` resolution drifts, the WAL pragma stops carrying, or
+ * `yjsPath` resolution drifts, the WAL pragma stops carrying, or
  * the readonly replay diverges from the writer format, this test breaks.
  */
 
@@ -39,8 +39,8 @@ const wsImpl = NoopWebSocket as unknown as typeof WebSocket;
 describe('daemon -> script handoff via persistence file', () => {
 	test('script warm-hydrates entries the daemon wrote', async () => {
 		// 1. Daemon owns the persistence file: write a few entries through it.
-		// Not `await using`: the writer must close before the reader opens so
-		// the readonly attachment sees the file on stable WAL pages. Disposed
+		// Not `using`: the writer must close before the reader opens so the
+		// readonly attachment sees the file on stable WAL pages. Disposed
 		// explicitly mid-scope below.
 		const daemon = openFujiDaemon({
 			getToken: () => 'fake-token',
@@ -82,7 +82,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		daemon[Symbol.dispose]();
 
 		// 2. Script opens the same absDir and replays the persistence file.
-		await using script = await openFujiScript({
+		using script = await openFujiScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: wsImpl,

@@ -16,7 +16,7 @@ import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
-	persistencePath,
+	yjsPath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import { openOpensidian as openOpensidianDoc } from './index.js';
@@ -42,7 +42,7 @@ export function openOpensidian({
 	const doc = openOpensidianDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: persistencePath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {

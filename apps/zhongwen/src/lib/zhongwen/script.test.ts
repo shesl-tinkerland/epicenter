@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('openZhongwen (script)', () => {
 	test('handles missing persistence file silently', async () => {
-		await using handle = await openZhongwen({
+		using handle = await openZhongwen({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: NoopWebSocket as unknown as typeof WebSocket,

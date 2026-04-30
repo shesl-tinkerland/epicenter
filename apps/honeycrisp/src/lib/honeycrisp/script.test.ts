@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('openHoneycrisp (script)', () => {
 	test('handles missing persistence file silently', async () => {
-		await using handle = await openHoneycrisp({
+		using handle = await openHoneycrisp({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: NoopWebSocket as unknown as typeof WebSocket,

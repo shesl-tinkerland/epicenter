@@ -68,7 +68,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		daemon[Symbol.dispose]();
 
 		// 2. Script opens the same absDir and replays the persistence file.
-		await using script = await openOpensidianScript({
+		using script = await openOpensidianScript({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: wsImpl,

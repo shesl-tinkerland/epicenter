@@ -2,8 +2,8 @@
  * Script-side factory for the Zhongwen workspace.
  *
  * Short-lived peers (one-shot CLI scripts, migrations, vault tools) read the
- * daemon's persistence file `{ readonly: true }` for warm hydrate, then run
- * their own cloud-sync attachment.
+ * daemon's yjs file `{ readonly: true }` for warm hydrate, then run their
+ * own cloud-sync attachment.
  *
  * Pairs with `daemon.ts` and `browser.ts`.
  */
@@ -13,25 +13,16 @@ import {
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
-	isMissingFile,
-	persistencePath,
 	toWsUrl,
+	yjsPath,
 } from '@epicenter/workspace';
 import { openZhongwen as openZhongwenDoc } from './index.js';
 
 const SERVER_URL = 'https://api.epicenter.so';
 
-function resolveDir(): string {
-	try {
-		return findEpicenterDir();
-	} catch {
-		return process.cwd();
-	}
-}
-
 export async function openZhongwen({
 	getToken,
-	absDir,
+	absDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),
 	webSocketImpl,
 }: {
@@ -40,25 +31,20 @@ export async function openZhongwen({
 	clientID?: number;
 	webSocketImpl?: typeof WebSocket;
 }) {
-	const resolvedDir = absDir ?? resolveDir();
-
 	const doc = openZhongwenDoc({ clientID });
 
-	const filePath = persistencePath(resolvedDir, doc.ydoc.guid);
-	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, { filePath });
-
-	const hydrate = persistence.whenLoaded.catch((err: unknown) => {
-		if (!isMissingFile(err)) throw err;
+	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, {
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
-		waitFor: hydrate,
+		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,
 	});
 
-	await hydrate;
+	await persistence.whenLoaded;
 
 	return {
 		...doc,

@@ -1,9 +1,9 @@
 /**
  * Tests for the script-side Opensidian factory.
  *
- * Coverage: missing-file fall-through. The `MissingFile` swallow inside the
- * factory is non-obvious behavior worth pinning. Everything else (clientID
- * derivation, attachment wiring, replay correctness) is either enforced by
+ * Coverage: missing-file fall-through. `attachSqliteReadonlyPersistence`
+ * silently no-ops when the file is absent; the factory's contract is that
+ * a missing daemon yields an empty handle. Everything else is enforced by
  * TypeScript or covered end-to-end by `integration.test.ts`.
  */
 
@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe('openOpensidian (script)', () => {
 	test('handles missing persistence file silently', async () => {
-		await using handle = await openOpensidian({
+		using handle = await openOpensidian({
 			getToken: () => 'fake-token',
 			absDir: workdir,
 			webSocketImpl: NoopWebSocket as unknown as typeof WebSocket,

@@ -2,15 +2,15 @@
  * Script-side factory for the Fuji workspace.
  *
  * Short-lived peers (one-shot CLI scripts, migrations, vault tools) read the
- * daemon's persistence file `{ readonly: true }` for warm hydrate, then run
- * their own cloud-sync attachment. Their writes flow through cloud; the
- * daemon picks them up via its own `attachSync` and writes to disk.
+ * daemon's yjs file `{ readonly: true }` for warm hydrate, then run their
+ * own cloud-sync attachment. Their writes flow through cloud; the daemon
+ * picks them up via its own `attachSync` and writes to disk.
  *
- * No IPC. No coordination. The persistence read races nothing because
- * scripts never write to that file.
+ * No IPC. No coordination. The yjs read races nothing because scripts
+ * never write to that file.
  *
  * Pairs with `daemon.ts` (long-lived materializer worker that owns the
- * persistence file) and `browser.ts` (Svelte UI).
+ * yjs file) and `browser.ts` (Svelte UI).
  */
 
 import {
@@ -18,35 +18,25 @@ import {
 	attachSync,
 	findEpicenterDir,
 	hashClientId,
-	isMissingFile,
-	persistencePath,
 	toWsUrl,
+	yjsPath,
 } from '@epicenter/workspace';
 import { openFuji as openFujiDoc } from './index.js';
 
 const SERVER_URL = 'https://api.epicenter.so';
 
-function resolveDir(): string {
-	try {
-		return findEpicenterDir();
-	} catch {
-		return process.cwd();
-	}
-}
-
 export async function openFuji({
 	getToken,
-	absDir,
+	absDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	/**
-	 * Project root. Defaults to the nearest ancestor of `process.cwd()` that
-	 * contains `epicenter.config.ts` or `.epicenter/`; falls back to
-	 * `process.cwd()` if no marker is found. Scripts run outside a vault
-	 * therefore boot with no warm hydrate (the persistence file won't exist
-	 * under cwd) and cold-sync from cloud.
+	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
+	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via
+	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
+	 * `absDir` (e.g., `process.cwd()`) to opt out.
 	 */
 	absDir?: string;
 	/**
@@ -62,30 +52,24 @@ export async function openFuji({
 	 */
 	webSocketImpl?: typeof WebSocket;
 }) {
-	const resolvedDir = absDir ?? resolveDir();
-
 	const doc = openFujiDoc({ clientID });
 
-	const filePath = persistencePath(resolvedDir, doc.ydoc.guid);
-	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, { filePath });
-
-	// Swallow `MissingFile` (no daemon has written here yet: fall through to
-	// cold cloud sync); re-throw every other error.
-	const hydrate = persistence.whenLoaded.catch((err: unknown) => {
-		if (!isMissingFile(err)) throw err;
+	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, {
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
-		waitFor: hydrate,
+		waitFor: persistence.whenLoaded,
 		getToken,
 		webSocketImpl,
 	});
 
 	// Await hydrate inside the factory: callers get a fully-hydrated handle
 	// without remembering to await `whenReady`. The first WS handshake still
-	// gates on the same promise via `waitFor`, so the cloud delta-only.
-	await hydrate;
+	// gates on the same promise via `waitFor`, so the cloud handshake is
+	// delta-only when the file existed.
+	await persistence.whenLoaded;
 
 	return {
 		...doc,

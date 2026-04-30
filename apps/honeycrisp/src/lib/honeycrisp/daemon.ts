@@ -13,7 +13,7 @@ import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
-	persistencePath,
+	yjsPath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import { openHoneycrisp as openHoneycrispDoc } from './index.js';
@@ -34,7 +34,7 @@ export function openHoneycrisp({
 	const doc = openHoneycrispDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: persistencePath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {

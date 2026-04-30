@@ -13,7 +13,7 @@ import {
 	attachSqlitePersistence,
 	attachSync,
 	type DeviceDescriptor,
-	persistencePath,
+	yjsPath,
 	toWsUrl,
 } from '@epicenter/workspace';
 import { openZhongwen as openZhongwenDoc } from './index.js';
@@ -34,7 +34,7 @@ export function openZhongwen({
 	const doc = openZhongwenDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: persistencePath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(absDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
