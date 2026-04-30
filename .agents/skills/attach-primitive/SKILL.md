@@ -50,7 +50,7 @@ attachMarkdownMaterializer(ydoc, { dir, waitFor })
     // bespoke callbacks — no sugar helper can abstract the async
     // open/await/dispose cycle usefully.
     toMarkdown: async (row) => {
-      await using doc = await fileContentDocs.load(row.id);
+      using doc = await fileContentDocs.load(row.id);
       return { frontmatter: { id: row.id, name: row.name }, body: doc.content.read() };
     },
   })

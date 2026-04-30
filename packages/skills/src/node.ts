@@ -172,7 +172,7 @@ export const skillsDocument = createDisposableCache(
 						}
 
 						{
-							await using h = instructionsDocs.open(skillId);
+							using h = instructionsDocs.open(skillId);
 							await h.whenReady;
 							h.instructions.write(instructions);
 						}
@@ -202,7 +202,7 @@ export const skillsDocument = createDisposableCache(
 										_v: 1,
 									});
 
-									await using h = referenceDocs.open(refId);
+									using h = referenceDocs.open(refId);
 									await h.whenReady;
 									h.content.write(refContent);
 								}),
@@ -231,7 +231,7 @@ export const skillsDocument = createDisposableCache(
 							const skillDir = join(dir, skill.name);
 							await mkdir(skillDir, { recursive: true });
 
-							await using h = instructionsDocs.open(skill.id);
+							using h = instructionsDocs.open(skill.id);
 							await h.whenReady;
 							const skillMd = serializeSkillMd(skill, h.instructions.read());
 							await writeFile(join(skillDir, 'SKILL.md'), skillMd, 'utf-8');
@@ -246,7 +246,7 @@ export const skillsDocument = createDisposableCache(
 
 								await Promise.all(
 									refs.map(async (ref) => {
-										await using h = referenceDocs.open(ref.id);
+										using h = referenceDocs.open(ref.id);
 										await h.whenReady;
 										const text = h.content.read();
 										await writeFile(join(refsDir, ref.path), text, 'utf-8');

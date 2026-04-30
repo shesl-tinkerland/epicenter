@@ -159,7 +159,7 @@ export function attachYjsFileSystem(
 			if (id === null) throw FS_ERRORS.ENOENT(abs);
 			const row = tree.getRow(id, abs);
 			if (row.type === 'folder') throw FS_ERRORS.EISDIR(abs);
-			await using handle = contentDocuments.open(id);
+			using handle = contentDocuments.open(id);
 			await handle.whenReady;
 			return handle.content.read();
 		},
@@ -192,7 +192,7 @@ export function attachYjsFileSystem(
 				justCreated = true;
 			}
 
-			await using handle = contentDocuments.open(id);
+			using handle = contentDocuments.open(id);
 			await handle.whenReady;
 			handle.content.write(textData);
 			if (!justCreated) tree.touch(id, size);
@@ -208,7 +208,7 @@ export function attachYjsFileSystem(
 			const row = tree.getRow(id, abs);
 			if (row.type === 'folder') throw FS_ERRORS.EISDIR(abs);
 
-			await using handle = contentDocuments.open(id);
+			using handle = contentDocuments.open(id);
 			await handle.whenReady;
 			handle.content.appendText(text);
 			const newSize = new TextEncoder().encode(handle.content.read()).byteLength;
@@ -301,7 +301,7 @@ export function attachYjsFileSystem(
 					);
 				}
 			} else {
-				await using handle = contentDocuments.open(srcId);
+				using handle = contentDocuments.open(srcId);
 				await handle.whenReady;
 				const srcText = handle.content.read();
 				await this.writeFile(resolvedDest, srcText);

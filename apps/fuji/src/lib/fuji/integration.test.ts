@@ -42,7 +42,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// must close (via `}`) before the reader opens so the readonly
 		// attachment sees the file on stable WAL pages.
 		{
-			await using daemon = await openFujiDaemon({
+			using daemon = await openFujiDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',

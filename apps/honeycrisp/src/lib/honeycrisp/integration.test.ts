@@ -37,7 +37,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// close (via `}`) before the reader opens so the readonly attachment
 		// sees the file on stable WAL pages.
 		{
-			await using daemon = await openHoneycrispDaemon({
+			using daemon = await openHoneycrispDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',

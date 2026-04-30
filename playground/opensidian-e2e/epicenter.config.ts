@@ -111,7 +111,7 @@ const fileContentDocs = createDisposableCache(
 );
 
 async function readContent(rowId: string): Promise<string | undefined> {
-	await using handle = fileContentDocs.open(rowId);
+	using handle = fileContentDocs.open(rowId);
 	await handle.whenReady;
 	return handle.content.read();
 }

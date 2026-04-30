@@ -29,13 +29,13 @@ export function createSkillsActions({
 	referenceDocs: DisposableCache<string, ReferenceContentDoc>;
 }) {
 	async function readInstructions(id: string): Promise<string> {
-		await using h = instructionsDocs.open(id);
+		using h = instructionsDocs.open(id);
 		await h.whenReady;
 		return h.instructions.read();
 	}
 
 	async function readReference(id: string): Promise<string> {
-		await using h = referenceDocs.open(id);
+		using h = referenceDocs.open(id);
 		await h.whenReady;
 		return h.content.read();
 	}

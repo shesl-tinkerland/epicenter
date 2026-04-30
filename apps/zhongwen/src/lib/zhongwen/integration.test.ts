@@ -33,7 +33,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// close (via `}`) before the reader opens so the readonly attachment
 		// sees the file on stable WAL pages.
 		{
-			await using daemon = await openZhongwenDaemon({
+			using daemon = await openZhongwenDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',

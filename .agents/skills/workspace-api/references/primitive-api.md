@@ -202,10 +202,10 @@ $effect(() => {
 
 // Imperative: read/write from an action handler, CLI, or test.
 async function readInstructions(id: SkillId): Promise<string> {
-  await using h = instructionsDocs.open(id);
+  using h = instructionsDocs.open(id);
   await h.whenReady;           // builder convention — await what you need
   return h.instructions.read();
-  // `await using` disposes h at scope exit → refcount--, gcTime timer arms.
+  // `using` disposes h at scope exit → refcount--, gcTime timer arms.
 }
 ```
 

@@ -87,13 +87,13 @@ async function writeContent(
 	id: string,
 	text: string,
 ) {
-	await using handle = contentDocs.open(id as FileId);
+	using handle = contentDocs.open(id as FileId);
 	await handle.whenReady;
 	handle.content.write(text);
 }
 
 async function readContent(contentDocs: FileContentDocs, id: string) {
-	await using handle = contentDocs.open(id as FileId);
+	using handle = contentDocs.open(id as FileId);
 	await handle.whenReady;
 	return handle.content.read();
 }

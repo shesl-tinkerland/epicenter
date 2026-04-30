@@ -36,7 +36,7 @@ describe('daemon -> script handoff via persistence file', () => {
 		// files, then let the block-scoped `using` dispose at `}` so the
 		// writer commits and closes before the reader opens.
 		{
-			await using daemon = await openOpensidianDaemon({
+			using daemon = await openOpensidianDaemon({
 				getToken: () => 'fake-token',
 				device: {
 					id: 'test-daemon',

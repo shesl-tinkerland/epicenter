@@ -148,7 +148,7 @@ export function createSqliteIndex(
 		const filesTable = context.tables.files;
 
 		async function readFileContent(id: FileId): Promise<string> {
-			await using handle = contentDocs.open(id);
+			using handle = contentDocs.open(id);
 			await handle.whenReady;
 			return handle.content.read();
 		}

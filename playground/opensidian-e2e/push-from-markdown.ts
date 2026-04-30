@@ -87,7 +87,7 @@ export async function pushFromMarkdown(ctx: {
 						? makeEpicenterLink('opensidian', 'files', match.id)
 						: null;
 				});
-				await using handle = ctx.contentDocs.open(
+				using handle = ctx.contentDocs.open(
 					frontmatter.id as FileRow['id'],
 				);
 				await handle.whenReady;

@@ -159,8 +159,7 @@ The daemon has no `fuji.sqlite.*` or `fuji.markdown.*` namespace because it does
 // any bun script in the workspace's folder
 import { openFuji } from '@epicenter/fuji/script';
 
-await using fuji = openFuji({ authToken });
-await fuji.whenReady;
+using fuji = await openFuji({ authToken });
 
 // Same call shape as the browser tab:
 fuji.tables.entries.set({ id, url });
