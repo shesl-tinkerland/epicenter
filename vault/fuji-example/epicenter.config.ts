@@ -26,7 +26,7 @@ const sessions = createSessionStore();
 
 export const fuji = openFuji({
 	absDir: import.meta.dir,
-	authToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
+	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
 });
 
 // Activate encryption keys once the daemon's persistence has hydrated. The

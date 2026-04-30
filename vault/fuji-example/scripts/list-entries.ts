@@ -25,15 +25,14 @@ const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
 
 const sessions = createSessionStore();
 
-using fuji = openFuji({
-	authToken: async () =>
+await using fuji = await openFuji({
+	getToken: async () =>
 		(await sessions.load(SERVER_URL))?.accessToken ?? null,
 });
 
-await fuji.whenReady;
 // Mode B (cold path) only: give cloud sync a brief window to deliver the
 // initial document if there is no daemon-written persistence file. Mode A
-// returns instantly because `whenReady` already saw the warm replay.
+// returns instantly because the factory already awaited the warm replay.
 await Promise.race([
 	fuji.sync.whenConnected,
 	new Promise((resolve) => setTimeout(resolve, 2_000)),
