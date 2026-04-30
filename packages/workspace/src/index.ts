@@ -43,8 +43,7 @@
 // visible makes it obvious which package owns the contract.
 
 // ════════════════════════════════════════════════════════════════════════════
-// CORE: generic primitives (no Yjs, no sync wiring)
-// Subpath: @epicenter/workspace/core
+// DEVICE IDENTITY
 // ════════════════════════════════════════════════════════════════════════════
 
 export {
@@ -52,22 +51,31 @@ export {
 	getOrCreateDeviceId,
 	getOrCreateDeviceIdAsync,
 	type SimpleStorage,
-	type MaybePromise,
-	type AbsolutePath,
-	type ProjectDir,
-	type Guid,
-	type Id,
-	generateGuid,
-	generateId,
-	createId,
-	type DateIsoString,
-	type ParsedDateTimeString,
-	type TimezoneId,
-	DateTimeString,
-	createDisposableCache,
-	type DisposableCache,
-	DisposableCacheError,
-} from './core/index.js';
+} from './shared/device-id.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// SHARED TYPES
+// ════════════════════════════════════════════════════════════════════════════
+
+export type { AbsolutePath, MaybePromise, ProjectDir } from './shared/types.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// ID UTILITIES
+// ════════════════════════════════════════════════════════════════════════════
+
+export type { Guid, Id } from './shared/id.js';
+export { Id as createId, generateGuid, generateId } from './shared/id.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// DATE UTILITIES
+// ════════════════════════════════════════════════════════════════════════════
+
+export type {
+	DateIsoString,
+	ParsedDateTimeString,
+	TimezoneId,
+} from './shared/datetime-string.js';
+export { DateTimeString } from './shared/datetime-string.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // ERROR TYPES
@@ -195,6 +203,11 @@ export {
 	type TimelineEntry,
 } from './document/attach-timeline/index.js';
 
+export {
+	createDisposableCache,
+	type DisposableCache,
+	DisposableCacheError,
+} from './cache/disposable-cache.js';
 export { defineTable } from './document/define-table.js';
 export { defineKv } from './document/define-kv.js';
 export { docGuid } from './document/doc-guid.js';
@@ -305,8 +318,8 @@ export { findEpicenterDir } from './client/find-epicenter-dir.js';
 export type { Remote } from './client/remote-workspace-types.js';
 export {
 	attachSqliteReader,
-	type SqliteMirror,
-	type SqliteMirrorOptions,
+	type AttachSqliteReaderOptions,
+	type SqliteReaderAttachment,
 } from './document/attach-sqlite-reader.js';
 
 // ════════════════════════════════════════════════════════════════════════════
