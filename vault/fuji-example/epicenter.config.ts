@@ -26,7 +26,7 @@ const SERVER_URL = process.env.EPICENTER_SERVER ?? EPICENTER_API_URL;
 const sessions = createSessionStore();
 
 export const fuji = openFuji({
-	absDir: import.meta.dir,
+	projectDir: import.meta.dir,
 	getToken: async () => (await sessions.load(SERVER_URL))?.accessToken ?? null,
 });
 

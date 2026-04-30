@@ -11,13 +11,13 @@
  * cast.
  *
  * Used by `connectDaemon` and per-app `script.ts` factories so vault
- * scripts don't have to pass `absDir` explicitly: running a script from
+ * scripts don't have to pass `projectDir` explicitly: running a script from
  * anywhere inside the vault tree resolves the same daemon socket the
  * surrounding `epicenter serve` is bound to.
  *
  * Throws if no marker is found before reaching the filesystem root.
  * Catching is deliberate: callers that want a "run anywhere, cold-sync
- * from cloud" mode pass an explicit `absDir` (typically `process.cwd()`)
+ * from cloud" mode pass an explicit `projectDir` (typically `process.cwd()`)
  * to opt out of the throw.
  *
  * @param start Where to begin walking up. Defaults to `process.cwd()` so

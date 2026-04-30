@@ -120,16 +120,20 @@ export function ftsSearch(
 	try {
 		const qt = quoteIdentifier(tableName);
 		const qfts = quoteIdentifier(ftsTableName);
-		const stmt = db.prepare(
-			`SELECT ${qt}.${quoteIdentifier('id')} AS id,\n` +
-				`  snippet(${qfts}, ${snippetColumnIndex}, '<mark>', '</mark>', '...', 64) AS snippet,\n` +
-				`  rank\n` +
-				`FROM ${qfts}\n` +
-				`JOIN ${qt} ON ${qt}.rowid = ${qfts}.rowid\n` +
-				`WHERE ${qfts} MATCH ?\n` +
-				`ORDER BY rank LIMIT ?`,
-		);
-		const rows = stmt.all(trimmed, limit);
+		// `db.query()` caches the compiled statement keyed by SQL text, so
+		// subsequent searches for the same (tableName, snippetColumnIndex)
+		// pair reuse the bytecode.
+		const rows = db
+			.query(
+				`SELECT ${qt}.${quoteIdentifier('id')} AS id,\n` +
+					`  snippet(${qfts}, ${snippetColumnIndex}, '<mark>', '</mark>', '...', 64) AS snippet,\n` +
+					`  rank\n` +
+					`FROM ${qfts}\n` +
+					`JOIN ${qt} ON ${qt}.rowid = ${qfts}.rowid\n` +
+					`WHERE ${qfts} MATCH ?\n` +
+					`ORDER BY rank LIMIT ?`,
+			)
+			.all(trimmed, limit);
 
 		return rows.map((row) => {
 			const r = row as Record<string, unknown>;

@@ -46,13 +46,13 @@ export function workspaceFromArgv(
  * passes it to `getDaemon`.
  */
 export type ResolvedTarget = {
-	absDir: string;
+	projectDir: string;
 	userWorkspace: string | undefined;
 };
 
 export function resolveTarget(args: Record<string, unknown>): ResolvedTarget {
 	return {
-		absDir: resolve(dirFromArgv(args)),
+		projectDir: resolve(dirFromArgv(args)),
 		userWorkspace: workspaceFromArgv(args),
 	};
 }

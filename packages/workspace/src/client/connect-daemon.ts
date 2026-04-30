@@ -22,7 +22,7 @@
  * ```
  *
  * Daemon-scope calls (peers, list across workspaces) live on `DaemonClient`
- * directly — construct one with `daemonClient(socketPathFor(absDir))` and
+ * directly — construct one with `daemonClient(socketPathFor(projectDir))` and
  * call `.peers()` / `.list()` against the same socket. They are not
  * reachable through this workspace handle.
  */
@@ -43,7 +43,7 @@ import type { Remote } from './remote-workspace-types.js';
  * way, the value is opaque to this function and threads through to the
  * remote-workspace proxy.
  *
- * `absDir` defaults to walking up from `process.cwd()` for an
+ * `projectDir` defaults to walking up from `process.cwd()` for an
  * `epicenter.config.ts` file or a `.epicenter/` directory.
  *
  * Throws `DaemonError.Required` if no daemon is listening on the
@@ -52,20 +52,20 @@ import type { Remote } from './remote-workspace-types.js';
  */
 export async function connectDaemon<W>({
 	id,
-	absDir = findEpicenterDir(process.cwd()),
+	projectDir = findEpicenterDir(),
 }: {
 	id: string;
 	/**
 	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
 	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via
 	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
-	 * `absDir` to opt out.
+	 * `projectDir` to opt out.
 	 */
-	absDir?: ProjectDir;
+	projectDir?: ProjectDir;
 }): Promise<Remote<W>> {
-	const socketPath = socketPathFor(absDir);
+	const socketPath = socketPathFor(projectDir);
 	if (!(await pingDaemon(socketPath))) {
-		throw DaemonError.Required({ absDir, id }).error;
+		throw DaemonError.Required({ projectDir, id }).error;
 	}
 	const client = daemonClient(socketPath);
 	return buildRemoteWorkspace<W>(client, id);

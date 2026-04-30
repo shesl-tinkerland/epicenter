@@ -85,7 +85,7 @@ const whenReady = Promise.all([
 
 /**
  * Per-file content persistence via `attachSqlitePersistence`. Each content
- * Y.Doc writes its own `{guid}.db` under `<absDir>/.epicenter/yjs/{workspaceId}/content/`,
+ * Y.Doc writes its own `{guid}.db` under `<projectDir>/.epicenter/yjs/{workspaceId}/content/`,
  * nested under the workspace's yjs folder so per-file logs sit alongside
  * the main workspace log.
  */

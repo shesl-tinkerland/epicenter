@@ -9,28 +9,12 @@
  * consumer picks it up automatically.
  */
 
-export const APPS = {
-	API: { port: 8787, urls: ['https://api.epicenter.so'] },
-	SH: { port: 5173, urls: ['https://epicenter.sh'] },
-	AUDIO: { port: 1420, urls: ['https://whispering.epicenter.so'] },
-	FUJI: { port: 5174, urls: ['https://fuji.epicenter.so'] },
-	HONEYCRISP: { port: 5175, urls: ['https://honeycrisp.epicenter.so'] },
-	OPENSIDIAN: {
-		port: 5176,
-		urls: ['https://opensidian.com', 'https://opensidian.epicenter.so'],
-	},
-	ZHONGWEN: { port: 8888, urls: ['https://zhongwen.epicenter.so'] },
-	DASHBOARD: { port: 5178, urls: ['https://api.epicenter.so'] },
-} as const;
-
-export type AppId = keyof typeof APPS;
-
 /**
  * Canonical URL of the Epicenter API hub (auth, sync, AI, encryption keys).
  *
- * Single source of truth for `https://api.epicenter.so`. Derived from
- * `APPS.API.urls[0]` so the URL is declared exactly once. Import this in
- * app daemon/script factories instead of redeclaring a local `SERVER_URL`.
+ * Declared as a top-level constant so that `APPS.API.urls` references it
+ * (not the other way around). Import this in app daemon/script factories
+ * instead of redeclaring a local `SERVER_URL`.
  *
  * @example
  * ```ts
@@ -43,4 +27,20 @@ export type AppId = keyof typeof APPS;
  * });
  * ```
  */
-export const EPICENTER_API_URL = APPS.API.urls[0];
+export const EPICENTER_API_URL = 'https://api.epicenter.so';
+
+export const APPS = {
+	API: { port: 8787, urls: [EPICENTER_API_URL] },
+	SH: { port: 5173, urls: ['https://epicenter.sh'] },
+	AUDIO: { port: 1420, urls: ['https://whispering.epicenter.so'] },
+	FUJI: { port: 5174, urls: ['https://fuji.epicenter.so'] },
+	HONEYCRISP: { port: 5175, urls: ['https://honeycrisp.epicenter.so'] },
+	OPENSIDIAN: {
+		port: 5176,
+		urls: ['https://opensidian.com', 'https://opensidian.epicenter.so'],
+	},
+	ZHONGWEN: { port: 8888, urls: ['https://zhongwen.epicenter.so'] },
+	DASHBOARD: { port: 5178, urls: [EPICENTER_API_URL] },
+} as const;
+
+export type AppId = keyof typeof APPS;

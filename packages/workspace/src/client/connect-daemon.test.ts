@@ -28,14 +28,14 @@ describe('connectDaemon', () => {
 	test('throws DaemonError.Required when no daemon is listening', async () => {
 		let caught: unknown;
 		try {
-			await connectDaemon({ id: 'demo', absDir: root as ProjectDir });
+			await connectDaemon({ id: 'demo', projectDir: root as ProjectDir });
 		} catch (err) {
 			caught = err;
 		}
 		expect(caught).toBeDefined();
-		const e = caught as { name: string; absDir: string; id?: string };
+		const e = caught as { name: string; projectDir: string; id?: string };
 		expect(e.name).toBe('Required');
-		expect(e.absDir).toBe(root);
+		expect(e.projectDir).toBe(root);
 		expect(e.id).toBe('demo');
 	});
 });

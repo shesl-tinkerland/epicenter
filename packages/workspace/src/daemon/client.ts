@@ -47,7 +47,7 @@ const CONFIG_FILENAME = 'epicenter.config.ts';
  * outside the CLI (vault scripts) build it inline.
  */
 export type ResolvedTarget = {
-	absDir: string;
+	projectDir: string;
 	userWorkspace: string | undefined;
 };
 
@@ -65,16 +65,16 @@ export type ResolvedTarget = {
  *   `Result` instead.
  */
 export const DaemonError = defineErrors({
-	MissingConfig: ({ absDir }: { absDir: string }) => ({
-		message: `No ${CONFIG_FILENAME} found in ${absDir}`,
-		absDir,
+	MissingConfig: ({ projectDir }: { projectDir: string }) => ({
+		message: `No ${CONFIG_FILENAME} found in ${projectDir}`,
+		projectDir,
 	}),
-	Required: ({ absDir, id }: { absDir: string; id?: string }) => ({
+	Required: ({ projectDir, id }: { projectDir: string; id?: string }) => ({
 		message:
 			id !== undefined
-				? `no daemon running for ${absDir} (workspace ${id}); start one with \`epicenter serve\` first`
-				: `no server running for ${absDir}; start one with \`epicenter serve\` first`,
-		absDir,
+				? `no daemon running for ${projectDir} (workspace ${id}); start one with \`epicenter serve\` first`
+				: `no server running for ${projectDir}; start one with \`epicenter serve\` first`,
+		projectDir,
 		id,
 	}),
 	Timeout: ({
@@ -213,7 +213,7 @@ export type DaemonClient = ReturnType<typeof daemonClient>;
 /**
  * Resolve the daemon client for `target`, or surface why we can't.
  *
- *   - `MissingConfig`: no `epicenter.config.ts` in `absDir`. Surfaced
+ *   - `MissingConfig`: no `epicenter.config.ts` in `projectDir`. Surfaced
  *     distinctly from `Required` so unconfigured users don't get pointed
  *     at `epicenter serve` (which would fail and mislead).
  *   - `Required`: config exists but no server is running. Renderer
@@ -225,13 +225,13 @@ export type DaemonClient = ReturnType<typeof daemonClient>;
 export async function getDaemon(
 	target: ResolvedTarget,
 ): Promise<Result<DaemonClient, DaemonError>> {
-	const configPath = join(target.absDir, CONFIG_FILENAME);
+	const configPath = join(target.projectDir, CONFIG_FILENAME);
 	if (!(await Bun.file(configPath).exists())) {
-		return DaemonError.MissingConfig({ absDir: target.absDir });
+		return DaemonError.MissingConfig({ projectDir: target.projectDir });
 	}
-	const sock = socketPathFor(target.absDir);
+	const sock = socketPathFor(target.projectDir);
 	if (!(await pingDaemon(sock))) {
-		return DaemonError.Required({ absDir: target.absDir });
+		return DaemonError.Required({ projectDir: target.projectDir });
 	}
 	return Ok(daemonClient(sock));
 }

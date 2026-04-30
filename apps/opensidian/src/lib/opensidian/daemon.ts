@@ -27,18 +27,18 @@ import { openOpensidian as openOpensidianDoc } from './index.js';
 export function openOpensidian({
 	getToken,
 	device,
-	absDir,
+	projectDir,
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
 	/**
 	 * Project root (where `epicenter.config.ts` lives). Required: the daemon
-	 * is the sole writer of `<absDir>/.epicenter/yjs/<guid>.db`, so there
+	 * is the sole writer of `<projectDir>/.epicenter/yjs/<guid>.db`, so there
 	 * is no sane fallback. Mint via `findEpicenterDir()` at the call site
 	 * to brand a discovered path as `ProjectDir`.
 	 */
-	absDir: ProjectDir;
+	projectDir: ProjectDir;
 	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it (defaults to
@@ -49,7 +49,7 @@ export function openOpensidian({
 	const doc = openOpensidianDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: yjsPath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {

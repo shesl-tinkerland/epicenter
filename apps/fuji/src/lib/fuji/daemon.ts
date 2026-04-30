@@ -29,18 +29,18 @@ import { openFuji as openFujiDoc } from './index.js';
 export function openFuji({
 	getToken,
 	device,
-	absDir,
+	projectDir,
 	webSocketImpl,
 }: {
 	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
 	/**
 	 * Project root (where `epicenter.config.ts` lives). Required: the daemon
-	 * is the sole writer of `<absDir>/.epicenter/yjs/<guid>.db`, so there
+	 * is the sole writer of `<projectDir>/.epicenter/yjs/<guid>.db`, so there
 	 * is no sane fallback. Mint via `findEpicenterDir()` at the call site
 	 * to brand a discovered path as `ProjectDir`.
 	 */
-	absDir: ProjectDir;
+	projectDir: ProjectDir;
 	/**
 	 * WebSocket constructor for `attachSync`. Tests pass a stub to avoid
 	 * dialing real servers; production omits it (defaults to
@@ -51,7 +51,7 @@ export function openFuji({
 	const doc = openFujiDoc();
 
 	const persistence = attachSqlitePersistence(doc.ydoc, {
-		filePath: yjsPath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {
@@ -63,12 +63,12 @@ export function openFuji({
 	});
 
 	const sqlite = attachSqliteMaterializer(doc.ydoc, {
-		filePath: sqlitePath(absDir, doc.ydoc.guid),
+		filePath: sqlitePath(projectDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	}).table(doc.tables.entries);
 
 	const markdown = attachMarkdownMaterializer(doc.ydoc, {
-		dir: markdownPath(absDir, doc.ydoc.guid),
+		dir: markdownPath(projectDir, doc.ydoc.guid),
 		waitFor: persistence.whenLoaded,
 	});
 

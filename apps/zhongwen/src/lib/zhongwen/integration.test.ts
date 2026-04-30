@@ -36,10 +36,10 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openZhongwenDaemon({
 				getToken: () => 'fake-token',
-				absDir: workdir,
+				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});
-			await daemon.persistence.whenLoaded;
+			await daemon.whenReady;
 
 			const now = Date.now();
 			const seed: { id: ConversationId; title: string }[] = [
@@ -64,7 +64,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		using script = await openZhongwenScript({
 			getToken: () => 'fake-token',
-			absDir: workdir,
+			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});
 		const titles = script.tables.conversations

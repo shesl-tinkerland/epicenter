@@ -27,7 +27,7 @@ import {
 
 export type WorkspaceServerOptions = {
 	/** Filesystem-resolved absolute path that scopes this daemon. */
-	absDir: string;
+	projectDir: string;
 	/**
 	 * Pre-constructed workspace entries the daemon hosts. Each entry's
 	 * `name` is the routing key the wire surface dispatches on (the `-w`
@@ -60,7 +60,7 @@ export type WorkspaceServer = {
  * until `listen()` is called.
  */
 export function createWorkspaceServer({
-	absDir,
+	projectDir,
 	workspaces,
 }: WorkspaceServerOptions): WorkspaceServer {
 	const seen = new Set<string>();
@@ -73,7 +73,7 @@ export function createWorkspaceServer({
 		seen.add(entry.name);
 	}
 
-	const socketPath = socketPathFor(absDir);
+	const socketPath = socketPathFor(projectDir);
 	const app = buildApp(workspaces);
 
 	let server: UnixSocketServer | undefined;
@@ -83,7 +83,7 @@ export function createWorkspaceServer({
 		async listen() {
 			const result = await bindOrRecover(
 				socketPath,
-				absDir,
+				projectDir,
 				app,
 				pingDaemon,
 			);

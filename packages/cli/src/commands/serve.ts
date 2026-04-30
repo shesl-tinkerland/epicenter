@@ -126,10 +126,10 @@ export async function runServe(
 	options: ServeOptions,
 	deps: ServeDeps = {},
 ): Promise<Result<ServeHandle, ServeError | LoadError | StartupError>> {
-	const absDir = resolve(options.dir);
+	const projectDir = resolve(options.dir);
 
 	const loader = deps.loadConfig ?? loadConfig;
-	const loadResult = await loader(absDir);
+	const loadResult = await loader(projectDir);
 	if (loadResult.error) return loadResult;
 	const config = loadResult.data;
 
@@ -160,7 +160,7 @@ export async function runServe(
 	// metadata internally before our successful retry, so the
 	// writeMetadata below records *our* pid.
 	const wsServer = createWorkspaceServer({
-		absDir,
+		projectDir,
 		workspaces: config.entries,
 	});
 	const bindResult = await wsServer.listen();
@@ -173,9 +173,9 @@ export async function runServe(
 
 	const metadata: DaemonMetadata = {
 		pid: process.pid,
-		dir: absDir,
+		dir: projectDir,
 	};
-	writeMetadata(absDir, metadata);
+	writeMetadata(projectDir, metadata);
 
 	let teardownPromise: Promise<void> | null = null;
 	const teardown = (): Promise<void> => {
@@ -183,7 +183,7 @@ export async function runServe(
 		teardownPromise = (async () => {
 			await wsServer.close();
 			await safeAsyncDispose(config);
-			unlinkMetadata(absDir);
+			unlinkMetadata(projectDir);
 		})();
 		return teardownPromise;
 	};

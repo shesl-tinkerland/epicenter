@@ -3,7 +3,7 @@
  *
  * Boots the daemon-side factory in-process, mutates `tables.files`, lets
  * persistence flush via `[Symbol.dispose]()`, then opens the script-side
- * factory against the same `absDir`. The script's warm hydrate replays the
+ * factory against the same `projectDir`. The script's warm hydrate replays the
  * daemon's persistence file and the rows show up under
  * `tables.files.getAllValid()`.
  *
@@ -41,10 +41,10 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openOpensidianDaemon({
 				getToken: () => 'fake-token',
-				absDir: workdir,
+				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});
-			await daemon.persistence.whenLoaded;
+			await daemon.whenReady;
 
 			const now = Date.now();
 			const seed: { id: FileId; name: string }[] = [
@@ -69,10 +69,10 @@ describe('daemon -> script handoff via persistence file', () => {
 			});
 		}
 
-		// 2. Script opens the same absDir and replays the persistence file.
+		// 2. Script opens the same projectDir and replays the persistence file.
 		using script = await openOpensidianScript({
 			getToken: () => 'fake-token',
-			absDir: workdir,
+			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});
 		const names = script.tables.files

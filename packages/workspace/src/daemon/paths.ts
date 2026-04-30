@@ -6,7 +6,7 @@
  * elsewhere) or under `~/.epicenter/log/` (persistent log). Keyed by a hash
  * of the daemon's `--dir` so two daemons on the same machine never collide.
  *
- * For per-workspace data layout (yjs/sqlite/markdown under `<absDir>/.epicenter/`),
+ * For per-workspace data layout (yjs/sqlite/markdown under `<projectDir>/.epicenter/`),
  * see `document/workspace-paths.ts`. Different audience, different rationale.
  *
  * Pure helpers: no side effects, no directory creation. The `serve` command

@@ -2,7 +2,7 @@
  * Read-only handle on the daemon's materialized markdown tree.
  *
  * The daemon's `attachMarkdownMaterializer` writes per-table subdirectories
- * of `.md` files under `markdownPath(absDir, ydoc.guid)`. Script peers
+ * of `.md` files under `markdownPath(projectDir, ydoc.guid)`. Script peers
  * walk the same tree via `attachMarkdownMirror({ rootPath })`, getting a
  * minimal listing + read surface without redoing the daemon's serialization
  * work and without paying for a chokidar watch (deferred to a later
@@ -33,7 +33,7 @@ import { join, posix, relative, sep } from 'node:path';
 export type AttachMarkdownMirrorOptions = {
 	/**
 	 * Absolute path to the daemon's markdown tree root. Typically
-	 * `markdownPath(absDir, ydoc.guid)`.
+	 * `markdownPath(projectDir, ydoc.guid)`.
 	 */
 	rootPath: string;
 };
@@ -90,7 +90,7 @@ export type MarkdownMirrorAttachment = {
  * @example
  * ```ts
  * using mirror = attachMarkdownMirror({
- *   rootPath: markdownPath(absDir, fuji.ydoc.guid),
+ *   rootPath: markdownPath(projectDir, fuji.ydoc.guid),
  * });
  * for await (const file of mirror.list({ prefix: 'entries/' })) {
  *   const body = await mirror.read(file.id);

@@ -23,7 +23,7 @@ import { openZhongwen as openZhongwenDoc } from './index.js';
 
 export async function openZhongwen({
 	getToken,
-	absDir = findEpicenterDir(),
+	projectDir = findEpicenterDir(),
 	clientID = hashClientId(Bun.main),
 	webSocketImpl,
 }: {
@@ -32,9 +32,10 @@ export async function openZhongwen({
 	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
 	 * containing `epicenter.config.ts` or `.epicenter/`. Throws via
 	 * `findEpicenterDir` if no such ancestor exists; pass an explicit
-	 * `absDir` (e.g., `process.cwd() as ProjectDir`) to opt out.
+	 * `projectDir` to opt out (callers minting one outside `findEpicenterDir`
+	 * are responsible for the brand contract).
 	 */
-	absDir?: ProjectDir;
+	projectDir?: ProjectDir;
 	/**
 	 * Y.Doc clientID for this script. Defaults to `hashClientId(Bun.main)`
 	 * so two invocations of the same script reuse the same clientID and
@@ -51,7 +52,7 @@ export async function openZhongwen({
 	const doc = openZhongwenDoc({ clientID });
 
 	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, {
-		filePath: yjsPath(absDir, doc.ydoc.guid),
+		filePath: yjsPath(projectDir, doc.ydoc.guid),
 	});
 
 	const sync = attachSync(doc, {

@@ -1,7 +1,7 @@
 /**
  * Per-workspace data layout helpers.
  *
- * Three folders under `<absDir>/.epicenter/`, each named by what's inside:
+ * Three folders under `<projectDir>/.epicenter/`, each named by what's inside:
  *
  *   yjs/<id>.db     Yjs CRDT update log (durability; replayed by Yjs)
  *   sqlite/<id>.db  Queryable SQL surface (open with `sqlite3`, FTS5)
@@ -23,13 +23,13 @@ import { join } from 'node:path';
 /**
  * Path to a workspace's Yjs CRDT update log.
  *
- * Convention: `<absDir>/.epicenter/yjs/<workspaceId>.db`. This file is the
+ * Convention: `<projectDir>/.epicenter/yjs/<workspaceId>.db`. This file is the
  * source of truth: every `updateV2` event lands here as a row, and the
  * file is replayed at startup to reconstruct the Y.Doc. SQLite is the
  * implementation detail; you never query this file with `sqlite3`. For
  * the queryable surface, see `sqlitePath`.
  *
- * `absDir` is the project root (where `epicenter.config.ts` lives);
+ * `projectDir` is the project root (where `epicenter.config.ts` lives);
  * `workspaceId` is `ws.ydoc.guid`.
  *
  * @example
@@ -38,14 +38,14 @@ import { join } from 'node:path';
  * // → '/Users/braden/Code/vault/.epicenter/yjs/epicenter.fuji.db'
  * ```
  */
-export function yjsPath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'yjs', `${workspaceId}.db`);
+export function yjsPath(projectDir: string, workspaceId: string): string {
+	return join(projectDir, '.epicenter', 'yjs', `${workspaceId}.db`);
 }
 
 /**
  * Path to a workspace's SQLite mirror file (the queryable SQL surface).
  *
- * Convention: `<absDir>/.epicenter/sqlite/<workspaceId>.db`. The daemon's
+ * Convention: `<projectDir>/.epicenter/sqlite/<workspaceId>.db`. The daemon's
  * `attachSqliteMaterializer` writes this file (in WAL journal mode); script
  * peers open the same path read-only via `attachSqliteMirror`.
  *
@@ -61,14 +61,14 @@ export function yjsPath(absDir: string, workspaceId: string): string {
  * // → '/Users/braden/Code/vault/.epicenter/sqlite/epicenter.fuji.db'
  * ```
  */
-export function sqlitePath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'sqlite', `${workspaceId}.db`);
+export function sqlitePath(projectDir: string, workspaceId: string): string {
+	return join(projectDir, '.epicenter', 'sqlite', `${workspaceId}.db`);
 }
 
 /**
  * Root directory for a workspace's markdown materializer tree.
  *
- * Convention: `<absDir>/.epicenter/md/<workspaceId>/`. The daemon's
+ * Convention: `<projectDir>/.epicenter/md/<workspaceId>/`. The daemon's
  * `attachMarkdownMaterializer` writes per-table subdirectories of `.md`
  * files under this root; script peers walk the same tree read-only via
  * `attachMarkdownMirror`.
@@ -79,6 +79,6 @@ export function sqlitePath(absDir: string, workspaceId: string): string {
  * // → '/Users/braden/Code/vault/.epicenter/md/epicenter.fuji'
  * ```
  */
-export function markdownPath(absDir: string, workspaceId: string): string {
-	return join(absDir, '.epicenter', 'md', workspaceId);
+export function markdownPath(projectDir: string, workspaceId: string): string {
+	return join(projectDir, '.epicenter', 'md', workspaceId);
 }

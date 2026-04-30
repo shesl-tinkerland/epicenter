@@ -7,7 +7,7 @@
  * file (mkdir + WAL pragma) at construction and closes it on `ydoc.destroy()`.
  *
  * Pass `filePath: ':memory:'` for tests; otherwise pass a real on-disk path
- * (typically `sqlitePath(absDir, ydoc.guid)`). bun:sqlite is the only driver.
+ * (typically `sqlitePath(projectDir, ydoc.guid)`). bun:sqlite is the only driver.
  *
  * @module
  */
@@ -43,14 +43,18 @@ export const SqliteMaterializerError = defineErrors({
 		cause,
 	}),
 	/**
-	 * Setting `PRAGMA journal_mode = WAL` failed. Non-fatal: `:memory:` and
-	 * some test setups do not honor the pragma. The materializer proceeds
-	 * with the driver default. Production daemons should always run on a
-	 * real on-disk file where WAL is supported, since peer-side
-	 * `attachSqliteMirror` relies on WAL for concurrent reads.
+	 * Concurrency-related PRAGMA setup failed (WAL mode, synchronous, or
+	 * busy_timeout). Non-fatal: the materializer proceeds with driver
+	 * defaults. Production daemons should always run on a real on-disk
+	 * file where these are honored, since peer-side `attachSqliteMirror`
+	 * relies on WAL for concurrent reads.
 	 */
-	WalPragmaFailed: ({ cause }: { cause: unknown }) => ({
-		message: `[attachSqliteMaterializer] Failed to enable WAL journal mode: ${extractErrorMessage(cause)}`,
+	PragmaSetupFailed: ({
+		pragma,
+		cause,
+	}: { pragma: string; cause: unknown }) => ({
+		message: `[attachSqliteMaterializer] Failed to set ${pragma}: ${extractErrorMessage(cause)}`,
+		pragma,
 		cause,
 	}),
 	/** An FTS5 MATCH query raised inside the mirror database. */
@@ -98,7 +102,7 @@ type RegisteredTable = {
  * const tables = attachTables(ydoc, myTableDefs);
  *
  * const sqlite = attachSqliteMaterializer(ydoc, {
- *   filePath: sqlitePath(absDir, ydoc.guid),
+ *   filePath: sqlitePath(projectDir, ydoc.guid),
  *   waitFor: persistence.whenLoaded,
  * })
  *   .table(tables.posts, { fts: ['title', 'body'] })
@@ -148,6 +152,11 @@ export function attachSqliteMaterializer(
 
 	// ── SQL primitives ───────────────────────────────────────────
 
+	// `db.query()` caches the compiled prepared statement on the Database
+	// keyed by SQL text, so re-issuing the same INSERT/DELETE inside a tight
+	// flush loop reuses the cached bytecode. `db.prepare()` would compile
+	// fresh each call.
+
 	function insertRow(tableName: string, row: BaseRow) {
 		const config = registered.get(tableName)?.config;
 		const serialize = config?.serialize ?? serializeValue;
@@ -156,17 +165,15 @@ export function attachSqliteMaterializer(
 		const values = keys.map((key) => serialize(row[key]));
 		const columns = keys.map(quoteIdentifier).join(', ');
 
-		const stmt = db.prepare(
+		db.query(
 			`INSERT OR REPLACE INTO ${quoteIdentifier(tableName)} (${columns}) VALUES (${placeholders})`,
-		);
-		stmt.run(...(values as never[]));
+		).run(...(values as never[]));
 	}
 
 	function deleteRow(tableName: string, id: string) {
-		const stmt = db.prepare(
+		db.query(
 			`DELETE FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier('id')} = ?`,
-		);
-		stmt.run(id);
+		).run(id);
 	}
 
 	function fullLoadTable(tableName: string, table: AnyTable) {
@@ -178,7 +185,7 @@ export function attachSqliteMaterializer(
 		const keys = Object.keys(rows[0]!);
 		const placeholders = keys.map(() => '?').join(', ');
 		const columns = keys.map(quoteIdentifier).join(', ');
-		const stmt = db.prepare(
+		const stmt = db.query(
 			`INSERT OR REPLACE INTO ${quoteIdentifier(tableName)} (${columns}) VALUES (${placeholders})`,
 		);
 
@@ -217,15 +224,11 @@ export function attachSqliteMaterializer(
 			});
 	}
 
-	function flushPendingSync() {
-		if (isDisposed) return;
-		if (pendingSync.size === 0) return;
-
-		const currentPending = pendingSync;
-		pendingSync = new Map<string, Set<string>>();
-
-		db.run('BEGIN');
-		try {
+	// One Yjs transact = one SQL transaction. `db.transaction()` auto-begins,
+	// auto-commits on return, and auto-rolls-back on throw, replacing a
+	// manual BEGIN/COMMIT/ROLLBACK block with no recovery branch needed.
+	const flushTx = db.transaction(
+		(currentPending: Map<string, Set<string>>) => {
 			for (const [tableName, ids] of currentPending) {
 				const entry = registered.get(tableName);
 				if (entry === undefined) continue;
@@ -240,16 +243,17 @@ export function attachSqliteMaterializer(
 					insertRow(tableName, row);
 				}
 			}
-			db.run('COMMIT');
-		} catch (error: unknown) {
-			try {
-				db.run('ROLLBACK');
-			} catch {
-				// Best-effort: if ROLLBACK itself fails (e.g. txn already aborted),
-				// surface the original cause, not the rollback noise.
-			}
-			throw error;
-		}
+		},
+	);
+
+	function flushPendingSync() {
+		if (isDisposed) return;
+		if (pendingSync.size === 0) return;
+
+		const currentPending = pendingSync;
+		pendingSync = new Map<string, Set<string>>();
+
+		flushTx(currentPending);
 	}
 
 	// ── Query / mutation surface ─────────────────────────────────
@@ -269,15 +273,28 @@ export function attachSqliteMaterializer(
 	function count(tableName: string): number {
 		if (isDisposed) return 0;
 		try {
-			const stmt = db.prepare(
-				`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
-			);
-			const row = stmt.get() as Record<string, unknown> | null;
+			const row = db
+				.query(
+					`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
+				)
+				.get() as Record<string, unknown> | null;
 			return Number(row?.count ?? 0);
 		} catch {
 			return 0;
 		}
 	}
+
+	const rebuildOneTx = db.transaction((name: string, table: AnyTable) => {
+		db.run(`DELETE FROM ${quoteIdentifier(name)}`);
+		fullLoadTable(name, table);
+	});
+
+	const rebuildAllTx = db.transaction(() => {
+		for (const [name] of registered)
+			db.run(`DELETE FROM ${quoteIdentifier(name)}`);
+		for (const [name, entry] of registered)
+			fullLoadTable(name, entry.table);
+	});
 
 	function rebuild(tableName?: string): void {
 		if (isDisposed) return;
@@ -289,29 +306,11 @@ export function attachSqliteMaterializer(
 					`Cannot rebuild "${tableName}" — not in the materialized table set.`,
 				);
 			}
-			db.run('BEGIN');
-			try {
-				db.run(`DELETE FROM ${quoteIdentifier(tableName)}`);
-				fullLoadTable(tableName, entry.table);
-				db.run('COMMIT');
-			} catch (error: unknown) {
-				db.run('ROLLBACK');
-				throw error;
-			}
+			rebuildOneTx(tableName, entry.table);
 			return;
 		}
 
-		db.run('BEGIN');
-		try {
-			for (const [name] of registered)
-				db.run(`DELETE FROM ${quoteIdentifier(name)}`);
-			for (const [name, entry] of registered)
-				fullLoadTable(name, entry.table);
-			db.run('COMMIT');
-		} catch (error: unknown) {
-			db.run('ROLLBACK');
-			throw error;
-		}
+		rebuildAllTx();
 	}
 
 	// ── Disposal ────────────────────────────────────────────────
@@ -345,17 +344,12 @@ export function attachSqliteMaterializer(
 		isRegistrationOpen = false;
 		if (isDisposed) return;
 
-		// Enable WAL so the script-side `attachSqliteMirror` can open the
-		// same file `{ readonly: true }` and run concurrent reads against
-		// snapshot pages while the daemon writes. Sequenced BEFORE DDL so
-		// the journal mode is set on the file header before any CREATE TABLE
-		// touches it. Failure is logged (`:memory:` always rejects) and the
-		// materializer proceeds with the driver default.
-		const walResult = trySync({
-			try: () => db.run('PRAGMA journal_mode = WAL'),
-			catch: (cause) => SqliteMaterializerError.WalPragmaFailed({ cause }),
-		});
-		if (walResult.error !== null) log.warn(walResult.error);
+		// Concurrency PRAGMAs for the daemon-as-sole-writer + many-readonly-readers
+		// design. Sequenced BEFORE DDL so the journal mode is set on the file
+		// header before any CREATE TABLE touches it. Skipped for `:memory:`
+		// where `journal_mode = WAL` is not honored by SQLite (it returns the
+		// existing `memory` mode); the companion pragmas are no-ops there too.
+		if (filePath !== ':memory:') applyWriterPragmas(db, log);
 		if (isDisposed) return;
 
 		for (const [tableName, entry] of registered) {
@@ -370,15 +364,11 @@ export function attachSqliteMaterializer(
 
 		if (isDisposed) return;
 
-		db.run('BEGIN');
-		try {
+		const initialFullLoadTx = db.transaction(() => {
 			for (const [tableName, entry] of registered)
 				fullLoadTable(tableName, entry.table);
-			db.run('COMMIT');
-		} catch (error: unknown) {
-			db.run('ROLLBACK');
-			throw error;
-		}
+		});
+		initialFullLoadTx();
 
 		if (isDisposed) return;
 
@@ -463,6 +453,68 @@ export function attachSqliteMaterializer(
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE-LEVEL HELPERS
 // ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Apply the standard concurrency PRAGMAs for the writer side of a
+ * many-readers + one-writer SQLite setup:
+ *
+ *   journal_mode = WAL    enables MVCC snapshot reads while we write.
+ *   synchronous = NORMAL  the canonical durability tradeoff under WAL.
+ *   busy_timeout = 5000   keeps writes patient when a reader holds a
+ *                         snapshot during a checkpoint, instead of
+ *                         surfacing SQLITE_BUSY to callers.
+ *
+ * `journal_mode = WAL` does not throw on silent fallback (e.g. on a
+ * filesystem that doesn't support WAL); it just returns the mode that
+ * actually got set. We read the result and warn if it isn't `'wal'`.
+ */
+function applyWriterPragmas(db: Database, log: Logger): void {
+	const walResult = trySync({
+		try: () =>
+			(
+				db
+					.query('PRAGMA journal_mode = WAL')
+					.get() as { journal_mode?: string } | null
+			)?.journal_mode,
+		catch: (cause) =>
+			SqliteMaterializerError.PragmaSetupFailed({
+				pragma: 'journal_mode = WAL',
+				cause,
+			}),
+	});
+	if (walResult.error !== null) {
+		log.warn(walResult.error);
+	} else if (walResult.data !== 'wal') {
+		log.warn(
+			SqliteMaterializerError.PragmaSetupFailed({
+				pragma: 'journal_mode = WAL',
+				cause: new Error(
+					`PRAGMA journal_mode returned '${walResult.data}', expected 'wal'`,
+				),
+			}),
+		);
+	}
+
+	const syncResult = trySync({
+		try: () => db.run('PRAGMA synchronous = NORMAL'),
+		catch: (cause) =>
+			SqliteMaterializerError.PragmaSetupFailed({
+				pragma: 'synchronous = NORMAL',
+				cause,
+			}),
+	});
+	if (syncResult.error !== null) log.warn(syncResult.error);
+
+	const busyResult = trySync({
+		try: () => db.run('PRAGMA busy_timeout = 5000'),
+		catch: (cause) =>
+			SqliteMaterializerError.PragmaSetupFailed({
+				pragma: 'busy_timeout = 5000',
+				cause,
+			}),
+	});
+	if (busyResult.error !== null) log.warn(busyResult.error);
+}
 
 function tableDefinitionToJsonSchema(
 	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas

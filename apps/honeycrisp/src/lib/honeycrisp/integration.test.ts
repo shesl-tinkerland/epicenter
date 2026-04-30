@@ -3,7 +3,7 @@
  *
  * Boots the daemon-side factory in-process, mutates `tables.notes`, lets
  * persistence flush via `[Symbol.dispose]()`, then opens the script-side
- * factory against the same `absDir`. Pins the on-disk contract: a
+ * factory against the same `projectDir`. Pins the on-disk contract: a
  * sole-writer daemon plus many readonly script peers, sharing a SQLite WAL
  * persistence file.
  */
@@ -42,10 +42,10 @@ describe('daemon -> script handoff via persistence file', () => {
 		{
 			using daemon = openHoneycrispDaemon({
 				getToken: () => 'fake-token',
-				absDir: workdir,
+				projectDir: workdir,
 				webSocketImpl: NoopWebSocket,
 			});
-			await daemon.persistence.whenLoaded;
+			await daemon.whenReady;
 
 			const now = DateTimeString.now();
 			const seed: { id: NoteId; title: string }[] = [
@@ -70,7 +70,7 @@ describe('daemon -> script handoff via persistence file', () => {
 
 		using script = await openHoneycrispScript({
 			getToken: () => 'fake-token',
-			absDir: workdir,
+			projectDir: workdir,
 			webSocketImpl: NoopWebSocket,
 		});
 		const titles = script.tables.notes
