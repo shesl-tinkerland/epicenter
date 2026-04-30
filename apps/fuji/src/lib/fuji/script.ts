@@ -34,10 +34,11 @@ function resolveDir(): string {
 }
 
 export function openFuji({
-	authToken,
+	getToken,
 	absDir,
+	clientID = hashClientId(Bun.main),
 }: {
-	authToken: string | (() => string | null | Promise<string | null>);
+	getToken: () => string | null | Promise<string | null>;
 	/**
 	 * Project root. Defaults to the nearest ancestor of `process.cwd()` that
 	 * contains `epicenter.config.ts` or `.epicenter/`; falls back to
@@ -46,10 +47,17 @@ export function openFuji({
 	 * under cwd) and cold-sync from cloud.
 	 */
 	absDir?: string;
+	/**
+	 * Y.Doc clientID for this script. Defaults to `hashClientId(Bun.main)`
+	 * so two invocations of the same script reuse the same clientID and
+	 * their writes merge under Yjs causality. Override for tests, debugging,
+	 * or scripts that genuinely want a fresh peer identity per run.
+	 */
+	clientID?: number;
 }) {
 	const resolvedDir = absDir ?? resolveDir();
 
-	const doc = openFujiDoc({ clientID: hashClientId(Bun.main) });
+	const doc = openFujiDoc({ clientID });
 
 	const filePath = persistencePath(resolvedDir, doc.ydoc.guid);
 	const persistence = attachSqliteReadonlyPersistence(doc.ydoc, { filePath });
@@ -65,8 +73,7 @@ export function openFuji({
 	const sync = attachSync(doc, {
 		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: whenReady,
-		getToken:
-			typeof authToken === 'function' ? authToken : () => authToken,
+		getToken,
 	});
 
 	return {

@@ -28,11 +28,11 @@ import { openFuji as openFujiDoc } from './index.js';
 const SERVER_URL = 'https://api.epicenter.so';
 
 export function openFuji({
-	authToken,
+	getToken,
 	device,
 	absDir,
 }: {
-	authToken: string | (() => string | null | Promise<string | null>);
+	getToken: () => string | null | Promise<string | null>;
 	device?: DeviceDescriptor;
 	absDir: string;
 }) {
@@ -46,8 +46,7 @@ export function openFuji({
 		url: toWsUrl(`${SERVER_URL}/workspaces/${doc.ydoc.guid}`),
 		waitFor: persistence.whenLoaded,
 		device,
-		getToken:
-			typeof authToken === 'function' ? authToken : () => authToken,
+		getToken,
 	});
 
 	const mirrorFile = mirrorPathFor(absDir, doc.ydoc.guid);
