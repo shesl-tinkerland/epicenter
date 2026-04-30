@@ -6,7 +6,10 @@
 	"type": "module",
 	"exports": {
 		"./workspace": "./src/lib/workspace.ts",
-		"./openFuji": "./src/lib/fuji/index.ts"
+		"./openFuji": "./src/lib/fuji/index.ts",
+		"./browser": "./src/lib/fuji/browser.ts",
+		"./daemon": "./src/lib/fuji/daemon.ts",
+		"./script": "./src/lib/fuji/script.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -15,6 +18,7 @@
 		"build": "NODE_ENV=production vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
+		"test": "bun test ./src/lib/fuji",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
 	"devDependencies": {
