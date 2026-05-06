@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { cn } from '../utils.js';
 	import { RatingGroup, type RatingGroupRootProps } from 'bits-ui';
+	import { cn } from '../utils.js';
 
 	let {
 		value = $bindable(0),

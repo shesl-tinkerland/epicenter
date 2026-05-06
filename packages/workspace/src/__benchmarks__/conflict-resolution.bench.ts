@@ -13,8 +13,6 @@ import * as Y from 'yjs';
 import {
 	YKeyValue,
 	type YKeyValueEntry,
-} from '../document/y-keyvalue/index.js';
-import {
 	YKeyValueLww,
 	type YKeyValueLwwEntry,
 } from '../document/y-keyvalue/index.js';

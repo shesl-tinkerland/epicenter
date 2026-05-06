@@ -11,8 +11,7 @@
 import { unlinkSync } from 'node:fs';
 import { type } from 'arktype';
 import * as Y from 'yjs';
-import { attachTable } from '../../src/index.js';
-import { defineTable } from '../../src/index.js';
+import { attachTable, defineTable } from '../../src/index.js';
 import { formatBytes, measureTime } from './helpers.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -52,7 +51,7 @@ function generateId(index: number): string {
 
 async function main() {
 	const ydoc = new Y.Doc();
-	const tables = { events: attachTable(ydoc, "events", eventDefinition) };
+	const tables = { events: attachTable(ydoc, 'events', eventDefinition) };
 
 	console.log(`\n=== Static API Stress Test ===`);
 	console.log(`Events per cycle: ${EVENTS_PER_CYCLE.toLocaleString()}`);
@@ -136,7 +135,7 @@ async function main() {
 	// ── Bonus: what does a fresh doc from this snapshot look like? ──────
 	const ydoc2 = new Y.Doc();
 	Y.applyUpdate(ydoc2, finalUpdate);
-	const tables2 = { events: attachTable(ydoc2, "events", eventDefinition) };
+	const tables2 = { events: attachTable(ydoc2, 'events', eventDefinition) };
 	console.log(`\n=== Snapshot Verification ===`);
 	console.log(`Rows after loading snapshot: ${tables2.events.count()}`);
 

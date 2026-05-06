@@ -8,10 +8,7 @@
  */
 
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import {
-	PeerAddressError,
-	RpcError,
-} from '@epicenter/workspace';
+import { PeerAddressError, RpcError } from '@epicenter/workspace';
 import type { RunSyncStatus } from '@epicenter/workspace/node';
 import type { AwarenessState } from '../load-config';
 import { emitRemoteCallError } from './run';

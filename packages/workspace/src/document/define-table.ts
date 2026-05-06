@@ -29,11 +29,7 @@
  */
 
 import type { StandardSchemaV1 } from '@standard-schema/spec';
-import type {
-	BaseRow,
-	LastSchema,
-	TableDefinition,
-} from './attach-table.js';
+import type { BaseRow, LastSchema, TableDefinition } from './attach-table.js';
 import { createUnionSchema } from './schema-union.js';
 import type { CombinedStandardSchema } from './standard-schema.js';
 

@@ -15,8 +15,8 @@
 	import TextPreviewDialog from '$lib/components/copyable/TextPreviewDialog.svelte';
 	import { rpc } from '$lib/query';
 	import { transformationRuns } from '$lib/state/transformation-runs.svelte';
-	import type { TransformationRun } from '$lib/workspace';
 	import { viewTransition } from '$lib/utils/viewTransitions';
+	import type { TransformationRun } from '$lib/workspace';
 
 	let { runs }: { runs: TransformationRun[] } = $props();
 

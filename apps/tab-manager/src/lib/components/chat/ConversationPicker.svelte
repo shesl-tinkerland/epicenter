@@ -111,9 +111,7 @@
 											>{conv.title}</span
 										>
 										{#if conv.isLoading}
-											<Spinner
-												class="size-3 shrink-0 text-muted-foreground"
-											/>
+											<Spinner class="size-3 shrink-0 text-muted-foreground" />
 										{/if}
 									</span>
 									<span class="flex shrink-0 items-center gap-1">

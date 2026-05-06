@@ -1,8 +1,4 @@
-import type {
-	InferKvValue,
-	KvDefinitions,
-	Kv,
-} from '@epicenter/workspace';
+import type { InferKvValue, Kv, KvDefinitions } from '@epicenter/workspace';
 import { createSubscriber } from 'svelte/reactivity';
 
 /**
@@ -33,10 +29,7 @@ import { createSubscriber } from 'svelte/reactivity';
 export function fromKv<
 	TDefs extends KvDefinitions,
 	K extends keyof TDefs & string,
->(
-	kv: Kv<TDefs>,
-	key: K,
-): { current: InferKvValue<TDefs[K]> } {
+>(kv: Kv<TDefs>, key: K): { current: InferKvValue<TDefs[K]> } {
 	const subscribe = createSubscriber((update) => {
 		return kv.observe(key, update);
 	});

@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import {
-	attachRichText,
-	xmlFragmentToPlaintext,
-} from './attach-rich-text.js';
+import { attachRichText, xmlFragmentToPlaintext } from './attach-rich-text.js';
 
 /** Helper: build a paragraph XmlElement with text content (standalone, for insertion). */
 function makeParagraph(content: string): Y.XmlElement {

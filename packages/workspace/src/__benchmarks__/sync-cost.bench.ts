@@ -33,7 +33,7 @@ describe('sync delta size', () => {
 		const docA = new Y.Doc();
 		const docB = new Y.Doc();
 
-		const tablesA = { posts: attachTable(docA, "posts", postDefinition) };
+		const tablesA = { posts: attachTable(docA, 'posts', postDefinition) };
 
 		// Shared baseline: 100 rows
 		for (let i = 0; i < 100; i++) {
@@ -75,8 +75,8 @@ describe('sync delta size', () => {
 		const docA = new Y.Doc();
 		const docB = new Y.Doc();
 
-		const tablesA = { posts: attachTable(docA, "posts", postDefinition) };
-		const tablesB = { posts: attachTable(docB, "posts", postDefinition) };
+		const tablesA = { posts: attachTable(docA, 'posts', postDefinition) };
+		const tablesB = { posts: attachTable(docB, 'posts', postDefinition) };
 
 		// Shared baseline: 100 rows
 		for (let i = 0; i < 100; i++) {
@@ -125,8 +125,8 @@ describe('sync delta size', () => {
 		const docA = new Y.Doc();
 		const docB = new Y.Doc();
 
-		const tablesA = { posts: attachTable(docA, "posts", postDefinition) };
-		const tablesB = { posts: attachTable(docB, "posts", postDefinition) };
+		const tablesA = { posts: attachTable(docA, 'posts', postDefinition) };
+		const tablesB = { posts: attachTable(docB, 'posts', postDefinition) };
 
 		// Shared baseline
 		for (let i = 0; i < 100; i++) {
@@ -184,7 +184,7 @@ describe('merge time at scale', () => {
 			const docA = new Y.Doc();
 			const docB = new Y.Doc();
 
-			const tablesA = { posts: attachTable(docA, "posts", postDefinition) };
+			const tablesA = { posts: attachTable(docA, 'posts', postDefinition) };
 
 			// Baseline
 			for (let i = 0; i < 1_000; i++) {

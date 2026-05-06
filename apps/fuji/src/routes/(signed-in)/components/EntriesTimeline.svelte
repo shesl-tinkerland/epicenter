@@ -15,9 +15,9 @@
 	import { format, isToday, isYesterday } from 'date-fns';
 	import { VList } from 'virtua/svelte';
 	import { goto } from '$app/navigation';
+	import type { Entry } from '../fuji/workspace';
 	import { getEntriesState, matchesEntrySearch } from '../state/entries.svelte';
 	import { viewState } from '../state/view.svelte';
-	import type { Entry } from '../fuji/workspace';
 
 	let { entries, title }: { entries: Entry[]; title?: string } = $props();
 	const entriesState = getEntriesState();

@@ -20,8 +20,8 @@
  * function returns; no `whenLoaded` field.
  */
 
-import { existsSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
+import { existsSync } from 'node:fs';
 import * as Y from 'yjs';
 
 export type YjsLogReaderAttachment = {

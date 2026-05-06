@@ -9,8 +9,8 @@
  */
 
 import { Ok, tryAsync, trySync } from 'wellcrafted/result';
-import { whispering } from '$lib/whispering/client';
 import { deviceConfig } from '$lib/state/device-config.svelte';
+import { whispering } from '$lib/whispering/client';
 import { whisperingKv } from '$lib/workspace';
 
 // ── Migration state ──────────────────────────────────────────────────────────
@@ -79,10 +79,7 @@ export async function migrateOldSettings(): Promise<void> {
 	const { error: readyError } = await tryAsync({
 		try: () => whispering.whenReady,
 		catch: (err) => {
-			console.warn(
-				'[settings-migration] whenReady failed, aborting:',
-				err,
-			);
+			console.warn('[settings-migration] whenReady failed, aborting:', err);
 			return Ok(undefined);
 		},
 	});

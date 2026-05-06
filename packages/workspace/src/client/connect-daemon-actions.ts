@@ -47,7 +47,9 @@ import { findEpicenterDir } from './find-epicenter-dir.js';
  * Start one with `epicenter up`. There is no auto-spawn: explicit lifecycle
  * is the contract.
  */
-export async function connectDaemonActions<TActions extends Record<string, unknown>>({
+export async function connectDaemonActions<
+	TActions extends Record<string, unknown>,
+>({
 	route,
 	projectDir = findEpicenterDir(),
 }: {

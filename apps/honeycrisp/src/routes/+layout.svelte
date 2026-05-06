@@ -1,10 +1,10 @@
 <script lang="ts">
+	import { PageSpinner } from '@epicenter/svelte/page-spinner';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { Toaster } from '@epicenter/ui/sonner';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import { ModeWatcher } from 'mode-watcher';
-	import { PageSpinner } from '@epicenter/svelte/page-spinner';
 	import { auth } from '$lib/auth';
 	import { queryClient } from '$lib/query/client';
 	import '@epicenter/ui/app.css';

@@ -2,7 +2,6 @@
 	import { Input } from '@epicenter/ui/input';
 	import * as Table from '@epicenter/ui/table';
 	import Search from '@lucide/svelte/icons/search';
-	import { whisperingKv } from '$lib/workspace';
 	import { commands } from '$lib/commands';
 	import { rpc } from '$lib/query';
 	import {
@@ -10,6 +9,7 @@
 		deviceConfig,
 	} from '$lib/state/device-config.svelte';
 	import { createPressedKeys } from '$lib/utils/createPressedKeys.svelte';
+	import { whisperingKv } from '$lib/workspace';
 	import GlobalKeyboardShortcutRecorder from './GlobalKeyboardShortcutRecorder.svelte';
 	import LocalKeyboardShortcutRecorder from './LocalKeyboardShortcutRecorder.svelte';
 
@@ -20,10 +20,7 @@
 	/** Look up the definition default for a shortcut key from the correct store. */
 	function getDefaultShortcut(commandId: string): string | null {
 		if (type === 'local') {
-			const defs = whisperingKv as Record<
-				string,
-				{ defaultValue: unknown }
-			>;
+			const defs = whisperingKv as Record<string, { defaultValue: unknown }>;
 			return (
 				(defs[`shortcut.${commandId}`]?.defaultValue as string | null) ?? null
 			);

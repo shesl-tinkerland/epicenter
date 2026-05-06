@@ -24,11 +24,11 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '../shared/actions.js';
 import { standardSchemaToJsonSchema } from '../shared/standard-schema.js';
-import { openWriterSqlite } from './sqlite-writer.js';
 import type { BaseRow, Table, TableDefinition } from './attach-table.js';
 import { generateDdl, quoteIdentifier } from './sqlite/ddl.js';
 import { ftsSearch } from './sqlite/fts.js';
 import type { SearchOptions, SearchResult } from './sqlite/types.js';
+import { openWriterSqlite } from './sqlite-writer.js';
 
 export { generateDdl } from './sqlite/ddl.js';
 export type { SearchOptions, SearchResult } from './sqlite/types.js';
@@ -210,24 +210,22 @@ export function attachSqlite(
 	// One Yjs transact = one SQL transaction. `db.transaction()` auto-begins,
 	// auto-commits on return, and auto-rolls-back on throw, replacing a
 	// manual BEGIN/COMMIT/ROLLBACK block with no recovery branch needed.
-	const flushTx = db.transaction(
-		(currentPending: Map<string, Set<string>>) => {
-			for (const [tableName, ids] of currentPending) {
-				const entry = registered.get(tableName);
-				if (entry === undefined) continue;
+	const flushTx = db.transaction((currentPending: Map<string, Set<string>>) => {
+		for (const [tableName, ids] of currentPending) {
+			const entry = registered.get(tableName);
+			if (entry === undefined) continue;
 
-				for (const id of ids) {
-					const { data: row, error } = entry.table.get(id);
-					if (error || row === null) {
-						// Invalid or missing → drop from mirror.
-						deleteRow(tableName, id);
-						continue;
-					}
-					insertRow(tableName, row);
+			for (const id of ids) {
+				const { data: row, error } = entry.table.get(id);
+				if (error || row === null) {
+					// Invalid or missing → drop from mirror.
+					deleteRow(tableName, id);
+					continue;
 				}
+				insertRow(tableName, row);
 			}
-		},
-	);
+		}
+	});
 
 	function flushPendingSync() {
 		if (isDisposed) return;
@@ -274,8 +272,7 @@ export function attachSqlite(
 	const rebuildAllTx = db.transaction(() => {
 		for (const [name] of registered)
 			db.run(`DELETE FROM ${quoteIdentifier(name)}`);
-		for (const [name, entry] of registered)
-			fullLoadTable(name, entry.table);
+		for (const [name, entry] of registered) fullLoadTable(name, entry.table);
 	});
 
 	function rebuild(tableName?: string): void {

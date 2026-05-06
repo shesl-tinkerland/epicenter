@@ -25,10 +25,7 @@
 import { Database } from 'bun:sqlite';
 import { quoteIdentifier } from './sqlite/ddl.js';
 import { ftsSearch } from './sqlite/fts.js';
-import type {
-	SearchOptions,
-	SearchResult,
-} from './sqlite/types.js';
+import type { SearchOptions, SearchResult } from './sqlite/types.js';
 
 /**
  * Options for {@link attachSqliteReader}.
@@ -136,4 +133,3 @@ export function attachSqliteReader({
 		[Symbol.dispose]: dispose,
 	};
 }
-
