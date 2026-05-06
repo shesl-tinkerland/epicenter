@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fromDisposableCache } from '@epicenter/svelte';
+	import { useCacheHandle } from '@epicenter/svelte';
 	import { Loading } from '@epicenter/ui/loading';
 	import HoneycripEditor from '$lib/editor/Editor.svelte';
 	import { getSignedInSession } from '$lib/session.svelte';
@@ -9,7 +9,7 @@
 
 	let { noteId }: { noteId: string } = $props();
 
-	const doc = fromDisposableCache(signedIn.honeycrisp.noteBodyDocs, () => noteId);
+	const doc = useCacheHandle(signedIn.honeycrisp.noteBodyDocs, () => noteId);
 </script>
 
 {#await doc.current.idb.whenLoaded}
