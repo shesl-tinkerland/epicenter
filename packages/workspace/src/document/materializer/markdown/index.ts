@@ -1,8 +1,8 @@
 export { assembleMarkdown, type SerializeResult } from './markdown.js';
 export {
 	attachMarkdownMaterializer,
-	MaterializerPushError,
 	type MarkdownShape,
+	MaterializerPushError,
 	type PushEvent,
 	type PushResult,
 } from './materializer.js';

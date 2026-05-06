@@ -16,11 +16,7 @@ import type { BetterAuthOptions } from 'better-auth';
 import { createAuthClient, InferPlugin } from 'better-auth/client';
 import { deviceAuthorizationClient } from 'better-auth/client/plugins';
 import type { customSession } from 'better-auth/plugins';
-import {
-	createLogger,
-	memorySink,
-	type Logger,
-} from 'wellcrafted/logger';
+import { createLogger, type Logger, memorySink } from 'wellcrafted/logger';
 import type { BearerSession } from '../auth-types.js';
 import type { BetterAuthSessionResponse } from '../contracts/auth-session.js';
 import {
@@ -32,8 +28,8 @@ import {
 } from './machine-auth.js';
 import {
 	loadMachineSession,
-	saveMachineSession,
 	type MachineAuthStorageError,
+	saveMachineSession,
 } from './machine-session-store.js';
 
 type Expect<TValue extends true> = TValue;
@@ -300,7 +296,9 @@ describe('machine auth free functions', () => {
 
 	test('logout signs out and clears the stored session', async () => {
 		const backend = makeMemoryKeychainBackend();
-		await saveMachineSession(makeSession({ token: 'logout-token' }), { backend });
+		await saveMachineSession(makeSession({ token: 'logout-token' }), {
+			backend,
+		});
 		const seenTokens: string[] = [];
 		const fetchImpl = (async (_input, init) => {
 			seenTokens.push(new Headers(init?.headers).get('authorization') ?? '');

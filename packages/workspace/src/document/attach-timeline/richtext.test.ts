@@ -1,6 +1,6 @@
-import { xmlFragmentToPlaintext } from '../attach-rich-text.js';
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { xmlFragmentToPlaintext } from '../attach-rich-text.js';
 import { populateFragmentFromText } from './richtext.js';
 import { attachTimeline } from './timeline.js';
 

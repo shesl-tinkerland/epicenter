@@ -9,11 +9,11 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
+import type { AuthIdentity, AuthUser, BearerSession } from './auth-types.ts';
 import {
 	type BetterAuthSessionResponse,
 	bearerSessionFromBetterAuthSessionResponse,
 } from './contracts/auth-session.ts';
-import type { AuthIdentity, AuthUser, BearerSession } from './auth-types.ts';
 
 export const AuthError = defineErrors({
 	InvalidCredentials: () => ({

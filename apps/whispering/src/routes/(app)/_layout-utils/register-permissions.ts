@@ -73,7 +73,11 @@ export function registerMicrophonePermission() {
 						const { error: requestError } =
 							await desktopServices.permissions.microphone.request();
 
-						if (requestError) return toastOnError(requestError, 'Failed to request microphone permission');
+						if (requestError)
+							return toastOnError(
+								requestError,
+								'Failed to request microphone permission',
+							);
 						// Dismiss the toast after requesting
 						toast.dismiss(microphoneToastId);
 					},

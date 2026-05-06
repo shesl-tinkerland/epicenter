@@ -19,13 +19,7 @@ export const GroqError = defineErrors({
 	InvalidApiKeyFormat: () => ({
 		message: 'Groq API keys must start with "gsk_" or "xai-"',
 	}),
-	FileTooLarge: ({
-		sizeMb,
-		maxMb,
-	}: {
-		sizeMb: number;
-		maxMb: number;
-	}) => ({
+	FileTooLarge: ({ sizeMb, maxMb }: { sizeMb: number; maxMb: number }) => ({
 		message: `File size ${sizeMb.toFixed(1)}MB exceeds ${maxMb}MB limit`,
 		sizeMb,
 		maxMb,

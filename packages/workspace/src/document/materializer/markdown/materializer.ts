@@ -6,10 +6,10 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { defineMutation } from '../../../shared/actions.js';
-import { createLogger, type Logger } from 'wellcrafted/logger';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { Kv } from '../../attach-kv.js';
 import {
@@ -165,7 +165,9 @@ const defaultFromMarkdown = (parsed: MarkdownShape): BaseRow =>
  * Default KV serializer: pretty-printed JSON in `kv.json`. Used whenever a
  * registered kv's `config.serialize` isn't provided.
  */
-const defaultKvSerialize = (data: Record<string, unknown>): SerializeResult => ({
+const defaultKvSerialize = (
+	data: Record<string, unknown>,
+): SerializeResult => ({
 	filename: 'kv.json',
 	content: JSON.stringify(data, null, 2),
 });
@@ -273,7 +275,8 @@ export function attachMarkdownMaterializer(
 	 */
 	let isRegistrationOpen = true;
 
-	const resolveDir = async () => (typeof dir === 'function' ? await dir() : dir);
+	const resolveDir = async () =>
+		typeof dir === 'function' ? await dir() : dir;
 
 	// ── Per-table materialization ───────────────────────────────
 
@@ -515,7 +518,10 @@ export function attachMarkdownMaterializer(
 
 			await mkdir(directory, { recursive: true });
 			for (const row of entry.table.getAllValid()) {
-				const { filename, content } = await rowToMarkdownFile(row, entry.config);
+				const { filename, content } = await rowToMarkdownFile(
+					row,
+					entry.config,
+				);
 				await writeMarkdownFile(directory, filename, content);
 				written++;
 			}

@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import {
+	BEARER_SUBPROTOCOL_PREFIX,
 	decodeRpcPayload,
 	encodeAwareness,
 	encodeAwarenessStates,
@@ -10,13 +11,12 @@ import {
 	encodeSyncUpdate,
 	handleSyncPayload,
 	isRpcError,
-	BEARER_SUBPROTOCOL_PREFIX,
+	isTransportOrigin,
 	MAIN_SUBPROTOCOL,
 	MESSAGE_TYPE,
 	RpcError,
 	SYNC_MESSAGE_TYPE,
 	SYNC_ORIGIN,
-	isTransportOrigin,
 	type SyncMessageType,
 } from '@epicenter/sync';
 import * as decoding from 'lib0/decoding';

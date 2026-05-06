@@ -79,7 +79,10 @@ function setupRemoteOptions({
 
 	const initialPeers = Array.isArray(present)
 		? present
-		: Object.entries(present).map(([peerId, clientId]) => ({ peerId, clientId }));
+		: Object.entries(present).map(([peerId, clientId]) => ({
+				peerId,
+				clientId,
+			}));
 
 	const addPeer = (peerId: string, clientId: number) => {
 		const remoteDoc = new Y.Doc({ guid: peerId });

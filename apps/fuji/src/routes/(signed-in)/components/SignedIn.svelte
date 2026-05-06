@@ -57,9 +57,6 @@
 	});
 </script>
 
-<WorkspaceGate
-	pending={fuji.idb.whenLoaded}
-	onSignOut={() => auth.signOut()}
->
+<WorkspaceGate pending={fuji.idb.whenLoaded} onSignOut={() => auth.signOut()}>
 	{@render children?.()}
 </WorkspaceGate>

@@ -6,8 +6,11 @@
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import type { ToolCallPart as TanStackToolCallPart } from '@tanstack/ai-client';
-	import { type WorkspaceTools, workspaceAiTools } from '$lib/tab-manager/client';
 	import { toolTrustState } from '$lib/state/tool-trust.svelte';
+	import {
+		type WorkspaceTools,
+		workspaceAiTools,
+	} from '$lib/tab-manager/client';
 	import CollapsibleSection from '../CollapsibleSection.svelte';
 
 	let {

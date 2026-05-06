@@ -25,8 +25,8 @@
  */
 
 import { fromTable } from '@epicenter/svelte';
-import { tabManager } from '$lib/tab-manager/client';
 import type { BrowserTab } from '$lib/state/browser-state.svelte';
+import { tabManager } from '$lib/tab-manager/client';
 import type { SavedTab, SavedTabId } from '$lib/workspace';
 
 function createSavedTabState() {
@@ -34,8 +34,7 @@ function createSavedTabState() {
 
 	/** All saved tabs, sorted by most recently saved first. Cached via $derived. */
 	const tabs = $derived(
-		[...tabsMap.values()]
-			.sort((a, b) => b.savedAt - a.savedAt),
+		[...tabsMap.values()].sort((a, b) => b.savedAt - a.savedAt),
 	);
 
 	return {

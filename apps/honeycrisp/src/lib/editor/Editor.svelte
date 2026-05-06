@@ -389,9 +389,7 @@
 {#snippet groupItem(value: string, Icon: typeof BoldIcon, label: string)}
 	<Tooltip.Root>
 		<Tooltip.Trigger>
-			<ToggleGroup.Item {value}>
-				<Icon class="size-4" />
-			</ToggleGroup.Item>
+			<ToggleGroup.Item {value}> <Icon class="size-4" /> </ToggleGroup.Item>
 		</Tooltip.Trigger>
 		<Tooltip.Content>{label}</Tooltip.Content>
 	</Tooltip.Root>

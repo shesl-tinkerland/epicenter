@@ -14,7 +14,11 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Err, Ok, tryAsync } from 'wellcrafted/result';
-import { type DeviceId, generateBookmarkId, generateSavedTabId } from './definition';
+import {
+	type DeviceId,
+	generateBookmarkId,
+	generateSavedTabId,
+} from './definition';
 import type { Tables } from './tables';
 
 export const TabError = defineErrors({
@@ -119,8 +123,7 @@ export function createTabManagerActions({
 			}),
 			open: defineMutation({
 				title: 'Open Tab',
-				description:
-					'Open a new tab with the given URL on the current device.',
+				description: 'Open a new tab with the given URL on the current device.',
 				input: Type.Object({ url: Type.String() }),
 				handler: async ({ url }) =>
 					tryAsync({
@@ -263,7 +266,8 @@ export function createTabManagerActions({
 						tabIds.map((id) => browser.tabs.reload(id)),
 					);
 					return {
-						reloadedCount: results.filter((r) => r.status === 'fulfilled').length,
+						reloadedCount: results.filter((r) => r.status === 'fulfilled')
+							.length,
 					};
 				},
 			}),

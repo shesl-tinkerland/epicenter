@@ -28,9 +28,7 @@ let originalXdg: string | undefined;
 let runtimeRoot: string;
 let workDir: string;
 
-function makeRuntime(
-	actions: DaemonRuntime['actions'] = {},
-): DaemonRuntime {
+function makeRuntime(actions: DaemonRuntime['actions'] = {}): DaemonRuntime {
 	return {
 		actions,
 		async [Symbol.asyncDispose]() {

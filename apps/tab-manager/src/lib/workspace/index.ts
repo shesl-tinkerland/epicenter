@@ -1,3 +1,4 @@
+export { createTabManagerActions } from './actions';
 export {
 	type Bookmark,
 	BookmarkId,
@@ -13,7 +14,6 @@ export {
 	generateSavedTabId,
 	type SavedTab,
 	SavedTabId,
-	tabManagerTables,
 	type ToolTrust,
+	tabManagerTables,
 } from './definition';
-export { createTabManagerActions } from './actions';

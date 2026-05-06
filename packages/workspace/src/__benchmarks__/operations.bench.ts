@@ -8,17 +8,13 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import * as Y from 'yjs';
 import { type } from 'arktype';
-import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
-import { attachTable } from '../index.js';
-import { createKv } from '../document/internal.js';
+import * as Y from 'yjs';
 import { defineKv } from '../document/define-kv.js';
-import {
-	generateId,
-	measureTime,
-	postDefinition,
-} from './helpers.js';
+import { createKv } from '../document/internal.js';
+import { attachTable } from '../index.js';
+import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
+import { generateId, measureTime, postDefinition } from './helpers.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Table Operations
@@ -27,7 +23,7 @@ import {
 describe('table operations', () => {
 	test('insert 1,000 rows', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		const { durationMs } = measureTime(() => {
 			for (let i = 0; i < 1_000; i++) {
@@ -40,14 +36,16 @@ describe('table operations', () => {
 			}
 		});
 
-		console.log(`Insert 1,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(1_000 / (durationMs / 1_000))} ops/sec)`);
+		console.log(
+			`Insert 1,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(1_000 / (durationMs / 1_000))} ops/sec)`,
+		);
 		console.log(`Average per insert: ${(durationMs / 1_000).toFixed(4)}ms`);
 		expect(tables.posts.count()).toBe(1_000);
 	});
 
 	test('insert 10,000 rows', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		const { durationMs } = measureTime(() => {
 			for (let i = 0; i < 10_000; i++) {
@@ -60,14 +58,16 @@ describe('table operations', () => {
 			}
 		});
 
-		console.log(`Insert 10,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(10_000 / (durationMs / 1_000))} ops/sec)`);
+		console.log(
+			`Insert 10,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(10_000 / (durationMs / 1_000))} ops/sec)`,
+		);
 		console.log(`Average per insert: ${(durationMs / 10_000).toFixed(4)}ms`);
 		expect(tables.posts.count()).toBe(10_000);
 	});
 
 	test('get 10,000 rows by ID', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		for (let i = 0; i < 10_000; i++) {
 			tables.posts.set({
@@ -90,7 +90,7 @@ describe('table operations', () => {
 
 	test('getAll / getAllValid / filter with 10,000 rows', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		for (let i = 0; i < 10_000; i++) {
 			tables.posts.set({
@@ -116,7 +116,7 @@ describe('table operations', () => {
 
 	test('delete 1,000 rows', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		for (let i = 0; i < 1_000; i++) {
 			tables.posts.set({
@@ -140,7 +140,7 @@ describe('table operations', () => {
 
 	test('batch insert vs individual insert (1,000 rows)', () => {
 		const ydoc1 = new Y.Doc();
-		const tables1 = { posts: attachTable(ydoc1, "posts", postDefinition) };
+		const tables1 = { posts: attachTable(ydoc1, 'posts', postDefinition) };
 
 		const { durationMs: individualMs } = measureTime(() => {
 			for (let i = 0; i < 1_000; i++) {
@@ -154,7 +154,7 @@ describe('table operations', () => {
 		});
 
 		const ydoc2 = new Y.Doc();
-		const tables2 = { posts: attachTable(ydoc2, "posts", postDefinition) };
+		const tables2 = { posts: attachTable(ydoc2, 'posts', postDefinition) };
 
 		const { durationMs: batchMs } = measureTime(() => {
 			ydoc2.transact(() => {

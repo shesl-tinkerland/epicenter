@@ -7,8 +7,8 @@
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { auth } from '$lib/auth';
 	import FolderMenuItem from '../components/FolderMenuItem.svelte';
-	import { getHoneycrispState } from '../state';
 	import { getSignedIn } from '../signed-in';
+	import { getHoneycrispState } from '../state';
 
 	const signedIn = getSignedIn();
 	const { foldersState, notesState, viewState } = getHoneycrispState();

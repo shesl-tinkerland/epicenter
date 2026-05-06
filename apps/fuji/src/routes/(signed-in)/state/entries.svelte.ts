@@ -89,5 +89,4 @@ export function createEntriesState(fuji: Fuji) {
 }
 
 export type EntriesState = ReturnType<typeof createEntriesState>;
-export const [getEntriesState, setEntriesState] =
-	createContext<EntriesState>();
+export const [getEntriesState, setEntriesState] = createContext<EntriesState>();

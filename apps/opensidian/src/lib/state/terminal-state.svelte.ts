@@ -207,7 +207,6 @@ function createTerminalState() {
 		clear() {
 			history = [];
 		},
-
 	};
 }
 

@@ -28,7 +28,6 @@ describe('defineTable', () => {
 			});
 			expect(result).not.toHaveProperty('issues');
 		});
-
 	});
 
 	describe('variadic syntax', () => {
@@ -145,9 +144,14 @@ describe('defineTable', () => {
 			});
 
 			// v3 passes through unchanged
-			const latest = { id: '1', title: 'Test', views: 5, author: 'a', _v: 3 as const };
+			const latest = {
+				id: '1',
+				title: 'Test',
+				views: 5,
+				author: 'a',
+				_v: 3 as const,
+			};
 			expect(posts.migrate(latest)).toEqual(latest);
 		});
 	});
-
 });

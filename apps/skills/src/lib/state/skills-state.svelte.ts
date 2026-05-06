@@ -26,8 +26,7 @@ function createSkillsState() {
 	const referencesMap = fromTable(skillsWorkspace.tables.references);
 
 	const skills = $derived(
-		[...skillsMap.values()]
-			.sort((a, b) => a.name.localeCompare(b.name)),
+		[...skillsMap.values()].sort((a, b) => a.name.localeCompare(b.name)),
 	);
 
 	let selectedSkillId = $state<string | null>(null);

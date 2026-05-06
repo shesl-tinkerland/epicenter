@@ -30,7 +30,7 @@ describe('cold start: load from binary', () => {
 		test(`load ${count.toLocaleString()} small rows from binary`, () => {
 			// Build source doc
 			const sourceDoc = new Y.Doc();
-			const tables = { posts: attachTable(sourceDoc, "posts", postDefinition) };
+			const tables = { posts: attachTable(sourceDoc, 'posts', postDefinition) };
 			for (let i = 0; i < count; i++) {
 				tables.posts.set({
 					id: generateId(i),
@@ -55,7 +55,7 @@ describe('cold start: load from binary', () => {
 
 	test('load 1,000 notes with 500 chars each', () => {
 		const sourceDoc = new Y.Doc();
-		const tables = { notes: attachTable(sourceDoc, "notes", noteDefinition) };
+		const tables = { notes: attachTable(sourceDoc, 'notes', noteDefinition) };
 		const content = 'x'.repeat(400);
 		for (let i = 0; i < 1_000; i++) {
 			tables.notes.set({
@@ -82,7 +82,9 @@ describe('cold start: load from binary', () => {
 
 	test('load 5 heavy docs (50K chars each)', () => {
 		const sourceDoc = new Y.Doc();
-		const tables = { notes: attachTable(sourceDoc, "notes", heavyNoteDefinition) };
+		const tables = {
+			notes: attachTable(sourceDoc, 'notes', heavyNoteDefinition),
+		};
 		for (let i = 0; i < 5; i++) {
 			tables.notes.set(makeHeavyRow(`doc-${i}`, 50_000));
 		}
@@ -107,7 +109,7 @@ describe('snapshot encoding time', () => {
 	for (const count of [1_000, 10_000, 50_000]) {
 		test(`encode ${count.toLocaleString()} small rows to binary`, () => {
 			const ydoc = new Y.Doc();
-			const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+			const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 			for (let i = 0; i < count; i++) {
 				tables.posts.set({
 					id: generateId(i),
@@ -135,7 +137,7 @@ describe('snapshot encoding time', () => {
 describe('incremental update size', () => {
 	test('single row edit: delta vs full snapshot', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
+		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
 		// Insert 1000 rows
 		for (let i = 0; i < 1_000; i++) {
