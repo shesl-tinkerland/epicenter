@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid/non-secure';
 import { Ok, tryAsync } from 'wellcrafted/result';
-import { ToastServiceLive } from '$lib/services/toast';
 import { whispering } from '$lib/whispering/client';
+import { ToastServiceLive } from '$lib/services/toast';
 import {
 	type DbMigrationState,
 	getDatabaseMigrationState,
@@ -174,9 +174,10 @@ function createMigrationDialog() {
 			isSeeding = true;
 			logs = [];
 
-			const { createMigrationTestData, MOCK_RECORDING_COUNT } = await import(
-				'./migration-test-data'
-			);
+			const {
+				createMigrationTestData,
+				MOCK_RECORDING_COUNT,
+			} = await import('./migration-test-data');
 			const testData = createMigrationTestData();
 
 			await tryAsync({

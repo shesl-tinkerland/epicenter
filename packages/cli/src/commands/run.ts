@@ -24,8 +24,8 @@ import {
 } from '@epicenter/workspace';
 import {
 	type DaemonError,
-	type RunError as DaemonRunError,
 	getDaemon,
+	type RunError as DaemonRunError,
 	type RunRequest,
 	type RunSyncStatus,
 } from '@epicenter/workspace/node';
@@ -176,11 +176,7 @@ export function emitRemoteCallError(
 			emitMissError(cause.peerTarget, cause.sawPeers, cause.waitMs, syncStatus);
 			return;
 		case 'PeerLeft':
-			emitPeerLeftError(
-				cause.peerTarget,
-				cause.targetClientId,
-				cause.peerState,
-			);
+			emitPeerLeftError(cause.peerTarget, cause.targetClientId, cause.peerState);
 			return;
 		case 'ActionNotFound':
 		case 'Timeout':

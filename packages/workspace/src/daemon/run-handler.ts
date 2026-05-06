@@ -17,13 +17,13 @@
  */
 
 import { Ok } from 'wellcrafted/result';
-import type { SyncStatus } from '../document/attach-sync.js';
 import {
 	invokeAction,
 	resolveActionPath,
 	walkActions,
 } from '../shared/actions.js';
 import type { RunRequest } from './app.js';
+import type { SyncStatus } from '../document/attach-sync.js';
 import {
 	RunError,
 	type RunResponse,

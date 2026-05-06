@@ -34,3 +34,4 @@ export type AudioStoredInIndexedDB = {
 	id: string;
 	serializedAudio: SerializedAudio | undefined;
 };
+

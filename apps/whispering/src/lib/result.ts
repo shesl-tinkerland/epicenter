@@ -96,3 +96,4 @@ export const WhisperingWarningErr = (args: WhisperingErrorInput) =>
  * @template T - The type of the success value
  */
 export type WhisperingResult<T> = Ok<T> | Err<WhisperingError>;
+

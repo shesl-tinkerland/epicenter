@@ -17,7 +17,10 @@ import {
 } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
 
-import type { SyncError, SyncFailedReason } from '../document/attach-sync.js';
+import type {
+	SyncError,
+	SyncFailedReason,
+} from '../document/attach-sync.js';
 import type { RemoteCallError } from '../rpc/remote-actions.js';
 
 export type RunSyncStatus =

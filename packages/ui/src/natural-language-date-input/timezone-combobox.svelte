@@ -43,7 +43,9 @@
 	const selectedTimeZone = $derived(
 		timeZoneOptions.find((timeZoneOption) => timeZoneOption.timeZone === value),
 	);
-	const triggerLabel = $derived(selectedTimeZone?.label ?? 'Select timezone');
+	const triggerLabel = $derived(
+		selectedTimeZone?.label ?? 'Select timezone',
+	);
 </script>
 
 <Popover.Root bind:open={combobox.open}>

@@ -5,9 +5,9 @@
  * mode conversion, and snapshot restore.
  */
 
+import { xmlFragmentToPlaintext } from '../attach-rich-text.js';
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { xmlFragmentToPlaintext } from '../attach-rich-text.js';
 import { attachTimeline } from './timeline.js';
 
 function setup() {

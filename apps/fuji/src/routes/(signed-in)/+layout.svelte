@@ -15,6 +15,8 @@
 
 {#if auth.state.status === 'signed-in'}
 	{#key auth.state.identity.user.id}
-		<SignedIn> <FujiAppShell>{@render children?.()}</FujiAppShell> </SignedIn>
+		<SignedIn>
+			<FujiAppShell>{@render children?.()}</FujiAppShell>
+		</SignedIn>
 	{/key}
 {/if}

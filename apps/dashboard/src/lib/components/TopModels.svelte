@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { FEATURE_IDS } from '@epicenter/api/billing-plans';
 	import * as Card from '@epicenter/ui/card';
 	import * as Empty from '@epicenter/ui/empty';
 	import { Skeleton } from '@epicenter/ui/skeleton';
 	import * as Table from '@epicenter/ui/table';
 	import { createQuery } from '@tanstack/svelte-query';
+	import { FEATURE_IDS } from '@epicenter/api/billing-plans';
 	import { usageQueryOptions } from '$lib/query/billing';
 
 	const usage = createQuery(() =>

@@ -1,8 +1,8 @@
 import type { FileId, FileRow } from '@epicenter/filesystem';
 import { fromTable } from '@epicenter/svelte';
 import { toast } from '@epicenter/ui/sonner';
-import { SvelteSet } from 'svelte/reactivity';
 import { extractErrorMessage } from 'wellcrafted/error';
+import { SvelteSet } from 'svelte/reactivity';
 import { opensidian } from '$lib/opensidian/client';
 import { searchParams } from '$lib/search-params.svelte';
 

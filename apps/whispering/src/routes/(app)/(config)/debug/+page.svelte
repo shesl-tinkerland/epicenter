@@ -37,10 +37,7 @@
 
 	function createMetrics() {
 		const tableDefs = [
-			{
-				label: 'Recordings',
-				count: () => whispering.tables.recordings.count(),
-			},
+			{ label: 'Recordings', count: () => whispering.tables.recordings.count() },
 			{
 				label: 'Transformations',
 				count: () => whispering.tables.transformations.count(),

@@ -6,9 +6,9 @@
  */
 
 import {
-	type AwarenessAttachment,
 	defineMutation,
 	defineQuery,
+	type AwarenessAttachment,
 	type PeerAwarenessSchema,
 	type RemoteClient,
 	type SyncAttachment,

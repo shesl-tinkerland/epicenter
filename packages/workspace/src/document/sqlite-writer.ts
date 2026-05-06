@@ -21,9 +21,9 @@
  * pick up the change in lockstep.
  */
 
-import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { Database } from 'bun:sqlite';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -43,10 +43,7 @@ export const SqliteWriterError = defineErrors({
 	PragmaSetupFailed: ({
 		pragma,
 		cause,
-	}: {
-		pragma: string;
-		cause: unknown;
-	}) => ({
+	}: { pragma: string; cause: unknown }) => ({
 		message: `[sqlite-writer] PRAGMA ${pragma} failed: ${extractErrorMessage(cause)}`,
 		pragma,
 		cause,
@@ -100,9 +97,7 @@ export function openWriterSqlite({
 	if (walResult.error !== null) {
 		log.warn(walResult.error);
 	} else if (walResult.data !== 'wal') {
-		log.warn(
-			SqliteWriterError.WalSilentFallback({ actualMode: walResult.data }),
-		);
+		log.warn(SqliteWriterError.WalSilentFallback({ actualMode: walResult.data }));
 	}
 
 	const syncResult = trySync({

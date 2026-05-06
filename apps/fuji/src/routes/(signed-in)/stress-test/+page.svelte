@@ -5,9 +5,9 @@
 	import { DateTimeString, generateId } from '@epicenter/workspace';
 	import { toast } from 'svelte-sonner';
 	import * as Y from 'yjs';
+	import { getEntriesState } from '../state/entries.svelte';
 	import type { EntryId } from '../fuji/workspace';
 	import { getSignedIn } from '../signed-in';
-	import { getEntriesState } from '../state/entries.svelte';
 
 	// ─── Config ──────────────────────────────────────────────────────────────────
 	const signedIn = getSignedIn();
@@ -189,9 +189,7 @@
 			const filterTimeMs = performance.now() - filterStart;
 
 			// Y.Doc binary size
-			const ydocSizeBytes = Y.encodeStateAsUpdate(
-				signedIn.fuji.ydoc,
-			).byteLength;
+			const ydocSizeBytes = Y.encodeStateAsUpdate(signedIn.fuji.ydoc).byteLength;
 
 			results = {
 				insertTimeMs,

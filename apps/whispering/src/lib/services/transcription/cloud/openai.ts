@@ -19,7 +19,13 @@ export const OpenaiError = defineErrors({
 	InvalidApiKeyFormat: () => ({
 		message: 'OpenAI API keys must start with "sk-"',
 	}),
-	FileTooLarge: ({ sizeMb, maxMb }: { sizeMb: number; maxMb: number }) => ({
+	FileTooLarge: ({
+		sizeMb,
+		maxMb,
+	}: {
+		sizeMb: number;
+		maxMb: number;
+	}) => ({
 		message: `File size ${sizeMb.toFixed(1)}MB exceeds ${maxMb}MB limit`,
 		sizeMb,
 		maxMb,

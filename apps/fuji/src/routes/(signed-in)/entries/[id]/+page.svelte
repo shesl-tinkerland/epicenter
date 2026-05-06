@@ -3,8 +3,8 @@
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import { page } from '$app/state';
 	import EntryEditor from '../../components/EntryEditor.svelte';
-	import type { EntryId } from '../../fuji/workspace';
 	import { getEntriesState } from '../../state/entries.svelte';
+	import type { EntryId } from '../../fuji/workspace';
 
 	const entriesState = getEntriesState();
 	const entryId = $derived(page.params.id as EntryId);

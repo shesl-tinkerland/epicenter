@@ -54,7 +54,7 @@ describe('autosave scenario', () => {
 
 		// ── YKV ──
 		const ykvDoc = new Y.Doc();
-		const tables = { notes: attachTable(ykvDoc, 'notes', heavyNoteDefinition) };
+		const tables = { notes: attachTable(ykvDoc, "notes", heavyNoteDefinition) };
 		for (let i = 0; i < 5; i++) {
 			tables.notes.set(makeRow(`doc-${i}`, baseContent));
 		}
@@ -154,9 +154,8 @@ describe('all-day editing scenario', () => {
 
 		// ── YKV ──
 		const ykvDoc = new Y.Doc();
-		const tables = { notes: attachTable(ykvDoc, 'notes', heavyNoteDefinition) };
-		for (let i = 0; i < 5; i++)
-			tables.notes.set(makeRowAtRevision(`doc-${i}`, 0));
+		const tables = { notes: attachTable(ykvDoc, "notes", heavyNoteDefinition) };
+		for (let i = 0; i < 5; i++) tables.notes.set(makeRowAtRevision(`doc-${i}`, 0));
 		for (let s = 1; s <= totalSaves; s++) {
 			const docIdx = s % 3; // rotate across 3 active documents
 			tables.notes.set(makeRowAtRevision(`doc-${docIdx}`, s));
@@ -175,9 +174,7 @@ describe('all-day editing scenario', () => {
 		for (let s = 1; s <= totalSaves; s++) {
 			const docIdx = s % 3;
 			const row = fieldRoot.get(`doc-${docIdx}`) as Y.Map<unknown>;
-			for (const [k, v] of Object.entries(
-				makeRowAtRevision(`doc-${docIdx}`, s),
-			))
+			for (const [k, v] of Object.entries(makeRowAtRevision(`doc-${docIdx}`, s)))
 				row.set(k, v);
 		}
 		const fieldSize = Y.encodeStateAsUpdate(fieldDoc).byteLength;

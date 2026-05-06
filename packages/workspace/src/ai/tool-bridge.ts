@@ -138,7 +138,9 @@ export type ToolDefinition = {
  *   .find(d => d.name === 'tabs_close')?.title; // → 'Close Tabs'
  * ```
  */
-export function actionsToAiTools<T>(source: T): {
+export function actionsToAiTools<T>(
+	source: T,
+): {
 	tools: (AnyClientTool & { name: ActionNames<T> })[];
 	definitions: ToolDefinition[];
 } {

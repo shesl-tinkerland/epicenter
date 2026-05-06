@@ -15,8 +15,8 @@ import {
 	wipeOwnerLocalYjsData,
 } from '@epicenter/workspace';
 import * as Y from 'yjs';
-import { openHoneycrisp as openHoneycrispDoc } from './index';
 import type { NoteId } from './workspace';
+import { openHoneycrisp as openHoneycrispDoc } from './index';
 
 function noteBodyDocGuid({
 	workspaceId,

@@ -10,7 +10,8 @@ import { output } from './format-output.js';
 function captureStdout(fn: () => void): string {
 	const original = console.log;
 	const lines: string[] = [];
-	console.log = (...args: unknown[]) => lines.push(args.map(String).join(' '));
+	console.log = (...args: unknown[]) =>
+		lines.push(args.map(String).join(' '));
 	try {
 		fn();
 	} finally {

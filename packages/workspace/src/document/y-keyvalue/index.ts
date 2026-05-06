@@ -16,10 +16,12 @@ export {
 	type YKeyValueChangeHandler,
 	type YKeyValueEntry,
 } from './_reference/y-keyvalue.js';
+
+export { YKeyValueLww, type YKeyValueLwwEntry } from './y-keyvalue-lww.js';
+
 export type {
 	KvEntry,
 	KvStoreChange,
 	KvStoreChangeHandler,
 	ObservableKvStore,
 } from './observable-kv-store.js';
-export { YKeyValueLww, type YKeyValueLwwEntry } from './y-keyvalue-lww.js';

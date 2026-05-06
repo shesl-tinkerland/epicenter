@@ -18,6 +18,7 @@
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { partitionResults, tryAsync } from 'wellcrafted/result';
 	import { commandCallbacks } from '$lib/commands';
+	import { WhisperingErr } from '$lib/result';
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import {
 		CompressionSelector,
@@ -34,7 +35,6 @@
 	} from '$lib/constants/audio';
 	import { getShortcutDisplayLabel } from '$lib/constants/keyboard';
 	import { rpc } from '$lib/query';
-	import { WhisperingErr } from '$lib/result';
 	import { services } from '$lib/services';
 	import { desktopServices } from '$lib/services/desktop';
 	import { deviceConfig } from '$lib/state/device-config.svelte';

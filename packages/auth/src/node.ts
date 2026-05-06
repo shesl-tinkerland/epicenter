@@ -1,13 +1,13 @@
 export {
 	createMachineAuthClient,
+	MachineAuthRequestError,
 	DeviceTokenError,
 	loginWithDeviceCode,
-	logout,
-	MachineAuthRequestError,
 	status,
+	logout,
 } from './node/machine-auth.js';
 export {
 	loadMachineSession,
-	MachineAuthStorageError,
 	saveMachineSession,
+	MachineAuthStorageError,
 } from './node/machine-session-store.js';

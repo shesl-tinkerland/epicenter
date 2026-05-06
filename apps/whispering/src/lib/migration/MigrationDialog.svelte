@@ -6,8 +6,7 @@
 	import { migrationDialog } from './migration-dialog.svelte';
 	import { MOCK_RECORDING_COUNT } from './migration-test-data';
 
-	let { trigger }: { trigger?: Snippet<[{ props: Record<string, unknown> }]> } =
-		$props();
+	let { trigger }: { trigger?: Snippet<[{ props: Record<string, unknown> }]> } = $props();
 
 	let logsContainer = $state<HTMLDivElement | null>(null);
 
@@ -69,19 +68,15 @@
 					<div class="space-y-1">
 						<Field.Description>
 							Recordings: {r.recordings.migrated} migrated,
-							{r.recordings.skipped}
-							skipped, {r.recordings.failed} failed (of {r.recordings.total})
+							{r.recordings.skipped} skipped, {r.recordings.failed} failed (of {r.recordings.total})
 						</Field.Description>
 						<Field.Description>
 							Transformations: {r.transformations.migrated} migrated,
-							{r.transformations.skipped}
-							skipped, {r.transformations.failed} failed (of
-							{r.transformations.total})
+							{r.transformations.skipped} skipped, {r.transformations.failed} failed (of {r.transformations.total})
 						</Field.Description>
 						<Field.Description>
 							Steps: {r.steps.migrated} migrated, {r.steps.skipped} skipped,
-							{r.steps.failed}
-							failed (of {r.steps.total})
+							{r.steps.failed} failed (of {r.steps.total})
 						</Field.Description>
 					</div>
 				</Field.Set>
@@ -118,8 +113,7 @@
 						<Field.Set>
 							<Field.Legend variant="label">Reset</Field.Legend>
 							<Field.Description>
-								Clears workspace tables and resets localStorage—re-enables the
-								migration button.
+								Clears workspace tables and resets localStorage—re-enables the migration button.
 							</Field.Description>
 							<Button
 								onclick={migrationDialog.resetMigration}

@@ -1,5 +1,9 @@
+import {
+	attachTable,
+	type TableDefinitions,
+	type Tables,
+} from '../index.js';
 import type * as Y from 'yjs';
-import { attachTable, type TableDefinitions, type Tables } from '../index.js';
 
 /**
  * Test-only convenience: attach every table in a definitions map to a Y.Doc.

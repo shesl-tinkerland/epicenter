@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { goto } from '$app/navigation';
+	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { auth } from '$lib/auth';
 	import SignedIn from './components/SignedIn.svelte';
 

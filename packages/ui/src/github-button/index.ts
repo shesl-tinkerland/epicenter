@@ -16,7 +16,7 @@ import Root from './github-button.svelte';
 export async function getStars({
 	owner,
 	repo: repoName,
-	fallback = 0,
+	fallback = 0
 }: {
 	owner: string;
 	repo: string;

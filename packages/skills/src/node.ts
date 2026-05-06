@@ -30,13 +30,13 @@ import {
 	onLocalUpdate,
 } from '@epicenter/workspace';
 import Type from 'typebox';
+import * as Y from 'yjs';
 import {
 	defineErrors,
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Ok, tryAsync } from 'wellcrafted/result';
-import * as Y from 'yjs';
 import { parseSkillMd } from './parse.js';
 import { referenceContentDocGuid } from './reference-content-docs.js';
 import { serializeSkillMd } from './serialize.js';
@@ -45,8 +45,8 @@ import { createSkillsActions } from './skills-actions.js';
 import type { Skill } from './tables.js';
 import { openSkills } from './workspace.js';
 
-export { SKILLS_WORKSPACE_ID } from './constants.js';
 export type { Reference, Skill } from './tables.js';
+export { SKILLS_WORKSPACE_ID } from './constants.js';
 export { referencesTable, skillsTable } from './tables.js';
 
 const DirInput = Type.Object({ dir: Type.String() });

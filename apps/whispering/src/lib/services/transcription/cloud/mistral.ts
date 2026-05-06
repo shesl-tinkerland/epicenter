@@ -15,7 +15,13 @@ export const MistralTranscriptionError = defineErrors({
 	MissingApiKey: () => ({
 		message: 'Mistral API key is required',
 	}),
-	FileTooLarge: ({ sizeMb, maxMb }: { sizeMb: number; maxMb: number }) => ({
+	FileTooLarge: ({
+		sizeMb,
+		maxMb,
+	}: {
+		sizeMb: number;
+		maxMb: number;
+	}) => ({
 		message: `File size ${sizeMb.toFixed(1)}MB exceeds ${maxMb}MB limit`,
 		sizeMb,
 		maxMb,

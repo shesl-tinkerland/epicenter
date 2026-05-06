@@ -70,7 +70,8 @@ export function createBlobStoreDesktop(): BlobStore {
 
 		ensurePlaybackUrl: async (key) => {
 			// DUAL READ: Check file system first, fallback to IndexedDB
-			const fsResult = await fileSystemDb.ensurePlaybackUrl(key);
+			const fsResult =
+				await fileSystemDb.ensurePlaybackUrl(key);
 
 			// If found in file system, return it
 			if (fsResult.data) {

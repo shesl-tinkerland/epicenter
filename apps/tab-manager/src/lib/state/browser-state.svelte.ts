@@ -323,7 +323,8 @@ function createBrowserState() {
 		tabsByWindow(windowId: number): BrowserTab[] {
 			const state = windowStates.get(windowId);
 			if (!state) return [];
-			return [...state.tabs.values()].sort((a, b) => a.index - b.index);
+			return [...state.tabs.values()]
+				.sort((a, b) => a.index - b.index);
 		},
 
 		/**

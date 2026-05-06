@@ -1,9 +1,9 @@
 <script lang="ts">
-	import type { AuthClient } from '@epicenter/auth-svelte';
 	import { Button } from '@epicenter/ui/button';
 	import * as Field from '@epicenter/ui/field';
 	import { Input } from '@epicenter/ui/input';
 	import { Spinner } from '@epicenter/ui/spinner';
+	import type { AuthClient } from '@epicenter/auth-svelte';
 
 	let {
 		auth,

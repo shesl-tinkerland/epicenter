@@ -70,10 +70,7 @@ export function attachRecordingMarkdownFiles(
 				}
 
 				if (toWrite.length) {
-					await invoke('write_markdown_files', {
-						directory: dir,
-						files: toWrite,
-					});
+					await invoke('write_markdown_files', { directory: dir, files: toWrite });
 				}
 				if (toDelete.length) {
 					await invoke('delete_files_in_directory', {

@@ -4,7 +4,7 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
-import { Err, Ok, type Result, tryAsync } from 'wellcrafted/result';
+import { Err, Ok, tryAsync, type Result } from 'wellcrafted/result';
 import {
 	BearerSession,
 	type BearerSession as BearerSessionType,

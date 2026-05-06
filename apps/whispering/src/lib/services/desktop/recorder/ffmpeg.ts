@@ -18,13 +18,15 @@ import {
 } from '$lib/services/desktop/command';
 import { FsServiceLive } from '$lib/services/desktop/fs';
 import {
+	type FfmpegRecordingParams,
+	RecorderError,
+	type RecorderService,
+} from '$lib/services/recorder/types';
+import {
 	asDeviceIdentifier,
 	type Device,
 	type DeviceAcquisitionOutcome,
 	type DeviceIdentifier,
-	type FfmpegRecordingParams,
-	RecorderError,
-	type RecorderService,
 } from '$lib/services/recorder/types';
 
 /**

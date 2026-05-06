@@ -22,10 +22,7 @@ import type { DateTimeString } from '@epicenter/workspace';
  * // "2024-01-01T20:00:00.000Z|America/New_York"
  * ```
  */
-export function toDateTimeString(
-	utcDate: Date,
-	timezone: string,
-): DateTimeString {
+export function toDateTimeString(utcDate: Date, timezone: string): DateTimeString {
 	return `${utcDate.toISOString()}|${timezone}` as DateTimeString;
 }
 

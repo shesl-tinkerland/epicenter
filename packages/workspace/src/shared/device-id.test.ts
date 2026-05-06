@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { getOrCreateInstallationId, type SimpleStorage } from './device-id.js';
 
-function makeMemoryStorage(
-	initial: Record<string, string> = {},
-): SimpleStorage {
+function makeMemoryStorage(initial: Record<string, string> = {}): SimpleStorage {
 	const store = new Map(Object.entries(initial));
 	return {
 		getItem: (k) => store.get(k) ?? null,

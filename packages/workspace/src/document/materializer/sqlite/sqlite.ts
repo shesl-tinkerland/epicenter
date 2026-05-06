@@ -17,9 +17,9 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineMutation, defineQuery } from '../../../shared/actions.js';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import { standardSchemaToJsonSchema } from '../../../shared/standard-schema.js';
 import type { BaseRow, Table, TableDefinition } from '../../attach-table.js';
 import { generateDdl, quoteIdentifier } from './ddl.js';
@@ -52,9 +52,7 @@ export const SqliteMaterializerError = defineErrors({
 		cause,
 	}),
 });
-export type SqliteMaterializerError = InferErrors<
-	typeof SqliteMaterializerError
->;
+export type SqliteMaterializerError = InferErrors<typeof SqliteMaterializerError>;
 
 /**
  * Per-table configuration, generic over the specific row type so `fts` narrows

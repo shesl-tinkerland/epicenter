@@ -36,11 +36,10 @@ const rawDefaultAuthClient = createAuthClient({
 	],
 });
 
-const defaultAuthClient =
-	rawDefaultAuthClient as typeof rawDefaultAuthClient & {
-		deviceCode: typeof rawDefaultAuthClient.device.code;
-		deviceToken: typeof rawDefaultAuthClient.device.token;
-	};
+const defaultAuthClient = rawDefaultAuthClient as typeof rawDefaultAuthClient & {
+	deviceCode: typeof rawDefaultAuthClient.device.code;
+	deviceToken: typeof rawDefaultAuthClient.device.token;
+};
 
 type MachineAuthClient = typeof defaultAuthClient;
 

@@ -31,9 +31,9 @@ export function getOrCreateInstallationId<T extends string = string>(
 	return fresh as unknown as T;
 }
 
-export async function getOrCreateInstallationIdAsync<T extends string = string>(
-	storage: AsyncStorage,
-): Promise<T> {
+export async function getOrCreateInstallationIdAsync<
+	T extends string = string,
+>(storage: AsyncStorage): Promise<T> {
 	const existing = await storage.getItem(KEY);
 	if (existing) return existing as T;
 	const fresh = generateGuid();

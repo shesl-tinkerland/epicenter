@@ -75,9 +75,7 @@ function findMatchingEntries(
 	const stem = csvFile.replace('.csv', '');
 	return Object.entries(files)
 		.filter(([name]) => {
-			const basename = name.includes('/')
-				? (name.split('/').pop() ?? name)
-				: name;
+			const basename = name.includes('/') ? (name.split('/').pop() ?? name) : name;
 			return (
 				basename === csvFile ||
 				(basename.startsWith(`${stem}_`) && basename.endsWith('.csv'))

@@ -22,8 +22,8 @@
 
 import { describe, test } from 'bun:test';
 import * as Y from 'yjs';
-import { createTables } from '../__tests__/create-tables.js';
 import { attachTable } from '../index.js';
+import { createTables } from '../__tests__/create-tables.js';
 import {
 	formatBytes,
 	generateId,
@@ -101,7 +101,7 @@ describe('scaling ceiling: small rows (posts)', () => {
 
 		for (const N of ROW_COUNTS) {
 			const ydoc = new Y.Doc();
-			const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
+			const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
 
 			// ── Insert N rows ──
 			const { durationMs: insertMs } = measureTime(() => {
@@ -197,7 +197,7 @@ describe('scaling ceiling: realistic rows (notes)', () => {
 
 		for (const N of ROW_COUNTS) {
 			const ydoc = new Y.Doc();
-			const tables = { notes: attachTable(ydoc, 'notes', noteDefinition) };
+			const tables = { notes: attachTable(ydoc, "notes", noteDefinition) };
 
 			const { durationMs: insertMs } = measureTime(() => {
 				for (let i = 0; i < N; i++) {
@@ -293,16 +293,10 @@ describe('scaling ceiling: multi-table write strategies', () => {
 	 */
 	test('population strategies: bulkSet vs sequential set vs interleaved set', () => {
 		console.log('\n=== MULTI-TABLE: WRITE STRATEGY COMPARISON ===');
-		console.log(
-			'3 tables sharing one Y.Doc. Same data, different insert patterns.\n',
-		);
+		console.log('3 tables sharing one Y.Doc. Same data, different insert patterns.\n');
 
-		console.log(
-			'| Total rows | bulkSet    | seq set()  | interleaved set() | bulk speedup |',
-		);
-		console.log(
-			'|------------|------------|------------|-------------------|--------------|',
-		);
+		console.log('| Total rows | bulkSet    | seq set()  | interleaved set() | bulk speedup |');
+		console.log('|------------|------------|------------|-------------------|--------------|');
 
 		for (const N of TOTAL_ROW_COUNTS) {
 			const perTable = Math.floor(N / 3);
@@ -316,22 +310,13 @@ describe('scaling ceiling: multi-table write strategies', () => {
 			});
 
 			const postRows = Array.from({ length: perTable }, (_, i) => ({
-				id: generateId(i),
-				title: `Post ${i}`,
-				views: i,
-				_v: 1 as const,
+				id: generateId(i), title: `Post ${i}`, views: i, _v: 1 as const,
 			}));
 			const bookmarkRows = Array.from({ length: perTable }, (_, i) => ({
-				id: generateId(i),
-				title: `Bookmark ${i}`,
-				views: i,
-				_v: 1 as const,
+				id: generateId(i), title: `Bookmark ${i}`, views: i, _v: 1 as const,
 			}));
 			const eventRows = Array.from({ length: perTable }, (_, i) => ({
-				id: generateId(i),
-				title: `Event ${i}`,
-				views: i,
-				_v: 1 as const,
+				id: generateId(i), title: `Event ${i}`, views: i, _v: 1 as const,
 			}));
 
 			const { durationMs: bulkMs } = measureTime(() => {
@@ -351,28 +336,13 @@ describe('scaling ceiling: multi-table write strategies', () => {
 
 			const { durationMs: seqMs } = measureTime(() => {
 				for (let i = 0; i < perTable; i++) {
-					seqTables.posts.set({
-						id: generateId(i),
-						title: `Post ${i}`,
-						views: i,
-						_v: 1,
-					});
+					seqTables.posts.set({ id: generateId(i), title: `Post ${i}`, views: i, _v: 1 });
 				}
 				for (let i = 0; i < perTable; i++) {
-					seqTables.bookmarks.set({
-						id: generateId(i),
-						title: `Bookmark ${i}`,
-						views: i,
-						_v: 1,
-					});
+					seqTables.bookmarks.set({ id: generateId(i), title: `Bookmark ${i}`, views: i, _v: 1 });
 				}
 				for (let i = 0; i < perTable; i++) {
-					seqTables.events.set({
-						id: generateId(i),
-						title: `Event ${i}`,
-						views: i,
-						_v: 1,
-					});
+					seqTables.events.set({ id: generateId(i), title: `Event ${i}`, views: i, _v: 1 });
 				}
 			});
 			seqDoc.destroy();
@@ -387,24 +357,9 @@ describe('scaling ceiling: multi-table write strategies', () => {
 
 			const { durationMs: intMs } = measureTime(() => {
 				for (let i = 0; i < perTable; i++) {
-					intTables.posts.set({
-						id: generateId(i),
-						title: `Post ${i}`,
-						views: i,
-						_v: 1,
-					});
-					intTables.bookmarks.set({
-						id: generateId(i),
-						title: `Bookmark ${i}`,
-						views: i,
-						_v: 1,
-					});
-					intTables.events.set({
-						id: generateId(i),
-						title: `Event ${i}`,
-						views: i,
-						_v: 1,
-					});
+					intTables.posts.set({ id: generateId(i), title: `Post ${i}`, views: i, _v: 1 });
+					intTables.bookmarks.set({ id: generateId(i), title: `Bookmark ${i}`, views: i, _v: 1 });
+					intTables.events.set({ id: generateId(i), title: `Event ${i}`, views: i, _v: 1 });
 				}
 			});
 			intDoc.destroy();
@@ -418,9 +373,7 @@ describe('scaling ceiling: multi-table write strategies', () => {
 		console.log('');
 		console.log('bulkSet = O(n) deferred conflict resolution via observer');
 		console.log('seq set() = one table at a time, V8 JIT stays hot');
-		console.log(
-			'interleaved set() = alternating arrays, toArray() thrash — NEVER do this in bulk',
-		);
+		console.log('interleaved set() = alternating arrays, toArray() thrash — NEVER do this in bulk');
 	}, 120_000);
 
 	test('post-population: random updates across 3 tables (realistic usage)', () => {
@@ -438,30 +391,15 @@ describe('scaling ceiling: multi-table write strategies', () => {
 				events: postDefinition,
 			});
 
-			tables.posts.bulkSet(
-				Array.from({ length: perTable }, (_, i) => ({
-					id: generateId(i),
-					title: `Post ${i}`,
-					views: i,
-					_v: 1 as const,
-				})),
-			);
-			tables.bookmarks.bulkSet(
-				Array.from({ length: perTable }, (_, i) => ({
-					id: generateId(i),
-					title: `Bookmark ${i}`,
-					views: i,
-					_v: 1 as const,
-				})),
-			);
-			tables.events.bulkSet(
-				Array.from({ length: perTable }, (_, i) => ({
-					id: generateId(i),
-					title: `Event ${i}`,
-					views: i,
-					_v: 1 as const,
-				})),
-			);
+			tables.posts.bulkSet(Array.from({ length: perTable }, (_, i) => ({
+				id: generateId(i), title: `Post ${i}`, views: i, _v: 1 as const,
+			})));
+			tables.bookmarks.bulkSet(Array.from({ length: perTable }, (_, i) => ({
+				id: generateId(i), title: `Bookmark ${i}`, views: i, _v: 1 as const,
+			})));
+			tables.events.bulkSet(Array.from({ length: perTable }, (_, i) => ({
+				id: generateId(i), title: `Event ${i}`, views: i, _v: 1 as const,
+			})));
 
 			// Now simulate realistic usage: random updates across tables
 			const { durationMs } = measureTime(() => {
@@ -470,26 +408,11 @@ describe('scaling ceiling: multi-table write strategies', () => {
 					// Randomly pick a table (simulates user editing different things)
 					const pick = i % 3;
 					if (pick === 0) {
-						tables.posts.set({
-							id: generateId(idx),
-							title: `Updated ${idx}`,
-							views: idx,
-							_v: 1,
-						});
+						tables.posts.set({ id: generateId(idx), title: `Updated ${idx}`, views: idx, _v: 1 });
 					} else if (pick === 1) {
-						tables.bookmarks.set({
-							id: generateId(idx),
-							title: `Updated ${idx}`,
-							views: idx,
-							_v: 1,
-						});
+						tables.bookmarks.set({ id: generateId(idx), title: `Updated ${idx}`, views: idx, _v: 1 });
 					} else {
-						tables.events.set({
-							id: generateId(idx),
-							title: `Updated ${idx}`,
-							views: idx,
-							_v: 1,
-						});
+						tables.events.set({ id: generateId(idx), title: `Updated ${idx}`, views: idx, _v: 1 });
 					}
 				}
 			});
@@ -520,7 +443,7 @@ describe('scaling ceiling: per-operation degradation', () => {
 		);
 
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
+		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
 
 		const milestones = [0, 10_000, 20_000, 30_000, 40_000, 50_000];
 		let totalInserted = 0;

@@ -7,12 +7,14 @@ import type {
 } from '$lib/constants/audio';
 import { FsServiceLive } from '$lib/services/desktop/fs';
 import {
-	asDeviceIdentifier,
 	type CpalRecordingParams,
-	type Device,
-	type DeviceAcquisitionOutcome,
 	RecorderError,
 	type RecorderService,
+} from '$lib/services/recorder/types';
+import {
+	asDeviceIdentifier,
+	type Device,
+	type DeviceAcquisitionOutcome,
 } from '$lib/services/recorder/types';
 
 /**

@@ -46,7 +46,7 @@ describe('heap usage: small rows', () => {
 			const heapBefore = getHeapUsed();
 
 			const ydoc = new Y.Doc();
-			const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
+			const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
 
 			for (let i = 0; i < count; i++) {
 				tables.posts.set({
@@ -96,7 +96,7 @@ describe('heap usage: content-heavy rows', () => {
 			const heapBefore = getHeapUsed();
 
 			const ydoc = new Y.Doc();
-			const tables = { notes: attachTable(ydoc, 'notes', heavyNoteDefinition) };
+			const tables = { notes: attachTable(ydoc, "notes", heavyNoteDefinition) };
 
 			for (let i = 0; i < rows; i++) {
 				tables.notes.set(makeHeavyRow(`doc-${i}`, content));
@@ -125,7 +125,7 @@ describe('heap overhead: binary vs in-memory', () => {
 		const heapBefore = getHeapUsed();
 
 		const ydoc = new Y.Doc();
-		const tables = { notes: attachTable(ydoc, 'notes', noteDefinition) };
+		const tables = { notes: attachTable(ydoc, "notes", noteDefinition) };
 
 		const content = 'x'.repeat(400);
 		for (let i = 0; i < 5_000; i++) {

@@ -6,8 +6,8 @@
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
-	import type { Folder } from '../honeycrisp/workspace';
 	import { getHoneycrispState } from '../state';
+	import type { Folder } from '../honeycrisp/workspace';
 
 	const { foldersState, notesState, viewState } = getHoneycrispState();
 

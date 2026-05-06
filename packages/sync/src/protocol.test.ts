@@ -11,7 +11,6 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { Ok } from 'wellcrafted/result';
 import {
 	Awareness,
 	applyAwarenessUpdate,
@@ -35,6 +34,7 @@ import {
 	RPC_TYPE,
 	SYNC_MESSAGE_TYPE,
 } from './protocol';
+import { Ok } from 'wellcrafted/result';
 import { RpcError } from './rpc-errors';
 
 // ============================================================================
@@ -49,6 +49,7 @@ describe('MESSAGE_TYPE constants', () => {
 		expect(MESSAGE_TYPE.AUTH).toBe(2);
 		expect(MESSAGE_TYPE.QUERY_AWARENESS).toBe(3);
 	});
+
 });
 
 // ============================================================================

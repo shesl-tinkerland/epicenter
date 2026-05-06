@@ -12,7 +12,10 @@ import { join } from 'node:path';
 import { type } from 'arktype';
 import * as Y from 'yjs';
 
-import { attachTables, defineTable } from '../index.js';
+import {
+	attachTables,
+	defineTable,
+} from '../index.js';
 import { attachSqlite } from './attach-sqlite.js';
 import { attachSqliteReader } from './attach-sqlite-reader.js';
 
@@ -35,10 +38,7 @@ afterEach(() => {
 	rmSync(workDir, { recursive: true, force: true });
 });
 
-async function seedMirrorFile(
-	filePath: string,
-	rows: Array<{ id: string; title: string; body: string }>,
-) {
+async function seedMirrorFile(filePath: string, rows: Array<{ id: string; title: string; body: string }>) {
 	const ydoc = new Y.Doc({ guid: 'test-mirror' });
 	const tables = attachTables(ydoc, { entries: entriesTable });
 	const materializer = attachSqlite(ydoc, {
@@ -79,9 +79,7 @@ describe('attachSqliteReader', () => {
 
 		using mirror = attachSqliteReader({ filePath });
 		expect(() =>
-			mirror.db.run(
-				"INSERT INTO entries (id, title, body) VALUES ('c', 't', 'b')",
-			),
+			mirror.db.run("INSERT INTO entries (id, title, body) VALUES ('c', 't', 'b')"),
 		).toThrow();
 	});
 
@@ -109,7 +107,9 @@ describe('attachSqliteReader', () => {
 		// exists but `entries_fts` does not.
 		const ydoc = new Y.Doc({ guid: 'no-fts' });
 		const tables = attachTables(ydoc, { entries: entriesTable });
-		const m = attachSqlite(ydoc, { filePath }).table(tables.entries);
+		const m = attachSqlite(ydoc, { filePath }).table(
+			tables.entries,
+		);
 		await m.whenLoaded;
 		ydoc.destroy();
 

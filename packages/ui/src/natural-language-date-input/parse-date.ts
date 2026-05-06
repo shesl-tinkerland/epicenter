@@ -93,10 +93,7 @@ export function parseNaturalLanguageDate(
 		return null;
 	}
 
-	const offsetMilliseconds = getOffsetMillisecondsForTimezone(
-		roughUtcDate,
-		timezone,
-	);
+	const offsetMilliseconds = getOffsetMillisecondsForTimezone(roughUtcDate, timezone);
 	if (offsetMilliseconds === null) {
 		return null;
 	}
@@ -144,10 +141,7 @@ export function parseNaturalLanguageDate(
  *   : null;
  * ```
  */
-export function toDateTimeString(
-	utcDate: Date,
-	timezone: string,
-): DateTimeString {
+export function toDateTimeString(utcDate: Date, timezone: string): DateTimeString {
 	return `${utcDate.toISOString()}|${timezone}` as DateTimeString;
 }
 
@@ -199,10 +193,7 @@ function extractDateComponents(
 	};
 }
 
-function getOffsetMillisecondsForTimezone(
-	instant: Date,
-	timezone: string,
-): number | null {
+function getOffsetMillisecondsForTimezone(instant: Date, timezone: string): number | null {
 	try {
 		const formatter = new Intl.DateTimeFormat('en-US', {
 			timeZone: timezone,

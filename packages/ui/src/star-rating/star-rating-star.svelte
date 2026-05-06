@@ -1,8 +1,8 @@
 <script lang="ts">
-	import StarIcon from '@lucide/svelte/icons/star';
-	import StarHalfIcon from '@lucide/svelte/icons/star-half';
-	import { RatingGroup } from 'bits-ui';
 	import { cn } from '../utils.js';
+	import StarHalfIcon from '@lucide/svelte/icons/star-half';
+	import StarIcon from '@lucide/svelte/icons/star';
+	import { RatingGroup } from 'bits-ui';
 
 	type StarRatingStarProps = {
 		index: number;

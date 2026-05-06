@@ -12,7 +12,7 @@
 	 * ```svelte
 	 * <TranscriptDialog
 	 *   recordingId={recording.id}
-	 *   transcript={recording.transcript}
+ *   transcript={recording.transcript}
 	 *   rows={1}
 	 * />
 	 * ```
@@ -22,7 +22,7 @@
 	 * <!-- With loading state -->
 	 * <TranscriptDialog
 	 *   recordingId={recording.id}
-	 *   transcript="..."
+ *   transcript="..."
 	 *   loading={true}
 	 * />
 	 * ```
@@ -32,7 +32,7 @@
 	 * <!-- With delete button -->
 	 * <TranscriptDialog
 	 *   recordingId={recording.id}
-	 *   transcript={recording.transcript}
+ *   transcript={recording.transcript}
 	 *   onDelete={() => handleDelete(recording)}
 	 * />
 	 * ```

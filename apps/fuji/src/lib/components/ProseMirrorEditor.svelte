@@ -1,26 +1,26 @@
 <script lang="ts">
 	import { baseKeymap, toggleMark } from 'prosemirror-commands';
 	import {
-		ellipsis,
-		emDash,
 		inputRules,
-		smartQuotes,
-		textblockTypeInputRule,
 		wrappingInputRule,
+		textblockTypeInputRule,
+		smartQuotes,
+		emDash,
+		ellipsis,
 	} from 'prosemirror-inputrules';
 	import { keymap } from 'prosemirror-keymap';
-	import { type MarkSpec, Schema } from 'prosemirror-model';
-	import { schema as basicSchema } from 'prosemirror-schema-basic';
+	import { Schema, type MarkSpec } from 'prosemirror-model';
 	import {
 		addListNodes,
+		splitListItem,
 		liftListItem,
 		sinkListItem,
-		splitListItem,
 	} from 'prosemirror-schema-list';
+	import { schema as basicSchema } from 'prosemirror-schema-basic';
 	import { EditorState, Plugin } from 'prosemirror-state';
 	import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 	import 'prosemirror-view/style/prosemirror.css';
-	import { redo, undo, ySyncPlugin, yUndoPlugin } from 'y-prosemirror';
+	import { ySyncPlugin, yUndoPlugin, undo, redo } from 'y-prosemirror';
 	import type * as Y from 'yjs';
 
 	let {

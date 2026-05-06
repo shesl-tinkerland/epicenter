@@ -29,7 +29,7 @@ import {
 describe('CRDT overhead vs raw JSON', () => {
 	test('small row: actual payload vs Y.Doc overhead', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
+		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
 
 		// Example row
 		const row = { id: 'id-000001', title: 'Post 1', views: 42 };
@@ -71,7 +71,7 @@ describe('CRDT overhead vs raw JSON', () => {
 
 	test('realistic row: notes with 500 chars of content', () => {
 		const ydoc = new Y.Doc();
-		const tables = { notes: attachTable(ydoc, 'notes', noteDefinition) };
+		const tables = { notes: attachTable(ydoc, "notes", noteDefinition) };
 
 		const sampleContent = `This is a realistic note with actual content. 
 It might contain multiple paragraphs and various formatting.
@@ -115,21 +115,15 @@ Let's add a bit more to make it realistic. The quick brown fox jumps over the la
 
 	test('actual ceiling measurements at 1K / 10K / 50K rows', () => {
 		console.log('\n=== PRACTICAL LIMITS (measured) ===');
-		console.log(
-			'| Rows     | Small Posts  | Notes (~500 chars) | Insert Time  |',
-		);
-		console.log(
-			'|----------|--------------|--------------------| -------------|',
-		);
+		console.log('| Rows     | Small Posts  | Notes (~500 chars) | Insert Time  |');
+		console.log('|----------|--------------|--------------------| -------------|');
 
 		const sampleContent = 'x'.repeat(400);
 
 		for (const count of [1_000, 10_000, 50_000]) {
 			// Small rows
 			const smallDoc = new Y.Doc();
-			const smallTables = {
-				posts: attachTable(smallDoc, 'posts', postDefinition),
-			};
+			const smallTables = { posts: attachTable(smallDoc, "posts", postDefinition) };
 			const smallStart = performance.now();
 			for (let i = 0; i < count; i++) {
 				smallTables.posts.set({
@@ -144,9 +138,7 @@ Let's add a bit more to make it realistic. The quick brown fox jumps over the la
 
 			// Notes with content
 			const noteDoc = new Y.Doc();
-			const noteTables = {
-				notes: attachTable(noteDoc, 'notes', noteDefinition),
-			};
+			const noteTables = { notes: attachTable(noteDoc, "notes", noteDefinition) };
 			for (let i = 0; i < count; i++) {
 				noteTables.notes.set({
 					id: generateId(i),
@@ -164,7 +156,7 @@ Let's add a bit more to make it realistic. The quick brown fox jumps over the la
 				`| ${String(count).padStart(8)} | ${formatBytes(smallSize).padEnd(12)} | ${formatBytes(noteSize).padEnd(18)} | ${smallMs.toFixed(0).padStart(8)}ms    |`,
 			);
 		}
-	}, 120_000); // 50K rows takes a while
+	}, 120_000);  // 50K rows takes a while
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -172,9 +164,10 @@ Let's add a bit more to make it realistic. The quick brown fox jumps over the la
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('update growth', () => {
+
 	test('Y.Doc size growth after updates (same rows updated 5 times)', () => {
 		const ydoc = new Y.Doc();
-		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
+		const tables = { posts: attachTable(ydoc, "posts", postDefinition) };
 
 		for (let i = 0; i < 1_000; i++) {
 			tables.posts.set({
@@ -216,7 +209,7 @@ describe('heavy text baseline sizes', () => {
 	for (const contentChars of [10_000, 50_000, 100_000]) {
 		test(`5 rows with ${formatBytes(contentChars)} chars each`, () => {
 			const ydoc = new Y.Doc();
-			const tables = { notes: attachTable(ydoc, 'notes', heavyNoteDefinition) };
+			const tables = { notes: attachTable(ydoc, "notes", heavyNoteDefinition) };
 
 			const rows = Array.from({ length: 5 }, (_, i) =>
 				makeHeavyRow(`doc-${i}`, contentChars),
@@ -233,9 +226,7 @@ describe('heavy text baseline sizes', () => {
 			console.log(
 				`  CRDT overhead:     ${((encoded.byteLength / jsonSize - 1) * 100).toFixed(1)}%`,
 			);
-			console.log(
-				`  Per row:           ${formatBytes(encoded.byteLength / 5)}`,
-			);
+			console.log(`  Per row:           ${formatBytes(encoded.byteLength / 5)}`);
 		});
 	}
 
@@ -246,7 +237,7 @@ describe('heavy text baseline sizes', () => {
 
 		for (const chars of [1_000, 5_000, 10_000, 50_000, 100_000, 500_000]) {
 			const ydoc = new Y.Doc();
-			const tables = { notes: attachTable(ydoc, 'notes', heavyNoteDefinition) };
+			const tables = { notes: attachTable(ydoc, "notes", heavyNoteDefinition) };
 
 			const row = makeHeavyRow('doc-0', chars);
 			tables.notes.set(row);

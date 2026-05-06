@@ -525,7 +525,10 @@ function benchmarkArrayYMap(
 	doc.transact(() => {
 		for (let i = 0; i < CONFIG.NUM_RECREATIONS; i++) {
 			yarray.push([
-				createYMapRow(`${CONFIG.NUM_ROWS - CONFIG.NUM_DELETIONS + i}`, '-v2'),
+				createYMapRow(
+					`${CONFIG.NUM_ROWS - CONFIG.NUM_DELETIONS + i}`,
+					'-v2',
+				),
 			]);
 		}
 	});
@@ -791,11 +794,7 @@ async function main() {
 `);
 
 	const allResults: BenchmarkResult[] = [];
-	const strategies = [
-		'single-column',
-		'full-row',
-		'mixed',
-	] satisfies UpdateStrategy[];
+	const strategies = ['single-column', 'full-row', 'mixed'] satisfies UpdateStrategy[];
 	const benchmarks = [
 		benchmarkMapPlain,
 		benchmarkArrayPlain,
