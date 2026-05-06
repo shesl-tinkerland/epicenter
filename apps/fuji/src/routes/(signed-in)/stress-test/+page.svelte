@@ -5,13 +5,11 @@
 	import { DateTimeString, generateId } from '@epicenter/workspace';
 	import { toast } from 'svelte-sonner';
 	import * as Y from 'yjs';
-	import { getEntriesState } from '../state/entries.svelte';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import type { EntryId } from '../fuji/workspace';
-	import { getSignedIn } from '../signed-in';
 
 	// ─── Config ──────────────────────────────────────────────────────────────────
-	const signedIn = getSignedIn();
-	const entriesState = getEntriesState();
+	const { fuji, entries } = getSignedInSession();
 
 	const COUNTS = [1_000, 10_000] as const;
 
@@ -102,7 +100,7 @@
 	let results = $state<Results | null>(null);
 
 	const stressTestCount = $derived(
-		entriesState.active.filter((e) => e.tags.includes('stress-test')).length,
+		entries.active.filter((e) => e.tags.includes('stress-test')).length,
 	);
 
 	// ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -168,7 +166,7 @@
 			);
 
 			const insertStart = performance.now();
-			await signedIn.fuji.tables.entries.bulkSet(rows, {
+			await fuji.tables.entries.bulkSet(rows, {
 				chunkSize: INSERT_CHUNK_SIZE,
 				onProgress: (p) => {
 					progress = p;
@@ -178,18 +176,18 @@
 
 			// Read performance
 			const readStart = performance.now();
-			const allValid = signedIn.fuji.tables.entries.getAllValid();
+			const allValid = fuji.tables.entries.getAllValid();
 			const readTimeMs = performance.now() - readStart;
 
 			// Filter performance
 			const filterStart = performance.now();
-			const stressEntries = signedIn.fuji.tables.entries.filter((e) =>
+			const stressEntries = fuji.tables.entries.filter((e) =>
 				e.tags.includes('stress-test'),
 			);
 			const filterTimeMs = performance.now() - filterStart;
 
 			// Y.Doc binary size
-			const ydocSizeBytes = Y.encodeStateAsUpdate(signedIn.fuji.ydoc).byteLength;
+			const ydocSizeBytes = Y.encodeStateAsUpdate(fuji.ydoc).byteLength;
 
 			results = {
 				insertTimeMs,
@@ -215,12 +213,12 @@
 		clearing = true;
 
 		try {
-			const stressEntries = signedIn.fuji.tables.entries.filter((e) =>
+			const stressEntries = fuji.tables.entries.filter((e) =>
 				e.tags.includes('stress-test'),
 			);
 			const ids = stressEntries.map((e) => e.id);
 
-			await signedIn.fuji.tables.entries.bulkDelete(ids);
+			await fuji.tables.entries.bulkDelete(ids);
 
 			results = null;
 			toast.success(
@@ -342,7 +340,7 @@
 
 	<!-- Live count -->
 	<div class="text-xs text-muted-foreground">
-		Total active entries: {entriesState.active.length.toLocaleString()}
+		Total active entries: {entries.active.length.toLocaleString()}
 		{#if stressTestCount > 0}
 			· Stress-test entries: {stressTestCount.toLocaleString()}
 		{/if}

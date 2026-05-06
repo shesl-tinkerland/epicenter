@@ -15,12 +15,18 @@
 	import { format, isToday, isYesterday } from 'date-fns';
 	import { VList } from 'virtua/svelte';
 	import { goto } from '$app/navigation';
-	import { getEntriesState, matchesEntrySearch } from '../state/entries.svelte';
+	import { getSignedInSession } from '$lib/signed-in-session';
+	import { matchesEntrySearch } from '$lib/entries-search';
 	import { viewState } from '../state/view.svelte';
 	import type { Entry } from '../fuji/workspace';
 
 	let { entries, title }: { entries: Entry[]; title?: string } = $props();
-	const entriesState = getEntriesState();
+	const { fuji } = getSignedInSession();
+
+	function createEntry() {
+		const { id } = fuji.actions.entries.create({});
+		goto(`/entries/${id}`);
+	}
 
 	// ─── TanStack Table (sort + filter model) ──────────────────────────────
 
@@ -135,7 +141,7 @@
 			>
 				<TableIcon class="size-4" />
 			</Button>
-			<Button variant="ghost" size="icon-sm" onclick={entriesState.createEntry}>
+			<Button variant="ghost" size="icon-sm" onclick={createEntry}>
 				<PlusIcon class="size-4" />
 			</Button>
 		</div>
@@ -162,7 +168,7 @@
 						<Button
 							variant="outline"
 							size="sm"
-							onclick={entriesState.createEntry}
+							onclick={createEntry}
 						>
 							<PlusIcon class="mr-1.5 size-4" />
 							New Entry

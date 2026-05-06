@@ -2,13 +2,13 @@
 	import { page } from '$app/state';
 	import EntriesTable from '../../components/EntriesTable.svelte';
 	import EntriesTimeline from '../../components/EntriesTimeline.svelte';
-	import { getEntriesState } from '../../state/entries.svelte';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import { viewState } from '../../state/view.svelte';
 
-	const entriesState = getEntriesState();
+	const { entries } = getSignedInSession();
 	const tagParam = $derived(decodeURIComponent(page.params.tag ?? ''));
 	const filteredEntries = $derived(
-		entriesState.active.filter((e) => e.tags.includes(tagParam)),
+		entries.active.filter((e) => e.tags.includes(tagParam)),
 	);
 </script>
 

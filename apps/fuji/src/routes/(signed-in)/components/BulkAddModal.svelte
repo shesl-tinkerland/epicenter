@@ -8,10 +8,10 @@
 	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { DateTimeString } from '@epicenter/workspace';
 	import ClipboardPasteIcon from '@lucide/svelte/icons/clipboard-paste';
-	import { getSignedIn } from '../signed-in';
+	import { getSignedInSession } from '$lib/signed-in-session';
 
 	const LINE_REGEX = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\s(.+)$/;
-	const signedIn = getSignedIn();
+	const { fuji } = getSignedInSession();
 
 	let isOpen = $state(false);
 	let rawText = $state('');
@@ -61,7 +61,7 @@
 				title: text,
 				date: DateTimeString.stringify(iso, timezone),
 			}));
-			signedIn.fuji.actions.entries.bulkCreate({ entries: items });
+			fuji.actions.entries.bulkCreate({ entries: items });
 			toast.success(`Added ${items.length} ${items.length === 1 ? 'entry' : 'entries'}`);
 			isOpen = false;
 			rawText = '';

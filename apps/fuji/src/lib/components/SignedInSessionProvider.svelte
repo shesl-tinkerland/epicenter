@@ -16,6 +16,7 @@
 	// below reads `captured`, never `signedIn`. This sidesteps Svelte's
 	// teardown semantics: descendants reading getSignedInSession() during
 	// the unmount frame walk a closure over plain JS, not a prop signal.
+	// svelte-ignore state_referenced_locally
 	const captured = signedIn;
 
 	const entriesMap = fromTable(captured.fuji.tables.entries);

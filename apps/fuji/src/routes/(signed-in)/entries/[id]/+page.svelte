@@ -2,13 +2,13 @@
 	import * as Empty from '@epicenter/ui/empty';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import { page } from '$app/state';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import EntryEditor from '../../components/EntryEditor.svelte';
-	import { getEntriesState } from '../../state/entries.svelte';
 	import type { EntryId } from '../../fuji/workspace';
 
-	const entriesState = getEntriesState();
+	const { entries } = getSignedInSession();
 	const entryId = $derived(page.params.id as EntryId);
-	const entry = $derived(entryId ? (entriesState.get(entryId) ?? null) : null);
+	const entry = $derived(entryId ? (entries.get(entryId) ?? null) : null);
 </script>
 
 <main class="flex h-full flex-1 flex-col overflow-hidden">

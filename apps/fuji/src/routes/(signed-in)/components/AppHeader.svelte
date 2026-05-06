@@ -7,18 +7,22 @@
 	import * as Tooltip from '@epicenter/ui/tooltip';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SearchIcon from '@lucide/svelte/icons/search';
+	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth';
-	import { getEntriesState } from '../state/entries.svelte';
-	import { getSignedIn } from '../signed-in';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import BulkAddModal from './BulkAddModal.svelte';
 
 	let { onOpenSearch }: { onOpenSearch: () => void } = $props();
-	const signedIn = getSignedIn();
-	const entriesState = getEntriesState();
+	const { fuji } = getSignedInSession();
 
 	async function forgetFujiDevice(): Promise<void> {
-		await signedIn.fuji.wipe();
+		await fuji.wipe();
 		window.location.reload();
+	}
+
+	function createEntry() {
+		const { id } = fuji.actions.entries.create({});
+		goto(`/entries/${id}`);
 	}
 </script>
 
@@ -48,7 +52,7 @@
 						{...props}
 						variant="ghost"
 						size="icon-sm"
-						onclick={entriesState.createEntry}
+						onclick={createEntry}
 					>
 						<PlusIcon class="size-4" />
 					</Button>
@@ -62,7 +66,7 @@
 	<div class="flex items-center gap-1">
 		<AccountPopover
 			{auth}
-			sync={signedIn.fuji.sync}
+			sync={fuji.sync}
 			syncNoun="entries"
 			onForgetDevice={forgetFujiDevice}
 			onSocialSignIn={() =>

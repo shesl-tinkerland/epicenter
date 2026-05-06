@@ -1,14 +1,14 @@
 <script lang="ts">
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import EntriesTable from './components/EntriesTable.svelte';
 	import EntriesTimeline from './components/EntriesTimeline.svelte';
-	import { getEntriesState } from './state/entries.svelte';
 	import { viewState } from './state/view.svelte';
 
-	const entriesState = getEntriesState();
+	const { entries } = getSignedInSession();
 </script>
 
 {#if viewState.viewMode === 'table'}
-	<EntriesTable entries={entriesState.active} />
+	<EntriesTable entries={entries.active} />
 {:else}
-	<EntriesTimeline entries={entriesState.active} />
+	<EntriesTimeline entries={entries.active} />
 {/if}

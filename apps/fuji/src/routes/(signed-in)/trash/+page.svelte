@@ -8,15 +8,13 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
-	import { getEntriesState } from '../state/entries.svelte';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import { relativeTime } from '$lib/format';
-	import { getSignedIn } from '../signed-in';
 
-	const signedIn = getSignedIn();
-	const entriesState = getEntriesState();
+	const { fuji, entries } = getSignedInSession();
 
 	const deletedEntries = $derived(
-		[...entriesState.deleted].sort((a, b) =>
+		[...entries.deleted].sort((a, b) =>
 			(b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''),
 		),
 	);
@@ -80,7 +78,7 @@
 										title="Restore entry"
 										onclick={() => {
 										toastOnError(
-											signedIn.fuji.actions.entries.restore({ id: entry.id }),
+											fuji.actions.entries.restore({ id: entry.id }),
 											'Couldn\'t restore entry',
 										);
 										goto(`/entries/${entry.id}`);
@@ -98,7 +96,7 @@
 												description: `"${entry.title || 'Untitled'}" will be permanently removed. This cannot be undone.`,
 												confirm: { text: 'Delete forever', variant: 'destructive' },
 												onConfirm: () => {
-													signedIn.fuji.tables.entries.delete(entry.id);
+													fuji.tables.entries.delete(entry.id);
 												},
 											});
 										}}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fromDisposableCache } from '@epicenter/svelte';
+	import { useCacheHandle } from '@epicenter/svelte';
 	import { Button } from '@epicenter/ui/button';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { Loading } from '@epicenter/ui/loading';
@@ -17,28 +17,28 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { format } from 'date-fns';
 	import { goto } from '$app/navigation';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import type { Entry } from '../fuji/workspace';
-	import { getSignedIn } from '../signed-in';
 	import ProseMirrorEditor from '$lib/components/ProseMirrorEditor.svelte';
 	import TagInput from '$lib/components/TagInput.svelte';
 
 	let { entry }: { entry: Entry } = $props();
-	const signedIn = getSignedIn();
+	const { fuji } = getSignedInSession();
 
 	type EntryUpdate = Omit<
-		Parameters<typeof signedIn.fuji.actions.entries.update>[0],
+		Parameters<typeof fuji.actions.entries.update>[0],
 		'id'
 	>;
 
 	function updateEntry(updates: EntryUpdate) {
 		toastOnError(
-			signedIn.fuji.actions.entries.update({ id: entry.id, ...updates }),
+			fuji.actions.entries.update({ id: entry.id, ...updates }),
 			"Couldn't save changes",
 		);
 	}
 
-	const contentDoc = fromDisposableCache(
-		signedIn.fuji.entryContentDocs,
+	const contentDoc = useCacheHandle(
+		fuji.entryContentDocs,
 		() => entry.id,
 	);
 
@@ -66,7 +66,7 @@
 					confirm: { text: 'Delete', variant: 'destructive' },
 					onConfirm: () => {
 						toastOnError(
-							signedIn.fuji.actions.entries.delete({ id: entry.id }),
+							fuji.actions.entries.delete({ id: entry.id }),
 							'Couldn\'t delete entry',
 						);
 						goto('/');

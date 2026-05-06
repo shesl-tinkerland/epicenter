@@ -10,12 +10,17 @@
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { getEntriesState } from '../state/entries.svelte';
+	import { getSignedInSession } from '$lib/signed-in-session';
 	import AppHeader from './AppHeader.svelte';
 	import EntriesSidebar from './EntriesSidebar.svelte';
 
 	let { children }: { children: Snippet } = $props();
-	const entriesState = getEntriesState();
+	const { fuji, entries } = getSignedInSession();
+
+	function createEntry() {
+		const { id } = fuji.actions.entries.create({});
+		goto(`/entries/${id}`);
+	}
 
 	function flushPendingEdits() {
 		if (
@@ -31,7 +36,7 @@
 
 	const paletteItems = $derived.by((): CommandPaletteItem[] => {
 		if (!paletteOpen) return [];
-		return entriesState.active.map((entry) => ({
+		return entries.active.map((entry) => ({
 			id: entry.id,
 			label: entry.title || 'Untitled',
 			description: entry.subtitle || undefined,
@@ -61,7 +66,7 @@
 
 		if (event.key === 'n' && event.metaKey) {
 			event.preventDefault();
-			entriesState.createEntry();
+			createEntry();
 			return;
 		}
 
@@ -86,8 +91,8 @@
 			class="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-xs text-muted-foreground"
 		>
 			<span
-				>{entriesState.active.length}
-				{entriesState.active.length === 1 ? 'entry' : 'entries'}</span
+				>{entries.active.length}
+				{entries.active.length === 1 ? 'entry' : 'entries'}</span
 			>
 			<div class="ml-auto flex items-center gap-1.5">
 				<span class="flex items-center gap-1"> Search <Kbd>⌘K</Kbd> </span>
