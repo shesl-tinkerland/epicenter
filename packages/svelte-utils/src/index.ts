@@ -11,3 +11,8 @@ export {
 	createPersistedState,
 	PersistedError,
 } from './persisted-state.svelte.js';
+export {
+	createSession,
+	type Session,
+	type SignedInBase,
+} from './session.svelte.js';
