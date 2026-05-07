@@ -95,38 +95,26 @@ export function reactiveCounter(externalStore: ExternalStore) {
 2. **Auto cleanup**: When no reactive consumers exist, `createSubscriber` calls your cleanup function
 3. **Single source of truth**: External store owns the data; `$state` is just a reactive mirror
 
-## Real World: Yjs CRDT to SvelteMap
+## Real World: Yjs Table to Readonly View
 
 ```typescript
-import { SvelteMap } from 'svelte/reactivity';
 import { createSubscriber } from 'svelte/reactivity';
 
-export function reactiveTable(yjsTable: YjsTableHelper) {
-	// Shadow state: SvelteMap for O(1) lookups
-	const rows = new SvelteMap<string, Row>();
-
-	// Initialize from current state
-	for (const row of yjsTable.getAll()) {
-		rows.set(row.id, row);
-	}
-
+export function readonlyTable(yjsTable: YjsTableHelper) {
 	const subscribe = createSubscriber((update) => {
-		return yjsTable.observeChanges((changes) => {
-			for (const [id, change] of changes) {
-				if (change.action === 'delete') rows.delete(id);
-				else rows.set(id, change.row);
-			}
+		return yjsTable.observeChanges(() => {
 			update();
 		});
 	});
 
 	return {
-		get rows() {
+		get all(): Row[] {
 			subscribe();
-			return rows;
+			return yjsTable.getAllValid();
 		},
-		upsert(row: Row) {
-			yjsTable.upsert(row); // Yjs handles it, observer updates SvelteMap
+		byId(id: string): Row | undefined {
+			subscribe();
+			return yjsTable.get(id);
 		},
 	};
 }
@@ -135,7 +123,7 @@ export function reactiveTable(yjsTable: YjsTableHelper) {
 ## The Flow
 
 ```
-Component calls upsert({ id: '1', title: 'Hello' })
+Component calls yjsTable.upsert({ id: '1', title: 'Hello' })
     │
     ▼
 yjsTable.upsert() ─── writes to ──► Yjs Y.Map
@@ -145,20 +133,16 @@ yjsTable.upsert() ─── writes to ──► Yjs Y.Map
 observeChanges callback fires
     │
     ▼
-rows.set('1', newRow) ─── updates ──► SvelteMap shadow state
-    │
-    ▼
 update() called
     │
     ▼
-Svelte re-renders components reading `rows`
+Svelte re-renders components reading `all` or `byId(id)`
 ```
 
-**No manual invalidation. No stale state. No race conditions.**
+No manual invalidation. No stale mirror state. No writable view API.
 
----
-
-This pattern has been solid for syncing Yjs CRDTs in a local-first app. Works great for any external store with an observe/subscribe API.
+The pattern is not Yjs-specific. It works for any external store with an
+observe or subscribe API where the external store remains the source of truth.
 
 ## Further Reading
 

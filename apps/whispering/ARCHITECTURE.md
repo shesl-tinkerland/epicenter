@@ -83,7 +83,7 @@ async function transcribeBlob(blob: Blob) {
 }
 ```
 
-**Workspace State** - After migrating to Yjs CRDTs, domain data (recordings, transformations, transformation runs) lives in reactive workspace state modules (`$lib/state/*.svelte.ts`). These use SvelteMap backed by Yjs documents for instant reactivity—no cache invalidation or optimistic updates needed.
+**Workspace State** - After migrating to Yjs CRDTs, domain data (recordings, transformations, transformation runs) lives in reactive workspace state modules (`$lib/state/*.svelte.ts`). These use readonly table views backed by Yjs documents for instant reactivity, with no cache invalidation or optimistic updates needed.
 
 The query layer's role has narrowed to things that don't fit in CRDTs:
 

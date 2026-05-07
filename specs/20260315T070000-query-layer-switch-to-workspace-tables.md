@@ -212,7 +212,7 @@ function createWorkspaceRecordings() {
             );
         },
 
-        /** Create or update a recording. Writes to Yjs → observer updates SvelteMap. */
+        /** Create or update a recording. Writes to Yjs; reactive table views invalidate from table changes. */
         set(recording: Recording) {
             workspace.tables.recordings.set(recording);
         },
@@ -352,7 +352,7 @@ The old model had `transformation.steps[]` as a nested array. The workspace mode
 
 ### Summary
 
-Replaced TanStack Query + DbService read/write path with reactive SvelteMap state modules backed by Yjs workspace tables for recordings. The recordings data flow is now fully workspace-backed: components read from SvelteMap, writes go directly to workspace tables, Yjs observers keep the SvelteMap in sync. Transformations are partially migrated—reads and deletes use workspace state, but create/update still go through TanStack Query mutations because the Editor component uses the old dot-notation field schema.
+Replaced TanStack Query + DbService read/write path with reactive table state backed by Yjs workspace tables for recordings. The recordings data flow is now fully workspace-backed: components read readonly table views, writes go directly to workspace tables, and table changes invalidate the view. Transformations are partially migrated because reads and deletes use workspace state, but create and update still go through TanStack Query mutations because the Editor component uses the old dot-notation field schema.
 
 ### Deviations from Spec
 

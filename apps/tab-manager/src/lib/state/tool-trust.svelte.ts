@@ -55,9 +55,8 @@ function createToolTrustState() {
 		/**
 		 * Set the trust level for a tool.
 		 *
-		 * Writes to the workspace table (Y.Doc-backed), which triggers
-		 * the observer to update the internal trust map reactively. Syncs
-		 * across devices via CRDT.
+		 * Writes to the workspace table. The readonly table view updates
+		 * reactive readers and syncs across devices via CRDT.
 		 *
 		 * @example
 		 * ```typescript
@@ -95,7 +94,7 @@ function createToolTrustState() {
 		/**
 		 * All trust entries as a cached reactive array.
 		 *
-		 * Returns `[toolName, trustLevel]` tuples. Stable reference via `$derived`—
+		 * Returns `[toolName, trustLevel]` tuples. Stable reference via `$derived`,
 		 * recomputes only when the underlying trust table changes.
 		 *
 		 * @example

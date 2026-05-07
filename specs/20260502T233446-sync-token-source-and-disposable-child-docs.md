@@ -312,7 +312,7 @@ Run app typechecks where practical. If they fail on existing unrelated Svelte or
 
 ### Deviations From Spec
 
-- `fromDocumentFamily` was replaced with `fromDisposableCache` because five Svelte call sites shared the same reactive open and dispose pattern. The helper earns the one-sentence test: bind a plain disposable cache to a reactive id and dispose the previous handle on id changes.
+- `fromDocumentFamily` was replaced with `fromDisposableCache`, now named `useCacheHandle`, because five Svelte call sites shared the same reactive open and dispose pattern. The helper earns the one-sentence test: bind a plain disposable cache to a reactive id and dispose the previous handle on id changes.
 - Zhongwen has no compatible browser sync setup in its current client path, so there was no token-source browser sync call site to update.
 
 ### Verification

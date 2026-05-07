@@ -419,7 +419,7 @@ describe('scaling ceiling: multi-table write strategies', () => {
 		console.log('bulkSet = O(n) deferred conflict resolution via observer');
 		console.log('seq set() = one table at a time, V8 JIT stays hot');
 		console.log(
-			'interleaved set() = alternating arrays, toArray() thrash — NEVER do this in bulk',
+			'interleaved set() = alternating arrays, toArray() thrash: NEVER do this in bulk',
 		);
 	}, 120_000);
 

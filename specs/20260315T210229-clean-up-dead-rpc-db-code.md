@@ -2,10 +2,10 @@
 
 ## Context
 
-We migrated recordings, transformations, transformation steps, and transformation runs from TanStack Query + DbService to reactive SvelteMap state modules backed by Yjs workspace tables. The data flow is now:
+We migrated recordings, transformations, transformation steps, and transformation runs from TanStack Query + DbService to reactive table state backed by Yjs workspace tables. The current table view API is readonly: `all` and `byId(id)`.
 
 ```
-Workspace (Yjs) → SvelteMap state modules → Components
+Workspace (Yjs) -> readonly table views -> Components
 ```
 
 Instead of:

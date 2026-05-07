@@ -95,7 +95,7 @@ export const fs = createYjsFileSystem(
 - `fsState.selectFile(id)` — navigate to a file (sets activeFileId + opens tab)
 - `fsState.getFile(id)` — get FileRow by ID
 - `fsState.walkTree(visitor)` — walk the file tree, collecting results
-- `fromTable(workspace.tables.files)` — reactive SvelteMap of all file rows
+- `fromTable(workspace.tables.files)`: readonly view of all file rows via `all` and `byId(id)`
 
 ### Current Editor Components
 

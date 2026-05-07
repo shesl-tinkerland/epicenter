@@ -180,7 +180,10 @@ All writes: `workspaceClient.kv.set('selectedFolderId', v)` → `selectedFolderI
 Svelte 5's own `fromStore()` establishes the convention: convert an external data source into reactive Svelte state. The `from*` family scales: `fromKv`, `fromTable`, future `fromKvAll`.
 
 ### Why `.current` on `fromKv` but not `fromTable`
-`fromKv` wraps a scalar value → needs a box (`{ current }`). `fromTable` wraps a collection → IS a collection (SvelteMap). Same distinction as `$state(value)` vs `SvelteMap`.
+Current API note: `fromKv` wraps a scalar value, so it uses `{ current }`.
+`fromTable` returns a readonly table view with `all` and `byId(id)`. The first
+implementation returned a `SvelteMap`, which is why the historical migration
+notes below mention `.get()` and `.values()`.
 
 ### Why `destroy` (not `dispose` or `Symbol.dispose`)
 - `destroy` matches the workspace codebase convention (extensions, WorkspaceClient all use `destroy`)
@@ -256,10 +259,10 @@ With 3 utilities (`fromKv`, `fromTable`, `createPersistedState`), one entry poin
 **Phase 2 — First migrations:**
 - Added `@epicenter/svelte` dep to honeycrisp + fuji `package.json`
 - Migrated honeycrisp `view.svelte.ts`: 3 `$state` + 3 `kv.observe` → 3 `fromKv` calls. Updated all `.current` reads/writes.
-- Migrated fuji `+page.svelte`: removed `$effect` wrapper, replaced 2 KV observers with `fromKv`, 1 table observer with `fromTable`. Updated derived state to use SvelteMap `.get()` and `[...values()]`.
+- Migrated fuji `+page.svelte`: removed `$effect` wrapper, replaced 2 KV observers with `fromKv`, 1 table observer with `fromTable`. At the time, derived state used SvelteMap `.get()` and `[...values()]`; current code should use `view.byId(id)` and `view.all`.
 
 **Phase 3 — Full rollout:**
-- Migrated honeycrisp `notes.svelte.ts`: replaced `allNotes` array + observe with `fromTable`. Derived `notes`, `deletedNotes`, `noteCounts` now read from `[...allNotesMap.values()]`.
+- Migrated honeycrisp `notes.svelte.ts`: replaced `allNotes` array + observe with `fromTable`. At the time, derived `notes`, `deletedNotes`, and `noteCounts` read from `[...allNotesMap.values()]`; current code should use `view.all`.
 - Migrated honeycrisp `folders.svelte.ts`: replaced `folders` array + observe with `fromTable`.
 - Migrated tab-manager `saved-tab-state.svelte.ts`: replaced `tabs` array + observe with `fromTable`.
 - Migrated tab-manager `bookmark-state.svelte.ts`: replaced `bookmarks` array + observe with `fromTable`.

@@ -15,7 +15,7 @@
  * const recording = recordings.byId(id);
  * const all = recordings.sorted; // newest first
  *
- * // Write (Yjs observer invalidates reactive readers)
+ * // Write (table view updates reactive readers)
  * recordings.set(recording);
  * recordings.delete(id);
  * ```
@@ -72,7 +72,7 @@ function createRecordings() {
 		 * Create or update a recording. Writes to Yjs invalidate the table view.
 		 *
 		 * Accepts a recording without `_v` (version tag is added automatically).
-		 * No manual cache invalidation needed. The observer handles UI updates.
+		 * No manual cache invalidation needed. The table view updates reactive readers.
 		 */
 		set(recording: Omit<Recording, '_v'>) {
 			whispering.tables.recordings.set({ ...recording, _v: 2 } as Recording);
@@ -91,7 +91,7 @@ function createRecordings() {
 		/**
 		 * Delete a recording by ID.
 		 *
-		 * Fire-and-forget. The Yjs observer invalidates reactive readers.
+		 * Fire-and-forget. The table view updates reactive readers.
 		 * Callers should clean up audio URLs before calling this.
 		 */
 		delete(id: string) {

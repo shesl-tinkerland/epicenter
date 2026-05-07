@@ -13,65 +13,69 @@ observers, intervals, or sockets are still alive.
 That means this can be fine for the page lifetime:
 
 ```typescript
-function createBookmarkState() {
-	const bookmarksMap = fromTable(workspace.tables.bookmarks);
-	const bookmarks = $derived([...bookmarksMap.values()]);
+function createSidebarState() {
+	let width = $state(280);
+
+	const unwatchStorage = watchStorage('sidebar-width', (nextWidth) => {
+		width = nextWidth;
+	});
 
 	return {
-		get bookmarks() {
-			return bookmarks;
+		get width() {
+			return width;
 		},
 	};
 }
 
-export const bookmarkState = createBookmarkState();
+export const sidebarState = createSidebarState();
 ```
 
-But during HMR, every updated module copy can add another table observer. The
+But during HMR, every updated module copy can add another storage watcher. The
 page did not reload, so nothing automatically removed the previous one.
 
 Make the singleton disposable:
 
 ```typescript
-function createBookmarkState() {
-	const bookmarksMap = fromTable(workspace.tables.bookmarks);
-	const bookmarks = $derived([...bookmarksMap.values()]);
+function createSidebarState() {
+	let width = $state(280);
+
+	const unwatchStorage = watchStorage('sidebar-width', (nextWidth) => {
+		width = nextWidth;
+	});
 
 	return {
 		[Symbol.dispose]() {
-			bookmarksMap[Symbol.dispose]();
+			unwatchStorage();
 		},
 
-		get bookmarks() {
-			return bookmarks;
+		get width() {
+			return width;
 		},
 	};
 }
 
-export const bookmarkState = createBookmarkState();
+export const sidebarState = createSidebarState();
 
 if (import.meta.hot) {
-	import.meta.hot.dispose(() => bookmarkState[Symbol.dispose]());
+	import.meta.hot.dispose(() => sidebarState[Symbol.dispose]());
 }
 ```
 
-This is not a `fromTable()` rule. `fromTable()` is just the example in front of
-us. The more general rule is ownership: the module created a persistent side
-effect, so the module owns the HMR teardown.
+This is an ownership rule. The module created a persistent side effect, so the
+module owns the HMR teardown.
 
 ```txt
-fromTable()
-  owns one Yjs observer
+watchStorage()
+  owns one browser storage listener
 
-createBookmarkState()
-  owns the fromTable() map
+createSidebarState()
+  owns the storage watcher
 
-bookmark-state.svelte.ts
+sidebar-state.svelte.ts
   owns the module singleton during HMR
 ```
 
-The same shape applies to a storage watcher, a browser event listener, an
-interval, or a socket:
+The same shape applies to a browser event listener, an interval, or a socket:
 
 ```typescript
 function createSidebarState() {
@@ -106,6 +110,11 @@ if (import.meta.hot) {
 
 Vite documents `hot.dispose(cb)` as the hook for persistent side effects created
 by the old module copy. That is the exact situation here.
+
+`fromTable()` is different now. It returns a readonly view backed by
+`createSubscriber`; the table observer attaches while reactive consumers read
+`view.all` or `view.byId(id)`, then detaches when those consumers are gone. Do
+not add HMR cleanup just to dispose a `fromTable()` view.
 
 Do not put this cleanup in a random component. The component did not create the
 module singleton. The module did.

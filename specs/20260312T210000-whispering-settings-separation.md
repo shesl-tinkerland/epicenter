@@ -8,7 +8,7 @@
 
 Split Whispering's unified `settings.svelte.ts` (localStorage-backed, ~80 keys) into two reactive state files reflecting a real architectural boundary:
 
-- **`workspace-settings.svelte.ts`** — ~42 synced preferences backed by Yjs KV (SvelteMap + observer)
+- **`workspace-settings.svelte.ts`**: ~42 synced preferences backed by Yjs KV through reactive views
 - **`device-config.svelte.ts`** — ~36 device-bound keys backed by localStorage (`createPersistedState`)
 
 This wave creates the reactive layer that Wave 3 (migration) writes into.
@@ -22,15 +22,15 @@ This wave creates the reactive layer that Wave 3 (migration) writes into.
 │  workspace-settings.svelte.ts                                    │
 │                                                                  │
 │  ┌──────────────┐  observeAll()  ┌───────────────┐  .get(key)  │
-│  │  Yjs KV      │───────────────►│  SvelteMap    │────────────►UI│
-│  │  (Y.Array)   │               │  (reactive)   │              │
+│  │  Yjs KV      │───────────────►│ reactive view │────────────►UI│
+│  │  (Y.Array)   │               │               │              │
 │  │  42 entries   │               │  42 entries   │              │
 │  └──────┬───────┘               └───────────────┘              │
 │         ▲                              │                        │
 │         │     kv.set(key, value)       │                        │
 │         └──────────────────────────────┘                        │
 │           write goes to Yjs first,                              │
-│           observer updates SvelteMap                            │
+│           observer invalidates the view                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

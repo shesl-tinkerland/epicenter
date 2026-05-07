@@ -147,7 +147,7 @@ function createEntriesStateForFuji() {
 Three concerns:
 
 1. **Reactive views over fuji** (`active`, `deleted`): pure data, belongs on fuji.
-2. **Lifecycle wrapper** (`fromTable` + `[Symbol.dispose]`): belongs on fuji, tied to fuji's `[Symbol.dispose]`.
+2. **Lifecycle wrapper at the time** (`fromTable` + `[Symbol.dispose]`): this was obsolete after `fromTable` became a readonly view with its own `createSubscriber` lifecycle.
 3. **`createEntry` with navigation**: UI policy. Two lines in a click handler.
 
 Refusal: drop the bundled `createEntry()`. Move reactive views onto `fuji.entries`. Let the click handler call `fuji.actions.entries.create()` then `goto()`. The `entries-state.svelte.ts` file deletes.

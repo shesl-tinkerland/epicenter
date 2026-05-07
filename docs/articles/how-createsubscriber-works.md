@@ -183,4 +183,4 @@ If your external events mutate `$state` directly, skip `createSubscriber`. The `
 
 ## Further Reading
 
-For a consumer-focused guide with practical examples (BroadcastChannel, IntersectionObserver, and more), see [Using createSubscriber](./using-createsubscriber.md). For choosing between `$state` and `createSubscriber` when both could work, see [`$state` vs `createSubscriber`: Who Owns the Reactivity?](./state-vs-createsubscriber-who-owns-reactivity.md). For a Yjs-specific example with shadow state and bidirectional sync, see [Syncing External State with createSubscriber](./svelte-5-createsubscriber-pattern.md).
+For a consumer-focused guide with practical examples (BroadcastChannel, IntersectionObserver, and more), see [Using createSubscriber](./using-createsubscriber.md). For choosing between `$state` and `createSubscriber` when both could work, see [`$state` vs `createSubscriber`: Who Owns the Reactivity?](./state-vs-createsubscriber-who-owns-reactivity.md). For a Yjs-specific readonly view example, see [Syncing External State with createSubscriber](./svelte-5-createsubscriber-pattern.md).

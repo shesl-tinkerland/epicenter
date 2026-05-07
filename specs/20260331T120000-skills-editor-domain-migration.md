@@ -78,11 +78,11 @@ const workspace = createWorkspace(honeycrisp)
 
 Two patterns exist:
 
-**Pattern A: `fromTable()`** (honeycrisp, tab-manager, zhongwen, fuji)—preferred for domain tables:
+**Pattern A: `fromTable()`** (honeycrisp, tab-manager, zhongwen, fuji): preferred for domain tables:
 
 ```typescript
-const skillsMap = fromTable(workspace.tables.skills);
-const skills = $derived(skillsMap.values().toArray().sort((a, b) => a.name.localeCompare(b.name)));
+const skillsView = fromTable(workspace.tables.skills);
+const skills = $derived(skillsView.all.toSorted((a, b) => a.name.localeCompare(b.name)));
 ```
 
 **Pattern B: Manual `SvelteMap` + `observe()`** (whispering)—used when custom logic is needed on each change event. Not needed here.

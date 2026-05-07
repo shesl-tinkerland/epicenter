@@ -409,4 +409,4 @@ The external source is the state. `createSubscriber` is the notification channel
 
 ## Further Reading
 
-For a Yjs-specific example with shadow `SvelteMap` state and bidirectional mutations, see [Syncing External State with createSubscriber](./svelte-5-createsubscriber-pattern.md). For the version signal, reference counting, and `render_effect` internals, see [How createSubscriber Works](./how-createsubscriber-works.md). For choosing between `$state` and `createSubscriber` when both could work, see [`$state` vs `createSubscriber`: Who Owns the Reactivity?](./state-vs-createsubscriber-who-owns-reactivity.md).
+For a Yjs-specific readonly view example, see [Syncing External State with createSubscriber](./svelte-5-createsubscriber-pattern.md). For the version signal, reference counting, and `render_effect` internals, see [How createSubscriber Works](./how-createsubscriber-works.md). For choosing between `$state` and `createSubscriber` when both could work, see [`$state` vs `createSubscriber`: Who Owns the Reactivity?](./state-vs-createsubscriber-who-owns-reactivity.md).

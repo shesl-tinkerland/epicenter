@@ -2,7 +2,7 @@
  * fromTable Tests
  *
  * Verifies the readonly table view wraps workspace tables with Svelte's
- * createSubscriber lifecycle instead of a mirrored SvelteMap.
+ * createSubscriber lifecycle.
  *
  * Key behaviors:
  * - First tracked read attaches a table observer
