@@ -24,10 +24,10 @@
  * ```
  */
 
-import { searchParams, type SortBy } from './search-params.svelte';
 import type { FolderId, NoteId } from '../honeycrisp/workspace';
 import type { createFoldersState } from './folders.svelte';
 import type { createNotesState } from './notes.svelte';
+import { type SortBy, searchParams } from './search-params.svelte';
 
 export function createViewState({
 	foldersState,

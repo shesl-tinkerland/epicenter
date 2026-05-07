@@ -24,8 +24,8 @@ import { fromTable } from '@epicenter/svelte';
 import { DateTimeString, generateId } from '@epicenter/workspace';
 import type { Honeycrisp } from '../honeycrisp/browser';
 import type { FolderId, NoteId } from '../honeycrisp/workspace';
-import { searchParams } from './search-params.svelte';
 import type { createFoldersState } from './folders.svelte';
+import { searchParams } from './search-params.svelte';
 
 export function createNotesState({
 	foldersState,

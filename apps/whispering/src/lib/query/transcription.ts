@@ -162,17 +162,15 @@ export async function transcribeBlob(
 
 			switch (selectedService) {
 				case 'OpenAI': {
-					const { data, error } = await services.transcriptions.openai.transcribe(
-						audioToTranscribe,
-						{
+					const { data, error } =
+						await services.transcriptions.openai.transcribe(audioToTranscribe, {
 							outputLanguage,
 							prompt,
 							temperature,
 							apiKey: deviceConfig.get('apiKeys.openai'),
 							modelName: settings.get('transcription.openai.model'),
 							baseURL: deviceConfig.get('apiEndpoints.openai') || undefined,
-						},
-					);
+						});
 					if (error) return openaiErrorToWhisperingErr(error);
 					return Ok(data);
 				}

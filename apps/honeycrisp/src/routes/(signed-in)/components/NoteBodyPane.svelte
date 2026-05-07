@@ -9,7 +9,10 @@
 
 	let { noteId }: { noteId: string } = $props();
 
-	const doc = fromDisposableCache(signedIn.honeycrisp.noteBodyDocs, () => noteId);
+	const doc = fromDisposableCache(
+		signedIn.honeycrisp.noteBodyDocs,
+		() => noteId,
+	);
 </script>
 
 {#await doc.current.idb.whenLoaded}

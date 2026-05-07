@@ -121,9 +121,9 @@ describe('attachEncryption', () => {
 				throw new Error('not signed-in');
 			},
 		});
-		expect(() =>
-			encryption.attachTable('a', encryptedRowDefinition),
-		).toThrow('not signed-in');
+		expect(() => encryption.attachTable('a', encryptedRowDefinition)).toThrow(
+			'not signed-in',
+		);
 	});
 
 	test('attachReadonlyTable reads encrypted rows without exposing writes', () => {

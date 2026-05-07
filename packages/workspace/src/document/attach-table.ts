@@ -508,7 +508,10 @@ export function createTable<
 			if (current === null) return Ok(null);
 
 			const merged = { ...current, ...partial, id };
-			const { data: validated, error: mergedError } = readonly.parse(id, merged);
+			const { data: validated, error: mergedError } = readonly.parse(
+				id,
+				merged,
+			);
 			if (mergedError) return Err(mergedError);
 
 			ykv.set(validated.id, validated);

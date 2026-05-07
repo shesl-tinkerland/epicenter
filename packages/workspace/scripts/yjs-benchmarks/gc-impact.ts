@@ -8,7 +8,6 @@ type BenchmarkResult = {
 	operations: number;
 };
 
-
 /**
  * Benchmark 1: Y.Text Heavy Editing
  * Simulates Google Docs-like typing and deleting

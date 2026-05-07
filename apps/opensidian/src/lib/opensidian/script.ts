@@ -1,7 +1,4 @@
-import {
-	createMachineAuthClient,
-	requireSignedIn,
-} from '@epicenter/auth/node';
+import { createMachineAuthClient, requireSignedIn } from '@epicenter/auth/node';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { attachSync, type ProjectDir, toWsUrl } from '@epicenter/workspace';
 import {

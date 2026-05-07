@@ -31,7 +31,9 @@ afterEach(() => {
 	rmSync(workDir, { recursive: true, force: true });
 });
 
-const sampleMeta = (overrides: Partial<DaemonMetadata> = {}): DaemonMetadata => ({
+const sampleMeta = (
+	overrides: Partial<DaemonMetadata> = {},
+): DaemonMetadata => ({
 	pid: process.pid,
 	dir: workDir,
 	startedAt: new Date(0).toISOString(),

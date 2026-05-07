@@ -197,7 +197,9 @@ export function attachEncryption(
 
 	function register(store: AnyEncryptedStore): void {
 		stores.push(store);
-		store.activateEncryption(deriveKeyring(options.encryptionKeys(), workspaceId));
+		store.activateEncryption(
+			deriveKeyring(options.encryptionKeys(), workspaceId),
+		);
 	}
 
 	const attachment: EncryptionAttachment = {

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { getSignedInSession } from '$lib/session.svelte';
 	import EntriesTable from '../../components/EntriesTable.svelte';
 	import EntriesTimeline from '../../components/EntriesTimeline.svelte';
-	import { getSignedInSession } from '$lib/session.svelte';
 	import { viewState } from '../../state/view.svelte';
 
 	const signedIn = getSignedInSession();

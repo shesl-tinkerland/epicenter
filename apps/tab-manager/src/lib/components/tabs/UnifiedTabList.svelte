@@ -174,7 +174,7 @@
 								variant="ghost"
 								size="icon-xs"
 								tooltip="Restore"
-							onclick={() =>
+								onclick={() =>
 							savedTabState.restore(tab).then((r) => toastOnError(r, 'Failed to restore tab'))}
 							>
 								<RotateCcwIcon />
@@ -217,7 +217,7 @@
 								variant="ghost"
 								size="icon-xs"
 								tooltip="Open"
-							onclick={() => bookmarkState.open(bookmark).then((r) => toastOnError(r, 'Failed to open bookmark'))}
+								onclick={() => bookmarkState.open(bookmark).then((r) => toastOnError(r, 'Failed to open bookmark'))}
 							>
 								<ExternalLinkIcon />
 							</Button>

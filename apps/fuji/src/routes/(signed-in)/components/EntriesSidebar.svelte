@@ -9,8 +9,8 @@
 	import { VList } from 'virtua/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { getSignedInSession } from '$lib/session.svelte';
 	import { matchesEntrySearch } from '$lib/entries-search';
+	import { getSignedInSession } from '$lib/session.svelte';
 	import { viewState } from '../state/view.svelte';
 
 	const signedIn = getSignedInSession();

@@ -17,5 +17,5 @@ export type InternalEncryptedIndexedDbAttachment = IndexedDbAttachment & {
 	activateEncryption(keyring: ReadonlyMap<number, Uint8Array>): void;
 };
 
-export { createReadonlyTable, createTable } from './attach-table.js';
 export { createKv } from './attach-kv.js';
+export { createReadonlyTable, createTable } from './attach-table.js';

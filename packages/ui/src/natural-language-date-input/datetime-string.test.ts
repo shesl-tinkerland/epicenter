@@ -4,7 +4,10 @@ import { localTimezone, toDateTimeString } from './datetime-string.js';
 
 describe('toDateTimeString', () => {
 	it('formats UTC date and timezone with a pipe separator', () => {
-		const value = toDateTimeString(new Date('2024-01-01T20:00:00.000Z'), 'America/New_York');
+		const value = toDateTimeString(
+			new Date('2024-01-01T20:00:00.000Z'),
+			'America/New_York',
+		);
 
 		expect(value).toBe('2024-01-01T20:00:00.000Z|America/New_York');
 		expect(value).toContain('|');

@@ -15,8 +15,8 @@
  */
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { YKeyValueLww, type YKeyValueLwwEntry } from './y-keyvalue-lww';
 import { YKeyValue, type YKeyValueEntry } from './_reference/y-keyvalue';
+import { YKeyValueLww, type YKeyValueLwwEntry } from './y-keyvalue-lww';
 
 describe('YKeyValueLww', () => {
 	describe('Basic Operations', () => {

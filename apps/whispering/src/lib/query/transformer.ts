@@ -5,7 +5,6 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Err, isErr, Ok, type Result } from 'wellcrafted/result';
-import { whispering } from '$lib/whispering/client';
 import { defineMutation } from '$lib/query/client';
 import {
 	WhisperingErr,
@@ -17,13 +16,14 @@ import { deviceConfig } from '$lib/state/device-config.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 import { transformationRuns } from '$lib/state/transformation-runs.svelte';
 import { transformationSteps } from '$lib/state/transformation-steps.svelte';
+import { asTemplateString, interpolateTemplate } from '$lib/utils/template';
+import { whispering } from '$lib/whispering/client';
 import type {
 	Transformation,
 	TransformationRun,
 	TransformationStep,
 	TransformationStepRun,
 } from '$lib/workspace';
-import { asTemplateString, interpolateTemplate } from '$lib/utils/template';
 
 type TransformationRunRunning = Extract<
 	TransformationRun,

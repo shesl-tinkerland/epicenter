@@ -15,10 +15,10 @@
 	import { format, isToday, isYesterday } from 'date-fns';
 	import { VList } from 'virtua/svelte';
 	import { goto } from '$app/navigation';
-	import { getSignedInSession } from '$lib/session.svelte';
 	import { matchesEntrySearch } from '$lib/entries-search';
-	import { viewState } from '../state/view.svelte';
+	import { getSignedInSession } from '$lib/session.svelte';
 	import type { Entry } from '../fuji/workspace';
+	import { viewState } from '../state/view.svelte';
 
 	let { entries, title }: { entries: Entry[]; title?: string } = $props();
 	const signedIn = getSignedInSession();
@@ -165,11 +165,7 @@
 						>Create your first entry to get started.</Empty.Description
 					>
 					<Empty.Content>
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={createEntry}
-						>
+						<Button variant="outline" size="sm" onclick={createEntry}>
 							<PlusIcon class="mr-1.5 size-4" />
 							New Entry
 						</Button>

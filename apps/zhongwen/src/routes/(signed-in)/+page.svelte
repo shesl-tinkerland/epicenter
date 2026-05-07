@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { requireSignedIn } from '@epicenter/auth';
 	import { fromKv } from '@epicenter/svelte';
 	import { Button } from '@epicenter/ui/button';
 	import * as Chat from '@epicenter/ui/chat';
@@ -9,7 +10,6 @@
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { auth } from '$lib/auth';
 	import { getSignedInSession } from '$lib/session.svelte';
-	import { requireSignedIn } from '@epicenter/auth';
 	import { createChatState } from './chat/chat-state.svelte';
 	import ChatInput from './components/ChatInput.svelte';
 	import ChatMessage from './components/ChatMessage.svelte';

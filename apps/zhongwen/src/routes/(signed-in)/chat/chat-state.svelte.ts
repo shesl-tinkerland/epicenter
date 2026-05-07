@@ -12,6 +12,14 @@ import { createChat, fetchServerSentEvents } from '@tanstack/ai-svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { JsonValue } from 'wellcrafted/json';
 import { auth } from '$lib/auth';
+import { getSignedInSession } from '$lib/session.svelte';
+import {
+	type ChatMessageId,
+	type Conversation,
+	type ConversationId,
+	generateChatMessageId,
+	generateConversationId,
+} from '../zhongwen/workspace';
 import {
 	DEFAULT_MODEL,
 	DEFAULT_PROVIDER,
@@ -20,14 +28,6 @@ import {
 } from './providers';
 import { ZHONGWEN_SYSTEM_PROMPT } from './system-prompt';
 import { toUiMessage } from './ui-message';
-import {
-	type ChatMessageId,
-	type Conversation,
-	type ConversationId,
-	generateChatMessageId,
-	generateConversationId,
-} from '../zhongwen/workspace';
-import { getSignedInSession } from '$lib/session.svelte';
 
 const asChatMessageId = (id: string) => id as ChatMessageId;
 
@@ -210,7 +210,9 @@ export function createChatState() {
 			reload() {
 				const lastMessage = chat.messages.at(-1);
 				if (lastMessage?.role === 'assistant') {
-					signedIn.zhongwen.tables.chatMessages.delete(asChatMessageId(lastMessage.id));
+					signedIn.zhongwen.tables.chatMessages.delete(
+						asChatMessageId(lastMessage.id),
+					);
 				}
 				void chat.reload();
 			},
@@ -247,12 +249,16 @@ export function createChatState() {
 
 	// fromTable owns the reactive data; this observer only handles
 	// imperative handle lifecycle (creating/destroying chat instances).
-	const unobserveConversations = signedIn.zhongwen.tables.conversations.observe(() => {
-		reconcileHandles();
-	});
-	const unobserveChatMessages = signedIn.zhongwen.tables.chatMessages.observe(() => {
-		handles.get(activeConversationId)?.syncMessages();
-	});
+	const unobserveConversations = signedIn.zhongwen.tables.conversations.observe(
+		() => {
+			reconcileHandles();
+		},
+	);
+	const unobserveChatMessages = signedIn.zhongwen.tables.chatMessages.observe(
+		() => {
+			handles.get(activeConversationId)?.syncMessages();
+		},
+	);
 
 	// Initialize after persistence loads
 	void signedIn.zhongwen.idb.whenLoaded.then(() => {

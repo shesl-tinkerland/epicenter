@@ -17,10 +17,10 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { format } from 'date-fns';
 	import { goto } from '$app/navigation';
-	import { getSignedInSession } from '$lib/session.svelte';
-	import type { Entry } from '../fuji/workspace';
 	import ProseMirrorEditor from '$lib/components/ProseMirrorEditor.svelte';
 	import TagInput from '$lib/components/TagInput.svelte';
+	import { getSignedInSession } from '$lib/session.svelte';
+	import type { Entry } from '../fuji/workspace';
 
 	let { entry }: { entry: Entry } = $props();
 	const signedIn = getSignedInSession();

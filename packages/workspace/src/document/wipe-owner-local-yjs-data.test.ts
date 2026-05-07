@@ -43,7 +43,9 @@ async function databaseNames(): Promise<string[]> {
 
 describe('wipeOwnerLocalYjsData', () => {
 	afterEach(async () => {
-		await Promise.all((await databaseNames()).map((name) => deleteDatabase(name)));
+		await Promise.all(
+			(await databaseNames()).map((name) => deleteDatabase(name)),
+		);
 	});
 
 	test('clears known scoped document keys', async () => {

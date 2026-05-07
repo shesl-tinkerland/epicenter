@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from 'bun:test';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, test } from 'bun:test';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { composeSinks, createLogger } from 'wellcrafted/logger';
 import { jsonlFileSink } from './jsonl-sink.js';
@@ -51,7 +51,10 @@ describe('jsonlFileSink', () => {
 		const second = JSON.parse(lines[1] as string);
 		expect(second.level).toBe('warn');
 		expect(second.data.name).toBe('Boom');
-		expect(second.data.cause).toMatchObject({ name: 'Error', message: 'kaboom' });
+		expect(second.data.cause).toMatchObject({
+			name: 'Error',
+			message: 'kaboom',
+		});
 	});
 
 	test('auto-creates parent directory', async () => {

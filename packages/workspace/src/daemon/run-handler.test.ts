@@ -12,8 +12,8 @@ import type { SyncStatus } from '../document/attach-sync.js';
 import type { PeerAwarenessSchema } from '../document/peer-identity.js';
 import type { RemoteClient } from '../rpc/remote-actions.js';
 import { defineMutation, defineQuery } from '../shared/actions.js';
-import { executeRun } from './run-handler.js';
 import type { RunSyncStatus } from './run-errors.js';
+import { executeRun } from './run-handler.js';
 import type { StartedDaemonRoute } from './types.js';
 
 type Runtime = StartedDaemonRoute['runtime'];

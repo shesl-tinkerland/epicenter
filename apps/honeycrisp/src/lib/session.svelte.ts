@@ -1,9 +1,9 @@
 import { requireSignedIn } from '@epicenter/auth';
 import { createSession, type InferSignedIn } from '@epicenter/svelte';
 import { getOrCreateInstallationId } from '@epicenter/workspace';
-import { auth } from './auth';
 import { openHoneycrisp } from '../routes/(signed-in)/honeycrisp/browser';
 import { createHoneycrispState } from '../routes/(signed-in)/state';
+import { auth } from './auth';
 
 export const session = createSession({
 	auth,

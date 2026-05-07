@@ -14,8 +14,8 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-	MAIN_SUBPROTOCOL,
 	decodeSyncRequest,
+	MAIN_SUBPROTOCOL,
 	parseSubprotocols,
 	stateVectorsEqual,
 } from '@epicenter/sync';

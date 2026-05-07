@@ -1,9 +1,9 @@
+import { requireSignedIn } from '@epicenter/auth';
 import {
 	BearerSession,
 	createBearerAuth,
 	waitForAuthState,
 } from '@epicenter/auth-svelte';
-import { requireSignedIn } from '@epicenter/auth';
 import { APP_URLS } from '@epicenter/constants/vite';
 import { createPersistedState } from '@epicenter/svelte';
 import { getOrCreateInstallationId } from '@epicenter/workspace';
