@@ -1,9 +1,9 @@
 /**
  * Reactive recording state backed by Yjs workspace tables.
  *
- * Replaces TanStack Query + BlobStore for recording CRUD. SvelteMap provides
- * per-key reactivity—updating one recording doesn't re-render the entire list.
- * The Yjs observer fires on local writes, remote CRDT sync, and migration.
+ * Replaces TanStack Query + BlobStore for recording CRUD. The readonly table
+ * view invalidates reactive readers on local writes, remote CRDT sync, and
+ * migration.
  *
  * Audio blob access still goes through BlobStore (blobs are too large for CRDTs).
  *
@@ -15,7 +15,7 @@
  * const recording = recordings.byId(id);
  * const all = recordings.sorted; // newest first
  *
- * // Write (Yjs observer auto-updates SvelteMap → components re-render)
+ * // Write (Yjs observer invalidates reactive readers)
  * recordings.set(recording);
  * recordings.delete(id);
  * ```
@@ -51,7 +51,7 @@ function createRecordings() {
 		/**
 		 * Get a recording by ID. Returns undefined if not found.
 		 *
-		 * Reads from the reactive SvelteMap—triggers re-render if the
+		 * Reads from the reactive table view. Components re-render if the
 		 * recording changes or is deleted.
 		 */
 		byId(id: string) {
@@ -69,10 +69,10 @@ function createRecordings() {
 		},
 
 		/**
-		 * Create or update a recording. Writes to Yjs → observer updates SvelteMap.
+		 * Create or update a recording. Writes to Yjs invalidate the table view.
 		 *
 		 * Accepts a recording without `_v` (version tag is added automatically).
-		 * No manual cache invalidation needed—the observer handles UI updates.
+		 * No manual cache invalidation needed. The observer handles UI updates.
 		 */
 		set(recording: Omit<Recording, '_v'>) {
 			whispering.tables.recordings.set({ ...recording, _v: 2 } as Recording);
@@ -91,7 +91,7 @@ function createRecordings() {
 		/**
 		 * Delete a recording by ID.
 		 *
-		 * Fire-and-forget—Yjs observer fires `map.delete(id)` automatically.
+		 * Fire-and-forget. The Yjs observer invalidates reactive readers.
 		 * Callers should clean up audio URLs before calling this.
 		 */
 		delete(id: string) {

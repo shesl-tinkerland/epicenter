@@ -16,7 +16,7 @@ Singleton reactive state that stays in sync with the application. Unlike the que
 
 ### `settings.svelte.ts`
 
-Synced workspace settings backed by Yjs KV. Settings here roam across devices via CRDT sync. Uses a SvelteMap for per-key reactivity.
+Synced workspace settings backed by Yjs KV. Settings here roam across devices via CRDT sync.
 
 ```typescript
 import { settings } from '$lib/state/settings.svelte';
@@ -24,22 +24,22 @@ import { settings } from '$lib/state/settings.svelte';
 // Read settings reactively (re-renders on change)
 const mode = settings.get('recording.mode');
 
-// Update settings (writes to Yjs KV → syncs to other devices)
+// Update settings (writes to Yjs KV and syncs to other devices)
 settings.set('recording.mode', 'vad');
 ```
 
 ### `recordings.svelte.ts`
 
-Recording metadata backed by Yjs workspace table. SvelteMap provides per-key reactivity—updating one recording doesn't re-render the entire list. Audio blobs are NOT stored here (too large for CRDTs); use `DbService.recordings.getAudioBlob()` for audio access.
+Recording metadata backed by Yjs workspace table. The readonly table view invalidates reactive readers when workspace rows change. Audio blobs are NOT stored here (too large for CRDTs); use `DbService.recordings.getAudioBlob()` for audio access.
 
 ```typescript
 import { recordings } from '$lib/state/recordings.svelte';
 
 // Read recordings reactively
-const recording = recordings.get(id);
+const recording = recordings.byId(id);
 const sorted = recordings.sorted; // newest first
 
-// Write (Yjs observer auto-updates SvelteMap)
+// Write (Yjs observer invalidates reactive readers)
 recordings.set(recording);
 recordings.update(id, { transcriptionStatus: 'DONE' });
 recordings.delete(id);
@@ -52,7 +52,7 @@ Transformation metadata backed by Yjs workspace table. Steps are stored in a sep
 ```typescript
 import { transformations } from '$lib/state/transformations.svelte';
 
-const transformation = transformations.get(id);
+const transformation = transformations.byId(id);
 const sorted = transformations.sorted; // alphabetical
 ```
 
@@ -80,7 +80,7 @@ const latest = transformationRuns.getLatestByRecordingId(recordingId);
 
 ### `device-config.svelte.ts`
 
-Device-bound configuration backed by per-key localStorage. Secrets, hardware IDs, filesystem paths, and global OS shortcuts that should never sync across devices. Uses a SvelteMap for per-key reactivity with cross-tab sync via storage events.
+Device-bound configuration backed by per-key localStorage. Secrets, hardware IDs, filesystem paths, and global OS shortcuts should never sync across devices.
 
 ```typescript
 import { deviceConfig } from '$lib/state/device-config.svelte';

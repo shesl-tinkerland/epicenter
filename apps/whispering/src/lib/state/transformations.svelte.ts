@@ -3,7 +3,7 @@
  *
  * Replaces TanStack Query + BlobStore for transformation CRUD. The workspace
  * model stores transformations as metadata rows (title, description, timestamps)
- * without embedded steps—steps live in a separate `transformationSteps` table.
+ * without embedded steps. Steps live in a separate `transformationSteps` table.
  *
  * @example
  * ```typescript
@@ -57,7 +57,7 @@ function createTransformations() {
 		},
 
 		/**
-		 * Create or update a transformation. Writes to Yjs → observer updates SvelteMap.
+		 * Create or update a transformation. Writes to Yjs invalidate the table view.
 		 */
 		set(transformation: Transformation) {
 			whispering.tables.transformations.set(transformation);

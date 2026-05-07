@@ -1,6 +1,8 @@
-# SvelteMap Over $state for Keyed Collections
+# Reactive Views Over $state for Keyed Collections
 
-When your data has IDs—workspace rows, conversations, recordings—store it in a `SvelteMap`, not a `$state` array. Derive the array form with `$derived` when you need it for rendering.
+When your data has IDs, workspace rows, conversations, recordings, and similar
+records should not live in a `$state` array. Use the domain source directly and
+derive the array form with `$derived` when you need it for rendering.
 
 ## The Problem
 
@@ -16,133 +18,97 @@ This works until you need to look one up:
 const metadata = $derived(conversations.find((c) => c.id === conversationId));
 ```
 
-That's O(n) on every access. Worse, Svelte's reactivity tracks the entire array—updating one conversation re-renders everything that reads `conversations`, even if they only care about a single item.
+That is O(n) on every access. Svelte also tracks the whole array, so updating
+one conversation re-renders anything that reads `conversations`, even if a
+component only cares about a single row.
 
-## The Fix: SvelteMap + $derived
+## Workspace Tables
+
+Workspace tables use `fromTable()` from `@epicenter/svelte`. It returns a
+readonly view with two reads:
 
 ```typescript
-const conversationsMap = fromTable(workspace.tables.conversations);
+const conversationsView = fromTable(workspace.tables.conversations);
 
 const conversations = $derived(
-    conversationsMap.values().toArray().sort((a, b) => b.updatedAt - a.updatedAt),
+	conversationsView.all.toSorted((a, b) => b.updatedAt - a.updatedAt),
 );
+
+const metadata = $derived(conversationsView.byId(conversationId));
 ```
 
-Two lines. The `SvelteMap` gives you O(1) lookups (`map.get(id)`), and Svelte tracks each key independently—updating conversation A doesn't re-render a component that only reads conversation B.
+`view.all` returns the current valid rows as an array. `view.byId(id)` returns
+one row or `undefined`. Both reads subscribe when used in a Svelte reactive
+context and read live table data without subscribing when used imperatively.
 
-The `$derived` array is a cached materialization. It recomputes only when the map changes, and it gives you a stable reference (critical for TanStack Table, which enters an infinite loop if `get data()` returns a new array on every call).
+The `$derived` array is a cached materialization. It recomputes when the table
+view invalidates, and it gives consumers a stable reference until then. That is
+important for TanStack Table, which can loop if `get data()` returns a new
+array on every access.
 
 ## The Three-Layer Pattern
 
-Every workspace-backed collection in this codebase follows this shape:
+Every workspace-backed collection in this codebase should follow this shape:
 
 ```typescript
-// 1. Map — reactive source (private, suffixed with Map)
-const recordingsMap = fromTable(workspace.tables.recordings);
+// 1. View: reactive source, private, suffixed with View
+const recordingsView = fromTable(workspace.tables.recordings);
 
-// 2. Derived array — cached materialization (private, no suffix)
+// 2. Derived array: cached materialization, private, no suffix
 const recordings = $derived(
-    recordingsMap.values().toArray().sort((a, b) => b.timestamp - a.timestamp),
+	recordingsView.all.toSorted((a, b) => b.timestamp - a.timestamp),
 );
 
-// 3. Getter — public API (matches the derived name)
+// 3. Getter: public API
 return {
-    get recordings() {
-        return recordings;
-    },
-    get(id: string) {
-        return recordingsMap.get(id);
-    },
+	get recordings() {
+		return recordings;
+	},
+	byId: recordingsView.byId,
 };
 ```
 
-Naming convention: `{name}Map` → `{name}` → `get {name}()`.
+Naming convention: `{name}View` to `{name}` to `get {name}()`.
 
-## What fromTable Does Under the Hood
+## What fromTable Does
 
-`fromTable()` from `@epicenter/svelte` wraps the manual SvelteMap + observe pattern into a single call:
+`fromTable()` wraps a workspace table with Svelte's public `createSubscriber`
+primitive:
 
 ```typescript
-export function fromTable<TRow extends BaseRow>(
-    table: TableHelper<TRow>,
-): SvelteMap<string, TRow> & { destroy: () => void } {
-    const map = new SvelteMap<string, TRow>();
+export function fromTable<TRow extends BaseRow>(table: Table<TRow>) {
+	const subscribe = createSubscriber((update) => table.observe(update));
 
-    // Seed with current valid rows
-    for (const row of table.getAllValid()) {
-        map.set(row.id, row);
-    }
-
-    // Granular updates — only touch changed rows
-    const unobserve = table.observe((changedIds) => {
-        for (const id of changedIds) {
-            const result = table.get(id);
-            switch (result.status) {
-                case 'valid':
-                    map.set(id, result.row);
-                    break;
-                case 'not_found':
-                case 'invalid':
-                    map.delete(id);
-                    break;
-            }
-        }
-    });
-
-    return Object.assign(map, { destroy: unobserve });
+	return {
+		get all(): TRow[] {
+			subscribe();
+			return table.getAllValid();
+		},
+		byId(id: string): TRow | undefined {
+			subscribe();
+			return table.get(id).data ?? undefined;
+		},
+	};
 }
 ```
 
-The observer fires on local writes, remote CRDT sync, and migration. You write to the workspace table (`workspace.tables.X.set()`), the observer picks it up, and the SvelteMap updates. Unidirectional—never write to the SvelteMap directly.
+The table remains the source of truth. Writes go through the workspace table or
+workspace actions. The view has no write methods and no manual dispose method.
+Svelte attaches the observer when a tracked read appears and detaches it after
+the last tracked reader is gone.
 
-## Why Not $state<T[]>?
+## When SvelteMap Still Fits
 
-Three concrete problems:
+Use `SvelteMap` for non-workspace keyed state that you own locally, such as
+browser tabs keyed by native tab ID. It is still the right primitive when the
+map itself is the mutable source.
 
-**1. O(n) lookups.** Every `.find(item => item.id === id)` scans the whole array. With a SvelteMap, `.get(id)` is O(1).
+Use `$state<T[]>` when:
 
-**2. Coarse reactivity.** Svelte's deep proxy on `$state` arrays tracks the array structure. Mutating one item re-triggers any `$derived` that reads the array, even if it only cares about a different item. SvelteMap tracks each key independently.
+- Items do not have stable IDs, such as terminal history entries.
+- Order is the primary concern, such as open file tab order.
+- The list is small local UI state.
+- Values are primitives without row identity.
 
-**3. Referential instability.** If you derive a sorted array inside a getter (not `$derived`), every access creates a new array. TanStack Table's internal `$derived` sees "data changed" → updates internal `$state` → re-triggers `$derived` → infinite loop → page freeze.
-
-`$derived` caches the result, so consumers get the same reference until the underlying SvelteMap actually changes.
-
-## When $state Arrays Are Fine
-
-Not every array needs a SvelteMap. Use `$state<T[]>` when:
-
-- **Items don't have stable IDs.** Terminal history entries, command history strings—sequential data without identity.
-- **Order is the primary concern.** Open file tabs (`$state<FileId[]>`) where the position in the array is the point, not keyed lookup.
-- **The list is local UI state.** Small arrays that aren't workspace-backed and don't need granular per-item reactivity.
-- **Primitives.** `$state<string[]>` for a list of tags—no identity, no object structure to track granularly.
-
-The rule: if items have IDs and you'll ever need `.find()` or `.get()`, use SvelteMap.
-
-## The .observe() Sync Mechanism
-
-The workspace `.observe()` callback receives a `Set<string>` of changed IDs. This is how SvelteMap stays in sync across multiple clients:
-
-```
-User A writes → Yjs CRDT updates → observer fires on User A's device
-                                 → CRDT syncs to User B
-                                 → observer fires on User B's device
-                                 → SvelteMap.set() → UI re-renders
-```
-
-Both `fromTable()` and manual `.observe()` implementations follow the same loop: re-read each changed ID from the table, update or delete in the SvelteMap. The table is the source of truth—the SvelteMap is a reactive projection.
-
-## Decision Tree
-
-```
-Your data has items with IDs?
-├─ YES → Use SvelteMap
-│   ├─ Workspace table? → fromTable()
-│   ├─ Workspace KV (single key)? → fromKv()
-│   ├─ Browser API (Chrome tabs)? → new SvelteMap() + event listeners
-│   └─ Need sorted/filtered array? → $derived(map.values().toArray().sort(...))
-│
-└─ NO → $state is fine
-    ├─ Primitives (boolean, string, number) → $state(value)
-    ├─ Sequential data without IDs → $state<T[]>([])
-    └─ Ordered list where position matters → $state<T[]>([])
-```
+The rule: if it is a workspace table, use `fromTable()`. If it is local keyed
+state, use `SvelteMap`. If it is sequential local state, use `$state<T[]>`.

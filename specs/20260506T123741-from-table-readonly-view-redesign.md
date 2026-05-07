@@ -1,7 +1,7 @@
 # `fromTable` Readonly View Redesign
 
 **Date**: 2026-05-06
-**Status**: In Progress; refreshed 2026-05-07
+**Status**: Implemented; verification blocked by baseline tooling
 **Author**: AI-assisted
 **Branch**: feat/from-table-readonly-view
 **Refresh note**: The May 7 session cleanup moved Fuji's `fromTable` usage
@@ -274,6 +274,7 @@ Build, prove, remove. Phases 1 to 4 are sequential; within Phase 2 the per-app m
 - [x] **0.2** Keep all `other resource cleanup` paths. Known examples: Fuji workspace disposal, OpenSidian `fs.index` and `fs` disposal, chat message observers, chat handles, and workspace handles.
 - [x] **0.3** In OpenSidian filesystem state, rewrite comments that claim ancestor-only or key-level tracking if this migration accepts global invalidation.
 - [ ] **0.4** Measure or smoke-test OpenSidian filesystem interactions with a large sample tree before merging the global-subscriber version.
+  > **Not run**: remains an explicit manual pre-merge check because the dev-server smoke pass was not completed in this execution session.
 
 ### Phase 1: Build the new primitive
 
@@ -312,17 +313,24 @@ Each file changes per the translation table below. No file change depends on ano
 ### Phase 3: Verify
 
 - [ ] **3.1** `bun run typecheck` across the monorepo passes with zero new errors.
+  > **Blocked**: full typecheck does not reach a green gate on `origin/main` shape. `apps/zhongwen/.svelte-kit/tsconfig.json` was missing until `bun run --cwd apps/zhongwen svelte-kit sync`. The rerun then failed in `@epicenter/landing` because `svelte-check` is not available after `astro check`, and focused changed-package checks also hit existing `@epicenter/ui` alias resolution errors from app typechecks. Grepping the focused output did not surface errors in the files changed by this implementation.
 - [ ] **3.2** `bun run test` passes.
+  > **Blocked**: full monorepo `bun run test` stops in `@epicenter/zhongwen` because its test script targets `./src/routes/(signed-in)/zhongwen`, where Bun reports no matching test files. Focused verification for `@epicenter/svelte` passes: `bun run test --filter=@epicenter/svelte`.
 - [ ] **3.3** Manual smoke: launch whispering, fuji, honeycrisp, tab-manager. Exercise per-app create/update/delete flows for at least one tabular view. Confirm no regressions in TanStack Table sorting or row updates.
+  > **Not run**: app-level dev-server smoke was left for PR review because the automated verification gates above are blocked by baseline setup issues.
 - [ ] **3.4** HMR check: edit one of the migrated wrapper files (e.g. `recordings.svelte.ts`), confirm hot replace does not leak observers (open devtools, check Yjs document for accumulated handlers if any.)
+  > **Not run**: same manual-smoke constraint as 3.3.
 - [ ] **3.5** Sign-out smoke: in fuji, sign out and back in. Confirm the rebuilt session payload does not retain stale entries data.
+  > **Not run**: same manual-smoke constraint as 3.3.
 
 ### Phase 4: Remove
 
-- [ ] **4.1** Delete the `ReactiveTableMap` type export reference (already done in 1.2; this phase confirms nothing imports it).
-- [ ] **4.2** Search-and-fail: `grep -rn "ReactiveTableMap" packages/ apps/` returns zero hits.
-- [ ] **4.3** Search-and-fail: no cleanup remains whose only purpose is disposing a `fromTable` view. Cleanup for other resources may remain.
-- [ ] **4.4** Update `docs/articles/sveltemap-over-state-for-keyed-collections.md` and `docs/articles/derived-vs-getter-caching-matters.md` if the new primitive contradicts examples.
+- [x] **4.1** Delete the `ReactiveTableMap` type export reference (already done in 1.2; this phase confirms nothing imports it).
+- [x] **4.2** Search-and-fail: `grep -rn "ReactiveTableMap" packages/ apps/` returns zero hits.
+- [x] **4.3** Search-and-fail: no cleanup remains whose only purpose is disposing a `fromTable` view. Cleanup for other resources may remain.
+  > **Audit**: remaining `[Symbol.dispose]()` and HMR cleanup in fromTable-adjacent files belongs to chat handles, table observers, filesystem indexes, workspace handles, or app bundles.
+- [x] **4.4** Update `docs/articles/sveltemap-over-state-for-keyed-collections.md` and `docs/articles/derived-vs-getter-caching-matters.md` if the new primitive contradicts examples.
+  > **Updated**: both docs now describe workspace table views as live readonly views over Yjs instead of SvelteMap mirrors.
 
 ### Call site translation table
 
@@ -469,13 +477,85 @@ createSubscriber refcounts. Two `$derived` reading `recordings.all` produce one 
 
 ## Success Criteria
 
-- [ ] `packages/svelte-utils/src/from-table.svelte.ts` is < 30 lines and uses only `svelte/reactivity` public exports.
-- [ ] Zero `Symbol.dispose` references remain in app code paths that consume `fromTable`.
-- [ ] Zero `import.meta.hot.dispose(...)` related to `fromTable` consumers.
-- [ ] Zero `onDestroy(...)` calls related to `fromTable` consumers.
+- [x] `packages/svelte-utils/src/from-table.svelte.ts` is < 30 lines and uses only `svelte/reactivity` public exports.
+- [x] Zero `Symbol.dispose` references remain in app code paths that consume `fromTable`.
+- [x] Zero `import.meta.hot.dispose(...)` related to `fromTable` consumers.
+- [x] Zero `onDestroy(...)` calls related to `fromTable` consumers.
 - [ ] `bun run typecheck` and `bun run test` pass.
 - [ ] Manual smoke across whispering, fuji, honeycrisp, tab-manager passes for create/update/delete on at least one tabular view per app.
 - [ ] HMR replace of a migrated wrapper file does not produce a stale-observer warning or duplicate row updates.
+
+## Post Implementation Review
+
+Files read:
+
+```txt
+.agents/
+`-- skills/svelte/SKILL.md
+apps/
+|-- fuji/src/
+|   |-- lib/session.svelte.ts
+|   `-- routes/(signed-in)/
+|       |-- components/EntryEditor.svelte
+|       `-- entries/[id]/+page.svelte
+|-- honeycrisp/src/
+|   |-- lib/session.svelte.ts
+|   `-- routes/(signed-in)/
+|       |-- components/NoteBodyPane.svelte
+|       `-- state/
+|           |-- folders.svelte.ts
+|           |-- index.ts
+|           |-- notes.svelte.ts
+|           `-- view.svelte.ts
+|-- opensidian/src/lib/
+|   |-- chat/chat-state.svelte.ts
+|   |-- components/editor/ContentEditor.svelte
+|   `-- state/fs-state.svelte.ts
+|-- skills/src/lib/
+|   |-- components/editor/
+|   |   |-- ExpandedReference.svelte
+|   |   `-- InstructionsEditor.svelte
+|   `-- state/skills-state.svelte.ts
+|-- tab-manager/src/lib/
+|   |-- chat/chat-state.svelte.ts
+|   `-- state/
+|       |-- bookmark-state.svelte.ts
+|       |-- saved-tab-state.svelte.ts
+|       `-- tool-trust.svelte.ts
+|-- whispering/src/
+|   |-- lib/query/
+|   |   |-- README.md
+|   |   |-- actions.ts
+|   |   `-- transformer.ts
+|   |-- lib/state/
+|   |   |-- README.md
+|   |   |-- recordings.svelte.ts
+|   |   |-- transformation-runs.svelte.ts
+|   |   |-- transformation-steps.svelte.ts
+|   |   `-- transformations.svelte.ts
+|   `-- routes/(app)/(config)/
+|       |-- recordings/+page.svelte
+|       |-- recordings/row-actions/RecordingRowActions.svelte
+|       `-- transformations/TransformationRowActions.svelte
+`-- zhongwen/src/routes/(signed-in)/chat/chat-state.svelte.ts
+docs/articles/
+|-- derived-vs-getter-caching-matters.md
+`-- sveltemap-over-state-for-keyed-collections.md
+packages/svelte-utils/
+|-- package.json
+`-- src/
+    |-- from-table.svelte.test.ts
+    |-- from-table.svelte.ts
+    |-- index.ts
+    `-- use-cache-handle.svelte.ts
+```
+
+Review result:
+
+- No old `fromTable` public shape remains in app or package call sites.
+- Remaining cleanup in fromTable-adjacent files owns other resources, not the table view.
+- Focused `@epicenter/svelte` tests pass after the review edits.
+- Full monorepo typecheck, full monorepo test, and manual smoke remain blocked or not run as documented in Phase 3.
 
 ## References
 

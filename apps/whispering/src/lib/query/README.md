@@ -1010,7 +1010,7 @@ Understanding how RPC fits into the bigger picture:
 Pure functions that do the actual work:
 
 ```typescript
-// services/db.ts — still used for audio blobs and run lifecycle
+// services/db.ts: still used for audio blobs and run lifecycle
 export async function ensureAudioPlaybackUrl(
 	recordingId: string,
 ): Promise<Result<string, DbError>> {
@@ -1020,14 +1020,14 @@ export async function ensureAudioPlaybackUrl(
 
 ### 2. Workspace State (`/lib/state/workspace-*.svelte.ts`)
 
-Reactive SvelteMap modules backed by Yjs CRDTs. These replaced TanStack Query for all domain data CRUD:
+Reactive workspace state modules backed by Yjs CRDTs. These replaced TanStack Query for all domain data CRUD:
 
 ```typescript
 // Workspace state is the primary data layer for recordings, transformations, runs
 import { recordings } from '$lib/state/recordings.svelte';
 
-// Direct reactive access — no queries needed
-const recording = recordings.get(id);
+// Direct reactive access, no queries needed
+const recording = recordings.byId(id);
 const allRecordings = recordings.sorted;
 ```
 
@@ -1036,7 +1036,7 @@ const allRecordings = recordings.sorted;
 Wraps services with reactivity and caching for things that don't fit in workspace state:
 
 ```typescript
-// query/audio.ts — audio blobs are too large for Yjs CRDTs
+// query/audio.ts: audio blobs are too large for Yjs CRDTs
 export const audio = {
 	getPlaybackUrl: (id: Accessor<string>) =>
 		defineQuery({
