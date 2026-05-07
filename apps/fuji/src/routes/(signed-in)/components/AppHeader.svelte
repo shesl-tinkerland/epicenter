@@ -15,11 +15,6 @@
 	let { onOpenSearch }: { onOpenSearch: () => void } = $props();
 	const signedIn = getSignedInSession();
 
-	async function forgetFujiDevice(): Promise<void> {
-		await signedIn.fuji.wipe();
-		window.location.reload();
-	}
-
 	function createEntry() {
 		const { id } = signedIn.fuji.actions.entries.create({});
 		goto(`/entries/${id}`);
@@ -68,7 +63,6 @@
 			{auth}
 			sync={signedIn.fuji.sync}
 			syncNoun="entries"
-			onForgetDevice={forgetFujiDevice}
 			onSocialSignIn={() =>
 				auth.signInWithSocialRedirect({
 					provider: 'google',

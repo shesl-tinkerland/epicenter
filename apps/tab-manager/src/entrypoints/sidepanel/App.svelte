@@ -26,11 +26,7 @@
 	import UnifiedTabList from '$lib/components/tabs/UnifiedTabList.svelte';
 	import { browserState } from '$lib/state/browser-state.svelte';
 	import { unifiedViewState } from '$lib/state/unified-view-state.svelte';
-	import {
-		auth,
-		forgetTabManagerDevice,
-		tabManager,
-	} from '$lib/tab-manager/client';
+	import { auth, tabManager } from '$lib/tab-manager/client';
 
 	let searchInputRef = $state<HTMLInputElement | null>(null);
 	let commandPaletteOpen = $state(false);
@@ -182,7 +178,6 @@
 					{auth}
 					sync={tabManager.sync}
 					syncNoun="tabs"
-					onForgetDevice={forgetTabManagerDevice}
 					onSocialSignIn={async () => {
 						const { idToken, nonce } = await getGoogleCredentials();
 						return auth.signInWithIdToken({ provider: 'google', idToken, nonce });

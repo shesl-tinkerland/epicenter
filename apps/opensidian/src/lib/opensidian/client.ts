@@ -56,11 +56,6 @@ const unsubscribeAuthState = auth.onStateChange((state) => {
 	}
 });
 
-export async function forgetOpensidianDevice(): Promise<void> {
-	await opensidian.wipe();
-	window.location.reload();
-}
-
 if (import.meta.hot) {
 	import.meta.hot.dispose(() => {
 		unsubscribeAuthState();

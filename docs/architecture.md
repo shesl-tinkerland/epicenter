@@ -153,6 +153,37 @@ await workspace.sync.whenDisposed;
 
 Browser bundles expose `wipe()` for explicit local cleanup such as "Forget this device." Sign-out does not call it. The wipe sequence disposes the live bundle, awaits the async attachments needed to unblock storage deletion, then deletes persisted local state. The refcounted cache still calls `[Symbol.dispose]()` on the last release after the `gcTime` grace period; it does not aggregate an async disposal barrier.
 
+## Sign out, forget device, and reload
+These three operations are separate on purpose:
+
+```text
+auth.signOut()
+  Invalidates auth.
+  Does not wipe workspace data.
+
+workspace.wipe()
+  Deletes local workspace data for the current account on this device.
+  Does not delete synced or server account data.
+
+window.location.reload()
+  Restarts the current app runtime.
+  Does not delete data or sign out by itself.
+```
+
+Keep ordinary sign-out auth-only. Local-first apps must not delete persisted workspace data when auth expires, refresh fails, or the user simply leaves the account session. Do not expose `workspace.wipe()` as a normal account-menu action. It is a recovery or privacy reset for a deliberately scoped surface, such as troubleshooting local corruption or preparing a shared browser profile for handoff.
+
+If a product surface does expose this destructive reset, present it as "Forget this device" and use explicit confirmation copy:
+
+```text
+Forget this device?
+
+This deletes local data for this account on this device. Synced data stays in your account.
+
+Forget device
+```
+
+If the same flow also signs out, append: "You'll be signed out here."
+
 ## Write and read flow
 Writes always hit Yjs first. Everything else reacts to that state instead of becoming a competing source of truth.
 

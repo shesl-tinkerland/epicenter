@@ -10,11 +10,6 @@
 	import FolderMenuItem from '../components/FolderMenuItem.svelte';
 
 	const signedIn = getSignedInSession();
-
-	async function forgetHoneycrispDevice(): Promise<void> {
-		await signedIn.honeycrisp.wipe();
-		window.location.reload();
-	}
 </script>
 
 <Sidebar.Root>
@@ -26,7 +21,6 @@
 					{auth}
 					sync={signedIn.honeycrisp.sync}
 					syncNoun="notes"
-					onForgetDevice={forgetHoneycrispDevice}
 					onSocialSignIn={() =>
 						auth.signInWithSocialRedirect({
 							provider: 'google',

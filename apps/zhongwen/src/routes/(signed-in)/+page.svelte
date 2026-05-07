@@ -3,11 +3,8 @@
 	import { fromKv } from '@epicenter/svelte';
 	import { Button } from '@epicenter/ui/button';
 	import * as Chat from '@epicenter/ui/chat';
-	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import * as Sidebar from '@epicenter/ui/sidebar';
-	import { toast } from '@epicenter/ui/sonner';
 	import { onDestroy } from 'svelte';
-	import { extractErrorMessage } from 'wellcrafted/error';
 	import { auth } from '$lib/auth';
 	import { getSignedInSession } from '$lib/session.svelte';
 	import { createChatState } from './chat/chat-state.svelte';
@@ -26,25 +23,6 @@
 	onDestroy(() => {
 		chatState[Symbol.dispose]();
 	});
-
-	function openForgetDeviceDialog() {
-		confirmationDialog.open({
-			title: 'Forget this device?',
-			description:
-				'This deletes local Zhongwen data on this device. Account data on the server stays in your account.',
-			confirm: { text: 'Forget device', variant: 'destructive' },
-			onConfirm: async () => {
-				try {
-					await signedIn.zhongwen.wipe();
-					await auth.signOut();
-				} catch (error) {
-					toast.error('Failed to forget this device', {
-						description: extractErrorMessage(error),
-					});
-				}
-			},
-		});
-	}
 </script>
 
 <Sidebar.Provider>
@@ -74,9 +52,6 @@
 				<span class="text-sm text-muted-foreground">
 					{requireSignedIn(auth).user.name}
 				</span>
-				<Button variant="ghost" size="sm" onclick={openForgetDeviceDialog}>
-					Forget device
-				</Button>
 			</div>
 		</header>
 
