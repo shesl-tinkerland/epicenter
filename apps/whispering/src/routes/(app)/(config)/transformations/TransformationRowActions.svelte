@@ -9,7 +9,7 @@
 
 	let { transformationId }: { transformationId: string } = $props();
 
-	const transformation = $derived(transformations.get(transformationId));
+	const transformation = $derived(transformations.byId(transformationId));
 </script>
 
 <div class="flex items-center gap-1">

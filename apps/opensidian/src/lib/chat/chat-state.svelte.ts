@@ -16,6 +16,7 @@ import {
 } from '$lib/chat/system-prompt';
 import { toUiMessage } from '$lib/chat/ui-message';
 import { auth, opensidian, workspaceAiTools } from '$lib/opensidian/client';
+import { searchParams } from '$lib/search-params.svelte';
 import { skillState } from '$lib/state/skill-state.svelte';
 import {
 	type ChatMessageId,
@@ -24,7 +25,6 @@ import {
 	generateChatMessageId,
 	generateConversationId,
 } from '$lib/workspace/definition';
-import { searchParams } from '$lib/search-params.svelte';
 
 function getStringValue(value: JsonValue | undefined, fallback: string) {
 	return typeof value === 'string' ? value : fallback;
@@ -35,12 +35,11 @@ function getNumberValue(value: JsonValue | undefined, fallback = 0) {
 }
 
 function createAiChatState() {
-	const conversationsMap = fromTable(opensidian.tables.conversations);
+	const conversationsView = fromTable(opensidian.tables.conversations);
 	const conversations = $derived(
-		[...conversationsMap.values()]
-			.sort(
-				(a, b) => getNumberValue(b.updatedAt) - getNumberValue(a.updatedAt),
-			),
+		conversationsView.all.toSorted(
+			(a, b) => getNumberValue(b.updatedAt) - getNumberValue(a.updatedAt),
+		),
 	);
 
 	function ensureDefaultConversation(): ConversationId | undefined {
@@ -87,7 +86,7 @@ function createAiChatState() {
 	const refreshFns = new Map<ConversationId, () => void>();
 
 	function createConversationHandle(conversationId: ConversationId) {
-		const metadata = $derived(conversationsMap.get(conversationId));
+		const metadata = $derived(conversationsView.byId(conversationId));
 
 		const chat = createChat({
 			initialMessages: loadMessages(conversationId),
@@ -253,7 +252,9 @@ function createAiChatState() {
 			reload() {
 				const lastMessage = chat.messages.at(-1);
 				if (lastMessage?.role === 'assistant') {
-					opensidian.tables.chatMessages.delete(lastMessage.id as ChatMessageId);
+					opensidian.tables.chatMessages.delete(
+						lastMessage.id as ChatMessageId,
+					);
 				}
 
 				void chat.reload();
@@ -282,13 +283,13 @@ function createAiChatState() {
 
 	function reconcileHandles() {
 		for (const conversationId of handles.keys()) {
-			if (!conversationsMap.has(conversationId as string)) {
+			if (!conversationsView.byId(conversationId as string)) {
 				destroyConversation(conversationId);
 			}
 		}
 
-		for (const conversationId of conversationsMap.keys()) {
-			const id = conversationId as ConversationId;
+		for (const conversation of conversationsView.all) {
+			const id = conversation.id as ConversationId;
 			if (!handles.has(id)) {
 				handles.set(id, createConversationHandle(id));
 			}
@@ -307,9 +308,11 @@ function createAiChatState() {
 		(searchParams.chat ?? '') as ConversationId,
 	);
 
-	const _unobserveConversations = opensidian.tables.conversations.observe(() => {
-		reconcileHandles();
-	});
+	const _unobserveConversations = opensidian.tables.conversations.observe(
+		() => {
+			reconcileHandles();
+		},
+	);
 	const _unobserveChatMessages = opensidian.tables.chatMessages.observe(() => {
 		refreshFns.get(activeConversationId)?.();
 	});
@@ -369,7 +372,6 @@ function createAiChatState() {
 		[Symbol.dispose]() {
 			_unobserveConversations();
 			_unobserveChatMessages();
-			conversationsMap[Symbol.dispose]();
 			for (const conversationId of handles.keys()) {
 				destroyConversation(conversationId);
 			}

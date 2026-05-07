@@ -516,7 +516,7 @@ export const actions = {
 			}
 
 			// Get the transformation from workspace state
-			const transformation = transformations.get(transformationId);
+			const transformation = transformations.byId(transformationId);
 
 			if (!transformation) {
 				settings.set('transformation.selectedId', null);
@@ -694,7 +694,7 @@ async function processRecordingPipeline({
 
 	// Check if transformation is valid if specified
 	if (!transformationId) return;
-	const transformation = transformations.get(transformationId);
+	const transformation = transformations.byId(transformationId);
 
 	if (!transformation) {
 		settings.set('transformation.selectedId', null);

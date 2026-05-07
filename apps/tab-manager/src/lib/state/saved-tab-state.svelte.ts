@@ -1,9 +1,8 @@
 /**
  * Reactive saved tab state for the side panel.
  *
- * Read-only reactive layer backed by `fromTable()` — provides granular
- * per-row reactivity via `SvelteMap`. All write operations are delegated
- * to workspace actions defined in `client.ts`.
+ * Read-only reactive layer backed by `fromTable()`. All write operations are
+ * delegated to workspace actions defined in `client.ts`.
  *
  * The public API exposes a `$derived` sorted array since the access
  * pattern is always "render the full sorted list."
@@ -25,24 +24,17 @@
  */
 
 import { fromTable } from '@epicenter/svelte';
-import { tabManager } from '$lib/tab-manager/client';
 import type { BrowserTab } from '$lib/state/browser-state.svelte';
+import { tabManager } from '$lib/tab-manager/client';
 import type { SavedTab, SavedTabId } from '$lib/workspace';
 
 function createSavedTabState() {
-	const tabsMap = fromTable(tabManager.tables.savedTabs);
+	const tabsView = fromTable(tabManager.tables.savedTabs);
 
 	/** All saved tabs, sorted by most recently saved first. Cached via $derived. */
-	const tabs = $derived(
-		[...tabsMap.values()]
-			.sort((a, b) => b.savedAt - a.savedAt),
-	);
+	const tabs = $derived(tabsView.all.toSorted((a, b) => b.savedAt - a.savedAt));
 
 	return {
-		[Symbol.dispose]() {
-			tabsMap[Symbol.dispose]();
-		},
-
 		get tabs() {
 			return tabs;
 		},
@@ -100,7 +92,3 @@ function createSavedTabState() {
 }
 
 export const savedTabState = createSavedTabState();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => savedTabState[Symbol.dispose]());
-}

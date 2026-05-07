@@ -431,12 +431,12 @@
 						{#if transcribeRecordings.isPending}
 							<EllipsisIcon class="size-4" />
 						{:else if selectedRecordingRows.some(({ id }) => {
-							const currentRow = recordings.get(id);
+							const currentRow = recordings.byId(id);
 							return currentRow?.transcriptionStatus === 'TRANSCRIBING';
 						})}
 							<LoadingTranscriptionIcon class="size-4" />
 						{:else if selectedRecordingRows.some(({ id }) => {
-							const currentRow = recordings.get(id);
+							const currentRow = recordings.byId(id);
 							return currentRow?.transcriptionStatus === 'DONE';
 						})}
 							<RetryTranscriptionIcon class="size-4" />

@@ -62,9 +62,9 @@ import {
 function createAiChatState() {
 	// ── Conversation List (Y.Doc-backed) ──────────────────────────────
 
-	const conversationsMap = fromTable(tabManager.tables.conversations);
+	const conversationsView = fromTable(tabManager.tables.conversations);
 	const conversations = $derived(
-		[...conversationsMap.values()].sort((a, b) => b.updatedAt - a.updatedAt),
+		conversationsView.all.toSorted((a, b) => b.updatedAt - a.updatedAt),
 	);
 
 	/**
@@ -138,7 +138,7 @@ function createAiChatState() {
 		let inputValue = $state('');
 		let dismissedError = $state<string | null>(null);
 
-		const metadata = $derived(conversationsMap.get(conversationId));
+		const metadata = $derived(conversationsView.byId(conversationId));
 
 		const chat = createChat({
 			initialMessages: loadMessages(conversationId),
@@ -395,7 +395,7 @@ function createAiChatState() {
 	}
 
 	/**
-	 * Sync handles with the conversationsMap.
+	 * Sync handles with the conversations table.
 	 *
 	 * Creates handles for new conversation IDs, destroys handles
 	 * for deleted IDs. Existing handles survive, so their chat instance
@@ -403,15 +403,15 @@ function createAiChatState() {
 	 */
 	function reconcileHandles() {
 		for (const id of handles.keys()) {
-			if (!conversationsMap.has(id as string)) {
+			if (!conversationsView.byId(id as string)) {
 				destroyConversation(id);
 			}
 		}
 
-		for (const id of conversationsMap.keys()) {
-			const convId = id as ConversationId;
-			if (!handles.has(convId)) {
-				handles.set(convId, createConversationHandle(convId));
+		for (const conversation of conversationsView.all) {
+			const id = conversation.id as ConversationId;
+			if (!handles.has(id)) {
+				handles.set(id, createConversationHandle(id));
 			}
 		}
 	}
@@ -522,7 +522,6 @@ function createAiChatState() {
 		[Symbol.dispose]() {
 			_unobserveConversations();
 			_unobserveChatMessages();
-			conversationsMap[Symbol.dispose]();
 			for (const id of handles.keys()) {
 				destroyConversation(id);
 			}

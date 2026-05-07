@@ -24,25 +24,21 @@ import { whispering } from '$lib/whispering/client';
 import type { TransformationStep } from '$lib/workspace';
 
 function createTransformationSteps() {
-	const map = fromTable(whispering.tables.transformationSteps);
+	const view = fromTable(whispering.tables.transformationSteps);
 
 	return {
-		[Symbol.dispose]() {
-			map[Symbol.dispose]();
-		},
-
 		/**
-		 * All transformation steps as a reactive SvelteMap.
+		 * All transformation steps as a reactive readonly array.
 		 */
 		get all() {
-			return map;
+			return view.all;
 		},
 
 		/**
 		 * Get a step by ID. Returns undefined if not found.
 		 */
-		get(id: string) {
-			return map.get(id);
+		byId(id: string) {
+			return view.byId(id);
 		},
 
 		/**
@@ -55,7 +51,7 @@ function createTransformationSteps() {
 		 * @returns Steps sorted by `order` field (ascending)
 		 */
 		getByTransformationId(transformationId: string): TransformationStep[] {
-			return Array.from(map.values())
+			return view.all
 				.filter((step) => step.transformationId === transformationId)
 				.sort((a, b) => a.order - b.order);
 		},
@@ -90,25 +86,21 @@ function createTransformationSteps() {
 		 * Useful when deleting a transformation—removes all child steps.
 		 */
 		deleteByTransformationId(transformationId: string) {
-			for (const [id, step] of map) {
+			for (const step of view.all) {
 				if (step.transformationId === transformationId) {
-					whispering.tables.transformationSteps.delete(id);
+					whispering.tables.transformationSteps.delete(step.id);
 				}
 			}
 		},
 
 		/** Total number of steps across all transformations. */
 		get count() {
-			return map.size;
+			return view.all.length;
 		},
 	};
 }
 
 export const transformationSteps = createTransformationSteps();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => transformationSteps[Symbol.dispose]());
-}
 
 /**
  * Generate a default transformation step with sensible defaults.

@@ -29,22 +29,18 @@ import { searchParams } from './search-params.svelte';
 export function createFoldersState(honeycrisp: Honeycrisp) {
 	// ─── Reactive State ──────────────────────────────────────────────────
 
-	const foldersMap = fromTable(honeycrisp.tables.folders);
+	const foldersView = fromTable(honeycrisp.tables.folders);
 
-	const folders = $derived([...foldersMap.values()]);
+	const folders = $derived(foldersView.all);
 
 	// ─── Public API ──────────────────────────────────────────────────────
 
 	return {
-		[Symbol.dispose]() {
-			foldersMap[Symbol.dispose]();
-		},
-
 		/**
 		 * Look up a folder by ID. Returns `undefined` if not found.
 		 */
-		get(id: FolderId) {
-			return foldersMap.get(id);
+		byId(id: FolderId) {
+			return foldersView.byId(id);
 		},
 
 		get folders() {
@@ -68,7 +64,7 @@ export function createFoldersState(honeycrisp: Honeycrisp) {
 			honeycrisp.tables.folders.set({
 				id,
 				name: 'New Folder',
-				sortOrder: foldersMap.size,
+				sortOrder: foldersView.all.length,
 				_v: 1,
 			});
 		},

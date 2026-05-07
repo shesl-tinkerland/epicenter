@@ -10,7 +10,7 @@
  * import { transformations } from '$lib/state/transformations.svelte';
  *
  * // Read reactively
- * const transformation = transformations.get(id);
+ * const transformation = transformations.byId(id);
  * const all = transformations.sorted; // alphabetical by title
  *
  * // Write
@@ -26,37 +26,31 @@ import type { Transformation, TransformationStep } from '$lib/workspace';
 import { transformationSteps } from './transformation-steps.svelte';
 
 function createTransformations() {
-	const map = fromTable(whispering.tables.transformations);
+	const view = fromTable(whispering.tables.transformations);
 
 	// Memoize sorted array with $derived for referential stability.
 	const sorted = $derived(
-		[...map.values()].sort((a, b) => a.title.localeCompare(b.title)),
+		view.all.toSorted((a, b) => a.title.localeCompare(b.title)),
 	);
 
 	return {
-		[Symbol.dispose]() {
-			map[Symbol.dispose]();
-		},
-
 		/**
-		 * All transformations as a reactive SvelteMap.
-		 *
-		 * Components reading this re-render per-key when transformations change.
+		 * All transformations as a reactive readonly array.
 		 */
 		get all() {
-			return map;
+			return view.all;
 		},
 
 		/**
 		 * Get a transformation by ID. Returns undefined if not found.
 		 */
-		get(id: string) {
-			return map.get(id);
+		byId(id: string) {
+			return view.byId(id);
 		},
 
 		/**
 		 * All transformations as a sorted array (alphabetical by title).
-		 * Memoized via `$derived`—stable reference until SvelteMap changes.
+		 * Memoized via `$derived`, stable until the table changes.
 		 */
 		get sorted(): Transformation[] {
 			return sorted;
@@ -85,16 +79,12 @@ function createTransformations() {
 
 		/** Total number of transformations. */
 		get count() {
-			return map.size;
+			return view.all.length;
 		},
 	};
 }
 
 export const transformations = createTransformations();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => transformations[Symbol.dispose]());
-}
 
 /**
  * Generate a default transformation with sensible defaults.

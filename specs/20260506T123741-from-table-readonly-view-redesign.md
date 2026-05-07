@@ -269,9 +269,10 @@ Build, prove, remove. Phases 1 to 4 are sequential; within Phase 2 the per-app m
 
 ### Phase 0: Reconfirm lifecycle and granularity
 
-- [ ] **0.1** For every Phase 2 file, list each `[Symbol.dispose]()` or HMR cleanup and mark it as `fromTable observer cleanup` or `other resource cleanup`.
-- [ ] **0.2** Keep all `other resource cleanup` paths. Known examples: Fuji workspace disposal, OpenSidian `fs.index` and `fs` disposal, chat message observers, chat handles, and workspace handles.
-- [ ] **0.3** In OpenSidian filesystem state, rewrite comments that claim ancestor-only or key-level tracking if this migration accepts global invalidation.
+- [x] **0.1** For every Phase 2 file, list each `[Symbol.dispose]()` or HMR cleanup and mark it as `fromTable observer cleanup` or `other resource cleanup`.
+  > **Audit**: Honeycrisp folders/notes/state, Fuji entries view, skills state, tab-manager saved tabs/bookmarks/tool trust, and Whispering table wrappers only owned fromTable observer cleanup. Tab-manager chat, Zhongwen chat, OpenSidian chat, OpenSidian filesystem state, Fuji session, and Honeycrisp session keep other resource cleanup for chat handles, table observers, filesystem indexes, workspace handles, or app bundles.
+- [x] **0.2** Keep all `other resource cleanup` paths. Known examples: Fuji workspace disposal, OpenSidian `fs.index` and `fs` disposal, chat message observers, chat handles, and workspace handles.
+- [x] **0.3** In OpenSidian filesystem state, rewrite comments that claim ancestor-only or key-level tracking if this migration accepts global invalidation.
 - [ ] **0.4** Measure or smoke-test OpenSidian filesystem interactions with a large sample tree before merging the global-subscriber version.
 
 ### Phase 1: Build the new primitive
@@ -290,22 +291,23 @@ Build, prove, remove. Phases 1 to 4 are sequential; within Phase 2 the per-app m
 
 Each file changes per the translation table below. No file change depends on another file's change.
 
-- [ ] **2.1** `apps/honeycrisp/src/routes/(signed-in)/state/folders.svelte.ts`
-- [ ] **2.2** `apps/honeycrisp/src/routes/(signed-in)/state/notes.svelte.ts`
-- [ ] **2.3** `apps/zhongwen/src/routes/(signed-in)/chat/chat-state.svelte.ts`
-- [ ] **2.4** `apps/fuji/src/lib/session.svelte.ts`
-- [ ] **2.5** removed: Fuji no longer has `SignedInSessionProvider.svelte`
-- [ ] **2.6** `apps/tab-manager/src/lib/chat/chat-state.svelte.ts`
-- [ ] **2.7** `apps/opensidian/src/lib/chat/chat-state.svelte.ts`
-- [ ] **2.8** `apps/whispering/src/lib/state/transformation-steps.svelte.ts`
-- [ ] **2.9** `apps/whispering/src/lib/state/transformation-runs.svelte.ts`
-- [ ] **2.10** `apps/whispering/src/lib/state/transformations.svelte.ts`
-- [ ] **2.11** `apps/whispering/src/lib/state/recordings.svelte.ts`
-- [ ] **2.12** `apps/opensidian/src/lib/state/fs-state.svelte.ts`
-- [ ] **2.13** `apps/tab-manager/src/lib/state/tool-trust.svelte.ts`
-- [ ] **2.14** `apps/tab-manager/src/lib/state/saved-tab-state.svelte.ts`
-- [ ] **2.15** `apps/tab-manager/src/lib/state/bookmark-state.svelte.ts`
-- [ ] **2.16** `apps/skills/src/lib/state/skills-state.svelte.ts`
+- [x] **2.1** `apps/honeycrisp/src/routes/(signed-in)/state/folders.svelte.ts`
+- [x] **2.2** `apps/honeycrisp/src/routes/(signed-in)/state/notes.svelte.ts`
+- [x] **2.3** `apps/zhongwen/src/routes/(signed-in)/chat/chat-state.svelte.ts`
+- [x] **2.4** `apps/fuji/src/lib/session.svelte.ts`
+  > **Note**: Also updated `apps/fuji/src/routes/(signed-in)/components/EntryEditor.svelte` from `fromDisposableCache` to `useCacheHandle`; this call site was added after the cherry-picked rename commit.
+- [x] **2.5** removed: Fuji no longer has `SignedInSessionProvider.svelte`
+- [x] **2.6** `apps/tab-manager/src/lib/chat/chat-state.svelte.ts`
+- [x] **2.7** `apps/opensidian/src/lib/chat/chat-state.svelte.ts`
+- [x] **2.8** `apps/whispering/src/lib/state/transformation-steps.svelte.ts`
+- [x] **2.9** `apps/whispering/src/lib/state/transformation-runs.svelte.ts`
+- [x] **2.10** `apps/whispering/src/lib/state/transformations.svelte.ts`
+- [x] **2.11** `apps/whispering/src/lib/state/recordings.svelte.ts`
+- [x] **2.12** `apps/opensidian/src/lib/state/fs-state.svelte.ts`
+- [x] **2.13** `apps/tab-manager/src/lib/state/tool-trust.svelte.ts`
+- [x] **2.14** `apps/tab-manager/src/lib/state/saved-tab-state.svelte.ts`
+- [x] **2.15** `apps/tab-manager/src/lib/state/bookmark-state.svelte.ts`
+- [x] **2.16** `apps/skills/src/lib/state/skills-state.svelte.ts`
 
 ### Phase 3: Verify
 

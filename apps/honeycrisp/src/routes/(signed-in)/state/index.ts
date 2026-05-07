@@ -12,9 +12,5 @@ export function createHoneycrispState(honeycrisp: Honeycrisp) {
 		foldersState,
 		notesState,
 		viewState,
-		[Symbol.dispose]() {
-			foldersState[Symbol.dispose]();
-			notesState[Symbol.dispose]();
-		},
 	};
 }

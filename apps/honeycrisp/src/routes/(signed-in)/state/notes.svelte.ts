@@ -24,8 +24,8 @@ import { fromTable } from '@epicenter/svelte';
 import { DateTimeString, generateId } from '@epicenter/workspace';
 import type { Honeycrisp } from '../honeycrisp/browser';
 import type { FolderId, NoteId } from '../honeycrisp/workspace';
-import { searchParams } from './search-params.svelte';
 import type { createFoldersState } from './folders.svelte';
+import { searchParams } from './search-params.svelte';
 
 export function createNotesState({
 	foldersState,
@@ -36,10 +36,10 @@ export function createNotesState({
 }) {
 	// ─── Reactive State ──────────────────────────────────────────────────
 
-	const allNotesMap = fromTable(honeycrisp.tables.notes);
+	const allNotesView = fromTable(honeycrisp.tables.notes);
 
 	/** All valid notes (including deleted). Cached — only recomputes when table changes. */
-	const allNotes = $derived([...allNotesMap.values()]);
+	const allNotes = $derived(allNotesView.all);
 
 	// ─── Derived State ───────────────────────────────────────────────────
 
@@ -65,15 +65,11 @@ export function createNotesState({
 	// ─── Public API ──────────────────────────────────────────────────────
 
 	return {
-		[Symbol.dispose]() {
-			allNotesMap[Symbol.dispose]();
-		},
-
 		/**
 		 * Look up a note by ID. Returns `undefined` if not found.
 		 */
-		get(id: NoteId) {
-			return allNotesMap.get(id);
+		byId(id: NoteId) {
+			return allNotesView.byId(id);
 		},
 
 		get allNotes() {
@@ -154,7 +150,7 @@ export function createNotesState({
 		 * ```
 		 */
 		restoreNote(noteId: NoteId) {
-			const note = allNotesMap.get(noteId);
+			const note = allNotesView.byId(noteId);
 			if (!note) return;
 			const folderExists = note.folderId
 				? foldersState.folders.some((f) => f.id === note.folderId)
@@ -197,7 +193,7 @@ export function createNotesState({
 		 * ```
 		 */
 		pinNote(noteId: NoteId) {
-			const note = allNotesMap.get(noteId);
+			const note = allNotesView.byId(noteId);
 			if (!note) return;
 			honeycrisp.tables.notes.update(noteId, {
 				pinned: !note.pinned,

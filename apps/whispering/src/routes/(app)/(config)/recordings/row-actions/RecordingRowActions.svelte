@@ -37,7 +37,7 @@
 		transformationRuns.getLatestByRecordingId(recordingId),
 	);
 
-	const recording = $derived(recordings.get(recordingId));
+	const recording = $derived(recordings.byId(recordingId));
 </script>
 
 <div class="flex items-center gap-1">

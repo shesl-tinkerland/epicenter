@@ -7,7 +7,7 @@ import { skills as skillsWorkspace } from '$lib/skills/client';
  * Reactive skills state singleton.
  *
  * Follows the canonical monorepo pattern: factory function creates
- * `fromTable()` reactive maps, `$derived` arrays, and CRUD methods.
+ * `fromTable()` reactive views, `$derived` arrays, and CRUD methods.
  * Components import the singleton and read directly.
  *
  * @example
@@ -22,34 +22,28 @@ import { skills as skillsWorkspace } from '$lib/skills/client';
  * ```
  */
 function createSkillsState() {
-	const skillsMap = fromTable(skillsWorkspace.tables.skills);
-	const referencesMap = fromTable(skillsWorkspace.tables.references);
+	const skillsView = fromTable(skillsWorkspace.tables.skills);
+	const referencesView = fromTable(skillsWorkspace.tables.references);
 
 	const skills = $derived(
-		[...skillsMap.values()]
-			.sort((a, b) => a.name.localeCompare(b.name)),
+		skillsView.all.toSorted((a, b) => a.name.localeCompare(b.name)),
 	);
 
 	let selectedSkillId = $state<string | null>(null);
 
 	const selectedSkill = $derived.by(() => {
 		if (!selectedSkillId) return null;
-		return skillsMap.get(selectedSkillId) ?? null;
+		return skillsView.byId(selectedSkillId) ?? null;
 	});
 
 	const selectedReferences = $derived.by(() => {
 		if (!selectedSkillId) return [];
-		return [...referencesMap.values()]
+		return referencesView.all
 			.filter((r) => r.skillId === selectedSkillId)
 			.sort((a, b) => a.path.localeCompare(b.path));
 	});
 
 	return {
-		[Symbol.dispose]() {
-			skillsMap[Symbol.dispose]();
-			referencesMap[Symbol.dispose]();
-		},
-
 		/** All skills, sorted alphabetically by name. */
 		get skills() {
 			return skills;
@@ -82,8 +76,8 @@ function createSkillsState() {
 		 *
 		 * @returns The skill row, or `undefined` if it doesn't exist.
 		 */
-		get(id: string) {
-			return skillsMap.get(id);
+		byId(id: string) {
+			return skillsView.byId(id);
 		},
 
 		/**
@@ -138,7 +132,7 @@ function createSkillsState() {
 		 */
 		deleteSkill(id: string) {
 			skillsWorkspace.batch(() => {
-				for (const ref of referencesMap.values()) {
+				for (const ref of referencesView.all) {
 					if (ref.skillId === id) {
 						skillsWorkspace.tables.references.delete(ref.id);
 					}
@@ -177,7 +171,3 @@ function createSkillsState() {
 }
 
 export const skillsState = createSkillsState();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => skillsState[Symbol.dispose]());
-}

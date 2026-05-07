@@ -12,6 +12,14 @@ import { createChat, fetchServerSentEvents } from '@tanstack/ai-svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { JsonValue } from 'wellcrafted/json';
 import { auth } from '$lib/auth';
+import { getSignedInSession } from '$lib/session.svelte';
+import {
+	type ChatMessageId,
+	type Conversation,
+	type ConversationId,
+	generateChatMessageId,
+	generateConversationId,
+} from '../zhongwen/workspace';
 import {
 	DEFAULT_MODEL,
 	DEFAULT_PROVIDER,
@@ -20,14 +28,6 @@ import {
 } from './providers';
 import { ZHONGWEN_SYSTEM_PROMPT } from './system-prompt';
 import { toUiMessage } from './ui-message';
-import {
-	type ChatMessageId,
-	type Conversation,
-	type ConversationId,
-	generateChatMessageId,
-	generateConversationId,
-} from '../zhongwen/workspace';
-import { getSignedInSession } from '$lib/session.svelte';
 
 const asChatMessageId = (id: string) => id as ChatMessageId;
 
@@ -38,9 +38,9 @@ export function createChatState() {
 
 	// ── Conversation List (Y.Doc-backed) ──
 
-	const conversationsMap = fromTable(signedIn.zhongwen.tables.conversations);
+	const conversationsView = fromTable(signedIn.zhongwen.tables.conversations);
 	const conversations = $derived(
-		[...conversationsMap.values()].sort((a, b) => b.updatedAt - a.updatedAt),
+		conversationsView.all.toSorted((a, b) => b.updatedAt - a.updatedAt),
 	);
 
 	/** Returns the ID to activate, either the first existing conversation or a newly created default. */
@@ -95,7 +95,7 @@ export function createChatState() {
 	function createConversationHandle(conversationId: ConversationId) {
 		let inputValue = $state('');
 
-		const metadata = $derived(conversationsMap.get(conversationId));
+		const metadata = $derived(conversationsView.byId(conversationId));
 
 		const chat = createChat({
 			initialMessages: loadMessages(conversationId),
@@ -210,7 +210,9 @@ export function createChatState() {
 			reload() {
 				const lastMessage = chat.messages.at(-1);
 				if (lastMessage?.role === 'assistant') {
-					signedIn.zhongwen.tables.chatMessages.delete(asChatMessageId(lastMessage.id));
+					signedIn.zhongwen.tables.chatMessages.delete(
+						asChatMessageId(lastMessage.id),
+					);
 				}
 				void chat.reload();
 			},
@@ -230,15 +232,15 @@ export function createChatState() {
 
 	function reconcileHandles() {
 		for (const id of handles.keys()) {
-			if (!conversationsMap.has(id)) {
+			if (!conversationsView.byId(id)) {
 				destroyConversation(id);
 			}
 		}
 
-		for (const id of conversationsMap.keys()) {
-			const convId = id as ConversationId;
-			if (!handles.has(convId)) {
-				handles.set(convId, createConversationHandle(convId));
+		for (const conversation of conversationsView.all) {
+			const id = conversation.id as ConversationId;
+			if (!handles.has(id)) {
+				handles.set(id, createConversationHandle(id));
 			}
 		}
 	}
@@ -247,12 +249,16 @@ export function createChatState() {
 
 	// fromTable owns the reactive data; this observer only handles
 	// imperative handle lifecycle (creating/destroying chat instances).
-	const unobserveConversations = signedIn.zhongwen.tables.conversations.observe(() => {
-		reconcileHandles();
-	});
-	const unobserveChatMessages = signedIn.zhongwen.tables.chatMessages.observe(() => {
-		handles.get(activeConversationId)?.syncMessages();
-	});
+	const unobserveConversations = signedIn.zhongwen.tables.conversations.observe(
+		() => {
+			reconcileHandles();
+		},
+	);
+	const unobserveChatMessages = signedIn.zhongwen.tables.chatMessages.observe(
+		() => {
+			handles.get(activeConversationId)?.syncMessages();
+		},
+	);
 
 	// Initialize after persistence loads
 	void signedIn.zhongwen.idb.whenLoaded.then(() => {
@@ -337,7 +343,6 @@ export function createChatState() {
 		[Symbol.dispose]() {
 			unobserveConversations();
 			unobserveChatMessages();
-			conversationsMap[Symbol.dispose]();
 			for (const id of handles.keys()) {
 				destroyConversation(id);
 			}

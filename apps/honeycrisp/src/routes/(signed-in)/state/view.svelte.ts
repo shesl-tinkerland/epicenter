@@ -24,10 +24,10 @@
  * ```
  */
 
-import { searchParams, type SortBy } from './search-params.svelte';
 import type { FolderId, NoteId } from '../honeycrisp/workspace';
 import type { createFoldersState } from './folders.svelte';
 import type { createNotesState } from './notes.svelte';
+import { type SortBy, searchParams } from './search-params.svelte';
 
 export function createViewState({
 	foldersState,
@@ -64,14 +64,14 @@ export function createViewState({
 	const folderName = $derived.by(() => {
 		const folderId = searchParams.folder;
 		return folderId
-			? (foldersState.get(folderId)?.name ?? 'Notes')
+			? (foldersState.byId(folderId)?.name ?? 'Notes')
 			: 'All Notes';
 	});
 
 	/** The currently selected note (can be active or deleted). */
 	const selectedNote = $derived.by(() => {
 		const noteId = searchParams.note;
-		return noteId ? (notesState.get(noteId) ?? null) : null;
+		return noteId ? (notesState.byId(noteId) ?? null) : null;
 	});
 
 	// ─── Public API ──────────────────────────────────────────────────────

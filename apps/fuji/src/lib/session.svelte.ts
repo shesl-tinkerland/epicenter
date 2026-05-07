@@ -23,18 +23,18 @@ export const session = createSession({
 			bearerToken: () => auth.bearerToken,
 			encryptionKeys: () => requireSignedIn(auth).encryptionKeys,
 		});
-		const entriesMap = fromTable(fuji.tables.entries);
+		const entriesView = fromTable(fuji.tables.entries);
 		const active = $derived(
-			[...entriesMap.values()].filter((e) => e.deletedAt === undefined),
+			entriesView.all.filter((e) => e.deletedAt === undefined),
 		);
 		const deleted = $derived(
-			[...entriesMap.values()].filter((e) => e.deletedAt !== undefined),
+			entriesView.all.filter((e) => e.deletedAt !== undefined),
 		);
 		return {
 			userId,
 			fuji,
 			entries: {
-				get: (id: EntryId) => entriesMap.get(id),
+				byId: (id: EntryId) => entriesView.byId(id),
 				get active() {
 					return active;
 				},
@@ -43,7 +43,6 @@ export const session = createSession({
 				},
 			},
 			[Symbol.dispose]() {
-				entriesMap[Symbol.dispose]();
 				fuji[Symbol.dispose]();
 			},
 		};

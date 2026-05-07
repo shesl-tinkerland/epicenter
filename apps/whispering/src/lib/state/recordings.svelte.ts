@@ -12,7 +12,7 @@
  * import { recordings } from '$lib/state/recordings.svelte';
  *
  * // Read reactively (re-renders on change)
- * const recording = recordings.get(id);
+ * const recording = recordings.byId(id);
  * const all = recordings.sorted; // newest first
  *
  * // Write (Yjs observer auto-updates SvelteMap → components re-render)
@@ -28,32 +28,24 @@ import type { Recording } from '$lib/workspace';
 export type { Recording } from '$lib/workspace';
 
 function createRecordings() {
-	const map = fromTable(whispering.tables.recordings);
+	const view = fromTable(whispering.tables.recordings);
 
 	// Memoize sorted array with $derived so consumers get a stable reference.
-	// Without this, every access creates a new array → TanStack Table's $derived
-	// sees "new data" → updates internal $state → re-triggers $derived → infinite loop.
+	// Without this, every access creates a new array, which can make TanStack
+	// Table's $derived loop on internal row model updates.
 	const sorted = $derived(
-		[...map.values()].sort(
+		view.all.toSorted(
 			(a, b) =>
 				new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
 		),
 	);
 
 	return {
-		[Symbol.dispose]() {
-			map[Symbol.dispose]();
-		},
-
 		/**
-		 * All recordings as a reactive SvelteMap.
-		 *
-		 * Components reading this re-render per-key when recordings change.
-		 * Use `.sorted` for a pre-sorted array, or iterate directly for
-		 * custom ordering.
+		 * All recordings as a reactive readonly array.
 		 */
 		get all() {
-			return map;
+			return view.all;
 		},
 
 		/**
@@ -62,16 +54,15 @@ function createRecordings() {
 		 * Reads from the reactive SvelteMap—triggers re-render if the
 		 * recording changes or is deleted.
 		 */
-		get(id: string) {
-			return map.get(id);
+		byId(id: string) {
+			return view.byId(id);
 		},
 
 		/**
 		 * All recordings as a sorted array (newest first by recordedAt).
 		 *
-		 * Memoized via `$derived`—returns a stable reference until the
-		 * SvelteMap actually changes. This is critical for TanStack Table,
-		 * which uses reference equality to detect data changes.
+		 * Memoized via `$derived`, so TanStack Table receives a stable
+		 * reference until the table changes.
 		 */
 		get sorted(): Recording[] {
 			return sorted;
@@ -120,13 +111,9 @@ function createRecordings() {
 
 		/** Total number of recordings. */
 		get count() {
-			return map.size;
+			return view.all.length;
 		},
 	};
 }
 
 export const recordings = createRecordings();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => recordings[Symbol.dispose]());
-}

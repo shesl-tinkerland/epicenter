@@ -28,18 +28,13 @@ export type TrustLevel = ToolTrust['trust'];
 // ─────────────────────────────────────────────────────────────────────────────
 
 function createToolTrustState() {
-	const trustMap = fromTable(tabManager.tables.toolTrust);
+	const trustView = fromTable(tabManager.tables.toolTrust);
 
-	/** Cached projection of trust entries — stable reference via $derived. */
+	/** Cached projection of trust entries. Stable reference via $derived. */
 	const trustEntries = $derived(
-		[...trustMap.values()]
-			.map((t): [string, TrustLevel] => [t.id, t.trust]),
+		trustView.all.map((t): [string, TrustLevel] => [t.id, t.trust]),
 	);
 	return {
-		[Symbol.dispose]() {
-			trustMap[Symbol.dispose]();
-		},
-
 		/**
 		 * Get the trust level for a tool.
 		 *
@@ -54,7 +49,7 @@ function createToolTrustState() {
 		 * ```
 		 */
 		get(name: string): TrustLevel {
-			return trustMap.get(name)?.trust ?? 'ask';
+			return trustView.byId(name)?.trust ?? 'ask';
 		},
 
 		/**
@@ -94,14 +89,14 @@ function createToolTrustState() {
 		 * ```
 		 */
 		shouldAutoApprove(name: string): boolean {
-			return (trustMap.get(name)?.trust ?? 'ask') === 'always';
+			return (trustView.byId(name)?.trust ?? 'ask') === 'always';
 		},
 
 		/**
 		 * All trust entries as a cached reactive array.
 		 *
 		 * Returns `[toolName, trustLevel]` tuples. Stable reference via `$derived`—
-		 * recomputes only when the underlying trustMap changes.
+		 * recomputes only when the underlying trust table changes.
 		 *
 		 * @example
 		 * ```typescript
@@ -117,7 +112,3 @@ function createToolTrustState() {
 }
 
 export const toolTrustState = createToolTrustState();
-
-if (import.meta.hot) {
-	import.meta.hot.dispose(() => toolTrustState[Symbol.dispose]());
-}

@@ -1,8 +1,8 @@
 import type { FileId, FileRow } from '@epicenter/filesystem';
 import { fromTable } from '@epicenter/svelte';
 import { toast } from '@epicenter/ui/sonner';
-import { extractErrorMessage } from 'wellcrafted/error';
 import { SvelteSet } from 'svelte/reactivity';
+import { extractErrorMessage } from 'wellcrafted/error';
 import { opensidian } from '$lib/opensidian/client';
 import { searchParams } from '$lib/search-params.svelte';
 
@@ -23,11 +23,10 @@ type InteractionMode =
  * Follows the tab-manager pattern: factory function creates all state,
  * exports a single const. Components import and read directly.
  *
- * Reactivity: `fromTable()` provides a reactive `SvelteMap` that updates
- * granularly per-row. `childrenOf` derives tree structure eagerly (O(n)
- * iteration on any row change—acceptable for <5000 files). Paths are
- * computed lazily via `computePath()`—only the accessed file's ancestor
- * chain is tracked, so `selected` and `PathBreadcrumb` stay fine-grained.
+ * Reactivity: `fromTable()` provides a readonly table view. `childrenOf`
+ * derives tree structure eagerly (O(n) iteration on any row change,
+ * acceptable for <5000 files). Paths are computed lazily via `computePath()`,
+ * but table invalidation is global in this version of the primitive.
  *
  * @example
  * ```svelte
@@ -39,7 +38,7 @@ type InteractionMode =
  */
 function createFsState() {
 	// ── Reactive source ──────────────────────────────────────────────
-	const filesMap = fromTable(opensidian.tables.files);
+	const filesView = fromTable(opensidian.tables.files);
 
 	// ── Reactive state ───────────────────────────────────────────────
 	const openFileIds = new SvelteSet<FileId>();
@@ -58,18 +57,18 @@ function createFsState() {
 
 	// ── Derived tree structure ───────────────────────────────────────
 	//
-	// childrenOf iterates the full filesMap (creating an all-key dependency),
-	// so it recomputes on ANY row change—even non-structural edits like
-	// updatedAt bumps. At O(n) Map iteration for <5000 files this is <1ms,
+	// childrenOf iterates the full files view, so it recomputes on ANY row
+	// change, even non-structural edits like updatedAt bumps.
+	// At O(n) iteration for <5000 files this is <1ms,
 	// an intentional trade-off over the complexity of structural-only tracking.
 
 	/** Parent→children mapping. Groups non-trashed file IDs by parentId. */
 	const childrenOf = $derived.by(() => {
 		const map = new Map<FileId | null, FileId[]>();
-		for (const [id, row] of filesMap) {
+		for (const row of filesView.all) {
 			if (row.trashedAt !== null) continue;
 			const siblings = map.get(row.parentId) ?? [];
-			siblings.push(id);
+			siblings.push(row.id);
 			map.set(row.parentId, siblings);
 		}
 		return map;
@@ -80,32 +79,31 @@ function createFsState() {
 	/**
 	 * Build the full POSIX path for a file by walking up the ancestor chain.
 	 *
-	 * O(depth) per call—typically 3–5 `filesMap.get()` lookups. In a reactive
-	 * context (`$derived`), this creates fine-grained dependencies on only the
-	 * accessed file's ancestors, not every row in the tree. In an imperative
-	 * context (action methods), it's a plain lookup with no reactive cost.
+	 * O(depth) per call, typically 3 to 5 lookups. In a reactive context
+	 * (`$derived`), this subscribes through the table view. In an imperative
+	 * context (action methods), it's a plain lookup with no observer.
 	 *
 	 * Replaces the previous eager `pathIndex` derived which rebuilt all paths
 	 * (O(n) string concatenation) on any row change.
 	 *
 	 * @example
 	 * ```typescript
-	 * // In $derived — tracks only activeFile + ancestors
+	 * // In $derived
 	 * const path = $derived(computePath(activeFileId));
 	 *
-	 * // In action — plain lookup, no reactive tracking
+	 * // In action
 	 * const oldPath = computePath(id);
 	 * ```
 	 */
 	function computePath(id: FileId): string | null {
-		const row = filesMap.get(id);
+		const row = filesView.byId(id);
 		if (!row || row.trashedAt !== null) return null;
 
 		const parts: string[] = [row.name];
 		let parentId = row.parentId;
 
 		while (parentId !== null) {
-			const parent = filesMap.get(parentId);
+			const parent = filesView.byId(parentId);
 			if (!parent || parent.trashedAt !== null) return null;
 			parts.unshift(parent.name);
 			parentId = parent.parentId;
@@ -120,19 +118,16 @@ function createFsState() {
 	/**
 	 * Active file's row data.
 	 *
-	 * Fine-grained: only tracks the active file's row via `filesMap.get()`.
-	 * Unrelated row changes don't trigger recomputation.
+	 * Tracks the active file's row through the table view.
 	 */
 	const selectedNode = $derived.by(() => {
 		const fileId = searchParams.file;
-		return fileId ? (filesMap.get(fileId) ?? null) : null;
+		return fileId ? (filesView.byId(fileId) ?? null) : null;
 	});
 	/**
 	 * Active file's full POSIX path.
 	 *
-	 * Fine-grained: only tracks the active file's name and ancestor chain
-	 * (via `computePath`). A `size` or `updatedAt` change on a sibling file
-	 * won't trigger recomputation—only name/ancestry changes matter.
+	 * Tracks the active file's path through the table view.
 	 */
 	const selectedPath = $derived.by(() => {
 		const fileId = searchParams.file;
@@ -230,14 +225,13 @@ function createFsState() {
 		 * Returns null if the row is deleted/invalid.
 		 */
 		getFile(id: FileId): FileRow | null {
-			return filesMap.get(id) ?? null;
+			return filesView.byId(id) ?? null;
 		},
 
 		/**
 		 * Build the full POSIX path for a file by walking up its ancestor chain.
 		 *
-		 * In reactive contexts (e.g., inside `$derived`), creates fine-grained
-		 * dependencies on only the accessed file's ancestors. In imperative
+		 * In reactive contexts, subscribes through the table view. In imperative
 		 * contexts (action methods), it's a plain O(depth) lookup.
 		 *
 		 * @returns The full path (e.g., `/docs/api/reference.md`) or null if trashed/deleted.
@@ -275,7 +269,7 @@ function createFsState() {
 			const results: T[] = [];
 			function walk(pid: FileId | null) {
 				for (const childId of childrenOf.get(pid) ?? []) {
-					const row = filesMap.get(childId);
+					const row = filesView.byId(childId);
 					if (!row || row.trashedAt !== null) continue;
 					const { collect, descend } = visitor(childId, row);
 					if (collect !== undefined) results.push(collect);
@@ -418,7 +412,6 @@ function createFsState() {
 		},
 
 		[Symbol.dispose]() {
-			filesMap[Symbol.dispose]();
 			opensidian.fs.index.dispose();
 			opensidian.fs.dispose();
 		},
