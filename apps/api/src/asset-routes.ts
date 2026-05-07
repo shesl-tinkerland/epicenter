@@ -9,25 +9,24 @@
  * through this Worker, which sets security headers and supports ETag/range.
  */
 
-import { customAlphabet } from 'nanoid';
-
-/**
- * 15-char alphanumeric ID generator—same spec as `generateGuid` in @epicenter/workspace.
- * Inlined here to avoid pulling workspace (and its Yjs dependency tree) into the
- * Cloudflare Worker bundle, where wrangler can't resolve it.
- */
-const generateGuid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
-
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
+import { customAlphabet } from 'nanoid';
 import { defineErrors } from 'wellcrafted/error';
 import type { Env } from './app.js';
 import { createAutumn } from './autumn.js';
 import { FEATURE_IDS } from './billing-plans.js';
 import { MAX_ASSET_BYTES } from './constants.js';
 import * as schema from './db/schema.js';
+
+/**
+ * 15-char alphanumeric ID generator, same spec as `generateGuid` in @epicenter/workspace.
+ * Inlined here to avoid pulling workspace (and its Yjs dependency tree) into the
+ * Cloudflare Worker bundle, where wrangler can't resolve it.
+ */
+const generateGuid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 15);
 
 const ALLOWED_MIME_TYPES = new Set([
 	'image/png',

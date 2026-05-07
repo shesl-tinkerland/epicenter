@@ -1,8 +1,9 @@
-# Reactive Views Over $state for Keyed Collections
+# Keyed Collections: SvelteMap, fromTable, or $state
 
-When your data has IDs, workspace rows, conversations, recordings, and similar
-records should not live in a `$state` array. Use the domain source directly and
-derive the array form with `$derived` when you need it for rendering.
+When your data has IDs, workspace rows, conversations, recordings, browser
+tabs, and similar records should not default to a `$state` array. Use the
+keyed source that owns the data, then derive the array form with `$derived`
+when you need it for rendering.
 
 ## The Problem
 
@@ -22,7 +23,7 @@ That is O(n) on every access. Svelte also tracks the whole array, so updating
 one conversation re-renders anything that reads `conversations`, even if a
 component only cares about a single row.
 
-## Workspace Tables
+## Workspace Tables: fromTable
 
 Workspace tables use `fromTable()` from `@epicenter/svelte`. It returns a
 readonly view with two reads:
@@ -100,8 +101,20 @@ the last tracked reader is gone.
 ## When SvelteMap Still Fits
 
 Use `SvelteMap` for non-workspace keyed state that you own locally, such as
-browser tabs keyed by native tab ID. It is still the right primitive when the
-map itself is the mutable source.
+browser tabs keyed by native tab ID:
+
+```typescript
+const tabsById = new SvelteMap<number, BrowserTab>();
+
+const activeTab = $derived(tabsById.get(activeTabId));
+const visibleTabs = $derived(
+	tabsById.values().toArray().filter((tab) => !tab.hidden),
+);
+```
+
+It is still the right primitive when the map itself is the mutable source. A
+keyed read like `tabsById.get(activeTabId)` can update independently from a
+full-list read like `tabsById.values()`.
 
 Use `$state<T[]>` when:
 

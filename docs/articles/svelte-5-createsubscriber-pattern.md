@@ -20,8 +20,8 @@ You have an external data source (WebSocket, IndexedDB, Yjs, Firebase, etc.) wit
 │                    createSubscriber                         │
 │                                                             │
 │   ┌─────────────┐    update()     ┌──────────────────┐     │
-│   │   Shadow    │ ◄────────────── │    Observer      │     │
-│   │   $state    │                 │    Callback      │     │
+│   │  Reactive   │ ◄────────────── │    Observer      │     │
+│   │   Signal    │                 │    Callback      │     │
 │   └─────────────┘                 └──────────────────┘     │
 │         │                                                   │
 │         │ subscribe()                                       │
@@ -42,7 +42,10 @@ You have an external data source (WebSocket, IndexedDB, Yjs, Firebase, etc.) wit
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight**: Mutations go UP to the source. The source notifies the observer. The observer updates shadow state. Svelte reacts. You never mutate `$state` directly from components.
+**Key insight**: Mutations go UP to the source. The source notifies the observer.
+The observer calls `update()` and Svelte reacts. Your getter can either return a
+local mirror or live-read the external source, but components should not mutate
+the reactive facade directly.
 
 ## Minimal Example
 
@@ -93,7 +96,7 @@ export function reactiveCounter(externalStore: ExternalStore) {
 
 1. **Lazy subscription**: Observer only attaches when `value` is read in a reactive context (`$effect`, `$derived`, template)
 2. **Auto cleanup**: When no reactive consumers exist, `createSubscriber` calls your cleanup function
-3. **Single source of truth**: External store owns the data; `$state` is just a reactive mirror
+3. **Single source of truth**: External store owns the data; any local `$state` is only a mirror for reads
 
 ## Real World: Yjs Table to Readonly View
 
