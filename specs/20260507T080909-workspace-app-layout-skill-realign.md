@@ -3,7 +3,7 @@
 > The skill currently leads with `apps/<app>/src/lib/<app>/{index, browser, client}.ts` as the default shape, with the route-group variant as a side note. The audit shows that's backwards: the post-spec-3 web apps (fuji, honeycrisp, zhongwen) use the route-group shape and don't have a `client.ts` at all, while the lib-singleton shape lives on in apps that haven't migrated to `createSession`. Reframe the skill around two co-equal shapes; surface `session.svelte.ts` as the singleton home for shape A.
 
 **Date**: 2026-05-07
-**Status**: Proposed
+**Status**: Implemented (2026-05-07)
 **Author**: AI-assisted, grounded in a live audit of `apps/{fuji,honeycrisp,zhongwen,opensidian,tab-manager,whispering}` post merge of `feat/encrypted-local-workspace-storage` (PR #1737, merge `770ba579a`).
 **Branch**: `chore/workspace-app-layout-skill-audit`
 
