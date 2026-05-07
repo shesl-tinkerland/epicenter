@@ -1,6 +1,5 @@
 import { oauthProvider } from '@better-auth/oauth-provider';
 import type { BetterAuthSessionResponse } from '@epicenter/auth/contracts';
-import { APPS } from '@epicenter/constants/apps';
 import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
 import { type BetterAuthOptions, betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -13,6 +12,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { createAutumn } from '../autumn';
 import { FEATURE_IDS } from '../billing-plans';
 import * as schema from '../db/schema';
+import { TRUSTED_ORIGINS } from '../trusted-origins';
 import { BASE_AUTH_CONFIG } from './base-config';
 import { deriveUserEncryptionKeys } from './encryption';
 
@@ -156,24 +156,7 @@ export function createAuth({
 				},
 			},
 		},
-		trustedOrigins: (request) => {
-			const origins = [
-				'tauri://localhost',
-				...Object.values(APPS).flatMap((app) => [
-					...app.urls,
-					`http://localhost:${app.port}`,
-				]),
-				// Wrangler dev serves at the custom domain over plain HTTP (no TLS).
-				// The browser sends Origin: http://api.epicenter.so which doesn't
-				// match https://api.epicenter.so. Add the HTTP variant.
-				`http://${new URL(APPS.API.urls[0]).host}`,
-			];
-			const origin = request?.headers.get('origin');
-			if (origin?.startsWith('chrome-extension://')) {
-				origins.push(origin);
-			}
-			return origins;
-		},
+		trustedOrigins: TRUSTED_ORIGINS,
 		// secondaryStorage = Cloudflare KV as a read-through cache.
 		// Postgres (Germany) is always the source of truth. KV avoids the
 		// ~150ms round-trip on repeated session reads from distant edges.

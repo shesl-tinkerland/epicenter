@@ -26,6 +26,7 @@ import { createAutumn } from './autumn';
 import { billingRoutes } from './billing-routes';
 import { MAX_PAYLOAD_BYTES } from './constants';
 import * as schema from './db/schema';
+import { TRUSTED_ORIGINS } from './trusted-origins';
 
 export { DocumentRoom } from './document-room';
 // Re-export so wrangler types generates DurableObjectNamespace<WorkspaceRoom|DocumentRoom>
@@ -97,23 +98,12 @@ export type Env = {
 const factory = createFactory<Env>({
 	initApp: (app) => {
 		// CORS — skip WebSocket upgrades (101 response headers are immutable).
-		// Allowed origins derived from APPS so adding an app automatically allows it.
-		const allowedOrigins = new Set([
-			'tauri://localhost',
-			...Object.values(APPS).flatMap((a) => [
-				...a.urls,
-				`http://localhost:${a.port}`,
-			]),
-		]);
+		// Trusted origins live in `./trusted-origins.ts`, shared with Better Auth.
 		app.use('*', async (c, next) => {
 			if (c.req.header('upgrade') === 'websocket') return next();
 			return cors({
-				origin: (origin) => {
-					if (!origin) return origin;
-					if (allowedOrigins.has(origin)) return origin;
-					if (origin.startsWith('chrome-extension://')) return origin;
-					return undefined;
-				},
+				origin: (origin) =>
+					origin && TRUSTED_ORIGINS.includes(origin) ? origin : undefined,
 				credentials: true,
 				allowHeaders: ['Content-Type', 'Authorization', 'Upgrade'],
 				allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
