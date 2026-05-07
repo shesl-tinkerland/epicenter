@@ -9,7 +9,7 @@
 	import { getSignedInSession } from '$lib/session.svelte';
 	import type { Folder } from '../honeycrisp/workspace';
 
-	const { foldersState, notesState, viewState } = getSignedInSession().state;
+	const signedIn = getSignedInSession();
 
 	let { folder }: { folder: Folder } = $props();
 
@@ -20,7 +20,7 @@
 
 	function commitRename() {
 		if (editingName.trim()) {
-			foldersState.renameFolder(folder.id, editingName.trim());
+			signedIn.state.folders.rename(folder.id, editingName.trim());
 		}
 		isEditing = false;
 		editingName = '';
@@ -51,8 +51,8 @@
 		</div>
 	{:else}
 		<Sidebar.MenuButton
-			isActive={viewState.selectedFolderId === folder.id}
-			onclick={() => viewState.selectFolder(folder.id)}
+			isActive={signedIn.state.view.selectedFolderId === folder.id}
+			onclick={() => signedIn.state.view.selectFolder(folder.id)}
 		>
 			{#if folder.icon}
 				<span class="text-base leading-none">{folder.icon}</span>
@@ -61,7 +61,7 @@
 			{/if}
 			<span>{folder.name}</span>
 			<span class="ml-auto text-xs text-muted-foreground">
-				{notesState.noteCounts[folder.id] ?? 0}
+				{signedIn.state.notes.countsByFolder[folder.id] ?? 0}
 			</span>
 		</Sidebar.MenuButton>
 		<DropdownMenu.Root>
@@ -108,7 +108,7 @@
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-				onclick={() => foldersState.deleteFolder(folder.id)}
+				onclick={() => signedIn.state.folders.delete(folder.id)}
 			>
 				Delete
 			</AlertDialog.Action>

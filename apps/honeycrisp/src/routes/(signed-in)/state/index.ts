@@ -1,20 +1,20 @@
 import type { Honeycrisp } from '../honeycrisp/browser';
-import { createFoldersState } from './folders.svelte';
-import { createNotesState } from './notes.svelte';
-import { createViewState } from './view.svelte';
+import { createFolders } from './folders.svelte';
+import { createNotes } from './notes.svelte';
+import { createView } from './view.svelte';
 
 export function createHoneycrispState(honeycrisp: Honeycrisp) {
-	const foldersState = createFoldersState(honeycrisp);
-	const notesState = createNotesState({ foldersState, honeycrisp });
-	const viewState = createViewState({ foldersState, notesState });
+	const folders = createFolders(honeycrisp);
+	const notes = createNotes({ folders, honeycrisp });
+	const view = createView({ folders, notes });
 
 	return {
-		foldersState,
-		notesState,
-		viewState,
+		folders,
+		notes,
+		view,
 		[Symbol.dispose]() {
-			foldersState[Symbol.dispose]();
-			notesState[Symbol.dispose]();
+			notes[Symbol.dispose]();
+			folders[Symbol.dispose]();
 		},
 	};
 }

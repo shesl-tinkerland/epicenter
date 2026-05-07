@@ -10,7 +10,7 @@
 	import NoteCard from '../components/NoteCard.svelte';
 	import type { Note } from '../honeycrisp/workspace';
 
-	const { notesState, viewState } = getSignedInSession().state;
+	const signedIn = getSignedInSession();
 
 	let {
 		notes,
@@ -82,18 +82,18 @@
 		if (flatNoteIds.length === 0) return;
 		e.preventDefault();
 
-		const currentIndex = viewState.selectedNoteId
-			? flatNoteIds.indexOf(viewState.selectedNoteId)
+		const currentIndex = signedIn.state.view.selectedNoteId
+			? flatNoteIds.indexOf(signedIn.state.view.selectedNoteId)
 			: -1;
 
 		if (e.key === 'ArrowDown') {
 			const nextIndex =
 				currentIndex < flatNoteIds.length - 1 ? currentIndex + 1 : 0;
-			viewState.selectNote(flatNoteIds[nextIndex]!);
+			signedIn.state.view.selectNote(flatNoteIds[nextIndex]!);
 		} else {
 			const prevIndex =
 				currentIndex > 0 ? currentIndex - 1 : flatNoteIds.length - 1;
-			viewState.selectNote(flatNoteIds[prevIndex]!);
+			signedIn.state.view.selectNote(flatNoteIds[prevIndex]!);
 		}
 	}}
 	tabindex="-1"
@@ -116,9 +116,9 @@
 					<DropdownMenu.Content align="end" class="w-44">
 						{#each sortOptions as option}
 							<DropdownMenu.Item
-								onclick={() => viewState.setSortBy(option.value)}
+								onclick={() => signedIn.state.view.setSortBy(option.value)}
 							>
-								{#if viewState.sortBy === option.value}
+								{#if signedIn.state.view.sortBy === option.value}
 									<CheckIcon class="mr-2 size-4" />
 								{:else}
 									<span class="mr-2 size-4"></span>
@@ -133,8 +133,8 @@
 					size="icon"
 					class="size-7"
 					onclick={() => {
-						const { id } = notesState.createNote(viewState.selectedFolderId);
-						viewState.selectNote(id);
+						const { id } = signedIn.state.notes.create(signedIn.state.view.selectedFolderId);
+						signedIn.state.view.selectNote(id);
 					}}
 				>
 					<PlusIcon class="size-4" />
@@ -160,8 +160,8 @@
 						{#each group.entries as note (note.id)}
 							<NoteCard
 								{note}
-								isSelected={note.id === viewState.selectedNoteId}
-								onSelect={() => viewState.selectNote(note.id)}
+								isSelected={note.id === signedIn.state.view.selectedNoteId}
+								onSelect={() => signedIn.state.view.selectNote(note.id)}
 							/>
 						{/each}
 					</div>

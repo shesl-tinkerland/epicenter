@@ -7,7 +7,7 @@
 	import NoteList from './components/NoteList.svelte';
 	import HoneycripSidebar from './components/Sidebar.svelte';
 
-	const { foldersState, notesState, viewState } = getSignedInSession().state;
+	const signedIn = getSignedInSession();
 </script>
 
 <svelte:window
@@ -17,11 +17,11 @@
 
 		if (e.key === 'n' && e.shiftKey) {
 			e.preventDefault();
-			foldersState.createFolder();
+			signedIn.state.folders.create();
 		} else if (e.key === 'n') {
 			e.preventDefault();
-			const { id } = notesState.createNote(viewState.selectedFolderId);
-			viewState.selectNote(id);
+			const { id } = signedIn.state.notes.create(signedIn.state.view.selectedFolderId);
+			signedIn.state.view.selectNote(id);
 		}
 	}}
 />
@@ -32,25 +32,25 @@
 	<main class="flex h-screen flex-1 overflow-hidden">
 		<Resizable.PaneGroup direction="horizontal">
 			<Resizable.Pane defaultSize={35} minSize={20}>
-				{#if viewState.isRecentlyDeletedView}
+				{#if signedIn.state.view.isRecentlyDeletedView}
 					<NoteList
-						notes={notesState.deletedNotes}
+						notes={signedIn.state.notes.deleted}
 						title="Recently Deleted"
 						showControls={false}
 						emptyMessage="No deleted notes"
 					/>
 				{:else}
 					<NoteList
-						notes={viewState.filteredNotes}
-						title={viewState.folderName}
+						notes={signedIn.state.view.filteredNotes}
+						title={signedIn.state.view.folderName}
 					/>
 				{/if}
 			</Resizable.Pane>
 			<Resizable.Handle />
 			<Resizable.Pane defaultSize={65} minSize={30} class="flex flex-col">
-				{#if viewState.selectedNote && viewState.selectedNoteId}
-					{#key viewState.selectedNoteId}
-						<NoteBodyPane noteId={viewState.selectedNoteId} />
+				{#if signedIn.state.view.selectedNote && signedIn.state.view.selectedNoteId}
+					{#key signedIn.state.view.selectedNoteId}
+						<NoteBodyPane noteId={signedIn.state.view.selectedNoteId} />
 					{/key}
 				{:else}
 					<div class="flex h-full flex-col items-center justify-center gap-2">

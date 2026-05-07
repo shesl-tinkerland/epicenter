@@ -10,13 +10,13 @@
  * <script>
  *   import { getSignedInSession } from '$lib/session.svelte';
  *
- *   const { notesState } = getSignedInSession().state;
+ *   const signedIn = getSignedInSession();
  * </script>
  *
- * {#each notesState.notes as note (note.id)}
+ * {#each signedIn.state.notes.all as note (note.id)}
  *   <p>{note.title}</p>
  * {/each}
- * <button onclick={() => notesState.createNote()}>New Note</button>
+ * <button onclick={() => signedIn.state.notes.create()}>New Note</button>
  * ```
  */
 
@@ -24,37 +24,35 @@ import { fromTable } from '@epicenter/svelte';
 import { DateTimeString, generateId } from '@epicenter/workspace';
 import type { Honeycrisp } from '../honeycrisp/browser';
 import type { FolderId, NoteId } from '../honeycrisp/workspace';
-import type { createFoldersState } from './folders.svelte';
+import type { createFolders } from './folders.svelte';
 import { searchParams } from './search-params.svelte';
 
-export function createNotesState({
-	foldersState,
+export function createNotes({
+	folders,
 	honeycrisp,
 }: {
-	foldersState: ReturnType<typeof createFoldersState>;
+	folders: ReturnType<typeof createFolders>;
 	honeycrisp: Honeycrisp;
 }) {
 	// ─── Reactive State ──────────────────────────────────────────────────
 
 	const allNotesMap = fromTable(honeycrisp.tables.notes);
 
-	/** All valid notes (including deleted). Cached — only recomputes when table changes. */
+	/** All valid notes (including deleted). Cached, only recomputes when table changes. */
 	const allNotes = $derived([...allNotesMap.values()]);
 
 	// ─── Derived State ───────────────────────────────────────────────────
 
-	/** Active notes — not soft-deleted. */
-	const notes = $derived(allNotes.filter((n) => n.deletedAt === undefined));
+	/** Active notes, not soft-deleted. */
+	const all = $derived(allNotes.filter((n) => n.deletedAt === undefined));
 
 	/** Soft-deleted notes for the Recently Deleted view. */
-	const deletedNotes = $derived(
-		allNotes.filter((n) => n.deletedAt !== undefined),
-	);
+	const deleted = $derived(allNotes.filter((n) => n.deletedAt !== undefined));
 
 	/** Per-folder note counts for the sidebar (active notes only). */
-	const noteCounts = $derived.by(() => {
+	const countsByFolder = $derived.by(() => {
 		const counts: Record<string, number> = {};
-		for (const note of notes) {
+		for (const note of all) {
 			if (note.folderId) {
 				counts[note.folderId] = (counts[note.folderId] ?? 0) + 1;
 			}
@@ -76,17 +74,14 @@ export function createNotesState({
 			return allNotesMap.get(id);
 		},
 
-		get allNotes() {
-			return allNotes;
+		get all() {
+			return all;
 		},
-		get notes() {
-			return notes;
+		get deleted() {
+			return deleted;
 		},
-		get deletedNotes() {
-			return deletedNotes;
-		},
-		get noteCounts() {
-			return noteCounts;
+		get countsByFolder() {
+			return countsByFolder;
 		},
 
 		/**
@@ -98,11 +93,11 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * const { id } = notesState.createNote(viewState.selectedFolderId);
-		 * viewState.selectNote(id);
+		 * const { id } = signedIn.state.notes.create(signedIn.state.view.selectedFolderId);
+		 * signedIn.state.view.selectNote(id);
 		 * ```
 		 */
-		createNote(folderId?: FolderId | null) {
+		create(folderId?: FolderId | null) {
 			const id = generateId() as NoteId;
 			honeycrisp.tables.notes.set({
 				id,
@@ -120,7 +115,7 @@ export function createNotesState({
 		},
 
 		/**
-		 * Soft-delete a note — moves it to Recently Deleted.
+		 * Soft-delete a note, moves it to Recently Deleted.
 		 *
 		 * The note is marked with a `deletedAt` timestamp but not permanently
 		 * removed. It can be restored from the Recently Deleted view. If the
@@ -128,11 +123,11 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.softDeleteNote(noteId);
+		 * signedIn.state.notes.softDelete(noteId);
 		 * // Note moves to Recently Deleted, editor closes
 		 * ```
 		 */
-		softDeleteNote(noteId: NoteId) {
+		softDelete(noteId: NoteId) {
 			honeycrisp.tables.notes.update(noteId, {
 				deletedAt: DateTimeString.now(),
 			});
@@ -149,15 +144,15 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.restoreNote(noteId);
+		 * signedIn.state.notes.restore(noteId);
 		 * // Note reappears in its original folder (or unfiled)
 		 * ```
 		 */
-		restoreNote(noteId: NoteId) {
+		restore(noteId: NoteId) {
 			const note = allNotesMap.get(noteId);
 			if (!note) return;
 			const folderExists = note.folderId
-				? foldersState.folders.some((f) => f.id === note.folderId)
+				? folders.all.some((f) => f.id === note.folderId)
 				: true;
 			honeycrisp.tables.notes.update(noteId, {
 				deletedAt: undefined,
@@ -166,18 +161,18 @@ export function createNotesState({
 		},
 
 		/**
-		 * Permanently delete a note — no recovery.
+		 * Permanently delete a note, no recovery.
 		 *
 		 * Removes the note from the database completely. This cannot be undone.
 		 * If the deleted note was selected, the selection is cleared.
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.permanentlyDeleteNote(noteId);
+		 * signedIn.state.notes.permanentlyDelete(noteId);
 		 * // Note is removed from Recently Deleted and database
 		 * ```
 		 */
-		permanentlyDeleteNote(noteId: NoteId) {
+		permanentlyDelete(noteId: NoteId) {
 			honeycrisp.tables.notes.delete(noteId);
 			if (searchParams.note === noteId) {
 				searchParams.update({ note: null });
@@ -192,11 +187,11 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.pinNote(noteId);
-		 * // Note moves to the top of the list
+		 * signedIn.state.notes.togglePin(noteId);
+		 * // Note moves to the top of the list (or unpins)
 		 * ```
 		 */
-		pinNote(noteId: NoteId) {
+		togglePin(noteId: NoteId) {
 			const note = allNotesMap.get(noteId);
 			if (!note) return;
 			honeycrisp.tables.notes.update(noteId, {
@@ -212,13 +207,13 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.moveNoteToFolder(noteId, folderId);
+		 * signedIn.state.notes.moveToFolder(noteId, folderId);
 		 *
 		 * // Move a note to unfiled
-		 * notesState.moveNoteToFolder(noteId, undefined);
+		 * signedIn.state.notes.moveToFolder(noteId, undefined);
 		 * ```
 		 */
-		moveNoteToFolder(noteId: NoteId, folderId: FolderId | undefined) {
+		moveToFolder(noteId: NoteId, folderId: FolderId | undefined) {
 			honeycrisp.tables.notes.update(noteId, { folderId });
 		},
 
@@ -230,14 +225,14 @@ export function createNotesState({
 		 *
 		 * @example
 		 * ```typescript
-		 * notesState.updateNoteContent({
+		 * signedIn.state.notes.updateContent({
 		 *   title: 'My Note Title',
 		 *   preview: 'First line of content...',
 		 *   wordCount: 42,
 		 * });
 		 * ```
 		 */
-		updateNoteContent({
+		updateContent({
 			title,
 			preview,
 			wordCount,

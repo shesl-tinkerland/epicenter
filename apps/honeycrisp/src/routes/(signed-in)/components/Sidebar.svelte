@@ -10,7 +10,6 @@
 	import FolderMenuItem from '../components/FolderMenuItem.svelte';
 
 	const signedIn = getSignedInSession();
-	const { foldersState, notesState, viewState } = signedIn.state;
 
 	async function forgetHoneycrispDevice(): Promise<void> {
 		await signedIn.honeycrisp.wipe();
@@ -40,8 +39,8 @@
 		<div class="px-2 pb-1">
 			<Sidebar.Input
 				placeholder="Search notes…"
-				value={viewState.searchQuery}
-				oninput={(e) => viewState.setSearchQuery(e.currentTarget.value)}
+				value={signedIn.state.view.searchQuery}
+				oninput={(e) => signedIn.state.view.setSearchQuery(e.currentTarget.value)}
 			/>
 		</div>
 	</Sidebar.Header>
@@ -52,26 +51,26 @@
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							isActive={viewState.selectedFolderId === null && !viewState.isRecentlyDeletedView}
-							onclick={() => viewState.selectFolder(null)}
+							isActive={signedIn.state.view.selectedFolderId === null && !signedIn.state.view.isRecentlyDeletedView}
+							onclick={() => signedIn.state.view.selectFolder(null)}
 						>
 							<FileTextIcon class="size-4" />
 							<span>All Notes</span>
 							<span class="ml-auto text-xs text-muted-foreground">
-								{notesState.notes.length}
+								{signedIn.state.notes.all.length}
 							</span>
 						</Sidebar.MenuButton>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							isActive={viewState.isRecentlyDeletedView && viewState.selectedFolderId === null}
-							onclick={() => viewState.selectRecentlyDeleted()}
+							isActive={signedIn.state.view.isRecentlyDeletedView && signedIn.state.view.selectedFolderId === null}
+							onclick={() => signedIn.state.view.selectRecentlyDeleted()}
 						>
 							<TrashIcon class="size-4" />
 							<span>Recently Deleted</span>
-							{#if notesState.deletedNotes.length > 0}
+							{#if signedIn.state.notes.deleted.length > 0}
 								<span class="ml-auto text-xs text-muted-foreground">
-									{notesState.deletedNotes.length}
+									{signedIn.state.notes.deleted.length}
 								</span>
 							{/if}
 						</Sidebar.MenuButton>
@@ -87,7 +86,7 @@
 				</Collapsible.Trigger>
 				<Sidebar.GroupAction
 					title="New Folder"
-					onclick={() => foldersState.createFolder()}
+					onclick={() => signedIn.state.folders.create()}
 				>
 					<PlusIcon />
 					<span class="sr-only">New Folder</span>
@@ -95,7 +94,7 @@
 				<Collapsible.Content>
 					<Sidebar.GroupContent>
 						<Sidebar.Menu>
-							{#each foldersState.folders as folder (folder.id)}
+							{#each signedIn.state.folders.all as folder (folder.id)}
 								<FolderMenuItem {folder} />
 							{:else}
 								<Sidebar.MenuItem>

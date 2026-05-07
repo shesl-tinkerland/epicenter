@@ -10,13 +10,13 @@
  * <script>
  *   import { getSignedInSession } from '$lib/session.svelte';
  *
- *   const { foldersState } = getSignedInSession().state;
+ *   const signedIn = getSignedInSession();
  * </script>
  *
- * {#each foldersState.folders as folder (folder.id)}
+ * {#each signedIn.state.folders.all as folder (folder.id)}
  *   <p>{folder.name}</p>
  * {/each}
- * <button onclick={() => foldersState.createFolder()}>New Folder</button>
+ * <button onclick={() => signedIn.state.folders.create()}>New Folder</button>
  * ```
  */
 
@@ -26,12 +26,12 @@ import type { Honeycrisp } from '../honeycrisp/browser';
 import type { FolderId } from '../honeycrisp/workspace';
 import { searchParams } from './search-params.svelte';
 
-export function createFoldersState(honeycrisp: Honeycrisp) {
+export function createFolders(honeycrisp: Honeycrisp) {
 	// ─── Reactive State ──────────────────────────────────────────────────
 
 	const foldersMap = fromTable(honeycrisp.tables.folders);
 
-	const folders = $derived([...foldersMap.values()]);
+	const all = $derived([...foldersMap.values()]);
 
 	// ─── Public API ──────────────────────────────────────────────────────
 
@@ -47,8 +47,8 @@ export function createFoldersState(honeycrisp: Honeycrisp) {
 			return foldersMap.get(id);
 		},
 
-		get folders() {
-			return folders;
+		get all() {
+			return all;
 		},
 
 		/**
@@ -59,11 +59,11 @@ export function createFoldersState(honeycrisp: Honeycrisp) {
 		 *
 		 * @example
 		 * ```typescript
-		 * foldersState.createFolder();
+		 * signedIn.state.folders.create();
 		 * // Folder appears in sidebar with name "New Folder"
 		 * ```
 		 */
-		createFolder() {
+		create() {
 			const id = generateId() as FolderId;
 			honeycrisp.tables.folders.set({
 				id,
@@ -81,10 +81,10 @@ export function createFoldersState(honeycrisp: Honeycrisp) {
 		 *
 		 * @example
 		 * ```typescript
-		 * foldersState.renameFolder(folderId, 'Work');
+		 * signedIn.state.folders.rename(folderId, 'Work');
 		 * ```
 		 */
-		renameFolder(folderId: FolderId, name: string) {
+		rename(folderId: FolderId, name: string) {
 			honeycrisp.tables.folders.update(folderId, { name });
 		},
 
@@ -97,11 +97,11 @@ export function createFoldersState(honeycrisp: Honeycrisp) {
 		 *
 		 * @example
 		 * ```typescript
-		 * foldersState.deleteFolder(folderId);
+		 * signedIn.state.folders.delete(folderId);
 		 * // Folder disappears from sidebar, its notes move to "All Notes"
 		 * ```
 		 */
-		deleteFolder(folderId: FolderId) {
+		delete(folderId: FolderId) {
 			honeycrisp.actions.folders.delete({ folderId });
 			if (searchParams.folder === folderId) {
 				searchParams.update({ folder: null, note: null });

@@ -5,7 +5,6 @@
 	import { getSignedInSession } from '$lib/session.svelte';
 
 	const signedIn = getSignedInSession();
-	const { notesState } = signedIn.state;
 
 	let { noteId }: { noteId: string } = $props();
 
@@ -20,6 +19,6 @@
 {:then _}
 	<HoneycripEditor
 		yxmlfragment={doc.current.body.binding}
-		onContentChange={(change) => notesState.updateNoteContent(change)}
+		onContentChange={(change) => signedIn.state.notes.updateContent(change)}
 	/>
 {/await}

@@ -136,7 +136,7 @@ export function createHoneycrispActions(tables: HoneycrispTables) {
 			 *
 			 * Re-parents every note in the folder (sets `folderId` to undefined)
 			 * and deletes the folder row. Selection clearing is handled by the
-			 * Svelte state layer (foldersState) via URL search params.
+			 * Svelte state layer (folders) via URL search params.
 			 */
 			delete: defineMutation({
 				description: 'Delete a folder and re-parent its notes to unfiled',
