@@ -13,6 +13,7 @@ export function createHoneycrispState(honeycrisp: Honeycrisp) {
 		notes,
 		view,
 		[Symbol.dispose]() {
+			view[Symbol.dispose]();
 			notes[Symbol.dispose]();
 			folders[Symbol.dispose]();
 		},

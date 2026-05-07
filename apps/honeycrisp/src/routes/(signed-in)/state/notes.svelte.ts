@@ -218,36 +218,34 @@ export function createNotes({
 		},
 
 		/**
-		 * Update the title, preview, and word count of the currently selected note.
+		 * Update the title, preview, and word count of a note.
 		 *
-		 * Called when the editor content changes. Only updates if a note is
-		 * currently selected.
+		 * Called when the editor content changes. Caller passes the noteId
+		 * explicitly: the note is whichever note the editor is bound to,
+		 * which is not necessarily what the URL search param says.
 		 *
 		 * @example
 		 * ```typescript
-		 * signedIn.state.notes.updateContent({
+		 * signedIn.state.notes.updateContent(noteId, {
 		 *   title: 'My Note Title',
 		 *   preview: 'First line of content...',
 		 *   wordCount: 42,
 		 * });
 		 * ```
 		 */
-		updateContent({
-			title,
-			preview,
-			wordCount,
-		}: {
-			title: string;
-			preview: string;
-			wordCount: number;
-		}) {
-			const selectedNoteId = searchParams.note;
-			if (!selectedNoteId) return;
-			honeycrisp.tables.notes.update(selectedNoteId, {
+		updateContent(
+			noteId: NoteId,
+			{
 				title,
 				preview,
 				wordCount,
-			});
+			}: {
+				title: string;
+				preview: string;
+				wordCount: number;
+			},
+		) {
+			honeycrisp.tables.notes.update(noteId, { title, preview, wordCount });
 		},
 	};
 }

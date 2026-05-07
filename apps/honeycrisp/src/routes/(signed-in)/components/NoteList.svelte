@@ -12,18 +12,6 @@
 
 	const signedIn = getSignedInSession();
 
-	let {
-		notes,
-		title,
-		showControls = true,
-		emptyMessage = 'No notes yet. Click + to create one.',
-	}: {
-		notes: Note[];
-		title: string;
-		showControls?: boolean;
-		emptyMessage?: string;
-	} = $props();
-
 	const sortOptions = [
 		{ value: 'dateEdited' as const, label: 'Date Edited' },
 		{ value: 'dateCreated' as const, label: 'Date Created' },
@@ -31,6 +19,7 @@
 	];
 
 	const groupedNotes = $derived.by(() => {
+		const notes = signedIn.state.view.currentNotes;
 		const pinned = notes
 			.filter((n) => n.pinned)
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -100,10 +89,12 @@
 >
 	<div class="flex items-center justify-between border-b px-4 py-3">
 		<div class="flex items-center gap-2">
-			<h2 class="text-sm font-semibold">{title}</h2>
-			<span class="text-xs text-muted-foreground">{notes.length}</span>
+			<h2 class="text-sm font-semibold">{signedIn.state.view.currentTitle}</h2>
+			<span class="text-xs text-muted-foreground"
+				>{signedIn.state.view.currentNotes.length}</span
+			>
 		</div>
-		{#if showControls}
+		{#if signedIn.state.view.currentShowControls}
 			<div class="flex items-center gap-1">
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
@@ -133,7 +124,9 @@
 					size="icon"
 					class="size-7"
 					onclick={() => {
-						const { id } = signedIn.state.notes.create(signedIn.state.view.selectedFolderId);
+						const { id } = signedIn.state.notes.create(
+							signedIn.state.view.selectedFolderId,
+						);
 						signedIn.state.view.selectNote(id);
 					}}
 				>
@@ -144,11 +137,11 @@
 	</div>
 
 	<ScrollArea.Root class="flex-1">
-		{#if notes.length === 0}
+		{#if signedIn.state.view.currentNotes.length === 0}
 			<div
 				class="flex h-full items-center justify-center p-8 text-center text-muted-foreground"
 			>
-				<p class="text-sm">{emptyMessage}</p>
+				<p class="text-sm">{signedIn.state.view.currentEmptyMessage}</p>
 			</div>
 		{:else}
 			<div class="flex flex-col gap-4 p-2">

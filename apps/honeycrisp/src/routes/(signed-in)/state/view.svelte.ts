@@ -1,9 +1,10 @@
 /**
  * Reactive view state for Honeycrisp, backed by URL search params.
  *
- * Manages navigation, selection, search, sort, and view mode. Cross-cutting
- * derivations (filteredNotes, folderName, selectedNote) live here because
- * they combine data from multiple domains.
+ * The lens the user is currently looking through. Owns navigation,
+ * selection, search, sort, view mode, and the derived "what notes does
+ * the user see right now" question (`currentNotes` plus its title and
+ * empty-state messaging).
  *
  * State lives in the URL so it's bookmarkable, shareable, and works with
  * browser back/forward. Default values are elided from the URL to keep it
@@ -17,10 +18,10 @@
  *   const signedIn = getSignedInSession();
  * </script>
  *
- * {#each signedIn.state.view.filteredNotes as note (note.id)}
+ * {#each signedIn.state.view.currentNotes as note (note.id)}
  *   <p>{note.title}</p>
  * {/each}
- * <p>Current folder: {signedIn.state.view.folderName}</p>
+ * <p>Current title: {signedIn.state.view.currentTitle}</p>
  * ```
  */
 
@@ -60,7 +61,7 @@ export function createView({
 			});
 	});
 
-	/** Human-readable name for the current folder (used as NoteList title). */
+	/** Human-readable name for the current folder. Feeds `currentTitle`. */
 	const folderName = $derived.by(() => {
 		const folderId = searchParams.folder;
 		return folderId ? (folders.get(folderId)?.name ?? 'Notes') : 'All Notes';
@@ -75,6 +76,7 @@ export function createView({
 	// ─── Public API ──────────────────────────────────────────────────────
 
 	return {
+		[Symbol.dispose]() {},
 		get selectedFolderId(): FolderId | null {
 			return searchParams.folder;
 		},
@@ -93,11 +95,27 @@ export function createView({
 		get isRecentlyDeletedView() {
 			return searchParams.isDeletedView;
 		},
-		get folderName() {
-			return folderName;
+
+		/**
+		 * The list of notes the user currently sees: deleted notes when in
+		 * Recently Deleted, otherwise the folder/search-filtered + sorted list.
+		 */
+		get currentNotes() {
+			return searchParams.isDeletedView ? notes.deleted : filteredNotes;
 		},
-		get filteredNotes() {
-			return filteredNotes;
+		/** The header title for the current notes list. */
+		get currentTitle(): string {
+			return searchParams.isDeletedView ? 'Recently Deleted' : folderName;
+		},
+		/** Whether the sort + new-note controls should appear. Off in Recently Deleted. */
+		get currentShowControls(): boolean {
+			return !searchParams.isDeletedView;
+		},
+		/** The empty-state message for the current notes list. */
+		get currentEmptyMessage(): string {
+			return searchParams.isDeletedView
+				? 'No deleted notes'
+				: 'No notes yet. Click + to create one.';
 		},
 
 		/**
