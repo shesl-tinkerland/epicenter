@@ -19,12 +19,12 @@
 		getSortedRowModel,
 	} from '@tanstack/table-core';
 	import { goto } from '$app/navigation';
-	import { getSignedInSession } from '$lib/session.svelte';
+	import BadgeList from '$lib/components/BadgeList.svelte';
 	import { matchesEntrySearch } from '$lib/entries-search';
 	import { relativeTime } from '$lib/format';
-	import { viewState } from '../state/view.svelte';
+	import { getSignedInSession } from '$lib/session.svelte';
 	import type { Entry } from '../fuji/workspace';
-	import BadgeList from '$lib/components/BadgeList.svelte';
+	import { viewState } from '../state/view.svelte';
 
 	let { entries, title }: { entries: Entry[]; title?: string } = $props();
 	const signedIn = getSignedInSession();
@@ -262,11 +262,7 @@
 										>Create your first entry to get started.</Empty.Description
 									>
 									<Empty.Content>
-										<Button
-											variant="outline"
-											size="sm"
-											onclick={createEntry}
-										>
+										<Button variant="outline" size="sm" onclick={createEntry}>
 											<PlusIcon class="mr-1.5 size-4" />
 											New Entry
 										</Button>

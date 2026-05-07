@@ -3,12 +3,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
 	BC_ORIGIN,
+	BEARER_SUBPROTOCOL_PREFIX,
 	decodeRpcPayload,
 	encodeAwarenessStates,
 	encodeRpcRequest,
 	encodeRpcResponse,
 	encodeSyncStep2,
-	BEARER_SUBPROTOCOL_PREFIX,
 	MAIN_SUBPROTOCOL,
 	MESSAGE_TYPE,
 } from '@epicenter/sync';
@@ -356,5 +356,4 @@ describe('attachSync split surface', () => {
 
 		ydoc.destroy();
 	});
-
 });

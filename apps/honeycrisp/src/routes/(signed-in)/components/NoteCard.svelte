@@ -2,13 +2,13 @@
 	import * as AlertDialog from '@epicenter/ui/alert-dialog';
 	import { Button } from '@epicenter/ui/button';
 	import * as ContextMenu from '@epicenter/ui/context-menu';
+	import { DateTimeString } from '@epicenter/workspace';
 	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { format } from 'date-fns';
-	import { DateTimeString } from '@epicenter/workspace';
 	import { getSignedInSession } from '$lib/session.svelte';
 	import type { Note } from '../honeycrisp/workspace';
 

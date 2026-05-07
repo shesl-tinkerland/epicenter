@@ -19,8 +19,8 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import type * as Y from 'yjs';
 import { createLogger, type Logger } from 'wellcrafted/logger';
+import type * as Y from 'yjs';
 
 /** Error produced when the user-supplied `fn` throws synchronously. */
 export const OnLocalUpdateError = defineErrors({

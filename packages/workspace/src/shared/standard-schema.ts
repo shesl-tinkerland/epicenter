@@ -4,8 +4,8 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { Ok, trySync } from 'wellcrafted/result';
 import { createLogger } from 'wellcrafted/logger';
+import { Ok, trySync } from 'wellcrafted/result';
 
 const log = createLogger('standard-schema');
 

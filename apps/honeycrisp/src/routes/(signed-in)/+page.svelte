@@ -1,11 +1,11 @@
 <script lang="ts">
 	import * as Resizable from '@epicenter/ui/resizable';
 	import { SidebarProvider } from '@epicenter/ui/sidebar';
+	import { getSignedInSession } from '$lib/session.svelte';
 	import CommandPalette from './components/CommandPalette.svelte';
 	import NoteBodyPane from './components/NoteBodyPane.svelte';
 	import NoteList from './components/NoteList.svelte';
 	import HoneycripSidebar from './components/Sidebar.svelte';
-	import { getSignedInSession } from '$lib/session.svelte';
 
 	const { foldersState, notesState, viewState } = getSignedInSession().state;
 </script>

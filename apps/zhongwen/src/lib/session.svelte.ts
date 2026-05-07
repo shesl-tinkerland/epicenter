@@ -1,7 +1,7 @@
 import { requireSignedIn } from '@epicenter/auth';
 import { createSession, type InferSignedIn } from '@epicenter/svelte';
-import { auth } from './auth';
 import { openZhongwen } from '../routes/(signed-in)/zhongwen/browser';
+import { auth } from './auth';
 
 export const session = createSession({
 	auth,

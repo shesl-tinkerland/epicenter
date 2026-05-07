@@ -13,8 +13,8 @@
 	import { rpc } from '$lib/query';
 	import { settings } from '$lib/state/settings.svelte';
 	import { transformations } from '$lib/state/transformations.svelte';
-	import type { Transformation } from '$lib/workspace';
 	import { viewTransition } from '$lib/utils/viewTransitions';
+	import type { Transformation } from '$lib/workspace';
 
 	const sortedTransformations = $derived(transformations.sorted);
 

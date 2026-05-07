@@ -1,4 +1,8 @@
-import { defineKv, defineTable, type InferTableRow } from '@epicenter/workspace';
+import {
+	defineKv,
+	defineTable,
+	type InferTableRow,
+} from '@epicenter/workspace';
 import { type } from 'arktype';
 
 // ── Constant imports ─────────────────────────────────────────────────────────
@@ -187,7 +191,9 @@ const transformationStepRuns = defineTable(
 );
 
 /** Transformation step run row type inferred from the latest workspace table schema version. */
-export type TransformationStepRun = InferTableRow<typeof transformationStepRuns>;
+export type TransformationStepRun = InferTableRow<
+	typeof transformationStepRuns
+>;
 
 /**
  * Synced settings stored as individual KV entries with last-write-wins resolution.

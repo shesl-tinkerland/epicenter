@@ -5,10 +5,10 @@
 import { describe, expect, test } from 'bun:test';
 import { type } from 'arktype';
 import * as Y from 'yjs';
-import { createReadonlyTable, createTable } from './internal.js';
 import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
-import { defineTable } from './define-table.js';
 import { attachReadonlyTable, attachTable } from './attach-table.js';
+import { defineTable } from './define-table.js';
+import { createReadonlyTable, createTable } from './internal.js';
 
 /** Creates Yjs infrastructure for testing */
 function setup() {
@@ -27,9 +27,7 @@ describe('createTable', () => {
 			const helper = createReadonlyTable(ykv, definition, 'test');
 			ykv.set('1', { id: '1', name: 'Alice', _v: 1 });
 
-			expect(helper.getAllValid()).toEqual([
-				{ id: '1', name: 'Alice', _v: 1 },
-			]);
+			expect(helper.getAllValid()).toEqual([{ id: '1', name: 'Alice', _v: 1 }]);
 			expect(helper.count()).toBe(1);
 			expect(helper.has('1')).toBe(true);
 			expect('set' in helper).toBe(false);

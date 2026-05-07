@@ -5,9 +5,9 @@
 	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import NoteCard from '../components/NoteCard.svelte';
 	import { getSignedInSession } from '$lib/session.svelte';
 	import { getDateLabel } from '$lib/utils/date';
+	import NoteCard from '../components/NoteCard.svelte';
 	import type { Note } from '../honeycrisp/workspace';
 
 	const { notesState, viewState } = getSignedInSession().state;

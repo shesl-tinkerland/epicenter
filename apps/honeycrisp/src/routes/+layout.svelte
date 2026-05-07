@@ -4,10 +4,10 @@
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { Loading } from '@epicenter/ui/loading';
 	import { Toaster } from '@epicenter/ui/sonner';
+	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import { ModeWatcher } from 'mode-watcher';
-	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { auth } from '$lib/auth';
 	import { queryClient } from '$lib/query/client';
 	import { session } from '$lib/session.svelte';
