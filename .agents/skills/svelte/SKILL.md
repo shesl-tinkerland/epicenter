@@ -202,13 +202,16 @@ Reserve `$derived.by()` for multi-statement logic where you genuinely need a fun
 
 See `docs/articles/record-lookup-over-nested-ternaries.md` for rationale.
 
-# When to Use SvelteMap vs $state
+# When to Use fromTable, SvelteMap, and $state
 
-Use `SvelteMap` when items have stable IDs and you need keyed lookup. Use `$state` for primitives, local UI booleans, and sequential data without identity.
+Use `fromTable()` for workspace table rows. It returns a readonly view with
+`all` and `byId(id)`, backed by `createSubscriber`. Use `SvelteMap` for
+non-workspace keyed data that needs local per-key mutation. Use `$state` for
+primitives, local UI booleans, and sequential data without identity.
 
 | Data Shape | Use | Example |
 |---|---|---|
-| Workspace table rows (have IDs) | `fromTable()` → `SvelteMap` | recordings, conversations, notes |
+| Workspace table rows (have IDs) | `fromTable()` readonly view | recordings, conversations, notes |
 | Workspace KV (single key) | `fromKv()` | selectedFolderId, sortBy |
 | Browser API keyed data | `new SvelteMap()` + listeners | Chrome tabs, windows |
 | Primitive value | `$state(value)` | `$state(false)`, `$state('')`, `$state(0)` |
@@ -218,16 +221,16 @@ Use `SvelteMap` when items have stable IDs and you need keyed lookup. Use `$stat
 ### Anti-Pattern: $state for ID-Keyed Collections
 
 ```typescript
-// ❌ BAD: O(n) lookups, coarse reactivity, referential instability
+// BAD: O(n) lookups, coarse reactivity, referential instability
 let conversations = $state<Conversation[]>(readAll());
 const metadata = $derived(conversations.find((c) => c.id === id)); // O(n) scan
 
-// ✅ GOOD: O(1) lookups, per-key reactivity, stable $derived array
-const conversationsMap = fromTable(workspace.tables.conversations);
+// GOOD: table lookup, cached derived array
+const conversationsView = fromTable(workspace.tables.conversations);
 const conversations = $derived(
-	conversationsMap.values().toArray().sort((a, b) => b.updatedAt - a.updatedAt),
+	conversationsView.all.toSorted((a, b) => b.updatedAt - a.updatedAt),
 );
-const metadata = $derived(conversationsMap.get(id)); // O(1) lookup
+const metadata = $derived(conversationsView.byId(id));
 ```
 
 Three problems with `$state<T[]>` for keyed data:
@@ -243,28 +246,29 @@ See `docs/articles/sveltemap-over-state-for-keyed-collections.md` for the full r
 When a factory function exposes workspace table data via `fromTable`, follow this three-layer convention:
 
 ```typescript
-// 1. Map — reactive source (private, suffixed with Map)
-const foldersMap = fromTable(workspaceClient.tables.folders);
+// 1. View: reactive source (private, suffixed with View)
+const foldersView = fromTable(workspaceClient.tables.folders);
 
-// 2. Derived array — cached materialization (private, no suffix)
-const folders = $derived(foldersMap.values().toArray());
+// 2. Derived array: cached materialization (private, no suffix)
+const folders = $derived(foldersView.all);
 
-// 3. Getter — public API (matches the derived name)
+// 3. Getter: public API (matches the derived name)
 return {
 	get folders() {
 		return folders;
 	},
+	byId: foldersView.byId,
 };
 ```
 
-Naming: `{name}Map` (private source) → `{name}` (cached derived) → `get {name}()` (public getter).
+Naming: `{name}View` (private source) → `{name}` (cached derived) → `get {name}()` (public getter).
 
 ### With Sort or Filter
 
-Chain operations inside `$derived` — the entire pipeline is cached:
+Chain operations inside `$derived`; the entire pipeline is cached:
 
 ```typescript
-const tabs = $derived(tabsMap.values().toArray().sort((a, b) => b.savedAt - a.savedAt));
+const tabs = $derived(tabsView.all.toSorted((a, b) => b.savedAt - a.savedAt));
 const notes = $derived(allNotes.filter((n) => n.deletedAt === undefined));
 ```
 
@@ -272,15 +276,15 @@ See the `typescript` skill for iterator helpers (`.toArray()`, `.filter()`, `.fi
 
 ### Template Props
 
-For component props expecting `T[]`, derive in the script block — never materialize in the template:
+For component props expecting `T[]`, derive in the script block. Never materialize in the template:
 
 ```svelte
 <!-- Bad: re-creates array on every render -->
-<FujiSidebar entries={entries.values().toArray()} />
+<FujiSidebar entries={entriesView.all.toSorted(sortEntries)} />
 
 <!-- Good: cached via $derived -->
 <script>
-	const entriesArray = $derived(entries.values().toArray());
+	const entriesArray = $derived(entriesView.all.toSorted(sortEntries));
 </script>
 <FujiSidebar entries={entriesArray} />
 ```
@@ -301,11 +305,12 @@ State modules use a factory function that returns a flat object with getters and
 
 ```typescript
 function createBookmarkState() {
-	const bookmarksMap = fromTable(workspaceClient.tables.bookmarks);
-	const bookmarks = $derived(bookmarksMap.values().toArray());
+	const bookmarksView = fromTable(workspaceClient.tables.bookmarks);
+	const bookmarks = $derived(bookmarksView.all);
 
 	return {
 		get bookmarks() { return bookmarks; },
+		byId: bookmarksView.byId,
 		async add(tab: Tab) { /* ... */ },
 		remove(id: BookmarkId) { /* ... */ },
 	};
@@ -928,7 +933,10 @@ For more complex repeated patterns (e.g., toolbar buttons with tooltips), use `{
 
 ## The Problem: New Array = Infinite Loop with TanStack Table
 
-When feeding data from a reactive SvelteMap (or any signal-based store) into `createSvelteTable`, the `get data()` getter must return a **referentially stable** array. If it creates a new array on every access, TanStack Table's internal `$derived` enters an infinite loop:
+When feeding data from a reactive table view, SvelteMap, or any signal-based
+store into `createSvelteTable`, the `get data()` getter must return a
+**referentially stable** array. If it creates a new array on every access,
+TanStack Table's internal `$derived` enters an infinite loop:
 
 ```
 1. $derived calls get data() → new array (Array.from().sort())
@@ -938,23 +946,26 @@ When feeding data from a reactive SvelteMap (or any signal-based store) into `cr
 5. → infinite loop → page freeze
 ```
 
-TanStack Query hid this problem because its cache returns the **same reference** until a refetch. SvelteMap getters that do `Array.from(map.values()).sort()` create a new array every call.
+TanStack Query hid this problem because its cache returns the **same reference**
+until a refetch. Direct table view getters like `view.all.toSorted(...)` create
+a new array every call.
 
 ## The Fix: Memoize with `$derived`
 
-In `.svelte.ts` modules, use `$derived` to compute the sorted/filtered array once per SvelteMap change:
+In `.svelte.ts` modules, use `$derived` to compute the sorted/filtered array
+once per table view change:
 
 ```typescript
-// ❌ BAD: New array on every access → infinite loop with TanStack Table
+// BAD: New array on every access causes an infinite loop with TanStack Table
 get sorted(): Recording[] {
-    return Array.from(map.values()).sort(
+    return view.all.toSorted(
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 }
 
-// ✅ GOOD: $derived caches the result, stable reference between SvelteMap changes
+// GOOD: $derived caches the result between table view changes
 const sorted = $derived(
-    Array.from(map.values()).sort(
+    view.all.toSorted(
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     ),
 );
@@ -969,10 +980,10 @@ get sorted(): Recording[] {
 
 The infinite loop only happens when the array is consumed by something that **tracks reference identity in a reactive context**:
 
-- `createSvelteTable({ get data() { ... } })` — **DANGEROUS** (infinite loop)
-- `$derived(someStore.sorted)` where the result feeds back into state — **DANGEROUS**
-- `{#each someStore.sorted as item}` in a template — **SAFE** (Svelte's each block diffs by value, renders once per change)
-- `$derived(someStore.get(id))` — **SAFE** (returns existing object reference from SvelteMap.get())
+- `createSvelteTable({ get data() { ... } })`: **DANGEROUS** (infinite loop)
+- `$derived(someStore.sorted)` where the result feeds back into state: **DANGEROUS**
+- `{#each someStore.sorted as item}` in a template: **SAFE** (Svelte's each block diffs by value, renders once per change)
+- `$derived(someStore.byId(id))`: **SAFE** (returns the table row or undefined)
 
 ## Rule of Thumb
 

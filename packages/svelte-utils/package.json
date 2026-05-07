@@ -40,6 +40,7 @@
 		"typescript": "catalog:"
 	},
 	"scripts": {
+		"test": "bun test --conditions browser src/*.test.ts",
 		"typecheck": "svelte-check --tsconfig ./tsconfig.json"
 	},
 	"license": "MIT"

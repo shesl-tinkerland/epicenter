@@ -1,9 +1,9 @@
 # `fromTable` Readonly View Redesign
 
 **Date**: 2026-05-06
-**Status**: Draft; refreshed 2026-05-07; risky before execution
+**Status**: In Progress; refreshed 2026-05-07
 **Author**: AI-assisted
-**Branch**: feat/encrypted-local-workspace-storage
+**Branch**: feat/from-table-readonly-view
 **Refresh note**: The May 7 session cleanup moved Fuji's `fromTable` usage
 from `apps/fuji/src/routes/(signed-in)/state/entries.svelte.ts` and
 `SignedInSessionProvider.svelte` into `apps/fuji/src/lib/session.svelte.ts`.
@@ -276,10 +276,11 @@ Build, prove, remove. Phases 1 to 4 are sequential; within Phase 2 the per-app m
 
 ### Phase 1: Build the new primitive
 
-- [ ] **1.1** Rewrite `packages/svelte-utils/src/from-table.svelte.ts` to the new shape. Drop `ReactiveTableMap` type export; the inferred return type is sufficient.
-- [ ] **1.2** Update `packages/svelte-utils/src/index.ts` to remove the `ReactiveTableMap` re-export.
-- [ ] **1.3** Update `.agents/skills/svelte/SKILL.md` and `.agents/skills/workspace-api/SKILL.md` references that mention `fromTable` returning a SvelteMap or requiring dispose.
-- [ ] **1.4** Add a focused test in `packages/svelte-utils/src/from-table.svelte.test.ts` verifying:
+- [x] **1.1** Rewrite `packages/svelte-utils/src/from-table.svelte.ts` to the new shape. Drop `ReactiveTableMap` type export; the inferred return type is sufficient.
+- [x] **1.2** Update `packages/svelte-utils/src/index.ts` to remove the `ReactiveTableMap` re-export.
+- [x] **1.3** Update `.agents/skills/svelte/SKILL.md` and `.agents/skills/workspace-api/SKILL.md` references that mention `fromTable` returning a SvelteMap or requiring dispose.
+  > **Note**: `.agents/skills/svelte/SKILL.md` contained the stale SvelteMap guidance. `.agents/skills/workspace-api/SKILL.md` only links to the Svelte skill and did not contradict the new primitive.
+- [x] **1.4** Add a focused test in `packages/svelte-utils/src/from-table.svelte.test.ts` verifying:
   - First read inside `$effect.root` attaches the observer
   - Last reader teardown detaches the observer (microtask)
   - Outside-effect reads return current Yjs state without subscribing

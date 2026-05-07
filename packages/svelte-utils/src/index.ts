@@ -1,7 +1,6 @@
 export { createAiChatFetch } from './create-ai-chat-fetch.js';
 export { fromKv } from './from-kv.svelte.js';
-export { fromTable, type ReactiveTableMap } from './from-table.svelte.js';
-export { useCacheHandle } from './use-cache-handle.svelte.js';
+export { fromTable } from './from-table.svelte.js';
 export {
 	createPersistedMap,
 	defineEntry,
@@ -17,3 +16,4 @@ export {
 	type Session,
 	type SignedInBase,
 } from './session.svelte.js';
+export { useCacheHandle } from './use-cache-handle.svelte.js';
