@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { PersistenceGate } from '@epicenter/svelte/persistence-gate';
 	import { SessionGate } from '@epicenter/svelte/session-gate';
 	import { Loading } from '@epicenter/ui/loading';
 	import { goto } from '$app/navigation';
@@ -14,11 +15,17 @@
 	});
 </script>
 
-<SessionGate {auth} {session}>
+<SessionGate {session}>
 	{#snippet signedOut()}
 		<Loading class="h-dvh" />
 	{/snippet}
-	{#snippet signedIn(_s)}
-		{@render children?.()}
+	{#snippet signedIn(s)}
+		<PersistenceGate
+			{auth}
+			whenReady={s.zhongwen.idb.whenLoaded}
+			wipe={() => s.zhongwen.wipe()}
+		>
+			{@render children?.()}
+		</PersistenceGate>
 	{/snippet}
 </SessionGate>

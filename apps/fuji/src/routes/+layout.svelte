@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { AuthForm } from '@epicenter/svelte/auth-form';
+	import { PersistenceGate } from '@epicenter/svelte/persistence-gate';
 	import { SessionGate } from '@epicenter/svelte/session-gate';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { Toaster } from '@epicenter/ui/sonner';
@@ -14,7 +15,7 @@
 
 <svelte:head><title>Fuji</title></svelte:head>
 
-<SessionGate {auth} {session}>
+<SessionGate {session}>
 	{#snippet signedOut()}
 		<div class="flex h-dvh items-center justify-center">
 			<AuthForm
@@ -28,8 +29,14 @@
 			/>
 		</div>
 	{/snippet}
-	{#snippet signedIn(_s)}
-		<FujiAppShell>{@render children?.()}</FujiAppShell>
+	{#snippet signedIn(s)}
+		<PersistenceGate
+			{auth}
+			whenReady={s.fuji.idb.whenLoaded}
+			wipe={() => s.fuji.wipe()}
+		>
+			<FujiAppShell>{@render children?.()}</FujiAppShell>
+		</PersistenceGate>
 	{/snippet}
 </SessionGate>
 

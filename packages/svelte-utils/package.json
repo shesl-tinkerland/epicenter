@@ -17,7 +17,8 @@
 		".": "./src/index.ts",
 		"./auth-form": "./src/auth-form/index.ts",
 		"./account-popover": "./src/account-popover/index.ts",
-		"./session-gate": "./src/session-gate/index.ts"
+		"./session-gate": "./src/session-gate/index.ts",
+		"./persistence-gate": "./src/persistence-gate/index.ts"
 	},
 	"dependencies": {
 		"@epicenter/auth": "workspace:*",

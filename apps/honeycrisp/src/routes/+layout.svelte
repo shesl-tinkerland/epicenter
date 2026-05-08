@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { AuthForm } from '@epicenter/svelte/auth-form';
+	import { PersistenceGate } from '@epicenter/svelte/persistence-gate';
 	import { SessionGate } from '@epicenter/svelte/session-gate';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { Toaster } from '@epicenter/ui/sonner';
@@ -18,7 +19,7 @@
 <svelte:head><title>Honeycrisp</title></svelte:head>
 
 <QueryClientProvider client={queryClient}>
-	<SessionGate {auth} {session}>
+	<SessionGate {session}>
 		{#snippet signedOut()}
 			<div class="flex h-dvh items-center justify-center">
 				<AuthForm
@@ -32,8 +33,14 @@
 				/>
 			</div>
 		{/snippet}
-		{#snippet signedIn(_s)}
-			<Tooltip.Provider>{@render children?.()}</Tooltip.Provider>
+		{#snippet signedIn(s)}
+			<PersistenceGate
+				{auth}
+				whenReady={s.honeycrisp.idb.whenLoaded}
+				wipe={() => s.honeycrisp.wipe()}
+			>
+				<Tooltip.Provider>{@render children?.()}</Tooltip.Provider>
+			</PersistenceGate>
 		{/snippet}
 	</SessionGate>
 </QueryClientProvider>

@@ -37,11 +37,11 @@
  * calling `createSession` and capture the resolved value in the `build`
  * closure. The build factory itself stays sync.
  *
- * The factory itself only requires `userId` (for the same-user no-op vs.
- * different-user reload decision) and `Symbol.dispose` (for teardown). If the
- * payload is consumed by `SessionGate`, also expose `whenReady: Promise<unknown>`
- * and `wipe: () => Promise<void>` at the top level so the gate can await
- * persistence boot and offer forget-device recovery without selector props.
+ * The factory only requires `userId` (for the same-user no-op vs.
+ * different-user reload decision) and `Symbol.dispose` (for teardown).
+ * Anything else on the payload is app shape, not session contract: callers
+ * inject what consumers (e.g., `PersistenceGate`) need at the call site
+ * rather than widening this constraint.
  *
  * @example
  * ```ts
@@ -60,8 +60,6 @@
  *     return {
  *       userId: identity.user.id,
  *       fuji,
- *       whenReady: fuji.idb.whenLoaded,
- *       wipe: () => fuji.wipe(),
  *       [Symbol.dispose]() { fuji[Symbol.dispose](); },
  *     };
  *   },

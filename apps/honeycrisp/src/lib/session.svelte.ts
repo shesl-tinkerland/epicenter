@@ -24,8 +24,6 @@ export const session = createSession({
 			userId,
 			honeycrisp,
 			state,
-			whenReady: honeycrisp.idb.whenLoaded,
-			wipe: () => honeycrisp.wipe(),
 			[Symbol.dispose]() {
 				state[Symbol.dispose]();
 				honeycrisp[Symbol.dispose]();

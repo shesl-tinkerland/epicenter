@@ -42,8 +42,6 @@ export const session = createSession({
 					return deleted;
 				},
 			},
-			whenReady: fuji.idb.whenLoaded,
-			wipe: () => fuji.wipe(),
 			[Symbol.dispose]() {
 				entriesMap[Symbol.dispose]();
 				fuji[Symbol.dispose]();
