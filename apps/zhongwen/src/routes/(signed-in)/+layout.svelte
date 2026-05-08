@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { SessionGate } from '@epicenter/svelte/session-gate';
 	import { Loading } from '@epicenter/ui/loading';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth';
@@ -7,23 +7,18 @@
 
 	let { children } = $props();
 
-	const current = $derived(session.current);
-
 	$effect(() => {
-		if (current.status === 'signed-out') {
+		if (session.current.status === 'signed-out') {
 			void goto('/sign-in', { replaceState: true });
 		}
 	});
 </script>
 
-{#if current.status === 'pending' || current.status === 'signed-out'}
-	<Loading class="h-dvh" />
-{:else}
-	<WorkspaceGate
-		pending={current.signedIn.zhongwen.idb.whenLoaded}
-		forgetDevice={() => current.signedIn.zhongwen.wipe()}
-		signOut={() => auth.signOut()}
-	>
+<SessionGate {auth} {session}>
+	{#snippet signedOut()}
+		<Loading class="h-dvh" />
+	{/snippet}
+	{#snippet signedIn(_s)}
 		{@render children?.()}
-	</WorkspaceGate>
-{/if}
+	{/snippet}
+</SessionGate>

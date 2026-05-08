@@ -25,13 +25,45 @@
  * Requires an `AuthClient` whose `state` is Svelte-reactive (use
  * `@epicenter/auth-svelte`, not `@epicenter/auth` directly).
  *
+ * Per-machine vs per-user identity: peer-like values (installation id,
+ * device name, platform) are per-machine. When peer identity is sync,
+ * construct it inside `build` so browser storage is read when the
+ * signed-in payload is built, and so TypeScript can contextually type the
+ * object at the workspace open call. User identity (userId, encryption
+ * keys, bearer token) is per-user and comes from the `identity` argument
+ * or the auth client.
+ *
+ * If peer resolution is async (chrome.storage, etc.), resolve it before
+ * calling `createSession` and capture the resolved value in the `build`
+ * closure. The build factory itself stays sync.
+ *
+ * The factory itself only requires `userId` (for the same-user no-op vs.
+ * different-user reload decision) and `Symbol.dispose` (for teardown). If the
+ * payload is consumed by `SessionGate`, also expose `whenReady: Promise<unknown>`
+ * and `wipe: () => Promise<void>` at the top level so the gate can await
+ * persistence boot and offer forget-device recovery without selector props.
+ *
  * @example
  * ```ts
  * export const session = createSession({
  *   auth,
  *   build: (identity) => {
- *     const fuji = openFuji({ ... });
- *     return { userId: identity.user.id, fuji, [Symbol.dispose]() {...} };
+ *     const fuji = openFuji({
+ *       userId: identity.user.id,
+ *       peer: {
+ *         id: getOrCreateInstallationId(localStorage),
+ *         name: 'Fuji',
+ *         platform: 'web',
+ *       },
+ *       ...
+ *     });
+ *     return {
+ *       userId: identity.user.id,
+ *       fuji,
+ *       whenReady: fuji.idb.whenLoaded,
+ *       wipe: () => fuji.wipe(),
+ *       [Symbol.dispose]() { fuji[Symbol.dispose](); },
+ *     };
  *   },
  * });
  * export type FujiSignedIn = InferSignedIn<typeof session>;
@@ -43,10 +75,6 @@ import type { AuthClient, AuthIdentity, AuthState } from '@epicenter/auth';
 export type Session<TSignedIn> =
 	| Exclude<AuthState, { status: 'signed-in' }>
 	| { status: 'signed-in'; signedIn: TSignedIn };
-
-export type SignedInBase = {
-	userId: string;
-} & Disposable;
 
 /**
  * Infer the signed-in payload type from a session created by `createSession`.
@@ -68,7 +96,9 @@ export type InferSignedIn<TSession extends { current: unknown }> =
 			: never
 		: never;
 
-export function createSession<TSignedIn extends SignedInBase>({
+export function createSession<
+	TSignedIn extends { userId: string } & Disposable,
+>({
 	auth,
 	build,
 }: {

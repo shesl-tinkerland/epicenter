@@ -14,6 +14,8 @@ export const session = createSession({
 		return {
 			userId,
 			zhongwen,
+			whenReady: zhongwen.idb.whenLoaded,
+			wipe: () => zhongwen.wipe(),
 			[Symbol.dispose]() {
 				zhongwen[Symbol.dispose]();
 			},

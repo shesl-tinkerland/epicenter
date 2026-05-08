@@ -15,5 +15,4 @@ export {
 	createSession,
 	type InferSignedIn,
 	type Session,
-	type SignedInBase,
 } from './session.svelte.js';

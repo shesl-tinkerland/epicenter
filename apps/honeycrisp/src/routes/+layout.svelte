@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { AuthForm } from '@epicenter/svelte/auth-form';
-	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { SessionGate } from '@epicenter/svelte/session-gate';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
-	import { Loading } from '@epicenter/ui/loading';
 	import { Toaster } from '@epicenter/ui/sonner';
 	import * as Tooltip from '@epicenter/ui/tooltip';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
@@ -14,36 +13,29 @@
 	import '@epicenter/ui/app.css';
 
 	let { children } = $props();
-
-	const current = $derived(session.current);
 </script>
 
 <svelte:head><title>Honeycrisp</title></svelte:head>
 
 <QueryClientProvider client={queryClient}>
-	{#if current.status === 'pending'}
-		<Loading class="h-dvh" />
-	{:else if current.status === 'signed-out'}
-		<div class="flex h-dvh items-center justify-center">
-			<AuthForm
-				{auth}
-				syncNoun="notes"
-				onSocialSignIn={() =>
-					auth.signInWithSocialRedirect({
-						provider: 'google',
-						callbackURL: window.location.origin,
-					})}
-			/>
-		</div>
-	{:else}
-		<WorkspaceGate
-			pending={current.signedIn.honeycrisp.idb.whenLoaded}
-			forgetDevice={() => current.signedIn.honeycrisp.wipe()}
-			signOut={() => auth.signOut()}
-		>
+	<SessionGate {auth} {session}>
+		{#snippet signedOut()}
+			<div class="flex h-dvh items-center justify-center">
+				<AuthForm
+					{auth}
+					syncNoun="notes"
+					onSocialSignIn={() =>
+						auth.signInWithSocialRedirect({
+							provider: 'google',
+							callbackURL: window.location.origin,
+						})}
+				/>
+			</div>
+		{/snippet}
+		{#snippet signedIn(_s)}
 			<Tooltip.Provider>{@render children?.()}</Tooltip.Provider>
-		</WorkspaceGate>
-	{/if}
+		{/snippet}
+	</SessionGate>
 </QueryClientProvider>
 
 <Toaster offset={16} closeButton />
