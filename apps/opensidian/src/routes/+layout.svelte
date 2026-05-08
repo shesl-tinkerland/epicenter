@@ -15,7 +15,8 @@
 
 <WorkspaceGate
 	pending={opensidian.idb.whenLoaded}
-	onSignOut={() => auth.signOut()}
+	forgetDevice={() => opensidian.wipe()}
+	signOut={() => auth.signOut()}
 >
 	{@render children()}
 </WorkspaceGate>

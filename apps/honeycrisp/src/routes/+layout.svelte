@@ -38,7 +38,8 @@
 	{:else}
 		<WorkspaceGate
 			pending={current.signedIn.honeycrisp.idb.whenLoaded}
-			onSignOut={() => auth.signOut()}
+			forgetDevice={() => current.signedIn.honeycrisp.wipe()}
+			signOut={() => auth.signOut()}
 		>
 			<Tooltip.Provider>{@render children?.()}</Tooltip.Provider>
 		</WorkspaceGate>

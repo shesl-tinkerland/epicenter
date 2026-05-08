@@ -21,7 +21,8 @@
 {:else}
 	<WorkspaceGate
 		pending={current.signedIn.zhongwen.idb.whenLoaded}
-		onSignOut={() => auth.signOut()}
+		forgetDevice={() => current.signedIn.zhongwen.wipe()}
+		signOut={() => auth.signOut()}
 	>
 		{@render children?.()}
 	</WorkspaceGate>

@@ -34,7 +34,8 @@
 {:else}
 	<WorkspaceGate
 		pending={current.signedIn.fuji.idb.whenLoaded}
-		onSignOut={() => auth.signOut()}
+		forgetDevice={() => current.signedIn.fuji.wipe()}
+		signOut={() => auth.signOut()}
 	>
 		<FujiAppShell>{@render children?.()}</FujiAppShell>
 	</WorkspaceGate>
