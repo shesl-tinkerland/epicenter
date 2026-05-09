@@ -59,6 +59,7 @@
 		children,
 		pending,
 		error,
+		class: className = 'h-dvh',
 	}: {
 		/** Promise the gate awaits before rendering children. */
 		whenReady: Promise<unknown>;
@@ -76,6 +77,13 @@
 		pending?: Snippet;
 		/** Override for the error branch. Receives the rejection reason. */
 		error?: Snippet<[unknown]>;
+		/**
+		 * Sizing class for the default pending and error containers. Defaults to
+		 * `'h-dvh'` for standalone use at the document root. For slot use inside
+		 * a flex parent, pass `'flex-1'`. Ignored when `pending` or `error`
+		 * snippets are overridden (callers own their own sizing).
+		 */
+		class?: string;
 	} = $props();
 
 	let forgettingDevice = $state(false);
@@ -120,14 +128,14 @@
 </script>
 
 {#await whenReady}
-	{#if pending}{@render pending()}{:else}<Loading class="h-dvh" />{/if}
+	{#if pending}{@render pending()}{:else}<Loading class={className} />{/if}
 {:then _}
 	{@render children()}
 {:catch err}
 	{#if error}
 		{@render error(err)}
 	{:else}
-		<Empty.Root class="h-dvh flex-none border-0">
+		<Empty.Root class="{className} flex-none border-0">
 			<Empty.Media>
 				<TriangleAlertIcon class="size-8 text-muted-foreground" />
 			</Empty.Media>
