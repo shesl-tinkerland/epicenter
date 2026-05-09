@@ -3,35 +3,43 @@ import { APPS } from '@epicenter/constants/apps';
 /**
  * Pinned Chrome extension origin for the tab-manager.
  *
- * Stable across all installs because `apps/tab-manager/wxt.config.ts`
- * pins the manifest `key`. Allowlisting this exact origin replaces an
- * earlier `chrome-extension://*` wildcard that defeated CSRF protection.
+ * Stable across all installs because `apps/tab-manager/wxt.config.ts` pins
+ * the manifest `key`. Allowlisting this exact origin replaces an earlier
+ * `chrome-extension://*` wildcard that let any user-installed extension
+ * read API responses with credentials.
  */
 const TAB_MANAGER_CHROME_EXTENSION_ORIGIN =
 	'chrome-extension://mkbnicfhpacdofmoocppnjjmdfmkkgda';
 
 /**
- * Origins permitted by both CORS and Better Auth's CSRF check.
+ * Origins permitted by Hono CORS and Better Auth (CSRF + callbackURL).
  *
- * Adding an app to `APPS` auto-extends this. Browser extensions are added
- * explicitly with their pinned origin: Chrome via the WXT `key`, Firefox
- * via `browser_specific_settings.gecko.id` plus AMO signing (required, no
- * exceptions; self-distributed XPIs get a random per-install UUID).
+ * One-sentence test: an origin is trusted iff a browser running our
+ * deployed code at that origin is allowed to act as a signed-in user.
  *
- * Localhost dev URLs are trusted in production by design so developers can
- * iterate against the deployed API from `localhost:<port>`. Session cookies
- * are still per-origin scoped, so this is not a CSRF vector.
+ * What that sentence rejects, and why:
  *
- * The `http://api.epicenter.so` entry is for `wrangler dev`, which serves
- * the custom domain over plain HTTP. In production Cloudflare upgrades the
- * domain to HTTPS, so this Origin is never sent by a real browser there.
+ * - **localhost ports**: we do not deploy code on user machines. Dev
+ *   frontends already target the local API by default (Vite's MODE-driven
+ *   `APP_URLS` and the dashboard's same-origin proxy in `apps/dashboard/
+ *   vite.config.ts`), so prod never legitimately sees `Origin: http://
+ *   localhost:*`. Trusting localhost in prod also lets a phishing link
+ *   like `?callbackURL=http://localhost:5173/anything` pass Better Auth's
+ *   redirect validation, which is dangerous for developers running Vite.
+ * - **http variants of production hosts**: we deploy over HTTPS. The
+ *   previous `http://api.epicenter.so` entry was paying off a
+ *   wrangler-dev custom-domain quirk that no real browser sees in
+ *   production.
+ * - **chrome-extension wildcards**: pinning the ID prevents any
+ *   user-installed extension from acting as a signed-in user.
  */
-export const TRUSTED_ORIGINS: string[] = [
+// Frozen at runtime to prevent the long-lived Cloudflare isolate from
+// accumulating mutations across requests. Typed as `string[]` (not
+// `readonly string[]`) because Better Auth's `trustedOrigins` is mutable,
+// and the readonly type leaks into its inferred Auth, breaking the OAuth
+// metadata helpers in `app.ts`.
+export const TRUSTED_ORIGINS: string[] = Object.freeze([
 	'tauri://localhost',
 	TAB_MANAGER_CHROME_EXTENSION_ORIGIN,
-	...Object.values(APPS).flatMap((app) => [
-		...app.urls,
-		`http://localhost:${app.port}`,
-	]),
-	`http://${new URL(APPS.API.urls[0]).host}`,
-];
+	...Object.values(APPS).flatMap((app) => app.urls),
+]) as string[];

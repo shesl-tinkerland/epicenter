@@ -20,7 +20,6 @@ export const APPS = {
 		urls: ['https://opensidian.com', 'https://opensidian.epicenter.so'],
 	},
 	ZHONGWEN: { port: 8888, urls: ['https://zhongwen.epicenter.so'] },
-	DASHBOARD: { port: 5178, urls: ['https://api.epicenter.so'] },
 } as const;
 
 export type AppId = keyof typeof APPS;

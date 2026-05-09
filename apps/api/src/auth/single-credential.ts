@@ -53,6 +53,17 @@ export const singleCredential = createMiddleware(async (c, next) => {
 	const cookie = getSessionCookie(c.req.raw);
 	const httpBearer = parseHttpBearer(headers.get('authorization'));
 	const wsBearer = parseWsBearer(headers.get('sec-websocket-protocol'));
+	const isWebSocketUpgrade = headers.get('upgrade') === 'websocket';
+
+	// WebSocket auth is bearer-only. Browsers attach cookies to WS handshakes
+	// regardless of SameSite, and CORS cannot block the upgrade (101 headers
+	// are immutable). Without this rejection, a cross-origin page could open
+	// authenticated WS connections in the victim's browser. Every real WS
+	// client (Tauri, dashboard, tab-manager) sends a bearer subprotocol; see
+	// `parseWsBearer` below.
+	if (isWebSocketUpgrade && cookie && !wsBearer) {
+		throw new HTTPException(401, { message: 'ws_requires_bearer' });
+	}
 
 	if (cookie && (httpBearer || wsBearer)) {
 		throw new HTTPException(400, { message: 'multiple_credentials' });
