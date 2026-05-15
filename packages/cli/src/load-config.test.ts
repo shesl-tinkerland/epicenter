@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { AuthClient } from '@epicenter/auth';
 import {
 	CONFIG_FILENAME,
 	loadDaemonConfig,
@@ -40,6 +41,18 @@ const daemonTransportFields = `
 	},
 `;
 
+function fakeAuthClient(): AuthClient {
+	return {
+		state: { status: 'signed-out' },
+		onStateChange: () => () => undefined,
+		startSignIn: async () => ({ data: undefined, error: null }),
+		signOut: async () => ({ data: undefined, error: null }),
+		fetch: globalThis.fetch.bind(globalThis),
+		openWebSocket: async (url, protocols) => new WebSocket(url, protocols),
+		[Symbol.dispose]() {},
+	};
+}
+
 describe('loadDaemonConfig', () => {
 	test('loads helper config without starting route definitions', async () => {
 		writeConfig(`
@@ -50,11 +63,12 @@ describe('loadDaemonConfig', () => {
 				daemon: {
 					routes: [{
 						route: 'demo',
-						start: ({ projectDir, route }) => {
+						start: ({ auth, projectDir, route }) => {
 							globalThis.__loadConfigEvents.push('started');
 							return {
 								collaboration: {
 									actions: {
+										paths_auth_status: { handler: () => auth.state.status },
 										paths_project_dir: { handler: () => projectDir },
 										paths_route: { handler: () => route }
 									},
@@ -82,7 +96,9 @@ describe('loadDaemonConfig', () => {
 		).toEqual([]);
 
 		if (loaded.error !== null) return;
-		const started = await startDaemonRoutes(loaded.data);
+		const started = await startDaemonRoutes(loaded.data, {
+			auth: fakeAuthClient(),
+		});
 
 		expect(started.error).toBeNull();
 		expect(started.data?.map((entry) => entry.route)).toEqual(['demo']);
@@ -91,6 +107,7 @@ describe('loadDaemonConfig', () => {
 			| undefined;
 		expect(actions?.paths_project_dir?.handler()).toBe(workDir);
 		expect(actions?.paths_route?.handler()).toBe('demo');
+		expect(actions?.paths_auth_status?.handler()).toBe('signed-out');
 		expect(
 			(globalThis as { __loadConfigEvents?: string[] }).__loadConfigEvents,
 		).toEqual(['started']);
@@ -185,7 +202,8 @@ describe('loadDaemonConfig', () => {
 		expect(loaded.error).toBeNull();
 		if (loaded.error !== null) return;
 
-		const started = await startDaemonRoutes(loaded.data);
+		const auth = fakeAuthClient();
+		const started = await startDaemonRoutes(loaded.data, { auth });
 		expect(started.error).toBeNull();
 		expect(started.data?.[0]?.route).toBe('demo');
 	});
@@ -223,7 +241,9 @@ describe('loadDaemonConfig', () => {
 		expect(loaded.error).toBeNull();
 		if (loaded.error !== null) return;
 
-		const started = await startDaemonRoutes(loaded.data);
+		const started = await startDaemonRoutes(loaded.data, {
+			auth: fakeAuthClient(),
+		});
 		expect(started.data).toBeNull();
 		expect(started.error?.name).toBe('InvalidRouteRuntime');
 	});
@@ -247,7 +267,9 @@ describe('loadDaemonConfig', () => {
 		expect(loaded.error).toBeNull();
 		if (loaded.error !== null) return;
 
-		const started = await startDaemonRoutes(loaded.data);
+		const started = await startDaemonRoutes(loaded.data, {
+			auth: fakeAuthClient(),
+		});
 		expect(started.error).toBeNull();
 		expect(started.data?.[0]?.route).toBe('demo');
 	});
@@ -281,7 +303,9 @@ describe('loadDaemonConfig', () => {
 		expect(loaded.error).toBeNull();
 		if (loaded.error !== null) return;
 
-		const started = await startDaemonRoutes(loaded.data);
+		const started = await startDaemonRoutes(loaded.data, {
+			auth: fakeAuthClient(),
+		});
 
 		expect(started.data).toBeNull();
 		expect(started.error?.name).toBe('RouteFailed');

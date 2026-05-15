@@ -7,6 +7,8 @@
  */
 
 import { join, resolve } from 'node:path';
+import type { AuthClient } from '@epicenter/auth';
+import { createMachineAuthClient } from '@epicenter/auth/node';
 import type { ProjectDir } from '@epicenter/workspace';
 import type {
 	DaemonRouteDefinition,
@@ -32,6 +34,10 @@ export type LoadedDaemonConfig = {
 	projectDir: ProjectDir;
 	configPath: string;
 	routes: readonly DaemonRouteDefinition[];
+};
+
+export type StartDaemonRoutesOptions = {
+	auth?: AuthClient;
 };
 
 export const DaemonConfigError = defineErrors({
@@ -245,18 +251,23 @@ export async function loadDaemonConfig(
 
 export async function startDaemonRoutes(
 	config: LoadedDaemonConfig,
+	options: StartDaemonRoutesOptions = {},
 ): Promise<Result<StartedDaemonRoute[], DaemonConfigError>> {
 	const runtimes: StartedDaemonRoute[] = [];
+	const auth = options.auth ?? (await createMachineAuthClient());
+	const ownsAuth = options.auth === undefined;
 
 	for (const definition of config.routes) {
 		let runtime: unknown;
 		try {
 			runtime = await definition.start({
+				auth,
 				projectDir: config.projectDir,
 				route: definition.route,
 			});
 		} catch (cause) {
 			await disposeStartedDaemonRoutes(runtimes);
+			if (ownsAuth) auth[Symbol.dispose]();
 			return DaemonConfigError.RouteFailed({
 				configPath: config.configPath,
 				route: definition.route,
@@ -266,6 +277,7 @@ export async function startDaemonRoutes(
 
 		if (!hasDaemonRuntimeShape(runtime)) {
 			await disposeStartedDaemonRoutes(runtimes);
+			if (ownsAuth) auth[Symbol.dispose]();
 			return DaemonConfigError.InvalidRouteRuntime({
 				configPath: config.configPath,
 				route: definition.route,

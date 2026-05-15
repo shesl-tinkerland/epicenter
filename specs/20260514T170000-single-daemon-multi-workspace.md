@@ -1,7 +1,7 @@
 # Single Daemon, Many Workspaces
 
 **Date**: 2026-05-14
-**Status**: Feasibility (no implementation yet)
+**Status**: Phase 1 in progress
 **Author**: Braden + Claude
 **Related**: `20260514T160000-script-surfaces-resolution.md` (scripts call into this daemon over unix socket).
 
@@ -154,6 +154,8 @@ Do this after the auth-injection refactor lands; it's a clean-break naming move 
 **Phase 0 (this spec):** decision recorded, no code changes.
 
 **Phase 1: shared auth client.** Smallest, highest-correctness change. Inject `auth` into `DaemonRouteDefinition.start()`. Update each `define*Daemon()` to consume the injected client. Bonus: write a regression test that two routes in one process don't race on keychain writes.
+
+Implementation note: branch `codex/daemon-shared-auth` injects a single `AuthClient` from `startDaemonRoutes()` into every route start context. Fuji, Honeycrisp, Opensidian, and Zhongwen now consume the injected client instead of calling `createMachineAuthClient()` inside their route factories. `startDaemonRoutes()` still accepts an explicit auth client for tests so config-loader tests do not require a persisted machine session.
 
 **Phase 2: root config + naming pass.** Land single-`epicenter.config.ts` at the project root listing all routes. Rename `define*Daemon` to `define*Route`. Update CLI docs.
 

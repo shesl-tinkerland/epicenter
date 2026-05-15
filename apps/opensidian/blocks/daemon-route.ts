@@ -1,4 +1,3 @@
-import { createMachineAuthClient } from '@epicenter/auth/node';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachEncryption,
@@ -19,8 +18,7 @@ export function defineOpensidianDaemon({
 } = {}) {
 	return {
 		route,
-		async start({ projectDir }) {
-			const auth = await createMachineAuthClient();
+		async start({ auth, projectDir }) {
 			if (auth.state.status === 'signed-out') {
 				throw new Error('[opensidian-daemon] auth signed-out at start.');
 			}
