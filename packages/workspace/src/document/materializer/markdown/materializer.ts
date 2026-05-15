@@ -1,6 +1,5 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import Type from 'typebox';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -10,15 +9,14 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { convertEpicenterLinksToWikilinks } from '../../../links.js';
-import { defineMutation } from '../../../shared/actions.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { Kv } from '../../attach-kv.js';
 import type { BaseRow, Table, TableParseError } from '../../attach-table.js';
 import {
 	assembleMarkdown,
 	type SerializeResult,
-} from '../../markdown/markdown.js';
-import { parseMarkdownFile } from '../../markdown/parse-markdown-file.js';
+} from './assemble-markdown.js';
+import { parseMarkdownFile } from './parse-markdown-file.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PUSH ERROR + EVENT TYPES
@@ -540,47 +538,40 @@ export function attachMarkdownMaterializer(
 		return { deleted, written };
 	}
 
+	// ── Pull (workspace → disk, additive) ────────────────────────
+
+	async function pullMarkdownFiles(): Promise<{ written: number }> {
+		const baseDir = await resolveDir();
+		let written = 0;
+		for (const entry of registered.values()) {
+			const directory = join(baseDir, entry.config.dir ?? entry.table.name);
+			await mkdir(directory, { recursive: true });
+			for (const row of entry.table.getAllValid()) {
+				const { filename, content } = await rowToMarkdownFile(
+					row,
+					entry.config,
+				);
+				await writeMarkdownFile(directory, filename, content);
+				written++;
+			}
+		}
+		return { written };
+	}
+
 	// ── Builder ──────────────────────────────────────────────────
 
 	const api = {
 		whenFlushed,
-		push: defineMutation({
-			title: 'Push markdown to workspace',
-			description:
-				'Read markdown files from disk and import rows into registered tables',
-			input: Type.Object({}),
-			handler: pushMarkdownFiles,
-		}),
-		pull: defineMutation({
-			title: 'Pull workspace to markdown',
-			description:
-				'Re-serialize all valid rows from registered tables to markdown files on disk',
-			input: Type.Object({}),
-			handler: async () => {
-				const baseDir = await resolveDir();
-				let written = 0;
-				for (const entry of registered.values()) {
-					const directory = join(baseDir, entry.config.dir ?? entry.table.name);
-					await mkdir(directory, { recursive: true });
-					for (const row of entry.table.getAllValid()) {
-						const { filename, content } = await rowToMarkdownFile(
-							row,
-							entry.config,
-						);
-						await writeMarkdownFile(directory, filename, content);
-						written++;
-					}
-				}
-				return { written };
-			},
-		}),
-		rebuild: defineMutation({
-			title: 'Rebuild markdown files',
-			description:
-				'Delete existing .md files in registered table directories and re-serialize all valid rows. Destructive: removes orphan files left by deleted rows or stale configs.',
-			input: Type.Object({ table: Type.Optional(Type.String()) }),
-			handler: ({ table }) => rebuildMarkdownFiles(table),
-		}),
+		/** Read markdown files from disk and import rows into registered tables. */
+		push: pushMarkdownFiles,
+		/** Re-serialize all valid rows from registered tables to markdown files on disk. */
+		pull: pullMarkdownFiles,
+		/**
+		 * Delete existing `.md` files in registered table directories and
+		 * re-serialize all valid rows. Destructive: removes orphan files left by
+		 * deleted rows or stale configs.
+		 */
+		rebuild: rebuildMarkdownFiles,
 	};
 
 	type MaterializerBuilder = typeof api & {

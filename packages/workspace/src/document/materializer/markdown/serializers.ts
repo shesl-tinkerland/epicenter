@@ -1,6 +1,6 @@
 import slugify from '@sindresorhus/slugify';
 import filenamify from 'filenamify';
-import type { BaseRow } from '../attach-table.js';
+import type { BaseRow } from '../../attach-table.js';
 
 /** Max slug length before the ID suffix. */
 const MAX_SLUG_LENGTH = 50;

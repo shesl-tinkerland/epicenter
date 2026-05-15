@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { generateId } from '../../shared/id.js';
-import { assembleMarkdown } from './markdown.js';
+import { generateId } from '../../../shared/id.js';
+import { assembleMarkdown } from './assemble-markdown.js';
 import { parseMarkdownFile } from './parse-markdown-file.js';
 
 type PrepareResult = {
