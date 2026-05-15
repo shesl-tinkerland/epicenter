@@ -1,7 +1,4 @@
-export {
-	assembleMarkdown,
-	type SerializeResult,
-} from '../../markdown/markdown.js';
+export { assembleMarkdown } from '../../markdown/markdown.js';
 export { parseMarkdownFile } from '../../markdown/parse-markdown-file.js';
 export { prepareMarkdownFiles } from '../../markdown/prepare-markdown-files.js';
 export {
@@ -11,7 +8,6 @@ export {
 } from '../../markdown/serializers.js';
 export {
 	attachMarkdownMaterializer,
-	type MarkdownShape,
 	MaterializerPushError,
 	type PushEvent,
 	type PushResult,

@@ -9,6 +9,7 @@ import {
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
+import { convertEpicenterLinksToWikilinks } from '../../../links.js';
 import { defineMutation } from '../../../shared/actions.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { Kv } from '../../attach-kv.js';
@@ -167,8 +168,10 @@ const defaultKvSerialize = (data: Record<string, unknown>) =>
 /**
  * Compose a row into the full on-disk artifact: filename + content string.
  *
- * Resolves the per-slot defaults (`filename`, `toMarkdown`) and runs them
- * through `assembleMarkdown`. Pure except for awaiting caller-supplied promises.
+ * Resolves the per-slot defaults (`filename`, `toMarkdown`), rewrites
+ * `epicenter://` body links to `[[wikilinks]]` so on-disk notes stay
+ * portable, and runs the result through `assembleMarkdown`. Pure except for
+ * awaiting caller-supplied promises.
  */
 async function rowToMarkdownFile<TRow extends BaseRow>(
 	row: TRow,
@@ -178,7 +181,11 @@ async function rowToMarkdownFile<TRow extends BaseRow>(
 	const toMarkdownFn = config.toMarkdown ?? defaultToMarkdown;
 	const filename = await filenameFn(row);
 	const shape = await toMarkdownFn(row);
-	const content = assembleMarkdown(shape.frontmatter, shape.body);
+	const body =
+		shape.body !== undefined
+			? convertEpicenterLinksToWikilinks(shape.body)
+			: undefined;
+	const content = assembleMarkdown(shape.frontmatter, body);
 	return { filename, content };
 }
 
