@@ -28,20 +28,12 @@ export type OAuthSignInLauncher = {
 	startSignIn(): Promise<Result<OAuthTokenGrant | null, unknown>>;
 };
 
-export type OAuthTokenRefresher = (input: {
-	baseURL: string;
-	clientId: string;
-	grant: OAuthTokenGrant;
-	fetch: typeof fetch;
-	now: () => number;
-}) => Promise<OAuthTokenGrant>;
+type AuthFetchInput = Request | string | URL;
 
-export type OAuthRefreshTokenRevoker = (input: {
-	baseURL: string;
-	clientId: string;
-	refreshToken: string;
-	fetch: typeof fetch;
-}) => Promise<void>;
+export type AuthFetch = (
+	input: AuthFetchInput,
+	init?: RequestInit,
+) => Promise<Response>;
 
 /**
  * Shape returned by `GET /api/me`. Internal; not exported as a top-level
@@ -59,10 +51,8 @@ export type CreateOAuthAppAuthConfig = {
 	clientId: string;
 	persistedAuthStorage: PersistedAuthStorage;
 	launcher: OAuthSignInLauncher;
-	fetch?: typeof fetch;
+	fetch?: AuthFetch;
 	WebSocket?: typeof WebSocket;
-	refreshOAuthToken?: OAuthTokenRefresher;
-	revokeOAuthRefreshToken?: OAuthRefreshTokenRevoker;
 	now?: () => number;
 };
 
@@ -76,8 +66,6 @@ export function createOAuthAppAuth({
 	launcher,
 	fetch: fetchImpl = globalThis.fetch.bind(globalThis),
 	WebSocket: WebSocketImpl = globalThis.WebSocket,
-	refreshOAuthToken = refreshOAuthTokenWithEndpoint,
-	revokeOAuthRefreshToken = revokeOAuthRefreshTokenWithEndpoint,
 	now = Date.now,
 }: CreateOAuthAppAuthConfig): AuthClient {
 	let persisted = persistedAuthStorage.get();
@@ -114,7 +102,7 @@ export function createOAuthAppAuth({
 		const startedFrom = persisted;
 		refreshPromise = (async () => {
 			try {
-				const grant = await refreshOAuthToken({
+				const grant = await refreshOAuthTokenWithEndpoint({
 					baseURL,
 					clientId,
 					grant: startedFrom.grant,
@@ -249,7 +237,7 @@ export function createOAuthAppAuth({
 	}
 
 	async function fetchWithAuth(
-		input: Request | string | URL,
+		input: AuthFetchInput,
 		init: RequestInit | undefined,
 		forceRefresh: boolean,
 	) {
@@ -261,7 +249,7 @@ export function createOAuthAppAuth({
 			headers.delete('Authorization');
 		}
 		const normalizedInput = normalizeFetchInput(input, baseURL);
-		return fetchImpl(normalizedInput as Parameters<typeof fetchImpl>[0], {
+		return fetchImpl(normalizedInput, {
 			...init,
 			headers,
 			credentials: 'omit',
@@ -320,7 +308,7 @@ export function createOAuthAppAuth({
 				if (refreshTokenToRevoke) {
 					void Promise.resolve()
 						.then(() =>
-							revokeOAuthRefreshToken({
+							revokeOAuthRefreshTokenWithEndpoint({
 								baseURL,
 								clientId,
 								refreshToken: refreshTokenToRevoke,
@@ -363,8 +351,11 @@ function shouldRefreshGrant(grant: OAuthTokenGrant, now: number) {
 	return grant.accessTokenExpiresAt <= now + REFRESH_SKEW_MS;
 }
 
-function normalizeFetchInput(input: Request | string | URL, baseURL: string) {
-	if (input instanceof Request) return input.clone();
+function normalizeFetchInput(
+	input: AuthFetchInput,
+	baseURL: string,
+): AuthFetchInput {
+	if (input instanceof Request) return input.clone() as Request;
 	if (typeof input === 'string' && input.startsWith('/')) {
 		return new URL(input, baseURL).toString();
 	}
@@ -381,7 +372,7 @@ async function refreshOAuthTokenWithEndpoint({
 	baseURL: string;
 	clientId: string;
 	grant: OAuthTokenGrant;
-	fetch: typeof globalThis.fetch;
+	fetch: AuthFetch;
 	now: () => number;
 }): Promise<OAuthTokenGrant> {
 	const body = new URLSearchParams({
@@ -421,7 +412,7 @@ async function revokeOAuthRefreshTokenWithEndpoint({
 	baseURL: string;
 	clientId: string;
 	refreshToken: string;
-	fetch: typeof globalThis.fetch;
+	fetch: AuthFetch;
 }) {
 	const body = new URLSearchParams({
 		client_id: clientId,

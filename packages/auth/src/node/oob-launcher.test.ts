@@ -12,14 +12,13 @@
  */
 
 import { expect, test } from 'bun:test';
+import type { AuthFetch } from '../create-oauth-app-auth.js';
 import { createOobOAuthLauncher } from './oob-launcher.js';
 
 const NOW = 1_700_000_000_000;
 
-type FetchLike = typeof globalThis.fetch;
-
-function asFetch(impl: (input: unknown, init?: unknown) => Promise<Response>) {
-	return impl as unknown as FetchLike;
+function asFetch(impl: AuthFetch): AuthFetch {
+	return impl;
 }
 
 function makeJsonResponse(value: unknown, init?: ResponseInit) {
@@ -58,22 +57,20 @@ function setup({
 }: {
 	readCode?: () => Promise<string>;
 	openBrowser?: (url: string) => Promise<void> | void;
-	fetchImpl?: FetchLike;
+	fetchImpl?: AuthFetch;
 } = {}) {
 	const printed: string[] = [];
 	const tokenRequests: Array<{ url: string; body: URLSearchParams }> = [];
-	const defaultFetch = asFetch(async (input, init) => {
-		const req = input as Request | string | URL;
+	const defaultFetch = asFetch(async (req, init) => {
 		const url =
 			typeof req === 'string'
 				? req
 				: req instanceof URL
 					? req.toString()
 					: req.url;
-		const initObj = init as RequestInit | undefined;
 		tokenRequests.push({
 			url,
-			body: captureBody(initObj?.body ?? null),
+			body: captureBody(init?.body ?? null),
 		});
 		return makeJsonResponse({
 			access_token: 'a',
@@ -124,7 +121,7 @@ test('PKCE verifier and challenge are linked', async () => {
 		baseURL: 'http://localhost:8787',
 		clientId: 'epicenter-cli',
 		fetch: asFetch(async (_input, init) => {
-			const body = captureBody((init as RequestInit | undefined)?.body ?? null);
+			const body = captureBody(init?.body ?? null);
 			receivedVerifier = body.get('code_verifier');
 			return makeJsonResponse({
 				access_token: 'a',
@@ -147,9 +144,8 @@ test('PKCE verifier and challenge are linked', async () => {
 	const challenge = url.searchParams.get('code_challenge');
 	const method = url.searchParams.get('code_challenge_method');
 	expect(method).toBe('S256');
-	expect(challenge).toBe(
-		await base64UrlSha256(receivedVerifier as unknown as string),
-	);
+	if (!receivedVerifier) throw new Error('Expected PKCE verifier.');
+	expect(challenge).toBe(await base64UrlSha256(receivedVerifier));
 });
 
 test('cancellation: empty paste returns Err(AuthorizationCancelled) and no network', async () => {

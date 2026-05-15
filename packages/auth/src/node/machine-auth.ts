@@ -30,7 +30,10 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient } from '../auth-contract.js';
 import { AuthUser, type PersistedAuth } from '../auth-types.js';
-import { createOAuthAppAuth } from '../create-oauth-app-auth.js';
+import {
+	type AuthFetch,
+	createOAuthAppAuth,
+} from '../create-oauth-app-auth.js';
 import {
 	loadMachineTokens,
 	type MachineAuthStorageError,
@@ -71,7 +74,7 @@ type CommonConfig = {
 	clientId?: string;
 	redirectUri?: string;
 	filePath?: string;
-	fetch?: typeof globalThis.fetch;
+	fetch?: AuthFetch;
 	log?: Logger;
 	now?: () => number;
 };
@@ -334,7 +337,7 @@ async function fetchApiMe({
 }: {
 	baseURL: string;
 	accessToken: string;
-	fetch: typeof globalThis.fetch;
+	fetch: AuthFetch;
 }): Promise<Result<ApiMeResponse, MachineAuthRequestError>> {
 	let response: Response;
 	try {

@@ -14,6 +14,7 @@ import { describe, expect, test } from 'bun:test';
 import { Ok } from 'wellcrafted/result';
 import type {
 	AuthClient,
+	AuthFetch,
 	LocalUnlockBundle,
 	OAuthTokenGrant,
 	PersistedAuth,
@@ -76,6 +77,32 @@ function json(value: unknown, init?: ResponseInit) {
 		...init,
 		headers: { 'content-type': 'application/json', ...init?.headers },
 	});
+}
+
+function oauthTokenResponse({
+	accessToken = 'new-access',
+	refreshToken = 'new-refresh',
+	expiresIn = 3600,
+}: {
+	accessToken?: string;
+	refreshToken?: string;
+	expiresIn?: number;
+} = {}) {
+	return json({
+		access_token: accessToken,
+		refresh_token: refreshToken,
+		expires_in: expiresIn,
+		token_type: 'bearer',
+	});
+}
+
+function createFetch(
+	impl: (
+		input: Request | string | URL,
+		init?: RequestInit,
+	) => Promise<Response>,
+): AuthFetch {
+	return impl;
 }
 
 function apiMeBody(userId = 'user-1') {
@@ -144,10 +171,10 @@ test('startSignIn calls /api/me and writes both sections', async () => {
 					accessTokenExpiresAt: now + 3_600_000,
 				}),
 		},
-		fetch: (async (input: Request | string | URL) => {
+		fetch: createFetch(async (input) => {
 			fetches.push(String(input));
 			return json(apiMeBody('user-1'));
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const result = await auth.startSignIn();
@@ -177,15 +204,13 @@ test('refresh writes ONLY the grant section; unlock byte-identical', async () =>
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		refreshOAuthToken: async () => ({
-			accessToken: 'new-access',
-			refreshToken: 'new-refresh',
-			accessTokenExpiresAt: now + 3_600_000,
-		}),
-		fetch: (async (input: Request | string | URL) => {
+		fetch: createFetch(async (input) => {
 			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/auth/oauth2/token')) {
+				return oauthTokenResponse();
+			}
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	await auth.fetch('http://localhost:8787/resource');
@@ -207,10 +232,10 @@ test('same-user guard wipes the cell when /api/me returns a different userId', a
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		fetch: (async (input: Request | string | URL) => {
+		fetch: createFetch(async (input) => {
 			if (String(input).endsWith('/api/me')) return json(apiMeBody('bob'));
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const response = await auth.fetch('http://localhost:8787/resource');
@@ -233,11 +258,11 @@ test('network gate: no Authorization header until /api/me confirms same user', a
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+		fetch: createFetch(async (input, init) => {
 			if (String(input).endsWith('/api/me')) return apiMePromise;
 			seenAuth.push(new Headers(init?.headers).get('authorization'));
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const fetchPromise = auth.fetch('http://localhost:8787/resource');
@@ -258,13 +283,13 @@ test('auth.fetch resolves relative API paths against the auth base URL', async (
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+		fetch: createFetch(async (input, init) => {
 			fetches.push({
 				url: String(input),
 				authorization: new Headers(init?.headers).get('authorization'),
 			});
 			return json(apiMeBody('user-1'));
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const response = await auth.fetch('/api/me');
@@ -296,10 +321,10 @@ test('network gate: no WebSocket bearer protocol until /api/me confirms same use
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		WebSocket: WebSocketRecorder,
-		fetch: (async (input: Request | string | URL) => {
+		fetch: createFetch(async (input) => {
 			if (String(input).endsWith('/api/me')) return apiMePromise;
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const socketPromise = auth.openWebSocket('ws://localhost:8787/sync', [
@@ -326,9 +351,9 @@ test('cold-boot offline keeps signed-in with unlock and no profile field', async
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		fetch: (async () => {
+		fetch: createFetch(async () => {
 			throw new Error('offline');
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	expect(auth.state).toMatchObject({
@@ -347,12 +372,12 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 	const originalConsoleError = console.error;
 	console.error = () => undefined;
 	let markRevokeStarted!: () => void;
-	let rejectRevoke!: (error: Error) => void;
+	let resolveRevoke!: () => void;
 	const revokeStarted = new Promise<void>((r) => {
 		markRevokeStarted = r;
 	});
-	const revokePromise = new Promise<void>((_, reject) => {
-		rejectRevoke = reject;
+	const revokePromise = new Promise<void>((resolve) => {
+		resolveRevoke = resolve;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -360,18 +385,20 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		refreshOAuthToken: async () => {
-			throw new Error('refresh failed');
-		},
-		revokeOAuthRefreshToken: async ({ refreshToken }) => {
-			expect(refreshToken).toBe('refresh-token');
-			markRevokeStarted();
-			await revokePromise;
-		},
-		fetch: (async (input: Request | string | URL) => {
+		fetch: createFetch(async (input, init) => {
 			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/auth/oauth2/token')) {
+				return new Response(null, { status: 503 });
+			}
+			if (String(input).endsWith('/auth/oauth2/revoke')) {
+				const body = new URLSearchParams(String(init?.body ?? ''));
+				expect(body.get('token')).toBe('refresh-token');
+				markRevokeStarted();
+				await revokePromise;
+				return new Response(null, { status: 503 });
+			}
 			return new Response(null, { status: 401 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	try {
@@ -388,7 +415,7 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 		expect(auth.state).toEqual({ status: 'signed-out' });
 		expect(await signOutPromise).toEqual(Ok(undefined));
 		await revokeStarted;
-		rejectRevoke(new Error('revoke failed'));
+		resolveRevoke();
 		await Promise.resolve();
 	} finally {
 		console.error = originalConsoleError;
@@ -415,15 +442,7 @@ test('network verification clears on grant refresh until /api/me confirms new ce
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		refreshOAuthToken: async () => ({
-			accessToken: 'new-access',
-			refreshToken: 'new-refresh',
-			accessTokenExpiresAt: now + 3_600_000,
-		}),
-		fetch: (async (
-			input: Request | string | URL,
-			init?: RequestInit,
-		): Promise<Response> => {
+		fetch: createFetch(async (input, init) => {
 			const authorization = new Headers(init?.headers).get('authorization');
 			if (String(input).endsWith('/api/me')) {
 				apiMeCalls += 1;
@@ -432,11 +451,14 @@ test('network verification clears on grant refresh until /api/me confirms new ce
 				markSecondApiMeRequested();
 				return secondApiMePromise;
 			}
+			if (String(input).endsWith('/auth/oauth2/token')) {
+				return oauthTokenResponse();
+			}
 			resourceAuths.push(authorization);
 			if (resourceAuths.length === 2)
 				return new Response(null, { status: 401 });
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	await auth.fetch('http://localhost:8787/resource');
@@ -472,11 +494,11 @@ test('concurrent refresh shares one promise and signOut during refresh wins', as
 	const resourceAuths: Array<string | null> = [];
 	let refreshCalls = 0;
 	let markRefreshStarted!: () => void;
-	let resolveRefresh!: (grant: OAuthTokenGrant) => void;
+	let resolveRefresh!: (response: Response) => void;
 	const refreshStarted = new Promise<void>((r) => {
 		markRefreshStarted = r;
 	});
-	const refreshPromise = new Promise<OAuthTokenGrant>((r) => {
+	const refreshPromise = new Promise<Response>((r) => {
 		resolveRefresh = r;
 	});
 	const auth = createOAuthAppAuth({
@@ -485,18 +507,20 @@ test('concurrent refresh shares one promise and signOut during refresh wins', as
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		refreshOAuthToken: async () => {
-			refreshCalls += 1;
-			markRefreshStarted();
-			return refreshPromise;
-		},
-		revokeOAuthRefreshToken: async ({ refreshToken }) => {
-			expect(refreshToken).toBe('refresh-token');
-		},
-		fetch: (async (_input: Request | string | URL, init?: RequestInit) => {
+		fetch: createFetch(async (input, init) => {
+			if (String(input).endsWith('/auth/oauth2/token')) {
+				refreshCalls += 1;
+				markRefreshStarted();
+				return refreshPromise;
+			}
+			if (String(input).endsWith('/auth/oauth2/revoke')) {
+				const body = new URLSearchParams(String(init?.body ?? ''));
+				expect(body.get('token')).toBe('refresh-token');
+				return new Response(null, { status: 200 });
+			}
 			resourceAuths.push(new Headers(init?.headers).get('authorization'));
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const firstFetch = auth.fetch('http://localhost:8787/first');
@@ -510,11 +534,7 @@ test('concurrent refresh shares one promise and signOut during refresh wins', as
 	expect(setup.current).toBeNull();
 	expect(auth.state).toEqual({ status: 'signed-out' });
 
-	resolveRefresh({
-		accessToken: 'new-access',
-		refreshToken: 'new-refresh',
-		accessTokenExpiresAt: now + 3_600_000,
-	});
+	resolveRefresh(oauthTokenResponse());
 	await Promise.all([firstFetch, secondFetch]);
 	expect(setup.current).toBeNull();
 	expect(resourceAuths).toEqual([null, null]);
@@ -535,14 +555,16 @@ test('/api/me response after signOut is discarded without corrupting state', asy
 		now: () => now,
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
-		revokeOAuthRefreshToken: async ({ refreshToken }) => {
-			expect(refreshToken).toBe('refresh-token');
-		},
-		fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+		fetch: createFetch(async (input, init) => {
 			if (String(input).endsWith('/api/me')) return apiMePromise;
+			if (String(input).endsWith('/auth/oauth2/revoke')) {
+				const body = new URLSearchParams(String(init?.body ?? ''));
+				expect(body.get('token')).toBe('refresh-token');
+				return new Response(null, { status: 200 });
+			}
 			resourceAuths.push(new Headers(init?.headers).get('authorization'));
 			return new Response(null, { status: 204 });
-		}) as unknown as typeof fetch,
+		}),
 	});
 
 	const fetchPromise = auth.fetch('http://localhost:8787/resource');

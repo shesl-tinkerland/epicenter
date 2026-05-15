@@ -20,6 +20,7 @@ import {
 } from 'wellcrafted/error';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { OAuthTokenGrant } from '../auth-types.js';
+import type { AuthFetch } from '../create-oauth-app-auth.js';
 
 export const OobLauncherError = defineErrors({
 	TokenExchangeFailed: ({
@@ -71,7 +72,7 @@ export type CreateOobOAuthLauncherConfig = {
 	openBrowser?: (url: string) => Promise<void> | void;
 	readCode?: () => Promise<string>;
 	print?: (line: string) => void;
-	fetch?: typeof globalThis.fetch;
+	fetch?: AuthFetch;
 	crypto?: Crypto;
 	now?: () => number;
 };

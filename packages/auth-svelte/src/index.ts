@@ -1,12 +1,12 @@
 export {
 	AuthError,
+	type AuthFetch,
 	type AuthState,
 	AuthUser,
 	type CreateOAuthAppAuthConfig,
 	type LocalUnlockBundle,
 	type OAuthSignInLauncher,
 	type OAuthTokenGrant,
-	type OAuthTokenRefresher,
 	PersistedAuth,
 	type PersistedAuthStorage,
 } from '@epicenter/auth';

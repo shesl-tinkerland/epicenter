@@ -6,6 +6,7 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { OAuthTokenGrant } from '../auth-types.js';
+import type { AuthFetch } from '../create-oauth-app-auth.js';
 
 export const OAuthClientError = defineErrors({
 	MissingCallbackTransaction: () => ({
@@ -62,7 +63,7 @@ export type OAuthClientConfig = {
 	resource: string;
 	scope?: string;
 	storage: OAuthTemporaryStorage;
-	fetch?: typeof fetch;
+	fetch?: AuthFetch;
 };
 
 export type OAuthLauncher = {

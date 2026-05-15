@@ -11,6 +11,7 @@
  */
 
 import { expect, test } from 'bun:test';
+import type { AuthFetch } from '../create-oauth-app-auth.js';
 import { createOAuthClient, type OAuthTemporaryStorage } from './index.js';
 
 function createMemoryStorage(seed: Record<string, string> = {}) {
@@ -41,8 +42,8 @@ function createFetch({
 	tokenStatus?: number;
 	tokenBody?: Record<string, unknown>;
 	onTokenBody?: (body: URLSearchParams) => void;
-} = {}) {
-	return (async (input: Request | URL | string, init?: RequestInit) => {
+} = {}): AuthFetch {
+	return async (input, init) => {
 		const url = new URL(input instanceof Request ? input.url : input);
 		if (url.pathname === '/.well-known/oauth-authorization-server/auth') {
 			return Response.json({
@@ -60,7 +61,7 @@ function createFetch({
 			);
 		}
 		throw new Error(`Unexpected fetch: ${url.toString()}`);
-	}) as typeof fetch;
+	};
 }
 
 test('createAuthorizationUrl stores verifier state and returns PKCE URL', async () => {

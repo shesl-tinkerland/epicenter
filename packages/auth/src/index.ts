@@ -7,10 +7,9 @@ export {
 	PersistedAuth,
 } from './auth-types.js';
 export {
+	type AuthFetch,
 	type CreateOAuthAppAuthConfig,
 	createOAuthAppAuth,
-	type OAuthRefreshTokenRevoker,
 	type OAuthSignInLauncher,
-	type OAuthTokenRefresher,
 	type PersistedAuthStorage,
 } from './create-oauth-app-auth.js';
