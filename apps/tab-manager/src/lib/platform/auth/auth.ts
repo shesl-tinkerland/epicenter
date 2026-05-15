@@ -17,7 +17,7 @@ import { createStorageState } from '../../state/storage-state.svelte';
 /**
  * Persisted auth cell in `chrome.storage.local`.
  *
- * Older builds persisted under `local:auth.session` with the OAuthSession
+ * Older builds persisted under `local:auth.session` with a bundled auth
  * shape. After this migration, schema validation fails for the legacy shape
  * and the cell reads as null, forcing a one-time sign-in. Workspace IndexedDB
  * data is keyed by userId and survives the reset.

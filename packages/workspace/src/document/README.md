@@ -99,10 +99,10 @@ import { auth } from './auth';
 function openBlog() {
   const ydoc = new Y.Doc({ guid: 'blog' });
   const tables = attachTables(ydoc, myTables);
-  if (auth.state.status !== 'signed-in') return null;
+  if (auth.state.status === 'signed-out') return null;
 
   const idb = attachIndexedDb(ydoc);
-  attachOwnedBroadcastChannel(ydoc, { userId: auth.state.identity.user.id });
+  attachOwnedBroadcastChannel(ydoc, { userId: auth.state.unlock.userId });
   const collaboration = openCollaboration(ydoc, {
     url: roomWsUrl('https://api.example.com', ydoc.guid),
     openWebSocket: auth.openWebSocket,

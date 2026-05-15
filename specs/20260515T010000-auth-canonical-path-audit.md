@@ -503,8 +503,6 @@ Live contradictions found and handled:
 
 Live non-blocking findings deferred:
 1. `apps/api` still has the historical `device_code` table and migration metadata, but no active device-authorization runtime path was found.
-2. `apps/tab-manager/src/lib/platform/auth/auth.ts` has a legacy-storage comment that mentions `OAuthSession`.
-3. `packages/workspace/src/document/README.md` still has an old `auth.state.identity` example.
 ```
 
 Implemented changes:
@@ -582,8 +580,10 @@ Self-hosted CLI callback registration:
   Deferred pending the trusted-client setup decision.
 
 Broader stale docs:
-  Deferred outside packages/cli/README.md. Historical docs and package READMEs
-  still contain rejected terms and old examples.
+  packages/cli/README.md was fixed in the Phase 1 commit.
+  A follow-up cleanup also removed the live tab-manager OAuthSession comment
+  and the workspace README auth.state.identity example. Historical docs still
+  contain rejected terms and old examples.
 ```
 
 Commands run during Phase 1 execution:
@@ -617,10 +617,8 @@ apps/api tests:
 
 Live grep results:
   device_code remains only in DB schema and migration metadata.
-  OAuthSession remains in a legacy storage comment in tab-manager.
-  auth.state.identity remains in packages/workspace/src/document/README.md.
-  No live runtime raw token getter or device authorization machine path was
-  found in packages or apps.
+  No live package or app OAuthSession, AuthIdentity, auth.state.identity,
+  raw token getter, or device authorization machine path remains.
 
 Dash check:
   Pass after replacing two existing dashes in packages/sync/src/auth-subprotocol.ts.
