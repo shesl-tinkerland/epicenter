@@ -1,4 +1,4 @@
-export { slugFilename } from './serializers.js';
+export { slugFilename } from './slug-filename.js';
 export {
 	attachMarkdownMaterializer,
 	MaterializerPushError,

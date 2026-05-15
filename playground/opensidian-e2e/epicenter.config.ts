@@ -46,7 +46,7 @@ import { attachYjsLog, epicenterPaths } from '@epicenter/workspace/node';
 import { opensidianTables } from 'opensidian';
 import Type from 'typebox';
 import * as Y from 'yjs';
-import { prepareMarkdownFiles } from './markdown-utils';
+import { prepareMarkdownFiles } from './prepare-markdown-files';
 
 const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');

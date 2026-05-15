@@ -9,10 +9,7 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { convertEpicenterLinksToWikilinks } from '../../../links.js';
-import {
-	assembleMarkdown,
-	type SerializeResult,
-} from '../../../markdown/assemble-markdown.js';
+import { assembleMarkdown } from '../../../markdown/assemble-markdown.js';
 import { parseMarkdownFile } from '../../../markdown/parse-markdown-file.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { Kv } from '../../attach-kv.js';
@@ -26,8 +23,9 @@ import type { BaseRow, Table, TableParseError } from '../../attach-table.js';
  * Errors produced by the background write-observer (table row → .md file,
  * KV state → serialized file). These run inside `.catch(...)` of a detached
  * async task, so they ship to the logger, not through a Result to the caller.
+ * File-local: never crosses the module boundary.
  */
-export const MaterializerWriteError = defineErrors({
+const MaterializerWriteError = defineErrors({
 	TableWriteFailed: ({
 		tableName,
 		cause,
@@ -44,7 +42,6 @@ export const MaterializerWriteError = defineErrors({
 		cause,
 	}),
 });
-export type MaterializerWriteError = InferErrors<typeof MaterializerWriteError>;
 
 export const MaterializerPushError = defineErrors({
 	/** Reading the file from disk failed. */
@@ -123,7 +120,10 @@ type TableConfig<TRow extends BaseRow> = {
 
 type KvConfig = {
 	/** Serialize the full KV state to a single file. Default: `kv.json` with JSON.stringify. */
-	serialize?: (data: Record<string, unknown>) => SerializeResult;
+	serialize?: (data: Record<string, unknown>) => {
+		filename: string;
+		content: string;
+	};
 };
 
 type RegisteredTable = {
@@ -157,11 +157,10 @@ const defaultFromMarkdown = (parsed: MarkdownShape): BaseRow =>
  * Default KV serializer: pretty-printed JSON in `kv.json`. Used whenever a
  * registered kv's `config.serialize` isn't provided.
  */
-const defaultKvSerialize = (data: Record<string, unknown>) =>
-	({
-		filename: 'kv.json',
-		content: JSON.stringify(data, null, 2),
-	}) satisfies SerializeResult;
+const defaultKvSerialize = (data: Record<string, unknown>) => ({
+	filename: 'kv.json',
+	content: JSON.stringify(data, null, 2),
+});
 
 /**
  * Compose a row into the full on-disk artifact: filename + content string.

@@ -9,6 +9,6 @@
  * conventions.
  */
 
-export { assembleMarkdown, type SerializeResult } from './assemble-markdown.js';
+export { assembleMarkdown } from './assemble-markdown.js';
 export { parseMarkdownFile } from './parse-markdown-file.js';
 export { toSlugFilename } from './to-slug-filename.js';

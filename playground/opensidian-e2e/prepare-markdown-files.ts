@@ -1,11 +1,12 @@
 /**
- * Vault scripting helpers local to the opensidian playground.
+ * Vault recipe local to the opensidian playground: walk a flat directory
+ * of `.md` files and inject a generated `id` into the frontmatter of any
+ * file missing one, aborting on id collisions.
  *
- * The workspace ships the markdown primitives at
- * `@epicenter/workspace/markdown`. This file holds opinionated recipes
- * built on top of those primitives that are too vault-specific to live in
- * a library, starting with `prepareMarkdownFiles` which encodes the
- * "flat directory, `id` field, abort on collision" convention.
+ * Built on top of the workspace's markdown primitives
+ * (`@epicenter/workspace/markdown`). Lives here because the "flat
+ * directory, `id` field, abort on collision" convention is too
+ * vault-specific for the library to maintain.
  */
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';

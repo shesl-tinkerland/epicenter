@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseMarkdownFile } from '@epicenter/workspace/markdown';
-import { prepareMarkdownFiles } from './markdown-utils';
+import { prepareMarkdownFiles } from './prepare-markdown-files';
 
 const TEST_DIR = join(import.meta.dir, '__test-prepare__');
 

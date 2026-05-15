@@ -30,8 +30,3 @@ export function assembleMarkdown(
 		? `---\n${yamlBlock}---\n\n${body}\n`
 		: `---\n${yamlBlock}---\n`;
 }
-
-export type SerializeResult = {
-	filename: string;
-	content: string;
-};
