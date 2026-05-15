@@ -1,8 +1,8 @@
 # Machine Auth: OOB Code Paste + File-Backed Session
 
 **Date**: 2026-05-14
-**Status**: Partially implemented (Phases 1-2 landed via `specs/20260514T200000-api-me-three-field-token-bundle.md` Waves 1-2; Phases 3-4 open).
-**Branch**: `codex/pr-workspace-api-surface` (target; implementation lands on a follow-up branch)
+**Status**: Implemented (2026-05-15). Phases 1-2 landed via `specs/20260514T200000-api-me-three-field-token-bundle.md` Waves 1-2; Phases 3-4 landed via PR #1762 (`specs/20260514T210000-execute-oob-cli-phases-3-4.md`). Only Phase 6 (CLI README OOB walkthrough) is open.
+**Branch**: `codex/pr-workspace-api-surface` (target; implementation landed on `codex/wave1-cli-callback-and-health`, merged via #1762)
 **Depends on**: `specs/20260512T111335-post-oauth-audit-remediation.md` (resolves Phase 4)
 **Composes with**: `specs/20260514T200000-api-me-three-field-token-bundle.md` (defines the persisted shape; this spec is the CLI's flavor of that architecture)
 **Resolves**: `specs/20260512T111335-post-oauth-audit-remediation.md` Open Question 2 ("Is CLI/device login currently shipped to users?")
@@ -16,10 +16,10 @@ Reality on `main` after the `/api/me` spec's Waves 1-4 landed (2026-05-14):
 | --- | --- | --- | --- |
 | 1 | Server callback page + constants + trusted-client projection | Landed in api-me Wave 1 (commits `9f32ea0bc` and follow-ons) | **DONE** |
 | 2 | File-backed `machine-session-store.ts` persisting `OAuthSession` | api-me Wave 2 replaced this with `machine-tokens-store.ts` persisting `PersistedAuth = { grant, unlock }` (commit `58a5e9b36`) | **DONE, with a sharper shape** |
-| 3 | OOB launcher (`oob-launcher.ts`) | Not started | **OPEN** |
-| 4 | Rewrite `machine-auth.ts` to use the OOB launcher | `machine-auth.ts` is stubbed (`PENDING_WAVE_3` errors); needs the OOB rewrite consuming `PersistedAuthStorage` | **OPEN** |
-| 5 | Daemon smoke + consumer audit | Cannot run until Phases 3-4 land; daemons currently throw on boot | **OPEN** |
-| 6 | Docs | api-me Wave 4 already deleted `/workspace-identity` and updated `docs/encryption.md` references | Mostly done; CLI README still needs the OOB walkthrough |
+| 3 | OOB launcher (`oob-launcher.ts`) | Landed in PR #1762 Wave 1 (commit `095ed0833`) | **DONE** |
+| 4 | Rewrite `machine-auth.ts` to use the OOB launcher | Landed in PR #1762 Wave 2 (commit `51efc2853`); CLI wire-up in Wave 3 (`3c5c875e2`); tests in Wave 4 (`f2f04c763`); revoke-ordering fix in `6f15a2c72` | **DONE** |
+| 5 | Daemon smoke + consumer audit | Daemons now boot through the real `createMachineAuthClient` path; orchestration guide moves the next lane to `codex/daemon-shared-auth` (Phase 1 of single-daemon spec) | **DONE for smoke; consumer audit folds into daemon-shared-auth** |
+| 6 | Docs | api-me Wave 4 already deleted `/workspace-identity` and updated `docs/encryption.md` references | Mostly done; CLI README still needs the OOB walkthrough: **OPEN** |
 
 The persisted-shape and identity-source decisions below are **superseded by the api-me spec**. Where this spec says `OAuthSession`, read `PersistedAuth`. Where it says `/workspace-identity`, read `/api/me`. Where it says `machine-session-store.ts`, read `machine-tokens-store.ts`. The narrative below is preserved with these substitutions called out inline.
 
@@ -388,7 +388,7 @@ createOAuthAppAuth({
 
 Ordered patches. Each step lands as one commit unless noted.
 
-### Phase 1: Server callback page  [DONE — api-me Wave 1]
+### Phase 1: Server callback page  [DONE: api-me Wave 1]
 
 Landed in commits `9f32ea0bc` (`/api/me` route) and follow-on Wave 1 commits. The CLI callback page, the `/auth/cli-callback` route, the constants update, and the `toOAuthClientType` collapse are all on `main`. Items below are preserved as the original task list; treat all as `[x]`.
 
@@ -428,7 +428,7 @@ Landed in commits `9f32ea0bc` (`/api/me` route) and follow-on Wave 1 commits. Th
 
 Acceptance: `bun --cwd apps/api run build` passes; `bun --cwd apps/api test` passes; manual smoke clean.
 
-### Phase 2: File-backed session store  [DONE — api-me Wave 2, with a sharper shape]
+### Phase 2: File-backed session store  [DONE: api-me Wave 2, with a sharper shape]
 
 Landed in commit `58a5e9b36` as `packages/auth/src/node/machine-tokens-store.ts` (the file was renamed from `machine-session-store.ts` during the api-me Wave 2 schema break). The persisted shape is `PersistedAuth = { grant, unlock }` per the api-me spec, not `OAuthSession`. The original task list below is preserved as a historical record; for the as-shipped contract, see `specs/20260514T200000-api-me-three-field-token-bundle.md`.
 

@@ -2,7 +2,12 @@
 
 **Date**: 2026-05-14
 **Type**: Execution spec for a coding agent
-**Status**: Ready to execute
+**Status**: Landed in PR #1762 (2026-05-15). All four waves shipped on `main`:
+- Wave 1: `095ed0833 feat(auth): add OOB OAuth launcher for CLI sign-in`
+- Wave 2: `51efc2853 feat(auth): replace machine-auth stub with OOB + /api/me flow`
+- Wave 3: `3c5c875e2 feat(cli): wire epicenter auth to OOB flow`
+- Wave 4: `f2f04c763 test(auth): cover OOB launcher and machine-auth flow`
+- Follow-up: `6f15a2c72 fix(auth): clear sign-out before revoke`
 **Drives**:
 - `specs/20260514T120000-machine-auth-oob-clean-break.md` (Phases 3-4 only)
 - `specs/20260514T200000-api-me-three-field-token-bundle.md` (PersistedAuth shape, grant/unlock split, network gate)
@@ -37,16 +42,16 @@ add tests, and verify daemon boot.
    network gate, and the same-user guard. **Where it conflicts with anything
    else, it wins.**
 
-2. `specs/20260514T120000-machine-auth-oob-clean-break.md` — sections
+2. `specs/20260514T120000-machine-auth-oob-clean-break.md`: sections
    `## Status update (post-api-me)`, `## Desired State`, Phase 3, Phase 4. The
    rest is historical context.
 
-3. `packages/auth/src/auth-types.ts` — exact arktype shapes of
+3. `packages/auth/src/auth-types.ts`: exact arktype shapes of
    `OAuthTokenGrant` (3 fields), `LocalUnlockBundle`, `PersistedAuth`.
 
-4. `packages/auth/src/auth-contract.ts` — `AuthClient` and `AuthState` contracts.
+4. `packages/auth/src/auth-contract.ts`: `AuthClient` and `AuthState` contracts.
 
-5. `packages/auth/src/create-oauth-app-auth.ts` — what `createMachineAuthClient`
+5. `packages/auth/src/create-oauth-app-auth.ts`: what `createMachineAuthClient`
    instantiates (for daemons). Pay attention to:
    - the `persistedAuthStorage` parameter shape
    - the `launcher.startSignIn` contract
@@ -55,18 +60,18 @@ add tests, and verify daemon boot.
      `auth.state` carries only `status` + `unlock`; no `email`, no `profile`,
      no `profileStatus`. The CLI fetches `/api/me` itself for display.)
 
-6. `packages/auth/src/node/machine-tokens-store.ts` — `loadMachineTokens` /
+6. `packages/auth/src/node/machine-tokens-store.ts`: `loadMachineTokens` /
    `saveMachineTokens` signatures; the storage adapter you wire in.
 
-7. `packages/auth/src/node/machine-auth.ts` — the stub you are replacing.
+7. `packages/auth/src/node/machine-auth.ts`: the stub you are replacing.
    Preserves public function names; daemon code imports them.
 
-8. `packages/cli/src/commands/auth.ts` — the CLI surface to update.
+8. `packages/cli/src/commands/auth.ts`: the CLI surface to update.
 
-9. `packages/constants/src/oauth.ts` — `EPICENTER_CLI_OAUTH_CLIENT_ID` and the
+9. `packages/constants/src/oauth.ts`: `EPICENTER_CLI_OAUTH_CLIENT_ID` and the
    registered redirect URI (`https://api.epicenter.so/auth/cli-callback`).
 
-10. `apps/api/src/app.ts` (search for `/api/me` and `/auth/oauth2/*`) — confirm
+10. `apps/api/src/app.ts` (search for `/api/me` and `/auth/oauth2/*`): confirm
     the endpoint paths. **No edits.**
 
 After reading, post a one-line acknowledgment of what you're about to do.
@@ -367,7 +372,7 @@ Commit message: `feat(auth): replace machine-auth stub with OOB + /api/me flow`.
 
 ### Wave 3: CLI command + barrel exports
 
-File: `packages/auth/src/node.ts` — drop `loginWithDeviceCode`, `DeviceTokenError`,
+File: `packages/auth/src/node.ts`: drop `loginWithDeviceCode`, `DeviceTokenError`,
 `MachineAuthClient` (alias) re-exports; add `loginWithOob`. Verify no callers
 under `packages/` remain that import the deleted names.
 
