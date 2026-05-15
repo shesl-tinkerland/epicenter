@@ -12,8 +12,8 @@
  * `epicenter.config.ts`.
  */
 
-import type { Result } from 'wellcrafted/result';
 import type { AuthClient } from '@epicenter/auth';
+import type { Result } from 'wellcrafted/result';
 import type { SyncStatus } from '../document/internal/sync-supervisor.js';
 import type { Collaboration } from '../document/open-collaboration.js';
 import type { PresenceEntry } from '../document/presence.js';
