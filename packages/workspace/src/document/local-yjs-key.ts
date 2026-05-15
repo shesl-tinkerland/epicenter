@@ -9,7 +9,3 @@ const LOCAL_YJS_KEY_PREFIX = 'epicenter.v1.user';
 export function createOwnedYjsKey(userId: string, ydocGuid: string): string {
 	return `${LOCAL_YJS_KEY_PREFIX}.${userId}.yjs.${ydocGuid}`;
 }
-
-export function createOwnedYjsKeyPrefix(userId: string): string {
-	return `${LOCAL_YJS_KEY_PREFIX}.${userId}.yjs.`;
-}

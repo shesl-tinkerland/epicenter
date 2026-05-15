@@ -20,7 +20,7 @@ import type * as Y from 'yjs';
 import { attachBroadcastChannelWithKey } from './attach-broadcast-channel.js';
 import { attachEncryptedIndexedDb } from './attach-encrypted-indexed-db.js';
 import { attachEncryption } from './attach-encryption.js';
-import { createOwnedYjsKey, createOwnedYjsKeyPrefix } from './local-yjs-key.js';
+import { createOwnedYjsKey } from './local-yjs-key.js';
 
 export type LocalOwner = ReturnType<typeof createLocalOwner>;
 
@@ -67,7 +67,7 @@ export function createLocalOwner({
 		 * clean slate.
 		 */
 		async wipeLocalYjsData(ydocGuids: Iterable<string> = []) {
-			const prefix = createOwnedYjsKeyPrefix(userId);
+			const prefix = `epicenter.v1.user.${userId}.yjs.`;
 			const names = new Set<string>();
 
 			for (const guid of ydocGuids) {
