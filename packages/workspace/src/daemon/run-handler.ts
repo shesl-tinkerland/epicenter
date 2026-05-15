@@ -28,33 +28,25 @@ import {
 } from './run-errors.js';
 import type { DaemonServedRoute } from './types.js';
 
-type DaemonActionTarget = {
-	entry: DaemonServedRoute;
-	localPath: string;
-};
-
-type DaemonRouteError = {
-	routeName: string;
-	available: string[];
-};
-
 export async function executeRun(
 	runtimes: readonly DaemonServedRoute[],
 	{ actionPath, input: actionInput, peerTarget, waitMs }: RunRequest,
 ): Promise<RunResponse> {
-	const target = resolveDaemonActionTarget(runtimes, actionPath);
-	if (target.error !== null) {
+	const { routeName, localPath } = parseDaemonActionPath(actionPath);
+	const routeRuntime = runtimes.find(
+		(candidate) => candidate.route === routeName,
+	);
+	if (!routeRuntime) {
+		const available = runtimes.map((candidate) => candidate.route);
 		return RunError.UsageError({
-			message: `No daemon route "${target.error.routeName}". Available: ${target.error.available.join(', ')}`,
-			suggestions: target.error.available.map((name) => `  ${name}`),
+			message: `No daemon route "${routeName}". Available: ${available.join(', ')}`,
+			suggestions: available.map((name) => `  ${name}`),
 		});
 	}
 
-	const { entry, localPath } = target.data;
-
-	const action = entry.runtime.collaboration.actions[localPath];
+	const action = routeRuntime.runtime.collaboration.actions[localPath];
 	if (!action) {
-		const descendants = daemonActionSuggestionLines(entry, localPath);
+		const descendants = daemonActionSuggestionLines(routeRuntime, localPath);
 		if (descendants.length > 0) {
 			return RunError.UsageError({
 				message: `"${actionPath}" is not a runnable action.`,
@@ -63,16 +55,16 @@ export async function executeRun(
 		}
 		return RunError.UsageError({
 			message: `"${actionPath}" is not defined.`,
-			suggestions: daemonActionNearestSiblingLines(entry, localPath),
+			suggestions: daemonActionNearestSiblingLines(routeRuntime, localPath),
 		});
 	}
 
 	if (peerTarget !== undefined) {
 		return invokeRemote({
 			actionInput,
-			entry,
 			localPath,
 			peerTarget,
+			routeRuntime,
 			waitMs,
 		});
 	}
@@ -84,46 +76,20 @@ export async function executeRun(
 	return Ok(result.data);
 }
 
-function resolveDaemonActionTarget(
-	runtimes: readonly DaemonServedRoute[],
-	actionPath: string,
-):
-	| { data: DaemonActionTarget; error: null }
-	| { data: null; error: DaemonRouteError } {
-	const { routeName, localPath } = parseDaemonActionPath(actionPath);
-	const entry = runtimes.find((candidate) => candidate.route === routeName);
-	if (!entry) {
-		return {
-			data: null,
-			error: {
-				routeName,
-				available: runtimes.map((candidate) => candidate.route),
-			},
-		};
-	}
-	return {
-		data: {
-			entry,
-			localPath,
-		},
-		error: null,
-	};
-}
-
 async function invokeRemote({
 	actionInput,
-	entry,
 	localPath,
 	peerTarget,
+	routeRuntime,
 	waitMs,
 }: {
 	actionInput: unknown;
-	entry: DaemonServedRoute;
 	localPath: string;
 	peerTarget: string;
+	routeRuntime: DaemonServedRoute;
 	waitMs: number;
 }): Promise<RunResponse> {
-	const { runtime } = entry;
+	const { runtime } = routeRuntime;
 
 	// `peerTarget` is a `replicaId` from the CLI; presence rows are keyed by
 	// `connId`, so pick the first (lowest-`connId`) tab on that install.
@@ -178,26 +144,26 @@ function toRunSyncStatus(status: SyncStatus): RunSyncStatus {
 }
 
 function daemonActionSuggestionLines(
-	entry: DaemonServedRoute,
+	routeRuntime: DaemonServedRoute,
 	prefix: string,
 ): string[] {
-	return Object.entries(entry.runtime.collaboration.actions)
+	return Object.entries(routeRuntime.runtime.collaboration.actions)
 		.filter(([path]) => !prefix || path.startsWith(prefix))
 		.map(
 			([path, action]) =>
-				`  ${joinDaemonActionPath(entry.route, path)}  (${action.type})`,
+				`  ${joinDaemonActionPath(routeRuntime.route, path)}  (${action.type})`,
 		);
 }
 
 function daemonActionNearestSiblingLines(
-	entry: DaemonServedRoute,
+	routeRuntime: DaemonServedRoute,
 	missedPath: string,
 ): string[] {
 	const parts = missedPath.split('_');
 	while (parts.length > 0) {
 		parts.pop();
 		const prefix = parts.join('_');
-		const alts = daemonActionSuggestionLines(entry, prefix);
+		const alts = daemonActionSuggestionLines(routeRuntime, prefix);
 		if (alts.length > 0) return alts;
 	}
 	return [];

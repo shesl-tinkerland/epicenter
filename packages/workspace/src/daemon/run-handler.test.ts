@@ -17,7 +17,7 @@ import type { ActionRegistry } from '../shared/actions.js';
 import { defineMutation, defineQuery } from '../shared/actions.js';
 import type { RunSyncStatus } from './run-errors.js';
 import { executeRun } from './run-handler.js';
-import type { DaemonServedCollaboration, DaemonServedRoute } from './types.js';
+import type { DaemonServedRoute } from './types.js';
 
 type FakeDispatch = (
 	action: string,
@@ -25,46 +25,12 @@ type FakeDispatch = (
 	options: { to: string; signal: AbortSignal },
 ) => Promise<Result<unknown, DispatchError>>;
 
-function fakePresence({
-	known,
-}: {
-	known: string[];
-}): DaemonServedCollaboration['peers'] {
-	const entries: PresenceEntry[] = known.map((replicaId) => ({
-		connId: `${replicaId}-conn`,
-		replicaId,
-		subject: 'test-user',
-	}));
-	return {
-		list: () => entries,
-	};
-}
-
-function fakeCollaboration<TActions extends ActionRegistry>({
-	actions,
-	syncStatus = { phase: 'connected' },
-	peers,
-	dispatch,
-}: {
-	actions: TActions;
-	syncStatus?: SyncStatus;
-	peers: DaemonServedCollaboration['peers'];
-	dispatch: FakeDispatch;
-}): DaemonServedCollaboration<TActions> {
-	return {
-		actions,
-		status: syncStatus,
-		peers,
-		dispatch,
-	};
-}
-
 function fakeEntry({
 	route = 'demo',
 	actions = {
 		tabs_list: defineQuery({ handler: () => [] }),
 	},
-	syncStatus,
+	syncStatus = { phase: 'connected' },
 	knownPeers = [],
 	dispatch = async () => ({ data: null, error: null }),
 }: {
@@ -74,17 +40,22 @@ function fakeEntry({
 	knownPeers?: string[];
 	dispatch?: FakeDispatch;
 } = {}): DaemonServedRoute {
-	const peers = fakePresence({ known: knownPeers });
-	const collaboration = fakeCollaboration({
-		actions,
-		syncStatus,
-		peers,
-		dispatch,
-	});
+	const peers: PresenceEntry[] = knownPeers.map((replicaId) => ({
+		connId: `${replicaId}-conn`,
+		replicaId,
+		subject: 'test-user',
+	}));
 	return {
 		route,
 		runtime: {
-			collaboration,
+			collaboration: {
+				actions,
+				status: syncStatus,
+				peers: {
+					list: () => peers,
+				},
+				dispatch,
+			},
 		},
 	};
 }
