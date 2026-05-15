@@ -22,7 +22,7 @@ import {
 	type EncryptionKeys,
 	generateId,
 } from '@epicenter/workspace';
-import { assembleMarkdown } from './markdown-utils';
+import { assembleMarkdown } from '@epicenter/workspace/markdown';
 import { attachYjsLog } from '@epicenter/workspace/node';
 import { opensidianTables } from 'opensidian';
 import * as Y from 'yjs';

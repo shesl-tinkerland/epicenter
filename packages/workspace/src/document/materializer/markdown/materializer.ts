@@ -9,14 +9,14 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import { tryAsync } from 'wellcrafted/result';
 import type * as Y from 'yjs';
 import { convertEpicenterLinksToWikilinks } from '../../../links.js';
-import type { MaybePromise } from '../../../shared/types.js';
-import type { Kv } from '../../attach-kv.js';
-import type { BaseRow, Table, TableParseError } from '../../attach-table.js';
 import {
 	assembleMarkdown,
 	type SerializeResult,
-} from './assemble-markdown.js';
-import { parseMarkdownFile } from './parse-markdown-file.js';
+} from '../../../markdown/assemble-markdown.js';
+import { parseMarkdownFile } from '../../../markdown/parse-markdown-file.js';
+import type { MaybePromise } from '../../../shared/types.js';
+import type { Kv } from '../../attach-kv.js';
+import type { BaseRow, Table, TableParseError } from '../../attach-table.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PUSH ERROR + EVENT TYPES

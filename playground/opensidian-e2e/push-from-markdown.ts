@@ -14,8 +14,8 @@ import {
 	convertWikilinksToEpicenterLinks,
 	makeEpicenterLink,
 } from '@epicenter/workspace/links';
+import { parseMarkdownFile } from '@epicenter/workspace/markdown';
 import type { opensidian } from './epicenter.config';
-import { parseMarkdownFile } from './markdown-utils';
 
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
 

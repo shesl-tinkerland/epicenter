@@ -1,13 +1,14 @@
 /**
- * Tests for the playground's local markdown helpers. Cover the same surface
- * as the workspace's previous `prepareMarkdownFiles` test, plus parser smoke
- * tests on the inlined `parseMarkdownFile`.
+ * Tests for the playground's local `prepareMarkdownFiles` recipe. The
+ * shared markdown primitives (parseMarkdownFile, assembleMarkdown,
+ * toSlugFilename) are tested in @epicenter/workspace's own suite.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseMarkdownFile, prepareMarkdownFiles } from './markdown-utils';
+import { parseMarkdownFile } from '@epicenter/workspace/markdown';
+import { prepareMarkdownFiles } from './markdown-utils';
 
 const TEST_DIR = join(import.meta.dir, '__test-prepare__');
 
@@ -26,34 +27,6 @@ function writeTestFile(name: string, content: string) {
 function readTestFile(name: string) {
 	return readFile(join(TEST_DIR, name), 'utf-8');
 }
-
-describe('parseMarkdownFile (playground copy)', () => {
-	test('parses frontmatter and body from standard format', () => {
-		const result = parseMarkdownFile(
-			'---\nid: abc\ntitle: Hello\n---\n\nSome body\n',
-		);
-		expect(result).not.toBeNull();
-		expect(result?.frontmatter).toEqual({ id: 'abc', title: 'Hello' });
-		expect(result?.body).toBe('Some body');
-	});
-
-	test('returns null for files without frontmatter', () => {
-		expect(parseMarkdownFile('# heading only\n')).toBeNull();
-	});
-
-	test('strips UTF-8 BOM before parsing', () => {
-		const result = parseMarkdownFile('﻿---\nid: abc\n---\n');
-		expect(result?.frontmatter).toEqual({ id: 'abc' });
-	});
-
-	test('handles CRLF line endings', () => {
-		const result = parseMarkdownFile(
-			'---\r\nid: abc\r\n---\r\n\r\nBody\r\n',
-		);
-		expect(result?.frontmatter).toEqual({ id: 'abc' });
-		expect(result?.body).toBe('Body');
-	});
-});
 
 describe('prepareMarkdownFiles', () => {
 	test('files without id get one added', async () => {

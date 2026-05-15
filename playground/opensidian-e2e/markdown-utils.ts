@@ -1,89 +1,20 @@
 /**
- * Markdown frontmatter helpers local to the opensidian playground.
+ * Vault scripting helpers local to the opensidian playground.
  *
- * Used by the playground's `markdown_prepare` action, the `pushFromMarkdown`
- * script, and the playground tests. The workspace library deliberately does
- * not export these: they are vault-style scripting utilities, not workspace
- * primitives, so this playground owns its own copies. See the audit
- * transcript that produced the move for the asymmetric-wins reasoning.
+ * The workspace ships the markdown primitives at
+ * `@epicenter/workspace/markdown`. This file holds opinionated recipes
+ * built on top of those primitives that are too vault-specific to live in
+ * a library, starting with `prepareMarkdownFiles` which encodes the
+ * "flat directory, `id` field, abort on collision" convention.
  */
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import slugify from '@sindresorhus/slugify';
-import { YAML } from 'bun';
 import { generateId } from '@epicenter/workspace';
-import filenamify from 'filenamify';
-
-const MAX_SLUG_LENGTH = 50;
-
-const FRONTMATTER_PATTERN =
-	/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-
-/**
- * Parse a `---`-delimited YAML frontmatter block out of a markdown string,
- * returning `null` if the file does not have valid frontmatter. Tolerates a
- * UTF-8 BOM and both LF and CRLF line endings.
- */
-export function parseMarkdownFile(content: string): {
-	frontmatter: Record<string, unknown>;
-	body: string | undefined;
-} | null {
-	const input = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
-	const match = input.match(FRONTMATTER_PATTERN);
-	if (!match) return null;
-
-	const raw = match[1];
-	if (!raw) return null;
-	const frontmatter = YAML.parse(raw);
-	if (typeof frontmatter !== 'object' || frontmatter === null) return null;
-
-	const rawBody = input
-		.slice(match[0].length)
-		.replace(/^\r?\n/, '')
-		.replace(/\r?\n$/, '');
-
-	return {
-		frontmatter: frontmatter as Record<string, unknown>,
-		body: rawBody.length > 0 ? rawBody : undefined,
-	};
-}
-
-/**
- * Assemble a `---`-delimited markdown file string from a frontmatter object
- * and an optional body. Undefined frontmatter values are dropped; null
- * values are preserved so nullable fields round-trip.
- */
-export function assembleMarkdown(
-	frontmatter: Record<string, unknown>,
-	body?: string,
-): string {
-	const cleaned: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(frontmatter)) {
-		if (value !== undefined) {
-			cleaned[key] = value;
-		}
-	}
-	const yaml = YAML.stringify(cleaned, null, 2);
-	const yamlBlock = yaml.endsWith('\n') ? yaml : `${yaml}\n`;
-	return body !== undefined
-		? `---\n${yamlBlock}---\n\n${body}\n`
-		: `---\n${yamlBlock}---\n`;
-}
-
-/**
- * Build a `{slugified-title}-{id}.md` filename, falling back to `{id}.md`
- * when the title is empty.
- */
-export function toSlugFilename(
-	title: string | undefined | null,
-	id: string,
-): string {
-	if (!title || title.trim().length === 0) return `${id}.md`;
-	const slug = slugify(title).slice(0, MAX_SLUG_LENGTH);
-	const raw = slug ? `${slug}-${id}.md` : `${id}.md`;
-	return filenamify(raw, { replacement: '-' });
-}
+import {
+	assembleMarkdown,
+	parseMarkdownFile,
+} from '@epicenter/workspace/markdown';
 
 type PrepareResult = {
 	prepared: number;

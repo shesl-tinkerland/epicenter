@@ -26,7 +26,7 @@ import {
 	createDisposableCache,
 	defineTable,
 } from '../../../index.js';
-import { parseMarkdownFile } from './parse-markdown-file.js';
+import { parseMarkdownFile } from '../../../markdown/parse-markdown-file.js';
 import {
 	attachMarkdownMaterializer,
 	type MarkdownShape,

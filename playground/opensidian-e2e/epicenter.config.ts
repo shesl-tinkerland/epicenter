@@ -41,11 +41,12 @@ import {
 import { defineConfig } from '@epicenter/workspace/daemon';
 import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
+import { toSlugFilename } from '@epicenter/workspace/markdown';
 import { attachYjsLog, epicenterPaths } from '@epicenter/workspace/node';
 import { opensidianTables } from 'opensidian';
 import Type from 'typebox';
 import * as Y from 'yjs';
-import { prepareMarkdownFiles, toSlugFilename } from './markdown-utils';
+import { prepareMarkdownFiles } from './markdown-utils';
 
 const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
 const MARKDOWN_DIR = join(import.meta.dir, 'data');
