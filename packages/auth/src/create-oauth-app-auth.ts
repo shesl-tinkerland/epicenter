@@ -260,7 +260,8 @@ export function createOAuthAppAuth({
 		} else {
 			headers.delete('Authorization');
 		}
-		return fetchImpl(normalizeFetchInput(input, baseURL), {
+		const normalizedInput = normalizeFetchInput(input, baseURL);
+		return fetchImpl(normalizedInput as Parameters<typeof fetchImpl>[0], {
 			...init,
 			headers,
 			credentials: 'omit',
