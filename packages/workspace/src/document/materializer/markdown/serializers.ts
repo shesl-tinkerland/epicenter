@@ -5,36 +5,16 @@ import type { BaseRow } from '../../attach-table.js';
 /** Max slug length before the ID suffix. */
 const MAX_SLUG_LENGTH = 50;
 
-/**
- * Build an ID-only filename: `{id}.md`.
- *
- * @example
- * ```typescript
- * toIdFilename('abc123') // 'abc123.md'
- * ```
- */
-export function toIdFilename(id: string): string {
+/** Build an ID-only filename: `{id}.md`. */
+function toIdFilename(id: string): string {
 	return `${id}.md`;
 }
 
 /**
- * Build a human-readable filename: `{slugified-title}-{id}.md`.
- *
- * Falls back to `{id}.md` when the title is empty, undefined, or null.
- *
- * @example
- * ```typescript
- * toSlugFilename('GitHub PR Review', 'abc123')
- * // 'github-pr-review-abc123.md'
- *
- * toSlugFilename(undefined, 'abc123')
- * // 'abc123.md'
- * ```
+ * Build a `{slugified-title}-{id}.md` filename, falling back to `{id}.md`
+ * when the title is empty.
  */
-export function toSlugFilename(
-	title: string | undefined | null,
-	id: string,
-): string {
+function toSlugFilename(title: string | undefined | null, id: string): string {
 	if (!title || title.trim().length === 0) {
 		return toIdFilename(id);
 	}
@@ -51,7 +31,7 @@ export function toSlugFilename(
  * @example
  * ```typescript
  * .table(tables.posts, { filename: slugFilename('title') })
- * // row with title "Hello World", id "abc123" → 'hello-world-abc123.md'
+ * // row with title "Hello World", id "abc123" => "hello-world-abc123.md"
  * ```
  */
 export function slugFilename<TRow extends BaseRow>(

@@ -1,24 +1,13 @@
 /**
- * prepareMarkdownFiles Tests
- *
- * Verifies the `prepareMarkdownFiles` utility that walks a directory of `.md`
- * files and ensures each has a unique `id` in its YAML frontmatter. Files
- * without an `id` get one generated; files with duplicate IDs trigger an error
- * with zero modifications.
- *
- * Key behaviors:
- * - Files without `id` get one added to frontmatter
- * - Files with existing `id` are left untouched
- * - Duplicate IDs produce an error with no file modifications
- * - Non-`.md` files are ignored
- * - Files without valid frontmatter are skipped
+ * Tests for the playground's local markdown helpers. Cover the same surface
+ * as the workspace's previous `prepareMarkdownFiles` test, plus parser smoke
+ * tests on the inlined `parseMarkdownFile`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseMarkdownFile } from './parse-markdown-file';
-import { prepareMarkdownFiles } from './prepare-markdown-files';
+import { parseMarkdownFile, prepareMarkdownFiles } from './markdown-utils';
 
 const TEST_DIR = join(import.meta.dir, '__test-prepare__');
 
@@ -38,6 +27,34 @@ function readTestFile(name: string) {
 	return readFile(join(TEST_DIR, name), 'utf-8');
 }
 
+describe('parseMarkdownFile (playground copy)', () => {
+	test('parses frontmatter and body from standard format', () => {
+		const result = parseMarkdownFile(
+			'---\nid: abc\ntitle: Hello\n---\n\nSome body\n',
+		);
+		expect(result).not.toBeNull();
+		expect(result?.frontmatter).toEqual({ id: 'abc', title: 'Hello' });
+		expect(result?.body).toBe('Some body');
+	});
+
+	test('returns null for files without frontmatter', () => {
+		expect(parseMarkdownFile('# heading only\n')).toBeNull();
+	});
+
+	test('strips UTF-8 BOM before parsing', () => {
+		const result = parseMarkdownFile('﻿---\nid: abc\n---\n');
+		expect(result?.frontmatter).toEqual({ id: 'abc' });
+	});
+
+	test('handles CRLF line endings', () => {
+		const result = parseMarkdownFile(
+			'---\r\nid: abc\r\n---\r\n\r\nBody\r\n',
+		);
+		expect(result?.frontmatter).toEqual({ id: 'abc' });
+		expect(result?.body).toBe('Body');
+	});
+});
+
 describe('prepareMarkdownFiles', () => {
 	test('files without id get one added', async () => {
 		await writeTestFile('note.md', '---\ntitle: Hello\n---\n\nBody text\n');
@@ -48,13 +65,12 @@ describe('prepareMarkdownFiles', () => {
 		expect(result.skipped).toBe(0);
 		expect(result.errors).toEqual([]);
 
-		const content = await readTestFile('note.md');
-		const parsed = parseMarkdownFile(content);
+		const parsed = parseMarkdownFile(await readTestFile('note.md'));
 		expect(parsed).not.toBeNull();
-		expect(typeof parsed!.frontmatter.id).toBe('string');
-		expect((parsed!.frontmatter.id as string).length).toBeGreaterThan(0);
-		expect(parsed!.frontmatter.title).toBe('Hello');
-		expect(parsed!.body).toBe('Body text');
+		expect(typeof parsed?.frontmatter.id).toBe('string');
+		expect((parsed?.frontmatter.id as string).length).toBeGreaterThan(0);
+		expect(parsed?.frontmatter.title).toBe('Hello');
+		expect(parsed?.body).toBe('Body text');
 	});
 
 	test('files with existing id are skipped', async () => {
@@ -66,10 +82,7 @@ describe('prepareMarkdownFiles', () => {
 		expect(result.prepared).toBe(0);
 		expect(result.skipped).toBe(1);
 		expect(result.errors).toEqual([]);
-
-		// File should be unmodified
-		const content = await readTestFile('note.md');
-		expect(content).toBe(original);
+		expect(await readTestFile('note.md')).toBe(original);
 	});
 
 	test('duplicate ids produce an error with no file modifications', async () => {
@@ -85,10 +98,7 @@ describe('prepareMarkdownFiles', () => {
 		expect(result.errors[0]).toContain('duplicate-id');
 		expect(result.errors[0]).toContain('a.md');
 		expect(result.errors[0]).toContain('b.md');
-
-		// c.md should NOT have been modified despite missing an id
-		const contentC = await readTestFile('c.md');
-		expect(contentC).toBe(originalC);
+		expect(await readTestFile('c.md')).toBe(originalC);
 	});
 
 	test('non-.md files are ignored', async () => {
@@ -100,7 +110,6 @@ describe('prepareMarkdownFiles', () => {
 
 		expect(result.prepared).toBe(1);
 		expect(result.skipped).toBe(0);
-		// Only the .md file was processed
 	});
 
 	test('files without frontmatter are skipped', async () => {
@@ -111,10 +120,9 @@ describe('prepareMarkdownFiles', () => {
 
 		expect(result.prepared).toBe(1);
 		expect(result.skipped).toBe(1);
-
-		// plain.md should be unmodified
-		const content = await readTestFile('plain.md');
-		expect(content).toBe('# Just a heading\n\nSome content\n');
+		expect(await readTestFile('plain.md')).toBe(
+			'# Just a heading\n\nSome content\n',
+		);
 	});
 
 	test('mixed files: some with id, some without, all valid', async () => {
@@ -126,16 +134,11 @@ describe('prepareMarkdownFiles', () => {
 		expect(result.prepared).toBe(1);
 		expect(result.skipped).toBe(1);
 		expect(result.errors).toEqual([]);
-
-		// The file that had an id should be untouched
-		const hasIdContent = await readTestFile('has-id.md');
-		expect(hasIdContent).toBe('---\nid: abc123\ntitle: Existing\n---\n');
-
-		// The file without id should now have one
-		const noIdContent = await readTestFile('no-id.md');
-		const parsed = parseMarkdownFile(noIdContent);
-		expect(parsed).not.toBeNull();
-		expect(typeof parsed!.frontmatter.id).toBe('string');
+		expect(await readTestFile('has-id.md')).toBe(
+			'---\nid: abc123\ntitle: Existing\n---\n',
+		);
+		const parsed = parseMarkdownFile(await readTestFile('no-id.md'));
+		expect(typeof parsed?.frontmatter.id).toBe('string');
 	});
 
 	test('empty directory returns zero counts', async () => {
