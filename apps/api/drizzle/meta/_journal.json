@@ -15,6 +15,13 @@
 			"when": 1778734800000,
 			"tag": "0001_delete_old_sync_rooms",
 			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1778827600452,
+			"tag": "0002_salty_hex",
+			"breakpoints": true
 		}
 	]
 }

@@ -3,7 +3,6 @@ import {
 	bigint,
 	boolean,
 	index,
-	integer,
 	jsonb,
 	pgTable,
 	text,
@@ -88,19 +87,6 @@ export const jwks = pgTable('jwks', {
 	privateKey: text('private_key').notNull(),
 	createdAt: timestamp('created_at').notNull(),
 	expiresAt: timestamp('expires_at'),
-});
-
-export const deviceCode = pgTable('device_code', {
-	id: text('id').primaryKey(),
-	deviceCode: text('device_code').notNull(),
-	userCode: text('user_code').notNull(),
-	userId: text('user_id'),
-	expiresAt: timestamp('expires_at').notNull(),
-	status: text('status').notNull(),
-	lastPolledAt: timestamp('last_polled_at'),
-	pollingInterval: integer('polling_interval'),
-	clientId: text('client_id'),
-	scope: text('scope'),
 });
 
 export const oauthClient = pgTable('oauth_client', {

@@ -624,6 +624,175 @@ Dash check:
   Pass after replacing two existing dashes in packages/sync/src/auth-subprotocol.ts.
 ```
 
+## Device Code Schema Residue Decision
+
+Completed on 2026-05-15.
+
+Falsification gate result:
+
+```txt
+No live route, Better Auth plugin config, client flow, CLI flow, daemon flow,
+or non-historical app/package test uses Better Auth device authorization.
+
+Pre-cleanup live API residue count:
+  1 stale database table export: deviceCode in apps/api/src/db/schema.ts.
+  20 matched strings across 4 files:
+    apps/api/src/db/schema.ts: 5
+    apps/api/drizzle/0000_equal_thor_girl.sql: 3
+    apps/api/drizzle/meta/0000_snapshot.json: 6
+    apps/api/drizzle/meta/0001_snapshot.json: 6
+
+Post-cleanup live API residue count:
+  0 live schema exports.
+  0 live route, plugin, client, CLI, daemon, or test users.
+  16 remaining repo matches across 4 migration-history files:
+    apps/api/drizzle/0000_equal_thor_girl.sql: 3
+    apps/api/drizzle/meta/0000_snapshot.json: 6
+    apps/api/drizzle/meta/0001_snapshot.json: 6
+    apps/api/drizzle/0002_salty_hex.sql: 1
+```
+
+Current evidence:
+
+```txt
+apps/api/src/auth/create-auth.ts
+  Runtime plugins are jwt() and oauthProvider().
+  deviceAuthorization() is not installed.
+
+apps/api/src/app.ts
+  /auth/* is the Better Auth catch-all.
+  There is no /device page and no route that calls deviceCode, deviceToken,
+  deviceApprove, or deviceDeny.
+
+packages/auth/src/node/*
+  Machine login uses OOB OAuth authorization code with PKCE through
+  /auth/oauth2/authorize, /auth/cli-callback, /auth/oauth2/token, and /api/me.
+  Machine logout revokes through /auth/oauth2/revoke.
+
+packages/auth/src/create-oauth-app-auth.ts
+  Shared auth uses authorization_code, refresh_token, /api/me, revoke,
+  auth.fetch, and auth.openWebSocket. It has no device grant path.
+
+packages/cli/README.md
+  Public CLI docs describe the OOB OAuth 2.1 code flow and PersistedAuth.
+```
+
+Upstream ownership check:
+
+```txt
+Better Auth device authorization:
+  deviceAuthorization() owns the deviceCode schema model and /device/*
+  endpoints. The installed source defines the schema at
+  node_modules/better-auth/dist/plugins/device-authorization/schema.mjs and
+  merges it only from the deviceAuthorization plugin entrypoint.
+
+Better Auth OAuth provider:
+  oauthProvider() owns oauthClient, oauthRefreshToken, oauthAccessToken,
+  and oauthConsent. The installed oauth-provider package does not reference
+  deviceCode.
+
+Drizzle migrations:
+  drizzle-kit migrate applies new migration SQL according to the migration
+  log. Editing 0000 or snapshot history would rewrite committed history.
+```
+
+Options:
+
+| Option | Change | Risk | Decision |
+| --- | --- | --- | --- |
+| Keep residue | Leave schema and historical migrations as-is. | Low runtime risk, but the live schema exports a stale table. | Rejected after the local row count was confirmed empty. |
+| Drop with migration | Remove `deviceCode` from `apps/api/src/db/schema.ts` and generate a new `DROP TABLE "device_code"` migration. | Destructive unless the target row count is proven empty and rollback is planned. | Chosen for local cleanup. Remote/prod migration still requires target row-count proof before running. |
+| Ignore historical migration only | Remove the live schema export while keeping 0000 and meta history. | Drizzle will still see drift and likely wants a drop migration. This creates an unclear half-state. | Reject. It hides the table from code while leaving DB drift unresolved. |
+
+Chosen path:
+
+```txt
+Drop with a new forward migration.
+
+Remove the live schema export, keep historical migrations intact, generate
+0002_salty_hex.sql, and apply that migration to the local API database after
+confirming local device_code row count is 0.
+```
+
+Rollback story:
+
+```sql
+-- forward
+DROP TABLE "device_code";
+
+-- rollback
+CREATE TABLE "device_code" (
+  "id" text PRIMARY KEY NOT NULL,
+  "device_code" text NOT NULL,
+  "user_code" text NOT NULL,
+  "user_id" text,
+  "expires_at" timestamp NOT NULL,
+  "status" text NOT NULL,
+  "last_polled_at" timestamp,
+  "polling_interval" integer,
+  "client_id" text,
+  "scope" text
+);
+```
+
+Validation:
+
+```bash
+rg -n --hidden -S "deviceAuthorization|deviceAuthorizationClient|device_code|deviceCode|/auth/device|device\\.code|device\\.token|urn:ietf:params:oauth:grant-type:device_code|user_code" apps packages --glob '!**/node_modules/**'
+rg --count-matches --hidden -S "deviceAuthorization|deviceAuthorizationClient|device_code|deviceCode|/auth/device|device\\.code|device\\.token|urn:ietf:params:oauth:grant-type:device_code|user_code" apps packages --glob '!**/node_modules/**'
+bun x drizzle-kit check
+bun test apps/api
+```
+
+Run the Drizzle command with `apps/api` as the current working directory.
+Drizzle resolves `out: './drizzle'` from the current working directory, so
+running the app config from the repo root can create a root `drizzle/meta`
+artifact.
+
+Results:
+
+```txt
+Live app/package grep:
+  Only apps/api migration artifacts matched.
+
+Residue count:
+  apps/api/drizzle/0000_equal_thor_girl.sql: 3
+  apps/api/drizzle/meta/0001_snapshot.json: 6
+  apps/api/drizzle/meta/0000_snapshot.json: 6
+  apps/api/drizzle/0002_salty_hex.sql: 1
+  Total: 16 matched strings across 4 files.
+
+Local row count:
+  select count(*) from "device_code" returned 0 before the drop.
+
+Generated migration:
+  apps/api/drizzle/0002_salty_hex.sql contains only:
+    DROP TABLE "device_code";
+
+Local migration application:
+  Applied apps/api/drizzle/0002_salty_hex.sql to the local API database.
+  select to_regclass('public.device_code') returned null afterward.
+
+Local database application note:
+  Local dev uses db:push:local, not migrate. The local database already had
+  the 0000 tables but an empty drizzle.__drizzle_migrations log, so a plain
+  drizzle-kit migrate replayed 0000 and exited with code 1. The generated
+  0002 SQL was applied directly after the empty row-count guard. Remote/prod
+  migration was not run.
+
+Drizzle migration check:
+  Pass from the apps/api working directory. drizzle-kit check reported:
+  Everything's fine.
+
+Root Drizzle artifact:
+  A first root-level check created drizzle/meta/_journal.json because the app
+  config has out: './drizzle'. The artifact was removed. A follow-up check
+  confirmed the root drizzle directory is absent.
+
+apps/api tests:
+  Pass. bun test apps/api ran 64 tests across 10 files.
+```
+
 ## Rejected Alternatives
 
 | Alternative | Refusal |
