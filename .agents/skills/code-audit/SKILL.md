@@ -77,9 +77,9 @@ grep -rn "\.then\s*\(\s*(\(\)|=> \{\}|=> undefined)" packages --include="*.ts"
 grep -rn "console\.(log|error|warn)" packages/workspace packages/sync --include="*.ts" | grep -v test
 ```
 
-**Why it matters**: library code that calls `console` directly can't be redirected, silenced, or piped to a structured sink (jsonl file, in-memory test introspection). Every `console.log` is a hardcoded output decision the consumer can't override.
+**Why it matters**: library code that calls `console` directly can't be redirected, silenced, or piped to a custom sink (in-memory test introspection, telemetry shipping). Every `console.log` is a hardcoded output decision the consumer can't override.
 
-**The framework's logger**: `wellcrafted/logger` provides `createLogger(name)` plus pluggable sinks (`consoleSink`, `memorySink`, `composeSinks`, repo-owned `jsonlFileSink`). Three established injection patterns:
+**The framework's logger**: `wellcrafted/logger` provides `createLogger(name)` plus pluggable sinks (`consoleSink`, `memorySink`, `composeSinks`). Three established injection patterns:
 
 ```ts
 // Module-scoped (default)

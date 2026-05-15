@@ -2,7 +2,7 @@ import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
 import { EncryptionKeys, encryptionKeysEqual } from '@epicenter/encryption';
 import { type } from 'arktype';
-import { createLogger } from 'wellcrafted/logger';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient, AuthState } from './auth-contract.js';
 import { AuthError } from './auth-errors.js';
@@ -49,8 +49,6 @@ const ApiMeResponse = type({
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
 
-const log = createLogger('oauth-app-auth');
-
 export type CreateOAuthAppAuthConfig = {
 	baseURL?: string;
 	clientId: string;
@@ -59,6 +57,7 @@ export type CreateOAuthAppAuthConfig = {
 	fetch?: AuthFetch;
 	WebSocket?: typeof WebSocket;
 	now?: () => number;
+	log?: Logger;
 };
 
 const REFRESH_SKEW_MS = 60_000;
@@ -71,6 +70,7 @@ export function createOAuthAppAuth({
 	fetch: fetchImpl = globalThis.fetch.bind(globalThis),
 	WebSocket: WebSocketImpl = globalThis.WebSocket,
 	now = Date.now,
+	log = createLogger('auth/oauth-app'),
 }: CreateOAuthAppAuthConfig): AuthClient {
 	let persisted = persistedAuthStorage.get();
 	let verifiedPersisted: PersistedAuthType | null = null;
@@ -78,7 +78,7 @@ export function createOAuthAppAuth({
 	let refreshPromise: Promise<boolean> | null = null;
 	let identityPromise: Promise<Result<ApiMeResponse, AuthError>> | null = null;
 
-	const stateStore = createAuthStateStore(deriveState());
+	const stateStore = createAuthStateStore(deriveState(), { log });
 
 	function deriveState(): AuthState {
 		if (persisted === null) return { status: 'signed-out' };

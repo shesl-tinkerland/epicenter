@@ -12,7 +12,7 @@ Structured, level-keyed, field-oriented logging for library code. Modeled on Rus
 
 ## Where it lives
 
-The core (`createLogger`, `consoleSink`, `memorySink`, `composeSinks`, `tapErr`, and their types) ships from **`wellcrafted/logger`** — runtime-agnostic, browser-safe. The Bun-only `jsonlFileSink` + `DisposableLogSink` ship from **`@epicenter/workspace`** because they need `Bun.file(path).writer()` and `node:fs`.
+All of it ships from **`wellcrafted/logger`** — `createLogger`, `consoleSink`, `memorySink`, `composeSinks`, `tapErr`, and the types. Runtime-agnostic, browser-safe. No file sink in-process: durability is a *host* concern (shell redirect, systemd journal, Cloudflare tail). The library emits to `consoleSink`; the operator decides where stdout/stderr go.
 
 ## Quickstart
 
@@ -54,42 +54,35 @@ Do NOT attach a `severity` to `defineErrors` variants. That's `miette`'s pattern
 A sink is `((event) => void) & Partial<AsyncDisposable>` — a callable with optional resource cleanup.
 
 ```ts
-// Core — runtime-agnostic, browser-safe
 import {
   createLogger,
-  consoleSink,    // default; mirrors old console.* behavior
+  consoleSink,    // default; routes to console[level]
   memorySink,     // for tests; returns { sink, events }
   composeSinks,   // fan out to multiple sinks
   tapErr,         // Result-flow combinator
 } from 'wellcrafted/logger';
-
-// Bun-only file sink — ships from the workspace package because it needs
-// `Bun.file(path).writer()` and `node:fs`
-import { jsonlFileSink } from '@epicenter/workspace';
 ```
 
-### `jsonlFileSink(path)` — Bun-only
+### Durability is the host's job
 
-Streamed append via Bun's `FileSink`. Parent directory auto-created. The returned sink implements `[Symbol.asyncDispose]` (flush + end the writer), so bind it with `await using`:
+For a long-running daemon or CLI that needs durable logs, the library still emits to `consoleSink`; the operator decides where the stream goes:
 
-```ts
-await using sink = jsonlFileSink(join(DATA_DIR, 'app.log.jsonl'));
-const log = createLogger('collaboration', sink);
-// ... do work ...
-// scope exit → flush + close the writer
+```bash
+bun run start                          # dev: console
+bun run start 2>> ~/.app/app.jsonl     # ad-hoc file capture
+systemd-run --user bun run start       # journal (structured queries via journalctl)
 ```
 
-Without `await using`, buffered writes can be lost on abrupt termination. **Never** skip the dispose binding.
+This used to be `jsonlFileSink`; that primitive was removed because owning a file writer in-process bought complexity (backpressure, dispose semantics, error fallbacks) that shell redirection already solves.
 
 ### `composeSinks(...)` — fan out
 
 ```ts
-await using file = jsonlFileSink(path);
-const sink = composeSinks(consoleSink, file);
+const sink = composeSinks(consoleSink, myCustomSink);
 const log = createLogger('source', sink);
 ```
 
-`composeSinks` forwards disposal to members that implement it (via `sink[Symbol.asyncDispose]?.()`). `consoleSink` is a no-op on dispose; file/network sinks flush and close.
+`composeSinks` forwards disposal to members that implement it (via `sink[Symbol.asyncDispose]?.()`). `consoleSink` is a no-op on dispose; stateful sinks flush and close.
 
 ### `memorySink()` — for tests
 
@@ -126,18 +119,17 @@ const sqlite   = attachSqliteMaterializer(ydoc, { db, log });
 const collaboration = openCollaboration(ydoc, { url, log, openWebSocket, replicaId });
 ```
 
-Share one sink across loggers (avoids interleaved writes on the same file):
+Share one sink across loggers when you build a custom one:
 
 ```ts
-await using fileSink = jsonlFileSink(path);
-const sink = composeSinks(consoleSink, fileSink);
-const markdown = attachMarkdownMaterializer(ydoc, { dir, log: createLogger('markdown', sink) });
-const sqlite   = attachSqliteMaterializer(ydoc, { db, log: createLogger('sqlite', sink) });
+const sink = composeSinks(consoleSink, myCustomSink);
+const markdown = attachMarkdownMaterializer(ydoc, { dir, log: createLogger('workspace/markdown', sink) });
+const sqlite   = attachSqliteMaterializer(ydoc, { db, log: createLogger('workspace/sqlite', sink) });
 ```
 
 ## Browser
 
-`createLogger` + `consoleSink` + `memorySink` + `composeSinks` + `tapErr` are pure JS, browser-safe. `jsonlFileSink` is Bun-only (uses `Bun.file(path).writer()` + `node:fs`) — browser apps just don't import it.
+The whole surface is pure JS and browser-safe.
 
 ## Event shape
 
@@ -153,7 +145,7 @@ type LogEvent = {
 };
 ```
 
-JSONL sink converts `ts` to ISO-8601 on the wire and flattens native `Error` instances to `{name, message, stack}` so they don't serialize to `{}`.
+Custom sinks that serialize for the wire should convert `ts` to ISO-8601 and flatten native `Error` instances (otherwise they JSON.stringify to `{}`).
 
 ## See also
 

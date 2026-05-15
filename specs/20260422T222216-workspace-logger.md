@@ -1,11 +1,23 @@
 # Workspace Logger — JSONL, Local, DI
 
 **Date**: 2026-04-22
-**Status**: shipped — Phases 1–5 implemented. Addendum 2026-04-23 below — core extracted to `wellcrafted/logger`; workspace now owns only the Bun-specific `jsonlFileSink`.
+**Status**: shipped, then partially reversed. Phases 1-5 implemented; core extracted to `wellcrafted/logger` (2026-04-23 addendum); `jsonlFileSink` removed entirely (2026-05-15 addendum below).
 **Author**: AI-assisted
 **Branch**: braden-w/document-primitive (or successor)
 
-> **See the [Addendum](#addendum-202604-23--extraction-to-wellcraftedlogger) at the bottom for the current state and the Wave 2–4 integration plan.**
+> **See the [2026-05-15 Addendum](#addendum-202605-15--jsonlfilesink-removed) for the current state. The JSONL file sink no longer exists.**
+
+## Addendum 2026-05-15 — `jsonlFileSink` removed
+
+Removed `jsonlFileSink` and its `./logger/jsonl-sink` subpath export. Zero runtime callers existed; the surface was committed but unused. Reasoning:
+
+- The sink's value proposition was durable in-process file logging. The complexity it required (Bun `FileSink` backpressure handling, dispose-time await, error-fallback policy) all existed to paper over `(event) => void` being a lie when the destination is a real file.
+- Durability is a host concern. Daemons get it via shell redirect (`bun run start 2>> app.jsonl`), systemd journal, or platform tail logs. The OS already solves the problem; reimplementing it in-process buys policy decisions (drop vs retry vs alert on sink failure) that the library shouldn't be making.
+- Without callers, the sink was speculative infrastructure. YAGNI applied.
+
+If a future need surfaces (e.g. an in-process structured-shipping sink for a specific consumer), build the minimum that satisfies it then, with a real caller to constrain the design.
+
+The rest of `wellcrafted/logger` (`createLogger`, `consoleSink`, `memorySink`, `composeSinks`, `tapErr`) is unchanged. The body of this spec is preserved below as history; references to `jsonlFileSink` describe a past state.
 
 ## Overview
 

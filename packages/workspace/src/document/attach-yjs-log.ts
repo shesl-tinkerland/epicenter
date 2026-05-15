@@ -25,11 +25,9 @@
  * does carry `whenLoaded`; that asymmetry is real, not vestigial.
  */
 
-import { createLogger } from 'wellcrafted/logger';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import * as Y from 'yjs';
 import { openWriterSqlite } from './sqlite-writer.js';
-
-const logger = createLogger('attachYjsLog');
 
 /** Max compacted update size (2 MB). Matches the Cloudflare DO limit. */
 const MAX_COMPACTED_BYTES = 2 * 1024 * 1024;
@@ -63,9 +61,12 @@ export type YjsLogAttachment = {
 
 export function attachYjsLog(
 	ydoc: Y.Doc,
-	{ filePath }: { filePath: string },
+	{
+		filePath,
+		log = createLogger('workspace/attach-yjs-log'),
+	}: { filePath: string; log?: Logger },
 ): YjsLogAttachment {
-	const db = openWriterSqlite({ filePath, log: logger });
+	const db = openWriterSqlite({ filePath, log });
 
 	db.run(
 		'CREATE TABLE IF NOT EXISTS updates (id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL)',
@@ -153,7 +154,7 @@ export function attachYjsLog(
 			try {
 				compactUpdateLog();
 			} catch (cause) {
-				logger.warn(
+				log.warn(
 					new Error('Final compactUpdateLog failed during destroy', {
 						cause,
 					}),
@@ -165,7 +166,7 @@ export function attachYjsLog(
 			try {
 				db.close();
 			} catch (cause) {
-				logger.warn(new Error('db.close() failed during destroy', { cause }));
+				log.warn(new Error('db.close() failed during destroy', { cause }));
 			}
 		} finally {
 			resolveDisposed();

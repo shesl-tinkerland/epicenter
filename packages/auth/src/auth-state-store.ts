@@ -4,7 +4,7 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import { createLogger } from 'wellcrafted/logger';
+import { createLogger, type Logger } from 'wellcrafted/logger';
 import type { AuthState } from './auth-contract.js';
 import type { LocalUnlockBundle } from './auth-types.js';
 
@@ -16,9 +16,10 @@ export const AuthStateStoreError = defineErrors({
 });
 export type AuthStateStoreError = InferErrors<typeof AuthStateStoreError>;
 
-const log = createLogger('auth-state-store');
-
-export function createAuthStateStore(initialState: AuthState) {
+export function createAuthStateStore(
+	initialState: AuthState,
+	{ log = createLogger('auth/state-store') }: { log?: Logger } = {},
+) {
 	let state = initialState;
 	const stateChangeListeners = new Set<(state: AuthState) => void>();
 

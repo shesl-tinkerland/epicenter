@@ -420,7 +420,7 @@ handler.onError?.(err);
 type LogSink = ((event: LogEvent) => void) & Partial<AsyncDisposable>;
 
 for (const sink of sinks) await sink[Symbol.asyncDispose]?.();
-// consoleSink has no dispose → no-op; jsonlFileSink has it → awaited
+// consoleSink has no dispose → no-op; stateful sinks (file, network) get awaited
 ```
 
 ## Boolean Naming: `is`/`has`/`can` Prefix
