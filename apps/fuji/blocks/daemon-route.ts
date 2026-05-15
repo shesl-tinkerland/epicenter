@@ -36,11 +36,11 @@ export function defineFujiDaemon({ route = 'fuji' }: { route?: string } = {}) {
 			const ydoc = new Y.Doc({ guid: FUJI_WORKSPACE_ID, gc: false });
 			ydoc.clientID = hashClientId(projectDir);
 			const encryption = attachEncryption(ydoc, {
-				encryptionKeys: () => {
+				keyring: () => {
 					if (auth.state.status === 'signed-out') {
 						throw new Error('[fuji-daemon] auth signed-out.');
 					}
-					return auth.state.unlock.encryptionKeys;
+					return auth.state.localIdentity.keyring;
 				},
 			});
 			const tables = encryption.attachTables(fujiTables);

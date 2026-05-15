@@ -1,6 +1,6 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
-import { EncryptionKeys, encryptionKeysEqual } from '@epicenter/encryption';
+import { SubjectKeyring, subjectKeyringsEqual } from '@epicenter/encryption';
 import { type } from 'arktype';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Ok, type Result } from 'wellcrafted/result';
@@ -16,7 +16,7 @@ import { parseOAuthTokenGrant } from './oauth-token-response.js';
 import { headersFromRequest } from './request-headers.js';
 
 /**
- * Storage adapter for the single `PersistedAuth` cell (grant + unlock).
+ * Storage adapter for the single `PersistedAuth` cell (grant + localIdentity).
  * Two methods, no watch hook: cross-context sign-out propagates via the
  * server (next bearer-bearing call hits a revoked token and reauth-requires
  * organically). The server is the authority; brief cross-tab desync is
@@ -45,7 +45,11 @@ export type AuthFetch = (
 const ApiMeResponse = type({
 	'+': 'delete',
 	user: AuthUser,
-	encryptionKeys: EncryptionKeys,
+	localIdentity: type({
+		'+': 'delete',
+		subject: 'string',
+		keyring: SubjectKeyring,
+	}),
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
 
@@ -85,12 +89,12 @@ export function createOAuthAppAuth({
 		if (networkAuthPaused) {
 			return {
 				status: 'reauth-required',
-				unlock: persisted.unlock,
+				localIdentity: persisted.localIdentity,
 			};
 		}
 		return {
 			status: 'signed-in',
-			unlock: persisted.unlock,
+			localIdentity: persisted.localIdentity,
 		};
 	}
 
@@ -116,7 +120,7 @@ export function createOAuthAppAuth({
 				if (persisted !== startedFrom) return false;
 				const next: PersistedAuthType = {
 					grant,
-					unlock: startedFrom.unlock,
+					localIdentity: startedFrom.localIdentity,
 				};
 				await persistedAuthStorage.set(next);
 				if (persisted !== startedFrom) return false;
@@ -165,8 +169,8 @@ export function createOAuthAppAuth({
 
 	/**
 	 * Verify `/api/me` against the persisted cell. Marks the cell verified;
-	 * writes the unlock cell only when `encryptionKeys` actually changed.
-	 * Wipes the cell on same-user-guard mismatch. Single-flight: concurrent
+	 * writes the localIdentity cell only when the keyring actually changed.
+	 * Wipes the cell on same-subject-guard mismatch. Single-flight: concurrent
 	 * callers share the in-flight promise.
 	 */
 	async function verifyIdentity(
@@ -178,7 +182,7 @@ export function createOAuthAppAuth({
 			if (error) return AuthError.VerifyIdentityFailed({ cause: error });
 			if (persisted !== startedFrom) return Ok(apiMe);
 
-			if (persisted.unlock.userId !== apiMe.user.id) {
+			if (persisted.localIdentity.subject !== apiMe.localIdentity.subject) {
 				await persistedAuthStorage.set(null);
 				persisted = null;
 				verifiedPersisted = null;
@@ -188,17 +192,14 @@ export function createOAuthAppAuth({
 			}
 
 			if (
-				!encryptionKeysEqual(
-					persisted.unlock.encryptionKeys,
-					apiMe.encryptionKeys,
+				!subjectKeyringsEqual(
+					persisted.localIdentity.keyring,
+					apiMe.localIdentity.keyring,
 				)
 			) {
 				const next: PersistedAuthType = {
 					grant: persisted.grant,
-					unlock: {
-						userId: apiMe.user.id,
-						encryptionKeys: apiMe.encryptionKeys,
-					},
+					localIdentity: apiMe.localIdentity,
 				};
 				await persistedAuthStorage.set(next);
 				if (persisted !== startedFrom) return Ok(apiMe);
@@ -221,7 +222,7 @@ export function createOAuthAppAuth({
 	 * Refuses to attach unless `/api/me` has confirmed the current cell in
 	 * this runtime. Cold boot online: refresh grant if
 	 * stale, call `/api/me`, then attach. Offline: fails closed; local
-	 * workspace decrypt continues via `unlock`.
+	 * workspace decrypt continues via `localIdentity`.
 	 */
 	async function bearerForNetwork(force: boolean): Promise<string | null> {
 		if (persisted === null || networkAuthPaused) return null;
@@ -270,10 +271,7 @@ export function createOAuthAppAuth({
 		const apiMe = callResult.data;
 		const next: PersistedAuthType = {
 			grant,
-			unlock: {
-				userId: apiMe.user.id,
-				encryptionKeys: apiMe.encryptionKeys,
-			},
+			localIdentity: apiMe.localIdentity,
 		};
 		await persistedAuthStorage.set(next);
 		persisted = next;

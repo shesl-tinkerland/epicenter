@@ -13,8 +13,8 @@ export function bytesToBase64(bytes: Uint8Array): string {
 /**
  * Decode base64 key material back into bytes.
  *
- * Pair this with `bytesToBase64()` when consuming `EncryptionKey.userKeyBase64`
- * from an auth session.
+ * Pair this with `bytesToBase64()` when consuming
+ * `SubjectKeyringEntry.subjectKeyBase64` from an auth session.
  */
 export function base64ToBytes(base64: string): Uint8Array {
 	const binaryString = atob(base64);

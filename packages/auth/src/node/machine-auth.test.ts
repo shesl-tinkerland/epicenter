@@ -29,8 +29,11 @@ const BASE_URL = 'http://localhost:8787';
 const CLIENT_ID = 'epicenter-cli';
 const NOW = 1_700_000_000_000;
 
-const encryptionKeys = [
-	{ version: 1, userKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=' },
+const keyring = [
+	{
+		version: 1,
+		subjectKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+	},
 ] as const;
 
 const cleanupPaths: string[] = [];
@@ -141,11 +144,11 @@ function tokenSuccess(): Route {
 		});
 }
 
-function apiMeOk(userId = 'user-1'): Route {
+function apiMeOk(subject = 'user-1'): Route {
 	return () =>
 		jsonResponse({
-			user: { id: userId, email: `${userId}@example.com` },
-			encryptionKeys: [...encryptionKeys],
+			user: { id: subject, email: `${subject}@example.com` },
+			localIdentity: { subject, keyring: [...keyring] },
 		});
 }
 
@@ -180,7 +183,7 @@ test('loginWithOob writes PersistedAuth and returns identity', async () => {
 			refreshToken: 'refresh-1',
 			accessTokenExpiresAt: NOW + 3_600_000,
 		},
-		unlock: { userId: 'user-1', encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject: 'user-1', keyring: [...keyring] },
 	});
 
 	if (process.platform !== 'win32') {
@@ -241,21 +244,79 @@ test('loginWithOob with /api/me 401 returns Err and writes no file', async () =>
 	expect(exists).toBe(false);
 });
 
-async function preWriteCell(filePath: string, userId = 'user-1') {
+async function preWriteCell(filePath: string, subject = 'user-1') {
 	const cell: PersistedAuth = {
 		grant: {
 			accessToken: 'access-stored',
 			refreshToken: 'refresh-stored',
 			accessTokenExpiresAt: NOW + 3_600_000,
 		},
-		unlock: { userId, encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject, keyring: [...keyring] },
 	};
 	const { error } = await saveMachineTokens(cell, { filePath });
 	if (error) throw error;
 	return cell;
 }
 
-test('status valid when /api/me returns 200 with same userId', async () => {
+async function writeLegacyCell(filePath: string, userId = 'user-1') {
+	const legacy = {
+		grant: {
+			accessToken: 'access-stored',
+			refreshToken: 'refresh-stored',
+			accessTokenExpiresAt: NOW + 3_600_000,
+		},
+		unlock: {
+			userId,
+			encryptionKeys: [
+				{ version: 1, subjectKeyBase64: keyring[0].subjectKeyBase64 },
+			],
+		},
+	};
+	await fs.mkdir(path.dirname(filePath), { recursive: true });
+	await fs.writeFile(filePath, JSON.stringify(legacy), { mode: 0o600 });
+}
+
+test('machine auth loads old auth.json shape', async () => {
+	const filePath = tmpAuthPath();
+	await writeLegacyCell(filePath, 'user-1');
+
+	const loaded = await loadMachineTokens({ filePath });
+	expect(loaded.error).toBeNull();
+	expect(loaded.data).toEqual({
+		grant: {
+			accessToken: 'access-stored',
+			refreshToken: 'refresh-stored',
+			accessTokenExpiresAt: NOW + 3_600_000,
+		},
+		localIdentity: { subject: 'user-1', keyring: [...keyring] },
+	});
+});
+
+test('sign-in writes the new persisted shape', async () => {
+	const filePath = tmpAuthPath();
+	const { fetch } = createFetch({
+		tokenRoute: tokenSuccess(),
+		apiMeRoute: apiMeOk('user-1'),
+	});
+
+	const result = await loginWithOob({
+		baseURL: BASE_URL,
+		clientId: CLIENT_ID,
+		filePath,
+		fetch,
+		now: () => NOW,
+		print: () => {},
+		openBrowser: () => {},
+		readCode: async () => 'CODE',
+	});
+	expect(result.error).toBeNull();
+	const raw = await fs.readFile(filePath, 'utf-8');
+	const parsed = JSON.parse(raw) as Record<string, unknown>;
+	expect(Object.keys(parsed).sort()).toEqual(['grant', 'localIdentity']);
+	expect('unlock' in parsed).toBe(false);
+});
+
+test('status valid when /api/me returns 200 with same subject', async () => {
 	const filePath = tmpAuthPath();
 	await preWriteCell(filePath, 'user-1');
 	const { fetch } = createFetch({ apiMeRoute: apiMeOk('user-1') });
@@ -308,7 +369,7 @@ test('status signedOut when no file', async () => {
 	expect(result.data).toEqual({ status: 'signedOut' });
 });
 
-test('same-user guard wipes cell when /api/me returns different userId', async () => {
+test('same-subject guard wipes cell when /api/me returns different subject', async () => {
 	const filePath = tmpAuthPath();
 	await preWriteCell(filePath, 'alice');
 	const { fetch } = createFetch({ apiMeRoute: apiMeOk('bob') });
@@ -429,7 +490,7 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 		if (url.endsWith('/api/me')) {
 			return jsonResponse({
 				user: { id: 'user-1', email: 'user-1@example.com' },
-				encryptionKeys: [...encryptionKeys],
+				localIdentity: { subject: 'user-1', keyring: [...keyring] },
 			});
 		}
 		if (url.endsWith('/api/something')) {

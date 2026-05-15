@@ -4,17 +4,20 @@
  * createLocalOwner: identity-scoped facade for authenticated browser
  * workspaces.
  *
- * One owner per signed-in user session. Every browser-local Yjs artifact
+ * One owner per signed-in subject. Every browser-local Yjs artifact
  * (IndexedDB database name, BroadcastChannel key, wipe namespace) is keyed by
- * `(userId, ydocGuid)`, and every encrypted resource is bound to the same
- * user's encryption keys. The owner is the one named place that knows the
- * pair.
+ * `(subject, ydocGuid)`, and every encrypted resource is bound to the same
+ * subject's keyring. The owner is the one named place that knows the pair.
  *
  * Daemons do not construct an owner: they call `attachEncryption` directly
- * with just `encryptionKeys` and persist via filesystem instead of IDB.
+ * with just `keyring` and persist via filesystem instead of IDB.
+ *
+ * The durable IndexedDB database prefix remains `epicenter.v1.user.` so
+ * existing encrypted data is still readable. Public API renames from
+ * `userId` to `subject`; the storage label stays stable for v1 data.
  */
 
-import type { EncryptionKeys } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import { clearDocument } from 'y-indexeddb';
 import type * as Y from 'yjs';
 import { attachBroadcastChannelWithKey } from './attach-broadcast-channel.js';
@@ -25,53 +28,56 @@ import { createOwnedYjsKey } from './local-yjs-key.js';
 export type LocalOwner = ReturnType<typeof createLocalOwner>;
 
 export function createLocalOwner({
-	userId,
-	encryptionKeys,
+	subject,
+	keyring,
 }: {
-	userId: string;
-	encryptionKeys: () => EncryptionKeys;
+	subject: string;
+	keyring: () => SubjectKeyring;
 }) {
 	return {
 		/**
 		 * Attach per-ydoc encrypted tables and KV. Thin delegate to the free
-		 * `attachEncryption(ydoc, { encryptionKeys })`; browsers go through
-		 * the owner so the encryption keys never have to be re-passed.
+		 * `attachEncryption(ydoc, { keyring })`; browsers go through the owner
+		 * so the keyring callback never has to be re-passed.
 		 */
 		attachEncryption(ydoc: Y.Doc) {
-			return attachEncryption(ydoc, { encryptionKeys });
+			return attachEncryption(ydoc, { keyring });
 		},
 		/**
 		 * Attach encrypted local IndexedDB persistence. The database name is
-		 * `createOwnedYjsKey(userId, ydoc.guid)` so other signed-in users on
-		 * the same browser profile cannot read this user's persisted CRDT
-		 * state.
+		 * `createOwnedYjsKey(subject, ydoc.guid)` so other signed-in subjects
+		 * on the same browser profile cannot read this subject's persisted
+		 * CRDT state.
 		 */
 		attachIndexedDb(ydoc: Y.Doc) {
 			return attachEncryptedIndexedDb(ydoc, {
-				databaseName: createOwnedYjsKey(userId, ydoc.guid),
-				encryptionKeys,
+				databaseName: createOwnedYjsKey(subject, ydoc.guid),
+				keyring,
 			});
 		},
 		/**
 		 * Attach owner-scoped cross-tab BroadcastChannel sync. Two signed-in
-		 * users in the same browser profile cannot exchange plaintext updates
-		 * through BroadcastChannel.
+		 * subjects in the same browser profile cannot exchange plaintext
+		 * updates through BroadcastChannel.
 		 */
 		attachBroadcastChannel(ydoc: Y.Doc) {
-			attachBroadcastChannelWithKey(ydoc, createOwnedYjsKey(userId, ydoc.guid));
+			attachBroadcastChannelWithKey(ydoc, createOwnedYjsKey(subject, ydoc.guid));
 		},
 		/**
 		 * Delete every owner-scoped IndexedDB database currently visible to
 		 * this browser profile, plus any explicitly named ones. Use from
-		 * `wipe()` paths on sign-out so the next signed-in user starts from a
-		 * clean slate.
+		 * `wipe()` paths on sign-out so the next signed-in subject starts
+		 * from a clean slate.
+		 *
+		 * The prefix is intentionally `epicenter.v1.user.{subject}.yjs.` so
+		 * v1 data written by older builds remains accessible.
 		 */
 		async wipeLocalYjsData(ydocGuids: Iterable<string> = []) {
-			const prefix = `epicenter.v1.user.${userId}.yjs.`;
+			const prefix = `epicenter.v1.user.${subject}.yjs.`;
 			const names = new Set<string>();
 
 			for (const guid of ydocGuids) {
-				names.add(createOwnedYjsKey(userId, guid));
+				names.add(createOwnedYjsKey(subject, guid));
 			}
 
 			if ('databases' in indexedDB) {

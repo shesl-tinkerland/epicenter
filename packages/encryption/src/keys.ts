@@ -1,33 +1,33 @@
 import { type } from 'arktype';
 
 /**
- * Transport-safe per-user encryption key delivered through auth sessions.
+ * Transport-safe per-subject key material delivered through auth sessions.
  *
  * The version is capped at 255 because encrypted blobs store the key version
- * in a single byte. `userKeyBase64` is actual key material, not a fingerprint
+ * in a single byte. `subjectKeyBase64` is actual key material, not a fingerprint
  * or public identifier, so callers should treat values matching this schema as
  * secrets.
  */
-export const EncryptionKey = type({
+export const SubjectKeyringEntry = type({
 	version: '1 <= number.integer <= 255',
-	userKeyBase64: 'string',
+	subjectKeyBase64: 'string',
 });
 
 /**
- * Non-empty keyring of user encryption keys.
+ * Non-empty keyring of per-subject keys.
  *
  * New writes use the highest version after workspace activation. Older entries
  * stay in the keyring so activation can decrypt old-version blobs and rewrite
  * them under the current version.
  */
-export const EncryptionKeys = type([
-	EncryptionKey,
+export const SubjectKeyring = type([
+	SubjectKeyringEntry,
 	'...',
-	EncryptionKey.array(),
+	SubjectKeyringEntry.array(),
 ]);
 
-export type EncryptionKey = typeof EncryptionKey.infer;
-export type EncryptionKeys = typeof EncryptionKeys.infer;
+export type SubjectKeyringEntry = typeof SubjectKeyringEntry.infer;
+export type SubjectKeyring = typeof SubjectKeyring.infer;
 
 /**
  * Reject versions that cannot be represented in the encrypted blob header.
@@ -42,7 +42,7 @@ export function assertEncryptionKeyVersion(version: number): void {
 }
 
 /**
- * Compare two encryption keyrings without creating a secret-bearing string.
+ * Compare two subject keyrings without creating a secret-bearing string.
  *
  * This is intentionally structural and order-independent. Use it for cache or
  * state dedup checks where the old `fingerprint` helper was tempting, but do
@@ -50,14 +50,14 @@ export function assertEncryptionKeyVersion(version: number): void {
  *
  * @example
  * ```typescript
- * if (!encryptionKeysEqual(nextKeys, currentKeys)) {
- *   currentKeys = nextKeys;
+ * if (!subjectKeyringsEqual(nextKeyring, currentKeyring)) {
+ *   currentKeyring = nextKeyring;
  * }
  * ```
  */
-export function encryptionKeysEqual(
-	left: EncryptionKeys,
-	right: EncryptionKeys,
+export function subjectKeyringsEqual(
+	left: SubjectKeyring,
+	right: SubjectKeyring,
 ): boolean {
 	if (left.length !== right.length) return false;
 	const sortedLeft = [...left].sort((a, b) => a.version - b.version);
@@ -67,7 +67,7 @@ export function encryptionKeysEqual(
 		return (
 			rightKey !== undefined &&
 			leftKey.version === rightKey.version &&
-			leftKey.userKeyBase64 === rightKey.userKeyBase64
+			leftKey.subjectKeyBase64 === rightKey.subjectKeyBase64
 		);
 	});
 }

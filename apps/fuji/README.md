@@ -25,25 +25,25 @@ Fuji's root workspace is built once per signed-in session by `createSession`. `o
 
 ```ts
 export function openFujiBrowser({
-  userId,
+  subject,
   peer,
   openWebSocket,
-  encryptionKeys,
+  keyring,
 }: {
-  userId: string;
+  subject: string;
   peer: PeerIdentity;
   openWebSocket?: (
     url: string | URL,
     protocols?: string[],
   ) => WebSocket | Promise<WebSocket>;
-  encryptionKeys: () => EncryptionKeys;
+  keyring: () => SubjectKeyring;
 }) {
   const rootYdoc = new Y.Doc({ guid: FUJI_WORKSPACE_ID, gc: false });
-  const encryption = attachEncryption(rootYdoc, { encryptionKeys });
+  const encryption = attachEncryption(rootYdoc, { keyring });
   const tables = encryption.attachTables(fujiTables);
   const kv = encryption.attachKv({});
-  const idb = encryption.attachIndexedDb(rootYdoc, { userId });
-  attachOwnedBroadcastChannel(rootYdoc, { userId });
+  const idb = encryption.attachIndexedDb(rootYdoc, { subject });
+  attachOwnedBroadcastChannel(rootYdoc, { subject });
   const actions = createFujiActions(tables);
   const collaboration = openCollaboration(rootYdoc, {
     url: roomWsUrl(APP_URLS.API, rootYdoc.guid),

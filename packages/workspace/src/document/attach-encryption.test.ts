@@ -1,6 +1,6 @@
 /**
- * attachEncryption tests: lazy encryptionKeys callback wires the keyring at
- * every registration site (table, kv). Plaintext mode does not exist:
+ * attachEncryption tests: lazy keyring callback wires the workspace keyring
+ * at every registration site (table, kv). Plaintext mode does not exist:
  * registration always activates encryption.
  *
  * Encrypted IndexedDB and owner-scoped behavior live on `createLocalOwner`;
@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import type { EncryptionKeys } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import { bytesToBase64 } from '@epicenter/encryption';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { type } from 'arktype';
@@ -16,17 +16,17 @@ import * as Y from 'yjs';
 import { attachEncryption } from './attach-encryption.js';
 import { defineTable } from './define-table.js';
 
-function toEncryptionKeys(key: Uint8Array): EncryptionKeys {
-	return [{ version: 1, userKeyBase64: bytesToBase64(key) }];
+function toKeyring(key: Uint8Array): SubjectKeyring {
+	return [{ version: 1, subjectKeyBase64: bytesToBase64(key) }];
 }
 
 const encryptedRowDefinition = defineTable(
 	type({ id: 'string', title: 'string', _v: '1' }),
 );
 
-function setup(keys: EncryptionKeys = toEncryptionKeys(randomBytes(32))) {
+function setup(keyring: SubjectKeyring = toKeyring(randomBytes(32))) {
 	const ydoc = new Y.Doc({ guid: 'enc-test', gc: false });
-	const encryption = attachEncryption(ydoc, { encryptionKeys: () => keys });
+	const encryption = attachEncryption(ydoc, { keyring: () => keyring });
 	const tableA = encryption.attachTable('a', encryptedRowDefinition);
 	const tableB = encryption.attachTable('b', encryptedRowDefinition);
 	return { ydoc, tableA, tableB, encryption };
@@ -49,16 +49,16 @@ describe('attachEncryption', () => {
 		});
 	});
 
-	test('late-registered store activates via encryptionKeys at registration time', () => {
-		const keys = toEncryptionKeys(randomBytes(32));
+	test('late-registered store activates via keyring callback at registration time', () => {
+		const keyring = toKeyring(randomBytes(32));
 		const ydoc = new Y.Doc({ guid: 'enc-late-register', gc: false });
-		const encryption = attachEncryption(ydoc, { encryptionKeys: () => keys });
+		const encryption = attachEncryption(ydoc, { keyring: () => keyring });
 
 		// Initial table is registered.
 		const earlyTable = encryption.attachTable('early', encryptedRowDefinition);
 		earlyTable.set({ id: '1', title: 'Early', _v: 1 });
 
-		// A later registration also calls encryptionKeys() and is encrypted from the start.
+		// A later registration also calls keyring() and is encrypted from the start.
 		const lateTable = encryption.attachTable('late', encryptedRowDefinition);
 
 		lateTable.set({ id: '1', title: 'Written after late register', _v: 1 });
@@ -69,10 +69,10 @@ describe('attachEncryption', () => {
 		});
 	});
 
-	test('encryptionKeys throwing at registration surfaces the throw', () => {
+	test('keyring callback throwing at registration surfaces the throw', () => {
 		const ydoc = new Y.Doc({ guid: 'enc-no-keys', gc: false });
 		const encryption = attachEncryption(ydoc, {
-			encryptionKeys: () => {
+			keyring: () => {
 				throw new Error('not signed-in');
 			},
 		});
@@ -82,9 +82,9 @@ describe('attachEncryption', () => {
 	});
 
 	test('attachReadonlyTable reads encrypted rows without exposing writes', () => {
-		const keys = toEncryptionKeys(randomBytes(32));
+		const keyring = toKeyring(randomBytes(32));
 		const ydoc = new Y.Doc({ guid: 'enc-readonly-table', gc: false });
-		const encryption = attachEncryption(ydoc, { encryptionKeys: () => keys });
+		const encryption = attachEncryption(ydoc, { keyring: () => keyring });
 		const definition = defineTable(
 			type({ id: 'string', title: 'string', _v: '1' }),
 		);
@@ -107,9 +107,9 @@ describe('attachEncryption', () => {
 	});
 
 	test('attachReadonlyTables returns readonly helpers keyed by definition', () => {
-		const keys = toEncryptionKeys(randomBytes(32));
+		const keyring = toKeyring(randomBytes(32));
 		const ydoc = new Y.Doc({ guid: 'enc-readonly-tables', gc: false });
-		const encryption = attachEncryption(ydoc, { encryptionKeys: () => keys });
+		const encryption = attachEncryption(ydoc, { keyring: () => keyring });
 		const definition = defineTable(
 			type({ id: 'string', title: 'string', _v: '1' }),
 		);

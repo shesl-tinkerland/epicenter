@@ -8,8 +8,9 @@
  * - `resolveBearerUser`: cheap resolver used by `requireOAuthUser` for every
  *   protected app resource (`/ai/*`, `/rooms/*`,
  *   `/api/billing/*`, `/api/assets/*`).
- * - `resolveBearerIdentity`: full resolver used by `/api/me`, adding
- *   per-user encryption keys to the returned payload.
+ * - `resolveBearerIdentity`: full resolver used by `/api/me`, adding the
+ *   derived local workspace identity (subject + per-subject keyring) to the
+ *   returned payload.
  *
  * HTTP and WebSocket wire-format coverage lives in `oauth-resource.test.ts`.
  */
@@ -17,7 +18,7 @@
 import { expect, test } from 'bun:test';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
-import type { EncryptionKeys } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { jwt } from 'better-auth/plugins';
@@ -32,10 +33,10 @@ import {
 	resolveBearerUser,
 } from './resource-boundary.js';
 
-const encryptionKeys: EncryptionKeys = [
+const keyring: SubjectKeyring = [
 	{
 		version: 1,
-		userKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+		subjectKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 	},
 ];
 let nextBoundaryTestPort = 51_000 + Math.floor(Math.random() * 10_000);
@@ -186,7 +187,7 @@ test('resolveBearerUser rejects tokens whose user no longer exists as InvalidTok
 // resolveBearerIdentity
 // ---------------------------------------------------------------------------
 
-test('resolveBearerIdentity returns user + encryption keys for a valid token', async () => {
+test('resolveBearerIdentity returns user + local workspace identity for a valid token', async () => {
 	const setup = createBoundaryTestServer();
 	try {
 		const { accessToken } = await issueOAuthTokens(setup, {
@@ -198,7 +199,8 @@ test('resolveBearerIdentity returns user + encryption keys for a valid token', a
 
 		expect(error).toBeNull();
 		expect(data?.user.email).toBe('boundary-test@example.com');
-		expect(data?.encryptionKeys).toEqual(encryptionKeys);
+		expect(data?.localIdentity.subject).toBe(data?.user.id);
+		expect(data?.localIdentity.keyring).toEqual(keyring);
 	} finally {
 		setup.server.stop(true);
 	}
@@ -216,8 +218,8 @@ test('resolveBearerIdentity short-circuits findUserById and key derivation on ve
 		findUserById: async () => {
 			throw new Error('findUserById should not run');
 		},
-		deriveUserEncryptionKeys: async () => {
-			throw new Error('deriveUserEncryptionKeys should not run');
+		deriveSubjectKeyring: async () => {
+			throw new Error('deriveSubjectKeyring should not run');
 		},
 	});
 
@@ -310,6 +312,6 @@ async function callIdentity(
 ) {
 	return resolveBearerIdentity({
 		...commonResolverDeps(setup, accessToken, overrides),
-		deriveUserEncryptionKeys: async () => encryptionKeys,
+		deriveSubjectKeyring: async () => keyring,
 	});
 }

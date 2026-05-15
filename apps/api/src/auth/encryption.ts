@@ -1,14 +1,14 @@
 import { env } from 'cloudflare:workers';
 import {
-	deriveUserEncryptionKeys as deriveUserEncryptionKeysFromSecrets,
-	type EncryptionKeys,
-	type EncryptionSecrets,
-	parseEncryptionSecrets,
+	deriveSubjectKeyring as deriveSubjectKeyringFromRoot,
+	parseRootKeyring,
+	type RootKeyring,
+	type SubjectKeyring,
 } from '@epicenter/encryption';
 
-let keyring: EncryptionSecrets;
+let rootKeyring: RootKeyring;
 try {
-	keyring = parseEncryptionSecrets(env.ENCRYPTION_SECRETS);
+	rootKeyring = parseRootKeyring(env.ENCRYPTION_SECRETS);
 } catch (error) {
 	throw new Error(
 		`ENCRYPTION_SECRETS is missing or malformed. Expected format: "2:base64Secret2,1:base64Secret1" (comma-separated version:secret pairs). Generate a secret with: openssl rand -base64 32\n\nValidation error:\n${error instanceof Error ? error.message : String(error)}`,
@@ -16,17 +16,17 @@ try {
 }
 
 /**
- * Derive the encryption keyring attached to Epicenter auth-session responses.
+ * Derive the per-subject keyring attached to Epicenter auth-session responses.
  *
  * The API owns env access and fail-fast worker startup. `@epicenter/encryption`
  * owns parsing and HKDF derivation, keeping workspace encryption separate from
  * Better Auth's cookie and token secrets.
  */
-export async function deriveUserEncryptionKeys(
-	userId: string,
-): Promise<EncryptionKeys> {
-	return deriveUserEncryptionKeysFromSecrets({
-		secrets: keyring,
-		userId,
+export async function deriveSubjectKeyring(
+	subject: string,
+): Promise<SubjectKeyring> {
+	return deriveSubjectKeyringFromRoot({
+		rootKeyring,
+		subject,
 	});
 }

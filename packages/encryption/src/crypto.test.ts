@@ -16,32 +16,32 @@ import { describe, expect, test } from 'bun:test';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import {
 	base64ToBytes,
-	buildEncryptionKeys,
+	buildSubjectKeyring,
 	bytesToBase64,
 	decryptBytes,
 	decryptValue,
 	deriveKeyFromPassword,
-	deriveUserEncryptionKeys,
+	deriveSubjectKeyring,
 	deriveWorkspaceKey,
 	type EncryptedBlob,
 	encryptBytes,
-	encryptionKeysEqual,
 	encryptValue,
-	formatEncryptionSecrets,
+	formatRootKeyring,
 	generateSalt,
 	getKeyVersion,
 	isEncryptedBlob,
 	PBKDF2_ITERATIONS_DEFAULT,
-	parseEncryptionSecrets,
+	parseRootKeyring,
+	subjectKeyringsEqual,
 } from './index.js';
 
 async function deriveWorkspaceKeyWithWebCrypto(
-	userKey: Uint8Array,
+	subjectKey: Uint8Array,
 	workspaceId: string,
 ): Promise<Uint8Array> {
 	const hkdfKey = await crypto.subtle.importKey(
 		'raw',
-		new Uint8Array(userKey).buffer,
+		new Uint8Array(subjectKey).buffer,
 		'HKDF',
 		false,
 		['deriveBits'],
@@ -96,8 +96,8 @@ describe('encryptValue and decryptValue', () => {
 
 		expect(() => encryptValue('test', key, undefined, 0)).toThrow();
 		expect(() => encryptValue('test', key, undefined, 256)).toThrow();
-		expect(() => buildEncryptionKeys(key, 0)).toThrow();
-		expect(() => buildEncryptionKeys(key, 256)).toThrow();
+		expect(() => buildSubjectKeyring(key, 0)).toThrow();
+		expect(() => buildSubjectKeyring(key, 256)).toThrow();
 	});
 
 	test('invalid key size throws', () => {
@@ -259,32 +259,36 @@ describe('base64 helpers', () => {
 
 describe('deriveWorkspaceKey', () => {
 	test('same inputs produce same key and different labels produce different keys', () => {
-		const userKey = randomBytes(32);
+		const subjectKey = randomBytes(32);
 
-		expect(deriveWorkspaceKey(userKey, 'tab-manager')).toEqual(
-			deriveWorkspaceKey(userKey, 'tab-manager'),
+		expect(deriveWorkspaceKey(subjectKey, 'tab-manager')).toEqual(
+			deriveWorkspaceKey(subjectKey, 'tab-manager'),
 		);
-		expect(deriveWorkspaceKey(userKey, 'tab-manager')).not.toEqual(
-			deriveWorkspaceKey(userKey, 'whispering'),
+		expect(deriveWorkspaceKey(subjectKey, 'tab-manager')).not.toEqual(
+			deriveWorkspaceKey(subjectKey, 'whispering'),
 		);
 	});
 
 	test('matches Web Crypto HKDF output for fixed fixtures', async () => {
 		const fixtures = [
 			{
-				userKey: base64ToBytes('AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='),
+				subjectKey: base64ToBytes(
+					'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+				),
 				workspaceId: 'tab-manager',
 			},
 			{
-				userKey: base64ToBytes('8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8='),
+				subjectKey: base64ToBytes(
+					'8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8=',
+				),
 				workspaceId: 'workspace:with:colons',
 			},
 		];
 
 		for (const fixture of fixtures) {
-			expect(deriveWorkspaceKey(fixture.userKey, fixture.workspaceId)).toEqual(
+			expect(deriveWorkspaceKey(fixture.subjectKey, fixture.workspaceId)).toEqual(
 				await deriveWorkspaceKeyWithWebCrypto(
-					fixture.userKey,
+					fixture.subjectKey,
 					fixture.workspaceId,
 				),
 			);
@@ -315,54 +319,54 @@ describe('deriveKeyFromPassword and generateSalt', () => {
 	});
 });
 
-describe('buildEncryptionKeys and encryptionKeysEqual', () => {
-	test('buildEncryptionKeys returns transport keys that round trip through base64', () => {
-		const userKey = randomBytes(32);
-		const keys = buildEncryptionKeys(userKey, 3);
+describe('buildSubjectKeyring and subjectKeyringsEqual', () => {
+	test('buildSubjectKeyring returns transport keys that round trip through base64', () => {
+		const subjectKey = randomBytes(32);
+		const keyring = buildSubjectKeyring(subjectKey, 3);
 
-		expect(keys).toEqual([
-			{ version: 3, userKeyBase64: bytesToBase64(userKey) },
+		expect(keyring).toEqual([
+			{ version: 3, subjectKeyBase64: bytesToBase64(subjectKey) },
 		]);
-		expect(base64ToBytes(keys[0].userKeyBase64)).toEqual(userKey);
+		expect(base64ToBytes(keyring[0].subjectKeyBase64)).toEqual(subjectKey);
 	});
 
-	test('encryptionKeysEqual ignores order and compares key material', () => {
+	test('subjectKeyringsEqual ignores order and compares key material', () => {
 		const keyV1 = bytesToBase64(randomBytes(32));
 		const keyV2 = bytesToBase64(randomBytes(32));
 
 		expect(
-			encryptionKeysEqual(
+			subjectKeyringsEqual(
 				[
-					{ version: 1, userKeyBase64: keyV1 },
-					{ version: 2, userKeyBase64: keyV2 },
+					{ version: 1, subjectKeyBase64: keyV1 },
+					{ version: 2, subjectKeyBase64: keyV2 },
 				],
 				[
-					{ version: 2, userKeyBase64: keyV2 },
-					{ version: 1, userKeyBase64: keyV1 },
+					{ version: 2, subjectKeyBase64: keyV2 },
+					{ version: 1, subjectKeyBase64: keyV1 },
 				],
 			),
 		).toBe(true);
 		expect(
-			encryptionKeysEqual(
-				[{ version: 1, userKeyBase64: keyV1 }],
-				[{ version: 1, userKeyBase64: keyV2 }],
+			subjectKeyringsEqual(
+				[{ version: 1, subjectKeyBase64: keyV1 }],
+				[{ version: 1, subjectKeyBase64: keyV2 }],
 			),
 		).toBe(false);
 	});
 });
 
-describe('parseEncryptionSecrets and formatEncryptionSecrets', () => {
-	test('parseEncryptionSecrets sorts versions descending', () => {
-		expect(parseEncryptionSecrets('1:old,3:new,2:middle')).toEqual([
+describe('parseRootKeyring and formatRootKeyring', () => {
+	test('parseRootKeyring sorts versions descending', () => {
+		expect(parseRootKeyring('1:old,3:new,2:middle')).toEqual([
 			{ version: 3, secret: 'new' },
 			{ version: 2, secret: 'middle' },
 			{ version: 1, secret: 'old' },
 		]);
 	});
 
-	test('formatEncryptionSecrets emits canonical descending order', () => {
+	test('formatRootKeyring emits canonical descending order', () => {
 		expect(
-			formatEncryptionSecrets([
+			formatRootKeyring([
 				{ version: 1, secret: 'old' },
 				{ version: 2, secret: 'new' },
 			]),
@@ -370,33 +374,31 @@ describe('parseEncryptionSecrets and formatEncryptionSecrets', () => {
 	});
 
 	test('secret values may contain colons', () => {
-		expect(parseEncryptionSecrets('1:secret:with:colons')).toEqual([
+		expect(parseRootKeyring('1:secret:with:colons')).toEqual([
 			{ version: 1, secret: 'secret:with:colons' },
 		]);
 	});
 
 	test('round trip preserves canonical representation', () => {
-		const formatted = formatEncryptionSecrets(
-			parseEncryptionSecrets('1:old,2:new'),
-		);
+		const formatted = formatRootKeyring(parseRootKeyring('1:old,2:new'));
 
 		expect(formatted).toBe('2:new,1:old');
 	});
 
 	test('malformed entries throw', () => {
-		expect(() => parseEncryptionSecrets('')).toThrow();
-		expect(() => parseEncryptionSecrets('1')).toThrow();
-		expect(() => parseEncryptionSecrets(':secret')).toThrow();
-		expect(() => parseEncryptionSecrets('1:')).toThrow();
-		expect(() => parseEncryptionSecrets('1:secret,with,comma')).toThrow();
+		expect(() => parseRootKeyring('')).toThrow();
+		expect(() => parseRootKeyring('1')).toThrow();
+		expect(() => parseRootKeyring(':secret')).toThrow();
+		expect(() => parseRootKeyring('1:')).toThrow();
+		expect(() => parseRootKeyring('1:secret,with,comma')).toThrow();
 	});
 
 	test('duplicate versions and out of range versions throw', () => {
-		expect(() => parseEncryptionSecrets('2:alpha,2:bravo')).toThrow();
-		expect(() => parseEncryptionSecrets('0:secret')).toThrow();
-		expect(() => parseEncryptionSecrets('256:secret')).toThrow();
+		expect(() => parseRootKeyring('2:alpha,2:bravo')).toThrow();
+		expect(() => parseRootKeyring('0:secret')).toThrow();
+		expect(() => parseRootKeyring('256:secret')).toThrow();
 		expect(() =>
-			formatEncryptionSecrets([
+			formatRootKeyring([
 				{ version: 1, secret: 'a' },
 				{ version: 1, secret: 'b' },
 			]),
@@ -404,27 +406,27 @@ describe('parseEncryptionSecrets and formatEncryptionSecrets', () => {
 	});
 });
 
-describe('deriveUserEncryptionKeys', () => {
-	test('derives one transport key for every secret version', async () => {
-		const keys = await deriveUserEncryptionKeys({
-			secrets: parseEncryptionSecrets('2:new,1:old'),
-			userId: 'user-1',
+describe('deriveSubjectKeyring', () => {
+	test('derives one transport key for every root key version', async () => {
+		const keyring = await deriveSubjectKeyring({
+			rootKeyring: parseRootKeyring('2:new,1:old'),
+			subject: 'user-1',
 		});
 
-		expect(keys).toHaveLength(2);
-		expect(keys[0]?.version).toBe(2);
-		expect(keys[1]?.version).toBe(1);
-		expect(base64ToBytes(keys[0]?.userKeyBase64 ?? '').length).toBe(32);
+		expect(keyring).toHaveLength(2);
+		expect(keyring[0]?.version).toBe(2);
+		expect(keyring[1]?.version).toBe(1);
+		expect(base64ToBytes(keyring[0]?.subjectKeyBase64 ?? '').length).toBe(32);
 	});
 
-	test('same secrets and user id derive the same transport keys', async () => {
+	test('same root keyring and subject derive the same transport keys', async () => {
 		const input = {
-			secrets: parseEncryptionSecrets('1:secret'),
-			userId: 'user-1',
+			rootKeyring: parseRootKeyring('1:secret'),
+			subject: 'user-1',
 		};
 
-		expect(await deriveUserEncryptionKeys(input)).toEqual(
-			await deriveUserEncryptionKeys(input),
+		expect(await deriveSubjectKeyring(input)).toEqual(
+			await deriveSubjectKeyring(input),
 		);
 	});
 });

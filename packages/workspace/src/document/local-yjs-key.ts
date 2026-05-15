@@ -1,3 +1,7 @@
+// Durable browser-local prefix. Kept stable across the user -> subject
+// rename so existing IndexedDB databases remain readable; the public
+// argument name moved from `userId` to `subject` while the stored label
+// did not change.
 const LOCAL_YJS_KEY_PREFIX = 'epicenter.v1.user';
 
 /**
@@ -6,6 +10,6 @@ const LOCAL_YJS_KEY_PREFIX = 'epicenter.v1.user';
  * This key is a local runtime name only. It does not change `ydoc.guid`, sync
  * room names, child document GUIDs, or encryption workspace labels.
  */
-export function createOwnedYjsKey(userId: string, ydocGuid: string): string {
-	return `${LOCAL_YJS_KEY_PREFIX}.${userId}.yjs.${ydocGuid}`;
+export function createOwnedYjsKey(subject: string, ydocGuid: string): string {
+	return `${LOCAL_YJS_KEY_PREFIX}.${subject}.yjs.${ydocGuid}`;
 }

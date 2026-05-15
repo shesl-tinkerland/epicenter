@@ -7,8 +7,8 @@
  * at `/auth/oauth2/token` with PKCE. Returns a 3-field `OAuthTokenGrant`.
  *
  * The launcher is concerned only with the OAuth dance. The caller pairs
- * the returned grant with `GET /api/me` to build the `unlock` section of
- * `PersistedAuth`.
+ * the returned grant with `GET /api/me` to build the `localIdentity` section
+ * of `PersistedAuth`.
  */
 
 import * as readline from 'node:readline';
@@ -20,7 +20,10 @@ import {
 } from 'wellcrafted/error';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { OAuthTokenGrant } from '../auth-types.js';
-import type { AuthFetch } from '../create-oauth-app-auth.js';
+import type {
+	AuthFetch,
+	OAuthSignInLauncher,
+} from '../create-oauth-app-auth.js';
 import { parseOAuthTokenGrant } from '../oauth-token-response.js';
 
 export const OobLauncherError = defineErrors({
@@ -48,14 +51,6 @@ export const OobLauncherError = defineErrors({
 });
 
 export type OobLauncherError = InferErrors<typeof OobLauncherError>;
-
-/**
- * Match the `OAuthSignInLauncher` shape `createOAuthAppAuth` consumes.
- * Declared here as well so this module is independently usable.
- */
-export type OAuthSignInLauncher = {
-	startSignIn(): Promise<Result<OAuthTokenGrant | null, unknown>>;
-};
 
 const DEFAULT_SCOPES = [
 	'openid',

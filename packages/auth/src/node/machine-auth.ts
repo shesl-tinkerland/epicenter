@@ -2,7 +2,7 @@
  * Machine auth API surface for CLI and daemons.
  *
  * `loginWithOob` runs the OOB OAuth dance once, fetches `/api/me` to derive
- * the local unlock bundle, and persists a `PersistedAuth` cell to
+ * the local workspace identity, and persists a `PersistedAuth` cell to
  * `~/.epicenter/auth.json` (mode 0o600). `status` and `logout` read that
  * cell and reach the server through a regular `createOAuthAppAuth` client.
  * `createMachineAuthClient` is the daemon entry point: it loads the cell,
@@ -18,8 +18,8 @@
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
-import type { EncryptionKeys } from '@epicenter/encryption';
-import { EncryptionKeys as EncryptionKeysSchema } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
+import { SubjectKeyring as SubjectKeyringSchema } from '@epicenter/encryption';
 import { type } from 'arktype';
 import {
 	defineErrors,
@@ -59,13 +59,17 @@ export type MachineAuthRequestError = InferErrors<
  */
 export type WorkspaceIdentity = {
 	user: { id: string; email: string };
-	encryptionKeys: EncryptionKeys;
+	keyring: SubjectKeyring;
 };
 
 const ApiMeResponse = type({
 	'+': 'delete',
 	user: AuthUser,
-	encryptionKeys: EncryptionKeysSchema,
+	localIdentity: type({
+		'+': 'delete',
+		subject: 'string',
+		keyring: SubjectKeyringSchema,
+	}),
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
 
@@ -95,8 +99,8 @@ export type StatusResult =
 export type LogoutResult = { status: 'signedOut' } | { status: 'loggedOut' };
 
 /**
- * Run the OOB OAuth dance, call `/api/me` for the unlock bundle, persist
- * `PersistedAuth`, and return the identity for the CLI to display.
+ * Run the OOB OAuth dance, call `/api/me` for the local workspace identity,
+ * persist `PersistedAuth`, and return the identity for the CLI to display.
  */
 export async function loginWithOob({
 	baseURL = EPICENTER_API_URL,
@@ -149,7 +153,7 @@ export async function loginWithOob({
 
 	const cell: PersistedAuth = {
 		grant,
-		unlock: { userId: me.user.id, encryptionKeys: me.encryptionKeys },
+		localIdentity: me.localIdentity,
 	};
 	const saved = await saveMachineTokens(
 		cell,
@@ -160,7 +164,7 @@ export async function loginWithOob({
 	return Ok({
 		identity: {
 			user: { id: me.user.id, email: me.user.email },
-			encryptionKeys: me.encryptionKeys,
+			keyring: me.localIdentity.keyring,
 		},
 	});
 }
@@ -168,7 +172,7 @@ export async function loginWithOob({
 /**
  * Load the persisted cell and verify it by hitting `/api/me` through a
  * regular `createOAuthAppAuth` client (so refresh-on-401 fires automatically
- * and the same-user guard wipes the cell on mismatch). Returns `unverified`
+ * and the same-subject guard wipes the cell on mismatch). Returns `unverified`
  * on network failures so the CLI can still report the cached identity.
  */
 export async function status({
@@ -187,7 +191,7 @@ export async function status({
 	});
 	if (loaded.error) return Err(loaded.error);
 	if (!loaded.data) return Ok({ status: 'signedOut' as const });
-	const cachedUnlock = loaded.data.unlock;
+	const cachedLocalIdentity = loaded.data.localIdentity;
 
 	const client = await createMachineAuthClient({
 		baseURL,
@@ -206,8 +210,8 @@ export async function status({
 		return Ok({
 			status: 'unverified' as const,
 			identity: {
-				user: { id: cachedUnlock.userId, email: '' },
-				encryptionKeys: cachedUnlock.encryptionKeys,
+				user: { id: cachedLocalIdentity.subject, email: '' },
+				keyring: cachedLocalIdentity.keyring,
 			},
 		});
 	}
@@ -229,19 +233,19 @@ export async function status({
 			status: 'valid' as const,
 			identity: {
 				user: { id: me.user.id, email: me.user.email },
-				encryptionKeys: me.encryptionKeys,
+				keyring: me.localIdentity.keyring,
 			},
 		});
 	}
 
 	// Network or auth failure. Cell may still be valid for local decrypt; the
-	// underlying auth client will have wiped it on same-user mismatch or
+	// underlying auth client will have wiped it on same-subject mismatch or
 	// reauth-required already. Email is unknown without /api/me.
 	return Ok({
 		status: 'unverified' as const,
 		identity: {
-			user: { id: cachedUnlock.userId, email: '' },
-			encryptionKeys: cachedUnlock.encryptionKeys,
+			user: { id: cachedLocalIdentity.subject, email: '' },
+			keyring: cachedLocalIdentity.keyring,
 		},
 	});
 }

@@ -1,22 +1,23 @@
 import {
 	base64ToBytes,
 	deriveWorkspaceKey,
-	type EncryptionKeys,
+	type SubjectKeyring,
 } from '@epicenter/encryption';
 
 /**
- * Derive a versioned HKDF keyring for a workspace from the owner's user keys.
+ * Derive a versioned HKDF keyring for a workspace from the owner's subject
+ * keyring.
  * Each version maps to a per-workspace key, used to activate encrypted stores
  * and to seed the encrypted IndexedDB provider.
  */
 export function deriveWorkspaceKeyring(
-	keys: EncryptionKeys,
+	keyring: SubjectKeyring,
 	workspaceId: string,
 ): Map<number, Uint8Array> {
-	const keyring = new Map<number, Uint8Array>();
-	for (const { version, userKeyBase64 } of keys) {
-		const userKey = base64ToBytes(userKeyBase64);
-		keyring.set(version, deriveWorkspaceKey(userKey, workspaceId));
+	const workspaceKeyring = new Map<number, Uint8Array>();
+	for (const { version, subjectKeyBase64 } of keyring) {
+		const subjectKey = base64ToBytes(subjectKeyBase64);
+		workspaceKeyring.set(version, deriveWorkspaceKey(subjectKey, workspaceId));
 	}
-	return keyring;
+	return workspaceKeyring;
 }

@@ -3,8 +3,8 @@
  *
  * The current-user endpoint is the single Epicenter identity surface
  * clients fetch at sign-in and at cold-boot when online. It returns
- * { user: AuthUser, encryptionKeys: EncryptionKeys }; unauthenticated or
- * under-scoped callers get RFC 6750-shaped errors via
+ * { user: AuthUser, localIdentity: LocalWorkspaceIdentity }; unauthenticated
+ * or under-scoped callers get RFC 6750-shaped errors via
  * createOAuthUnauthorizedResourceResponse.
  *
  * Built on a minimal memory-adapter Better Auth instance plus the pure bearer
@@ -14,7 +14,7 @@
 import { expect, test } from 'bun:test';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
-import type { EncryptionKeys } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { jwt } from 'better-auth/plugins';
@@ -27,15 +27,15 @@ import {
 	issueOAuthTokens,
 } from './test-helpers/oauth.js';
 
-const encryptionKeys: EncryptionKeys = [
+const keyring: SubjectKeyring = [
 	{
 		version: 1,
-		userKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+		subjectKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 	},
 ];
 let nextApiMeTestPort = 47_000 + Math.floor(Math.random() * 4_000);
 
-test('GET /api/me returns user + encryption keys for a valid scoped bearer', async () => {
+test('GET /api/me returns user + local workspace identity for a valid scoped bearer', async () => {
 	const setup = createApiMeTestServer();
 	try {
 		const { accessToken } = await issueOAuthTokens(setup, {
@@ -50,11 +50,12 @@ test('GET /api/me returns user + encryption keys for a valid scoped bearer', asy
 		expect(response.status).toBe(200);
 		const body = (await response.json()) as {
 			user: { id: string; email: string };
-			encryptionKeys: EncryptionKeys;
+			localIdentity: { subject: string; keyring: SubjectKeyring };
 		};
 		expect(body.user.email).toBe('api-me-test@example.com');
 		expect(typeof body.user.id).toBe('string');
-		expect(body.encryptionKeys).toEqual(encryptionKeys);
+		expect(body.localIdentity.subject).toBe(body.user.id);
+		expect(body.localIdentity.keyring).toEqual(keyring);
 	} finally {
 		setup.server.stop(true);
 	}
@@ -170,7 +171,7 @@ function createApiMeTestServer() {
 					verifyOAuthAccessToken: resource.getActions().verifyAccessToken,
 					findUserById: async (userId) =>
 						db.user?.find((u) => u.id === userId) ?? null,
-					deriveUserEncryptionKeys: async () => encryptionKeys,
+					deriveSubjectKeyring: async () => keyring,
 				});
 				if (error) return createOAuthUnauthorizedResourceResponse(c, error);
 				return c.json(identity);

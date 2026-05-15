@@ -47,15 +47,17 @@ prints an authorize URL, you sign in on the hosted portal, and paste the
 displayed code back into the terminal. On success the CLI persists the
 auth cell to `~/.epicenter/auth.json` (file mode `0o600`).
 
-The persisted shape is `PersistedAuth = { grant, unlock }`:
+The persisted shape is `PersistedAuth = { grant, localIdentity }`:
 
 - `grant` (`{ accessToken, refreshToken, accessTokenExpiresAt }`) is the
   online server-access material. The refresh token rotates on every
   refresh. `epicenter auth logout` clears the local file first, then makes a
   best-effort RFC 7009 revoke call.
-- `unlock` (`{ userId, encryptionKeys }`) is the local capability to
+- `localIdentity` (`{ subject, keyring }`) is the local capability to
   decrypt workspace Yjs data without a network roundtrip. Loaded once at
   sign-in from `GET /api/me` and re-confirmed at cold-boot when online.
+  Older cells with `{ unlock: { userId, encryptionKeys } }` migrate in
+  place on first read.
 
 Profile data (the signed-in email) is fetched fresh from `/api/me` and
 held in memory only; cold-boot offline shows a generic "Account" label

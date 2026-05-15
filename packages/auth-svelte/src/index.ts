@@ -4,7 +4,7 @@ export {
 	type AuthState,
 	AuthUser,
 	type CreateOAuthAppAuthConfig,
-	type LocalUnlockBundle,
+	type LocalWorkspaceIdentity,
 	type OAuthSignInLauncher,
 	type OAuthTokenGrant,
 	PersistedAuth,

@@ -2,34 +2,37 @@
  * Auth Client Contract Tests
  *
  * Covers:
- * - PersistedAuth = { grant, unlock } shape
+ * - PersistedAuth = { grant, localIdentity } shape
  * - AuthState three variants; profile data is absent from state
- * - Refresh writes only grant, unlock byte-identical
- * - Same-user guard at /api/me response
- * - Network gate: bearer not attached until /api/me confirms same user
- * - Cold-boot offline keeps signed-in with unlock and no profile field
+ * - Refresh writes only grant, localIdentity byte-identical
+ * - Same-subject guard at /api/me response
+ * - Network gate: bearer not attached until /api/me confirms same subject
+ * - Cold-boot offline keeps signed-in with localIdentity and no profile field
+ * - Legacy `{ grant, unlock: { userId, encryptionKeys } }` cells migrate
+ *   transparently to `{ grant, localIdentity: { subject, keyring } }`
  */
 
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import { describe, expect, test } from 'bun:test';
 import { Ok } from 'wellcrafted/result';
 import type {
 	AuthClient,
-	LocalUnlockBundle,
+	LocalWorkspaceIdentity,
 	OAuthTokenGrant,
 	PersistedAuth,
 	PersistedAuthStorage,
 } from './index.js';
-import { createOAuthAppAuth } from './index.js';
+import { createOAuthAppAuth, PersistedAuth as PersistedAuthSchema } from './index.js';
 
 const now = 1_000_000;
 
-const encryptionKeys = [
+const keyring: SubjectKeyring = [
 	{
 		version: 1,
-		userKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+		subjectKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 	},
-] satisfies LocalUnlockBundle['encryptionKeys'];
+];
 
 function grant({
 	accessToken = 'access-token',
@@ -40,15 +43,15 @@ function grant({
 }
 
 function cell({
-	userId = 'user-1',
+	subject = 'user-1',
 	grant: g = grant(),
 }: {
-	userId?: string;
+	subject?: string;
 	grant?: OAuthTokenGrant;
 } = {}): PersistedAuth {
 	return {
 		grant: g,
-		unlock: { userId, encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject, keyring: [...keyring] },
 	};
 }
 
@@ -97,10 +100,10 @@ function oauthTokenResponse({
 	return json(body);
 }
 
-function apiMeBody(userId = 'user-1') {
+function apiMeBody(subject = 'user-1') {
 	return {
-		user: { id: userId, email: `${userId}@example.com` },
-		encryptionKeys: [...encryptionKeys],
+		user: { id: subject, email: `${subject}@example.com` },
+		localIdentity: { subject, keyring: [...keyring] },
 	};
 }
 
@@ -129,7 +132,7 @@ test('signed-out by default; AuthClient satisfies the public contract', () => {
 	auth[Symbol.dispose]();
 });
 
-test('cold-boot signed-in exposes unlock immediately without profile data', () => {
+test('cold-boot signed-in exposes localIdentity immediately without profile data', () => {
 	const setup = createStorage(cell());
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -141,7 +144,7 @@ test('cold-boot signed-in exposes unlock immediately without profile data', () =
 
 	expect(auth.state).toEqual({
 		status: 'signed-in',
-		unlock: { userId: 'user-1', encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject: 'user-1', keyring: [...keyring] },
 	});
 	expect('email' in auth.state).toBe(false);
 	auth[Symbol.dispose]();
@@ -178,7 +181,7 @@ test('startSignIn calls /api/me and writes both sections', async () => {
 			refreshToken: 'sign-in-refresh',
 			accessTokenExpiresAt: now + 3_600_000,
 		},
-		unlock: { userId: 'user-1', encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject: 'user-1', keyring: [...keyring] },
 	});
 	expect(auth.state).toMatchObject({
 		status: 'signed-in',
@@ -187,7 +190,7 @@ test('startSignIn calls /api/me and writes both sections', async () => {
 	auth[Symbol.dispose]();
 });
 
-test('refresh writes ONLY the grant section; unlock byte-identical', async () => {
+test('refresh writes ONLY the grant section; localIdentity byte-identical', async () => {
 	const initial = cell({ grant: grant({ accessTokenExpiresAt: now + 1 }) });
 	const setup = createStorage(initial);
 	const auth = createOAuthAppAuth({
@@ -207,7 +210,7 @@ test('refresh writes ONLY the grant section; unlock byte-identical', async () =>
 
 	await auth.fetch('http://localhost:8787/resource');
 	const last = setup.saved.at(-1);
-	expect(last?.unlock).toEqual(initial.unlock);
+	expect(last?.localIdentity).toEqual(initial.localIdentity);
 	expect(last?.grant).toEqual({
 		accessToken: 'new-access',
 		refreshToken: 'new-refresh',
@@ -243,8 +246,8 @@ test('refresh keeps existing refresh token when token response omits rotation', 
 	auth[Symbol.dispose]();
 });
 
-test('same-user guard wipes the cell when /api/me returns a different userId', async () => {
-	const setup = createStorage(cell({ userId: 'alice' }));
+test('same-subject guard wipes the cell when /api/me returns a different subject', async () => {
+	const setup = createStorage(cell({ subject: 'alice' }));
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
 		clientId: 'client-1',
@@ -264,7 +267,66 @@ test('same-user guard wipes the cell when /api/me returns a different userId', a
 	auth[Symbol.dispose]();
 });
 
-test('network gate: no Authorization header until /api/me confirms same user', async () => {
+test('same-subject /api/me preserves state when keyring is unchanged', async () => {
+	const setup = createStorage(cell());
+	const auth = createOAuthAppAuth({
+		baseURL: 'http://localhost:8787',
+		clientId: 'client-1',
+		now: () => now,
+		persistedAuthStorage: setup.storage,
+		launcher: { startSignIn: async () => Ok(null) },
+		fetch: async (input) => {
+			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			return new Response(null, { status: 204 });
+		},
+	});
+
+	await auth.fetch('http://localhost:8787/resource');
+	expect(setup.current).toEqual(cell());
+	// No localIdentity write should have happened: keyring unchanged.
+	expect(setup.saved).toEqual([]);
+	expect(auth.state).toMatchObject({ status: 'signed-in' });
+	auth[Symbol.dispose]();
+});
+
+test('keyring rotation updates persisted localIdentity', async () => {
+	const setup = createStorage(cell());
+	const rotated: SubjectKeyring = [
+		{
+			version: 2,
+			subjectKeyBase64: 'AQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+		},
+		...keyring,
+	];
+	const auth = createOAuthAppAuth({
+		baseURL: 'http://localhost:8787',
+		clientId: 'client-1',
+		now: () => now,
+		persistedAuthStorage: setup.storage,
+		launcher: { startSignIn: async () => Ok(null) },
+		fetch: async (input) => {
+			if (String(input).endsWith('/api/me')) {
+				return json({
+					user: { id: 'user-1', email: 'user-1@example.com' },
+					localIdentity: { subject: 'user-1', keyring: rotated },
+				});
+			}
+			return new Response(null, { status: 204 });
+		},
+	});
+
+	await auth.fetch('http://localhost:8787/resource');
+	const last = setup.saved.at(-1);
+	expect(last?.localIdentity).toEqual({ subject: 'user-1', keyring: rotated });
+	expect(last?.grant).toEqual(cell().grant);
+	expect(auth.state).toEqual({
+		status: 'signed-in',
+		localIdentity: { subject: 'user-1', keyring: rotated },
+	});
+	auth[Symbol.dispose]();
+});
+
+test('network gate: no Authorization header until /api/me confirms same subject', async () => {
 	const setup = createStorage(cell());
 	const seenAuth: Array<string | null> = [];
 	let resolveApiMe!: (response: Response) => void;
@@ -326,7 +388,7 @@ test('auth.fetch resolves relative API paths against the auth base URL', async (
 	auth[Symbol.dispose]();
 });
 
-test('network gate: no WebSocket bearer protocol until /api/me confirms same user', async () => {
+test('network gate: no WebSocket bearer protocol until /api/me confirms same subject', async () => {
 	const setup = createStorage(cell());
 	const { openings, WebSocketRecorder } = createWebSocketRecorder();
 	let resolveApiMe!: (response: Response) => void;
@@ -365,7 +427,7 @@ test('network gate: no WebSocket bearer protocol until /api/me confirms same use
 	auth[Symbol.dispose]();
 });
 
-test('cold-boot offline keeps signed-in with unlock and no profile field', async () => {
+test('cold-boot offline keeps signed-in with localIdentity and no profile field', async () => {
 	const setup = createStorage(cell());
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -382,9 +444,11 @@ test('cold-boot offline keeps signed-in with unlock and no profile field', async
 		status: 'signed-in',
 	});
 	expect('email' in auth.state).toBe(false);
-	expect((auth.state as { unlock: LocalUnlockBundle }).unlock).toEqual({
-		userId: 'user-1',
-		encryptionKeys: [...encryptionKeys],
+	expect(
+		(auth.state as { localIdentity: LocalWorkspaceIdentity }).localIdentity,
+	).toEqual({
+		subject: 'user-1',
+		keyring: [...keyring],
 	});
 	auth[Symbol.dispose]();
 });
@@ -427,7 +491,7 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 		await auth.fetch('http://localhost:8787/resource');
 		expect(auth.state).toEqual({
 			status: 'reauth-required',
-			unlock: { userId: 'user-1', encryptionKeys: [...encryptionKeys] },
+			localIdentity: { subject: 'user-1', keyring: [...keyring] },
 		});
 		expect('email' in auth.state).toBe(false);
 
@@ -491,7 +555,7 @@ test('network verification clears on grant refresh until /api/me confirms new ce
 	await secondApiMeRequested;
 	expect(auth.state).toEqual({
 		status: 'signed-in',
-		unlock: { userId: 'user-1', encryptionKeys: [...encryptionKeys] },
+		localIdentity: { subject: 'user-1', keyring: [...keyring] },
 	});
 	expect('email' in auth.state).toBe(false);
 	expect(resourceAuths).toEqual(['Bearer access-token', 'Bearer access-token']);
@@ -604,14 +668,14 @@ test('/api/me response after signOut is discarded without corrupting state', asy
 	auth[Symbol.dispose]();
 });
 
-test('/api/me key update after signOut is discarded without writing unlock', async () => {
+test('/api/me key update after signOut is discarded without writing localIdentity', async () => {
 	const setup = createStorage(cell());
-	const rotatedKeys = [
+	const rotated: SubjectKeyring = [
 		{
 			version: 2,
-			userKeyBase64: 'AQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+			subjectKeyBase64: 'AQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 		},
-	] satisfies LocalUnlockBundle['encryptionKeys'];
+	];
 	let resolveApiMe!: (response: Response) => void;
 	const apiMePromise = new Promise<Response>((r) => {
 		resolveApiMe = r;
@@ -641,27 +705,94 @@ test('/api/me key update after signOut is discarded without writing unlock', asy
 	resolveApiMe(
 		json({
 			user: { id: 'user-1', email: 'user-1@example.com' },
-			encryptionKeys: rotatedKeys,
+			localIdentity: { subject: 'user-1', keyring: rotated },
 		}),
 	);
 	await fetchPromise;
 	expect(setup.current).toBeNull();
 	expect(setup.saved).not.toContainEqual({
 		grant: grant(),
-		unlock: { userId: 'user-1', encryptionKeys: rotatedKeys },
+		localIdentity: { subject: 'user-1', keyring: rotated },
 	});
 	expect(auth.state).toEqual({ status: 'signed-out' });
 	auth[Symbol.dispose]();
 });
 
+describe('legacy persisted shape', () => {
+	const legacyValue = {
+		grant: grant(),
+		unlock: {
+			userId: 'user-1',
+			encryptionKeys: [
+				{
+					version: 1,
+					subjectKeyBase64: keyring[0]!.subjectKeyBase64,
+				},
+			],
+		},
+	};
+
+	test('PersistedAuth schema accepts and migrates the old shape', () => {
+		const parsed = PersistedAuthSchema.assert(legacyValue);
+		expect(parsed).toEqual({
+			grant: grant(),
+			localIdentity: { subject: 'user-1', keyring: [...keyring] },
+		});
+		// Validating the migrated value again is idempotent.
+		expect(PersistedAuthSchema.assert(parsed)).toEqual(parsed);
+	});
+
+	test('browser localStorage style storage migrates legacy bytes on first read', () => {
+		// Simulate createPersistedState reading a legacy blob: the schema runs
+		// on the raw parsed JSON and produces the new shape.
+		const raw = JSON.stringify(legacyValue);
+		const migrated = PersistedAuthSchema.assert(JSON.parse(raw));
+		expect(migrated).toEqual({
+			grant: grant(),
+			localIdentity: { subject: 'user-1', keyring: [...keyring] },
+		});
+	});
+
+	test('chrome.storage.local style storage migrates legacy object on first read', () => {
+		// chrome.storage hands back an object instead of a string; same path.
+		const migrated = PersistedAuthSchema.assert(legacyValue);
+		expect(migrated).toEqual({
+			grant: grant(),
+			localIdentity: { subject: 'user-1', keyring: [...keyring] },
+		});
+	});
+
+	test('createOAuthAppAuth normalizes legacy cells in memory', async () => {
+		const setup = createStorage(
+			PersistedAuthSchema.assert(legacyValue) as PersistedAuth,
+		);
+		const auth = createOAuthAppAuth({
+			baseURL: 'http://localhost:8787',
+			clientId: 'client-1',
+			now: () => now,
+			persistedAuthStorage: setup.storage,
+			launcher: { startSignIn: async () => Ok(null) },
+			fetch: async () => json(apiMeBody('user-1')),
+		});
+
+		expect(auth.state).toEqual({
+			status: 'signed-in',
+			localIdentity: { subject: 'user-1', keyring: [...keyring] },
+		});
+		auth[Symbol.dispose]();
+	});
+});
+
 describe('removed legacy surface', () => {
 	test('requireIdentity / requireSession / OAuthSession are not exported', async () => {
 		const mod = await import('./index.js');
-		// @ts-expect-error: requireIdentity removed; reach for state.unlock.
+		// @ts-expect-error: requireIdentity removed; reach for state.localIdentity.
 		expect(mod.requireIdentity).toBeUndefined();
 		// @ts-expect-error: requireSession removed.
 		expect(mod.requireSession).toBeUndefined();
 		// @ts-expect-error: OAuthSession deleted; use PersistedAuth.
 		expect(mod.OAuthSession).toBeUndefined();
+		// @ts-expect-error: LocalUnlockBundle replaced by LocalWorkspaceIdentity.
+		expect(mod.LocalUnlockBundle).toBeUndefined();
 	});
 });

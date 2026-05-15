@@ -16,7 +16,7 @@ import pg from 'pg';
 import { aiChatHandlers } from './ai-chat';
 import { assetAuthedRoutes, assetPublicRoutes } from './asset-routes';
 import { createAuth } from './auth/create-auth';
-import { deriveUserEncryptionKeys } from './auth/encryption';
+import { deriveSubjectKeyring } from './auth/encryption';
 import {
 	createOAuthIssuerURL,
 	OAUTH_AUTHORIZATION_SERVER_METADATA_PATH,
@@ -264,9 +264,10 @@ app.get(
 	},
 );
 // Current-user endpoint: returns the authenticated user record plus their
-// workspace encryption keys. This is the single Epicenter identity surface
-// every client (browser apps, browser extension, CLI) calls at sign-in and
-// at cold-boot when online to refresh the persisted unlock cell.
+// local workspace identity (subject + per-subject keyring). This is the
+// single Epicenter identity surface every client (browser apps, browser
+// extension, CLI) calls at sign-in and at cold-boot when online to refresh
+// the persisted localIdentity cell.
 //
 // Inherits the bearer + workspaces:open scope check from
 // resolveRequestWorkspaceIdentity, so unauthenticated/under-scoped callers
@@ -276,13 +277,13 @@ app.get(
 	'/api/me',
 	describeRoute({
 		description:
-			'Return the authenticated user and their workspace encryption keys',
+			'Return the authenticated user and their local workspace identity',
 		tags: ['auth'],
 	}),
 	async (c) => {
 		const { data: identity, error } = await resolveRequestWorkspaceIdentity(
 			c,
-			deriveUserEncryptionKeys,
+			deriveSubjectKeyring,
 		);
 		if (error) return createOAuthUnauthorizedResourceResponse(c, error);
 		return c.json(identity);
@@ -353,21 +354,8 @@ const requireOAuthUser = factory.createMiddleware(async (c, next) => {
 
 app.use('/ai/*', requireOAuthUser);
 app.use('/rooms/*', requireOAuthUser);
-app.use('/api/health', requireOAuthUser);
 app.use('/api/billing/*', requireOAuthUser);
 app.use('/api/assets/*', requireOAuthUser);
-
-// Bearer-liveness probe. The CLI's `status` command pings this to verify
-// the current access token still works after a local id_token decode. Plain
-// 200 'ok' body; identity comes from the id_token, not from this response.
-app.get(
-	'/api/health',
-	describeRoute({
-		description: 'Bearer liveness probe (200 with a valid OAuth token)',
-		tags: ['health', 'auth'],
-	}),
-	(c) => c.text('ok'),
-);
 
 // Ensure Autumn customer exists and stash planId for model gating.
 // Runs after requireOAuthUser for AI routes so c.var.user is available.

@@ -120,7 +120,7 @@ refcounting, and the `gcTime` grace period between last dispose and teardown.
 
 ### Plaintext vs encrypted
 
-Both variants ship from this package. Plaintext (`attachTable`, `attachTables`, `attachKv`) binds a typed helper directly to the Y.Doc. Encrypted: the methods on the `EncryptionAttachment` coordinator returned by `attachEncryption(ydoc, { encryptionKeys })` (`encryption.attachTable`, `encryption.attachTables`, `encryption.attachKv`) additionally register their backing store with that coordinator. The coordinator reads `encryptionKeys()` synchronously at each registration site, derives the store keyring, and activates the store before handing it back. Already-attached encrypted stores keep their derived keyring; same-user key rotation needs a re-attach to affect those stores.
+Both variants ship from this package. Plaintext (`attachTable`, `attachTables`, `attachKv`) binds a typed helper directly to the Y.Doc. Encrypted: the methods on the `EncryptionAttachment` coordinator returned by `attachEncryption(ydoc, { keyring })` (`encryption.attachTable`, `encryption.attachTables`, `encryption.attachKv`) additionally register their backing store with that coordinator. The coordinator reads `keyring()` synchronously at each registration site, derives the per-workspace keyring, and activates the store before handing it back. Already-attached encrypted stores keep their derived keyring; same-subject key rotation needs a re-attach to affect those stores.
 
 Don't mix plaintext and encrypted wrappers on the same slot name: Yjs hands both calls the same underlying `Y.Array` and you get a silent plaintext-over-ciphertext race. The verb (`encryption.attachTable` vs plain `attachTable`) is the primary defense; review call sites accordingly. One slot name, one attach site, one intent.
 
@@ -130,35 +130,35 @@ Minimal encrypted workspace: encryption + IndexedDB + cross-tab + collaboration 
 import {
 	attachEncryption,
 	attachOwnedBroadcastChannel,
-	type EncryptionKeys,
 	openCollaboration,
 	type Replica,
 	roomWsUrl,
 } from '@epicenter/workspace';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import * as Y from 'yjs';
 import { appTables } from '$lib/workspace/definition';
 
 export function openApp({
-	userId,
+	subject,
 	replica,
 	openWebSocket,
-	encryptionKeys,
+	keyring,
 }: {
-	userId: string;
+	subject: string;
 	replica: Replica;
 	openWebSocket?: (
 		url: string | URL,
 		protocols?: string[],
 	) => WebSocket | Promise<WebSocket>;
-	encryptionKeys: () => EncryptionKeys;
+	keyring: () => SubjectKeyring;
 }) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.my-app', gc: false });
 
-	const encryption = attachEncryption(ydoc, { encryptionKeys });
+	const encryption = attachEncryption(ydoc, { keyring });
 	const tables = encryption.attachTables(appTables);
 
-	const idb = encryption.attachIndexedDb(ydoc, { userId });
-	attachOwnedBroadcastChannel(ydoc, { userId });
+	const idb = encryption.attachIndexedDb(ydoc, { subject });
+	attachOwnedBroadcastChannel(ydoc, { subject });
 
 	const collaboration = openCollaboration(ydoc, {
 		url: roomWsUrl('https://api.epicenter.so', ydoc.guid),
@@ -185,14 +185,14 @@ export function openApp({
 }
 
 export const workspace = openApp({
-	userId,
+	subject,
 	replica: { id: 'macbook', platform: 'tauri' },
 	openWebSocket: auth.openWebSocket,
-	encryptionKeys: () => {
+	keyring: () => {
 		if (auth.state.status === 'signed-out') {
 			throw new Error('[workspace] auth signed-out.');
 		}
-		return auth.state.unlock.encryptionKeys;
+		return auth.state.localIdentity.keyring;
 	},
 });
 ```

@@ -1,6 +1,10 @@
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
-import { AuthUser, type AuthUser as AuthUserType } from '@epicenter/auth';
-import type { EncryptionKeys } from '@epicenter/encryption';
+import {
+	AuthUser,
+	type AuthUser as AuthUserType,
+	type LocalWorkspaceIdentity,
+} from '@epicenter/auth';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import type { User } from 'better-auth';
 import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -14,7 +18,7 @@ export { WORKSPACES_OPEN_SCOPE };
 
 export type WorkspaceIdentity = {
 	user: AuthUserType;
-	encryptionKeys: EncryptionKeys;
+	localIdentity: LocalWorkspaceIdentity;
 };
 
 type VerifyOAuthAccessToken = ReturnType<
@@ -59,7 +63,8 @@ export function parseBearer(value: string | null): string | null {
  *
  * Wrappers project the user differently:
  * - `resolveBearerUser` returns the lean `AuthUser` for the middleware path.
- * - `resolveBearerIdentity` adds derived encryption keys for `/api/me`.
+ * - `resolveBearerIdentity` adds the derived local workspace identity for
+ *   `/api/me`.
  */
 async function verifyBearerToUser(
 	deps: ResolverDeps,
@@ -89,7 +94,7 @@ async function verifyBearerToUser(
 /**
  * Cheap resolver for the protected-resource boundary (`/ai/*`,
  * `/rooms/*`, `/api/billing/*`, `/api/assets/*`).
- * Skips encryption-key derivation; only the calling user is needed once
+ * Skips subject keyring derivation; only the calling user is needed once
  * the scope is proven.
  */
 export async function resolveBearerUser(
@@ -102,19 +107,22 @@ export async function resolveBearerUser(
 
 /**
  * Full resolver for `/api/me`. Returns the local-first payload the apps
- * need at boot: the calling user plus the per-user encryption key set
- * derived from the workspace identity secret.
+ * need at boot: the calling user plus the per-subject keyring derived from
+ * the root keyring.
  */
 export async function resolveBearerIdentity(
 	deps: ResolverDeps & {
-		deriveUserEncryptionKeys(userId: string): Promise<EncryptionKeys>;
+		deriveSubjectKeyring(subject: string): Promise<SubjectKeyring>;
 	},
 ): Promise<Result<WorkspaceIdentity, OAuthError>> {
 	const { data: user, error } = await verifyBearerToUser(deps);
 	if (error) return Err(error);
 	return Ok({
 		user: AuthUser.assert(user),
-		encryptionKeys: await deps.deriveUserEncryptionKeys(user.id),
+		localIdentity: {
+			subject: user.id,
+			keyring: await deps.deriveSubjectKeyring(user.id),
+		},
 	});
 }
 
@@ -130,16 +138,17 @@ export function resolveRequestOAuthUser<E extends RequestOAuthEnv>(
 
 /**
  * Resolve the OAuth bearer on the current request to the full workspace
- * identity payload. Key derivation stays injected so this module remains
- * free of Worker-only imports and easy to test through the pure resolver.
+ * identity payload. Subject keyring derivation stays injected so this module
+ * remains free of Worker-only imports and easy to test through the pure
+ * resolver.
  */
 export function resolveRequestWorkspaceIdentity<E extends RequestOAuthEnv>(
 	c: Context<E>,
-	deriveUserEncryptionKeys: (userId: string) => Promise<EncryptionKeys>,
+	deriveSubjectKeyring: (subject: string) => Promise<SubjectKeyring>,
 ) {
 	return resolveBearerIdentity({
 		...createResolverDeps(c),
-		deriveUserEncryptionKeys,
+		deriveSubjectKeyring,
 	});
 }
 

@@ -2,8 +2,9 @@ export { type AuthClient, type AuthState } from './auth-contract.js';
 export * from './auth-errors.js';
 export {
 	AuthUser,
-	type LocalUnlockBundle,
+	type LocalWorkspaceIdentity,
 	type OAuthTokenGrant,
+	parsePersistedAuth,
 	PersistedAuth,
 } from './auth-types.js';
 export {

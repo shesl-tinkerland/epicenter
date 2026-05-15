@@ -3,7 +3,7 @@
 import {
 	decryptBytes,
 	type EncryptedBlob,
-	type EncryptionKeys,
+	type SubjectKeyring,
 	encryptBytes,
 } from '@epicenter/encryption';
 import * as idb from 'lib0/indexeddb';
@@ -65,11 +65,11 @@ export type EncryptedIndexedDbError = InferErrors<
 type EncryptedIndexedDbOptions = {
 	databaseName: string;
 	/**
-	 * Lazy reader for the current user's encryption keys. Called once at
-	 * attach time to derive the per-`ydoc.guid` workspace keyring; the
-	 * latest version becomes the write key.
+	 * Lazy reader for the current subject keyring. Called once at attach
+	 * time to derive the per-`ydoc.guid` workspace keyring; the latest
+	 * version becomes the write key.
 	 */
-	encryptionKeys: () => EncryptionKeys;
+	keyring: () => SubjectKeyring;
 	/**
 	 * Logger for background failures (persistence write rejections, compaction
 	 * throws). Defaults to a console-backed logger with source
@@ -82,18 +82,18 @@ export function attachEncryptedIndexedDb(
 	ydoc: Y.Doc,
 	{
 		databaseName,
-		encryptionKeys,
+		keyring,
 		log = createLogger('attachEncryptedIndexedDb'),
 	}: EncryptedIndexedDbOptions,
 ): IndexedDbAttachment {
-	const keyring = deriveWorkspaceKeyring(encryptionKeys(), ydoc.guid);
-	if (keyring.size === 0) {
+	const workspaceKeyring = deriveWorkspaceKeyring(keyring(), ydoc.guid);
+	if (workspaceKeyring.size === 0) {
 		throw new Error(
-			'Cannot attach encrypted IndexedDB provider: encryptionKeys() returned no usable keys.',
+			'Cannot attach encrypted IndexedDB provider: keyring() returned no usable keys.',
 		);
 	}
-	const writeVersion = Math.max(...keyring.keys());
-	const writeBytes = keyring.get(writeVersion)!;
+	const writeVersion = Math.max(...workspaceKeyring.keys());
+	const writeBytes = workspaceKeyring.get(writeVersion)!;
 	let db: IDBDatabase | undefined;
 	let dbref = 0;
 	let dbsize = 0;
@@ -170,7 +170,7 @@ export function attachEncryptedIndexedDb(
 					for (const blob of encryptedUpdates) {
 						applyUpdateV2(
 							ydoc,
-							decryptBytes({ keyring, blob, aad }),
+							decryptBytes({ keyring: workspaceKeyring, blob, aad }),
 							attachment,
 						);
 					}

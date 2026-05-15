@@ -3,34 +3,34 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToBase64 } from './bytes.js';
-import { assertEncryptionKeyVersion, type EncryptionKeys } from './keys.js';
-import type { EncryptionSecrets } from './secrets.js';
+import { assertEncryptionKeyVersion, type SubjectKeyring } from './keys.js';
+import type { RootKeyring } from './secrets.js';
 
 const textEncoder = new TextEncoder();
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS_DEFAULT = 600_000;
 
 /**
- * Derive a per-workspace key from a per-user key.
+ * Derive a per-workspace key from a per-subject key.
  *
- * Workspace encryption never uses the session key directly. It derives a
+ * Workspace encryption never uses the subject key directly. It derives a
  * workspace-scoped key with HKDF and `workspace:{workspaceId}` as the info
- * label, so the same user key produces independent keys for different
+ * label, so the same subject key produces independent keys for different
  * workspaces.
  *
  * @example
  * ```typescript
- * const userKey = base64ToBytes(session.identity.encryptionKeys[0].userKeyBase64);
- * const workspaceKey = deriveWorkspaceKey(userKey, workspaceId);
+ * const subjectKey = base64ToBytes(session.localIdentity.keyring[0].subjectKeyBase64);
+ * const workspaceKey = deriveWorkspaceKey(subjectKey, workspaceId);
  * ```
  */
 export function deriveWorkspaceKey(
-	userKey: Uint8Array,
+	subjectKey: Uint8Array,
 	workspaceId: string,
 ): Uint8Array {
 	return hkdf(
 		sha256,
-		userKey,
+		subjectKey,
 		new Uint8Array(0),
 		textEncoder.encode(`workspace:${workspaceId}`),
 		32,
@@ -38,10 +38,10 @@ export function deriveWorkspaceKey(
 }
 
 /**
- * Derive a 32-byte user key from a password and salt.
+ * Derive a 32-byte subject key from a password and salt.
  *
  * This helper is for self-managed or local password flows. Cloud API sessions
- * should use `deriveUserEncryptionKeys()` with deployment secrets instead.
+ * should use `deriveSubjectKeyring()` with a root keyring instead.
  */
 export function deriveKeyFromPassword(
 	password: string,
@@ -55,33 +55,33 @@ export function deriveKeyFromPassword(
 }
 
 /**
- * Generate a PBKDF2 salt for password-derived user keys.
+ * Generate a PBKDF2 salt for password-derived subject keys.
  *
  * This salt is not an encryption nonce. Store it next to the password-derived
- * key metadata so the same password can derive the same user key later.
+ * key metadata so the same password can derive the same subject key later.
  */
 export function generateSalt(): Uint8Array {
 	return randomBytes(SALT_LENGTH);
 }
 
 /**
- * Wrap raw user key bytes in the auth-session keyring shape.
+ * Wrap raw subject key bytes in the auth-session keyring shape.
  *
- * Use this when a caller already has a user key, such as a password-derived
- * key. Server-side deployment derivation should call
- * `deriveUserEncryptionKeys()` so every configured secret version is included.
+ * Use this when a caller already has subject key material, such as a
+ * password-derived key. Server-side root keyring derivation should call
+ * `deriveSubjectKeyring()` so every configured root version is included.
  */
-export function buildEncryptionKeys(
-	userKey: Uint8Array,
+export function buildSubjectKeyring(
+	subjectKey: Uint8Array,
 	version: number = 1,
-): EncryptionKeys {
+): SubjectKeyring {
 	assertEncryptionKeyVersion(version);
-	return [{ version, userKeyBase64: bytesToBase64(userKey) }];
+	return [{ version, subjectKeyBase64: bytesToBase64(subjectKey) }];
 }
 
-async function deriveUserKey(
+async function deriveSubjectKey(
 	secret: string,
-	userId: string,
+	subject: string,
 ): Promise<Uint8Array> {
 	const rawKey = await crypto.subtle.digest(
 		'SHA-256',
@@ -95,7 +95,9 @@ async function deriveUserKey(
 			name: 'HKDF',
 			hash: 'SHA-256',
 			salt: new Uint8Array(0),
-			info: textEncoder.encode(`user:${userId}`),
+			// Keep the v1 HKDF label stable so existing encrypted workspaces
+			// remain readable while the public model moves from user to subject.
+			info: textEncoder.encode(`user:${subject}`),
 		},
 		hkdfKey,
 		256,
@@ -104,34 +106,34 @@ async function deriveUserKey(
 }
 
 /**
- * Derive per-user transport keys from deployment encryption secrets.
+ * Derive a per-subject keyring from a root keyring.
  *
- * The API uses this after parsing `ENCRYPTION_SECRETS`. It returns one
- * `{ version, userKeyBase64 }` entry per secret version, preserving the
- * keyring order supplied by `parseEncryptionSecrets()`.
+ * The API uses this after resolving its root keyring. It returns one
+ * `{ version, subjectKeyBase64 }` entry per root version, preserving the
+ * keyring order supplied by `parseRootKeyring()`.
  *
  * @example
  * ```typescript
- * const secrets = parseEncryptionSecrets(env.ENCRYPTION_SECRETS);
- * const encryptionKeys = await deriveUserEncryptionKeys({
- *   secrets,
- *   userId: user.id,
+ * const rootKeyring = parseRootKeyring(env.ENCRYPTION_SECRETS);
+ * const keyring = await deriveSubjectKeyring({
+ *   rootKeyring,
+ *   subject: user.id,
  * });
  * ```
  */
-export async function deriveUserEncryptionKeys({
-	secrets,
-	userId,
+export async function deriveSubjectKeyring({
+	rootKeyring,
+	subject,
 }: {
-	secrets: EncryptionSecrets;
-	userId: string;
-}): Promise<EncryptionKeys> {
+	rootKeyring: RootKeyring;
+	subject: string;
+}): Promise<SubjectKeyring> {
 	return Promise.all(
-		secrets.map(async ({ version, secret }) => ({
+		rootKeyring.map(async ({ version, secret }) => ({
 			version,
-			userKeyBase64: bytesToBase64(await deriveUserKey(secret, userId)),
+			subjectKeyBase64: bytesToBase64(await deriveSubjectKey(secret, subject)),
 		})),
-	) as Promise<EncryptionKeys>;
+	) as Promise<SubjectKeyring>;
 }
 
 export { PBKDF2_ITERATIONS_DEFAULT };

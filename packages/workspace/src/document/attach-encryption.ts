@@ -13,7 +13,7 @@
  * exports, call the methods on the returned attachment:
  *
  * ```ts
- * const encryption = attachEncryption(ydoc, { encryptionKeys: () => keys });
+ * const encryption = attachEncryption(ydoc, { keyring: () => subjectKeyring });
  * const tables = encryption.attachTables(defs);
  * const kv = encryption.attachKv(defs);
  * ```
@@ -24,16 +24,16 @@
  *
  * ## Key source: lazy callback
  *
- * `encryptionKeys` is a callback into whoever owns identity. The coordinator
- * calls it synchronously at every `attachTable` / `attachKv` site, derives the
- * keyring, and activates the store. The keyring is not cached on the
- * attachment: each attach call is its own derivation, which keeps state out of
- * this layer entirely.
+ * `keyring` is a callback into whoever owns identity. The coordinator calls
+ * it synchronously at every `attachTable` / `attachKv` site, derives the
+ * per-workspace keyring, and activates the store. The keyring is not cached
+ * on the attachment: each attach call is its own derivation, which keeps
+ * state out of this layer entirely.
  *
- * Same-user identity updates (key rotation, profile edits) do not flow
+ * Same-subject identity updates (key rotation, profile edits) do not flow
  * through this attachment. Authenticated apps reload the page on
- * different-user transitions; same-user updates are observed lazily via the
- * `encryptionKeys` callback the next time it runs.
+ * different-subject transitions; same-subject updates are observed lazily
+ * via the `keyring` callback the next time it runs.
  *
  * ## Local owner concerns live on `createLocalOwner`
  *
@@ -72,7 +72,7 @@
  * @module
  */
 
-import type { EncryptionKeys } from '@epicenter/encryption';
+import type { SubjectKeyring } from '@epicenter/encryption';
 import type * as Y from 'yjs';
 import {
 	createEncryptedYkvLww,
@@ -95,19 +95,19 @@ import { KV_KEY, TableKey } from './keys.js';
 
 export type AttachEncryptionOptions = {
 	/**
-	 * Lazy reader for the current user's encryption keys.
+	 * Lazy reader for the current subject keyring.
 	 *
 	 * Called synchronously at every `attachTable` / `attachKv` site. Throw if
-	 * no keys are available (e.g. signed-out): a throw here means the workspace
-	 * outlived its signed-in scope, which is a caller bug.
+	 * no keyring is available (e.g. signed-out): a throw here means the
+	 * workspace outlived its signed-in scope, which is a caller bug.
 	 */
-	encryptionKeys: () => EncryptionKeys;
+	keyring: () => SubjectKeyring;
 };
 
 export type EncryptionAttachment = {
 	/**
 	 * Attach an encrypted table to the coordinator's Y.Doc. The store is
-	 * activated with the current keyring (via `encryptionKeys()`) before being
+	 * activated with the current keyring (via `keyring()`) before being
 	 * returned.
 	 */
 	attachTable<
@@ -147,7 +147,7 @@ export type EncryptionAttachment = {
  *
  * The returned coordinator owns `attachTable` / `attachTables` / `attachKv`
  * methods: call them to register encrypted resources. The coordinator reads
- * `options.encryptionKeys()` synchronously at each registration site and
+ * `options.keyring()` synchronously at each registration site and
  * activates the resource before returning it.
  */
 export function attachEncryption(
@@ -161,7 +161,7 @@ export function attachEncryption(
 		const store = createEncryptedYkvLww(ydoc, key);
 		ydoc.once('destroy', () => store[Symbol.dispose]());
 		store.activateEncryption(
-			deriveWorkspaceKeyring(options.encryptionKeys(), workspaceId),
+			deriveWorkspaceKeyring(options.keyring(), workspaceId),
 		);
 		return store;
 	}
