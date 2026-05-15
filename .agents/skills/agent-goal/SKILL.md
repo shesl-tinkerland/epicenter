@@ -80,23 +80,20 @@ Then compress that into one goal.
 
 Codex:
 
-- `/goal` is experimental in Codex CLI and may require `features.goals`.
-- Useful controls include `/goal`, `/goal pause`, `/goal resume`, and `/goal clear`.
-- Write the goal as a durable objective attached to the active thread.
+- Write the goal as a durable objective attached to the active thread, with a verifiable stopping condition.
+- Codex docs do not describe Claude's separate evaluator model. Do not assume Codex uses the same evaluation mechanism.
 
 Claude Code:
 
 - `/goal` sets a session-scoped completion condition.
 - Claude uses a separate small model after each turn to decide whether the condition has been met.
-- The evaluator does not run tools or read files independently. Tell Claude to run checks and report the evidence.
-- `/goal clear` removes the goal. Claude also accepts aliases like `stop`, `off`, `reset`, `none`, and `cancel`.
-- Include a turn or time bound when useful, such as "or stop after 20 turns."
+- The evaluator does not run tools or read files independently.
 
-Shared rule: the goal should not rely on hidden state. If the verifier needs to know something, make the worker produce it in the conversation.
+Shared rule: the goal should not rely on hidden state. Tell the agent to run checks and surface evidence in the transcript.
 
 ## Verifier Test
 
-Before finalizing the goal, imagine a fresh evaluator can see only the transcript, not the filesystem.
+Before finalizing the goal, imagine a checker can see only the transcript, not the filesystem.
 
 Good evidence:
 
