@@ -2,6 +2,7 @@ import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
 import { EncryptionKeys, encryptionKeysEqual } from '@epicenter/encryption';
 import { type } from 'arktype';
+import { createLogger } from 'wellcrafted/logger';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient, AuthState } from './auth-contract.js';
 import { AuthError } from './auth-errors.js';
@@ -47,6 +48,8 @@ const ApiMeResponse = type({
 	encryptionKeys: EncryptionKeys,
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
+
+const log = createLogger('oauth-app-auth');
 
 export type CreateOAuthAppAuthConfig = {
 	baseURL?: string;
@@ -125,7 +128,7 @@ export function createOAuthAppAuth({
 				if (persisted === startedFrom) {
 					networkAuthPaused = true;
 					publishState();
-					console.error('[auth] failed to refresh OAuth grant:', cause);
+					log.error(AuthError.RefreshGrantFailed({ cause }));
 				}
 				return false;
 			} finally {

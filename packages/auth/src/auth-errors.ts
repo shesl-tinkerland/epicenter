@@ -22,6 +22,10 @@ export const AuthError = defineErrors({
 		message: `Failed to verify identity: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
+	RefreshGrantFailed: ({ cause }: { cause: unknown }) => ({
+		message: `Failed to refresh OAuth grant: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
 });
 
 export type AuthError = InferErrors<typeof AuthError>;

@@ -1,6 +1,22 @@
 import { encryptionKeysEqual } from '@epicenter/encryption';
+import {
+	defineErrors,
+	extractErrorMessage,
+	type InferErrors,
+} from 'wellcrafted/error';
+import { createLogger } from 'wellcrafted/logger';
 import type { AuthState } from './auth-contract.js';
 import type { LocalUnlockBundle } from './auth-types.js';
+
+export const AuthStateStoreError = defineErrors({
+	SubscriberThrew: ({ cause }: { cause: unknown }) => ({
+		message: `Auth state subscriber threw: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
+});
+export type AuthStateStoreError = InferErrors<typeof AuthStateStoreError>;
+
+const log = createLogger('auth-state-store');
 
 export function createAuthStateStore(initialState: AuthState) {
 	let state = initialState;
@@ -17,7 +33,7 @@ export function createAuthStateStore(initialState: AuthState) {
 				try {
 					listener(next);
 				} catch (error) {
-					console.error('[auth] subscriber threw:', error);
+					log.error(AuthStateStoreError.SubscriberThrew({ cause: error }));
 				}
 			}
 		},
