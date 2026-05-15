@@ -258,40 +258,6 @@ async function preWriteCell(filePath: string, subject = 'user-1') {
 	return cell;
 }
 
-async function writeLegacyCell(filePath: string, userId = 'user-1') {
-	const legacy = {
-		grant: {
-			accessToken: 'access-stored',
-			refreshToken: 'refresh-stored',
-			accessTokenExpiresAt: NOW + 3_600_000,
-		},
-		unlock: {
-			userId,
-			encryptionKeys: [
-				{ version: 1, subjectKeyBase64: keyring[0].subjectKeyBase64 },
-			],
-		},
-	};
-	await fs.mkdir(path.dirname(filePath), { recursive: true });
-	await fs.writeFile(filePath, JSON.stringify(legacy), { mode: 0o600 });
-}
-
-test('machine auth loads old auth.json shape', async () => {
-	const filePath = tmpAuthPath();
-	await writeLegacyCell(filePath, 'user-1');
-
-	const loaded = await loadMachineTokens({ filePath });
-	expect(loaded.error).toBeNull();
-	expect(loaded.data).toEqual({
-		grant: {
-			accessToken: 'access-stored',
-			refreshToken: 'refresh-stored',
-			accessTokenExpiresAt: NOW + 3_600_000,
-		},
-		localIdentity: { subject: 'user-1', keyring: [...keyring] },
-	});
-});
-
 test('sign-in writes the new persisted shape', async () => {
 	const filePath = tmpAuthPath();
 	const { fetch } = createFetch({

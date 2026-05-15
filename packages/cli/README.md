@@ -56,8 +56,6 @@ The persisted shape is `PersistedAuth = { grant, localIdentity }`:
 - `localIdentity` (`{ subject, keyring }`) is the local capability to
   decrypt workspace Yjs data without a network roundtrip. Loaded once at
   sign-in from `GET /api/me` and re-confirmed at cold-boot when online.
-  Older cells with `{ unlock: { userId, encryptionKeys } }` migrate in
-  place on first read.
 
 Profile data (the signed-in email) is fetched fresh from `/api/me` and
 held in memory only; cold-boot offline shows a generic "Account" label

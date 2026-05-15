@@ -95,9 +95,7 @@ async function deriveSubjectKey(
 			name: 'HKDF',
 			hash: 'SHA-256',
 			salt: new Uint8Array(0),
-			// Keep the v1 HKDF label stable so existing encrypted workspaces
-			// remain readable while the public model moves from user to subject.
-			info: textEncoder.encode(`user:${subject}`),
+			info: textEncoder.encode(`subject:${subject}`),
 		},
 		hkdfKey,
 		256,

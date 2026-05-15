@@ -2,9 +2,8 @@ export { type AuthClient, type AuthState } from './auth-contract.js';
 export * from './auth-errors.js';
 export {
 	AuthUser,
-	type LocalWorkspaceIdentity,
+	LocalWorkspaceIdentity,
 	type OAuthTokenGrant,
-	parsePersistedAuth,
 	PersistedAuth,
 } from './auth-types.js';
 export {

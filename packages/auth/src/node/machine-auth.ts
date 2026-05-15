@@ -19,7 +19,6 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
 import type { SubjectKeyring } from '@epicenter/encryption';
-import { SubjectKeyring as SubjectKeyringSchema } from '@epicenter/encryption';
 import { type } from 'arktype';
 import {
 	defineErrors,
@@ -29,7 +28,11 @@ import {
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient } from '../auth-contract.js';
-import { AuthUser, type PersistedAuth } from '../auth-types.js';
+import {
+	AuthUser,
+	LocalWorkspaceIdentity,
+	type PersistedAuth,
+} from '../auth-types.js';
 import {
 	type AuthFetch,
 	createOAuthAppAuth,
@@ -65,11 +68,7 @@ export type WorkspaceIdentity = {
 const ApiMeResponse = type({
 	'+': 'delete',
 	user: AuthUser,
-	localIdentity: type({
-		'+': 'delete',
-		subject: 'string',
-		keyring: SubjectKeyringSchema,
-	}),
+	localIdentity: LocalWorkspaceIdentity,
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
 

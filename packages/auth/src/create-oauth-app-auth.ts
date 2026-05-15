@@ -1,6 +1,6 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
-import { SubjectKeyring, subjectKeyringsEqual } from '@epicenter/encryption';
+import { subjectKeyringsEqual } from '@epicenter/encryption';
 import { type } from 'arktype';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Ok, type Result } from 'wellcrafted/result';
@@ -9,6 +9,7 @@ import { AuthError } from './auth-errors.js';
 import { createAuthStateStore } from './auth-state-store.js';
 import {
 	AuthUser,
+	LocalWorkspaceIdentity,
 	type OAuthTokenGrant,
 	type PersistedAuth as PersistedAuthType,
 } from './auth-types.js';
@@ -45,11 +46,7 @@ export type AuthFetch = (
 const ApiMeResponse = type({
 	'+': 'delete',
 	user: AuthUser,
-	localIdentity: type({
-		'+': 'delete',
-		subject: 'string',
-		keyring: SubjectKeyring,
-	}),
+	localIdentity: LocalWorkspaceIdentity,
 });
 type ApiMeResponse = typeof ApiMeResponse.infer;
 

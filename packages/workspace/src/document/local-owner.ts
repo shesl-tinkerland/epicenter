@@ -11,10 +11,6 @@
  *
  * Daemons do not construct an owner: they call `attachEncryption` directly
  * with just `keyring` and persist via filesystem instead of IDB.
- *
- * The durable IndexedDB database prefix remains `epicenter.v1.user.` so
- * existing encrypted data is still readable. Public API renames from
- * `userId` to `subject`; the storage label stays stable for v1 data.
  */
 
 import type { SubjectKeyring } from '@epicenter/encryption';
@@ -68,12 +64,9 @@ export function createLocalOwner({
 		 * this browser profile, plus any explicitly named ones. Use from
 		 * `wipe()` paths on sign-out so the next signed-in subject starts
 		 * from a clean slate.
-		 *
-		 * The prefix is intentionally `epicenter.v1.user.{subject}.yjs.` so
-		 * v1 data written by older builds remains accessible.
 		 */
 		async wipeLocalYjsData(ydocGuids: Iterable<string> = []) {
-			const prefix = `epicenter.v1.user.${subject}.yjs.`;
+			const prefix = `epicenter.v1.subject.${subject}.yjs.`;
 			const names = new Set<string>();
 
 			for (const guid of ydocGuids) {

@@ -16,26 +16,26 @@ If something is not visible there, it is not presented as fact here.
 ## What this system is
 This is server-managed encryption at the workspace value layer.
 It is not user-held end-to-end encryption.
-The auth server derives per-user keys from `ENCRYPTION_SECRETS` and returns them in the session response.
+The auth server derives per-subject keys from `ENCRYPTION_SECRETS` and returns them in the session response.
 The client derives per-workspace keys locally and uses those keys to encrypt individual CRDT values.
 That split is the trust boundary.
 The sync path only relays encrypted values.
-The auth path can derive user keys because it has access to the deployment secret.
+The auth path can derive subject keys because it has access to the deployment root keyring.
 
 ## Key hierarchy
 The hierarchy is two-stage.
-Server code derives a per-user key.
-Client code derives a per-workspace key from that user key.
+Server code derives a per-subject key.
+Client code derives a per-workspace key from that subject key.
 ```text
-ENCRYPTION_SECRETS entry
+ENCRYPTION_SECRETS entry        (root keyring)
         |
         | SHA-256(secret)
         v
 root key material
         |
-        | HKDF-SHA256 info = "user:{userId}"
+        | HKDF-SHA256 info = "subject:{subject}"
         v
-user key
+subject key                     (per-subject keyring)
         |
         | HKDF-SHA256 info = "workspace:{workspaceId}"
         v
@@ -45,15 +45,15 @@ workspace key
         v
 encrypted CRDT value
 ```
-On the server, `apps/api/src/auth/encryption.ts` reads `ENCRYPTION_SECRETS` from the worker env and calls `@epicenter/encryption` to parse the keyring and derive per-user keys.
-It returns one `{ version, userKeyBase64 }` entry per configured secret version.
+On the server, `apps/api/src/auth/encryption.ts` reads `ENCRYPTION_SECRETS` from the worker env and calls `@epicenter/encryption` to parse the root keyring and derive per-subject keys.
+It returns one `{ version, subjectKeyBase64 }` entry per configured root keyring version.
 On the client, the encryption coordinator (`attachEncryption(ydoc, { keyring })`) reads `keyring()` synchronously at every `attachTable` / `attachKv` / `attachIndexedDb` site, decodes each `subjectKeyBase64`, runs `deriveWorkspaceKey(subjectKey, workspaceId)`, and gets a 32-byte workspace key with `info = workspace:{workspaceId}`.
 The highest version becomes the current key for new writes.
 
 ## How keys reach the client
 Keys come through `/api/me`.
 `apps/api/src/app.ts` mounts `GET /api/me` behind the bearer + `workspaces:open` scope check from `resolveRequestWorkspaceIdentity`. The handler returns `{ user: { id, email }, localIdentity: { subject, keyring } }`.
-`@epicenter/auth` calls `/api/me` at sign-in and at cold-boot when online, persists `{ subject, keyring }` as the `localIdentity` section of the cell, and exposes it through `auth.state.localIdentity.keyring` whenever the auth state is not `signed-out`. Older cells with `{ unlock: { userId, encryptionKeys } }` migrate in place on first read.
+`@epicenter/auth` calls `/api/me` at sign-in and at cold-boot when online, persists `{ subject, keyring }` as the `localIdentity` section of the cell, and exposes it through `auth.state.localIdentity.keyring` whenever the auth state is not `signed-out`.
 Cold-boot offline keeps the cached `localIdentity` so the workspace can decrypt local Yjs data without a network roundtrip; the bearer is not attached to outbound requests until `/api/me` re-confirms the cell in this runtime.
 The workspace does not hold an independently mutable copy of the keys. `attachEncryption` takes a `keyring` callback and calls it when an encrypted table, KV store, or IndexedDB provider attaches. Each attached store keeps the keyring derived at that attachment boundary. In per-app session modules, the workspace builder reads `auth.state.localIdentity.keyring` directly:
 ```ts
@@ -100,12 +100,8 @@ export function openMyApp({
 
 The storage name is derived inside `@epicenter/workspace` as:
 ```text
-epicenter.v1.user.{subject}.yjs.{ydocGuid}
+epicenter.v1.subject.{subject}.yjs.{ydocGuid}
 ```
-
-The `user` segment is a durable storage label kept stable across the
-public rename so existing encrypted databases remain readable. The
-public field is `subject`; the on-disk prefix did not change.
 
 The `v1` segment names the local Yjs storage namespace. It gives future cleanup or migration code one prefix to target, while app code still treats the full string as an implementation detail.
 

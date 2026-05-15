@@ -10,9 +10,8 @@
  * - `wipeLocalYjsData`: deletes known guids and enumerated owner-scoped
  *   databases, leaves other owners and unscoped local docs alone.
  *
- * The durable IndexedDB prefix remains `epicenter.v1.user.` even though the
- * public field renamed to `subject`. These tests pin the prefix so any
- * accidental rename of the storage label is caught here, not in user data.
+ * These tests pin the durable IndexedDB prefix at `epicenter.v1.subject.`
+ * so any accidental rename of the storage label is caught here.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -111,9 +110,9 @@ describe('LocalOwner.attachIndexedDb', () => {
 		ydoc.destroy();
 	});
 
-	test('round trips encrypted Yjs updates through IndexedDB at the v1 user prefix', async () => {
+	test('round trips encrypted Yjs updates through IndexedDB at the v1 subject prefix', async () => {
 		const subject = `user-${crypto.randomUUID()}`;
-		const databaseName = `epicenter.v1.user.${subject}.yjs.encrypted-idb-roundtrip`;
+		const databaseName = `epicenter.v1.subject.${subject}.yjs.encrypted-idb-roundtrip`;
 		const keyring = toKeyring(randomBytes(32));
 
 		const firstDoc = new Y.Doc({
@@ -154,7 +153,7 @@ describe('LocalOwner.attachIndexedDb', () => {
 
 	test('target guid changes the derived storage key', async () => {
 		const subject = `user-${crypto.randomUUID()}`;
-		const databaseName = `epicenter.v1.user.${subject}.yjs.encrypted-idb-guid-a`;
+		const databaseName = `epicenter.v1.subject.${subject}.yjs.encrypted-idb-guid-a`;
 		const keyring = toKeyring(randomBytes(32));
 		const ydoc = new Y.Doc({ guid: 'encrypted-idb-guid-a', gc: false });
 		const owner = createLocalOwner({ subject, keyring: () => keyring });
@@ -247,7 +246,7 @@ describe('LocalOwner.attachBroadcastChannel', () => {
 		owner.attachBroadcastChannel(ydoc);
 
 		expect(FakeBroadcastChannel.names).toEqual([
-			'yjs.epicenter.v1.user.user-123.yjs.epicenter.fuji',
+			'yjs.epicenter.v1.subject.user-123.yjs.epicenter.fuji',
 		]);
 		expect(ydoc.guid).toBe('epicenter.fuji');
 		ydoc.destroy();
@@ -261,9 +260,9 @@ describe('LocalOwner.wipeLocalYjsData', () => {
 		);
 	});
 
-	test('clears known scoped document keys at the v1 user prefix', async () => {
-		await createDatabase('epicenter.v1.user.user-1.yjs.doc-a');
-		await createDatabase('epicenter.v1.user.user-1.yjs.doc-b');
+	test('clears known scoped document keys at the v1 subject prefix', async () => {
+		await createDatabase('epicenter.v1.subject.user-1.yjs.doc-a');
+		await createDatabase('epicenter.v1.subject.user-1.yjs.doc-b');
 
 		const owner = createLocalOwner({
 			subject: 'user-1',
@@ -272,14 +271,14 @@ describe('LocalOwner.wipeLocalYjsData', () => {
 		await owner.wipeLocalYjsData(['doc-a', 'doc-b']);
 
 		const remaining = await databaseNames();
-		expect(remaining).not.toContain('epicenter.v1.user.user-1.yjs.doc-a');
-		expect(remaining).not.toContain('epicenter.v1.user.user-1.yjs.doc-b');
+		expect(remaining).not.toContain('epicenter.v1.subject.user-1.yjs.doc-a');
+		expect(remaining).not.toContain('epicenter.v1.subject.user-1.yjs.doc-b');
 	});
 
 	test('also clears enumerated scoped database names and leaves others alone', async () => {
-		await createDatabase('epicenter.v1.user.user-1.yjs.doc-a');
-		await createDatabase('epicenter.v1.user.user-1.yjs.doc-b');
-		await createDatabase('epicenter.v1.user.user-2.yjs.doc-c');
+		await createDatabase('epicenter.v1.subject.user-1.yjs.doc-a');
+		await createDatabase('epicenter.v1.subject.user-1.yjs.doc-b');
+		await createDatabase('epicenter.v1.subject.user-2.yjs.doc-c');
 		await createDatabase('unscoped-doc');
 
 		const owner = createLocalOwner({
@@ -289,9 +288,9 @@ describe('LocalOwner.wipeLocalYjsData', () => {
 		await owner.wipeLocalYjsData(['doc-a']);
 
 		const remaining = await databaseNames();
-		expect(remaining).not.toContain('epicenter.v1.user.user-1.yjs.doc-a');
-		expect(remaining).not.toContain('epicenter.v1.user.user-1.yjs.doc-b');
-		expect(remaining).toContain('epicenter.v1.user.user-2.yjs.doc-c');
+		expect(remaining).not.toContain('epicenter.v1.subject.user-1.yjs.doc-a');
+		expect(remaining).not.toContain('epicenter.v1.subject.user-1.yjs.doc-b');
+		expect(remaining).toContain('epicenter.v1.subject.user-2.yjs.doc-c');
 		expect(remaining).toContain('unscoped-doc');
 	});
 });

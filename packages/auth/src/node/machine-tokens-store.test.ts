@@ -101,28 +101,6 @@ test('load against corrupt JSON returns Ok(null)', async () => {
 	expect(loaded.data).toBeNull();
 });
 
-test('load migrates legacy { grant, unlock } cells to { grant, localIdentity }', async () => {
-	const filePath = tmpAuthPath();
-	await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-	const legacy = {
-		grant: {
-			accessToken: 'a',
-			refreshToken: 'r',
-			accessTokenExpiresAt: 1_700_000_000_000,
-		},
-		unlock: {
-			userId: 'user-1',
-			encryptionKeys: [
-				{ version: 1, subjectKeyBase64: keyring[0].subjectKeyBase64 },
-			],
-		},
-	};
-	await fs.writeFile(filePath, JSON.stringify(legacy), { mode: 0o600 });
-	const loaded = await loadMachineTokens({ filePath });
-	expect(loaded.error).toBeNull();
-	expect(loaded.data).toEqual(makeCell('user-1'));
-});
-
 test('load refuses when permissions are too open', async () => {
 	if (process.platform === 'win32') return;
 	const filePath = tmpAuthPath();

@@ -1,8 +1,4 @@
-// Durable browser-local prefix. Kept stable across the user -> subject
-// rename so existing IndexedDB databases remain readable; the public
-// argument name moved from `userId` to `subject` while the stored label
-// did not change.
-const LOCAL_YJS_KEY_PREFIX = 'epicenter.v1.user';
+const LOCAL_YJS_KEY_PREFIX = 'epicenter.v1.subject';
 
 /**
  * Create the browser-local persistence and BroadcastChannel key for a Y.Doc.

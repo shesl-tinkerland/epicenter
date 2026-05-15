@@ -8,8 +8,6 @@
  * - Same-subject guard at /api/me response
  * - Network gate: bearer not attached until /api/me confirms same subject
  * - Cold-boot offline keeps signed-in with localIdentity and no profile field
- * - Legacy `{ grant, unlock: { userId, encryptionKeys } }` cells migrate
- *   transparently to `{ grant, localIdentity: { subject, keyring } }`
  */
 
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
@@ -23,7 +21,7 @@ import type {
 	PersistedAuth,
 	PersistedAuthStorage,
 } from './index.js';
-import { createOAuthAppAuth, PersistedAuth as PersistedAuthSchema } from './index.js';
+import { createOAuthAppAuth } from './index.js';
 
 const now = 1_000_000;
 
@@ -716,71 +714,6 @@ test('/api/me key update after signOut is discarded without writing localIdentit
 	});
 	expect(auth.state).toEqual({ status: 'signed-out' });
 	auth[Symbol.dispose]();
-});
-
-describe('legacy persisted shape', () => {
-	const legacyValue = {
-		grant: grant(),
-		unlock: {
-			userId: 'user-1',
-			encryptionKeys: [
-				{
-					version: 1,
-					subjectKeyBase64: keyring[0]!.subjectKeyBase64,
-				},
-			],
-		},
-	};
-
-	test('PersistedAuth schema accepts and migrates the old shape', () => {
-		const parsed = PersistedAuthSchema.assert(legacyValue);
-		expect(parsed).toEqual({
-			grant: grant(),
-			localIdentity: { subject: 'user-1', keyring: [...keyring] },
-		});
-		// Validating the migrated value again is idempotent.
-		expect(PersistedAuthSchema.assert(parsed)).toEqual(parsed);
-	});
-
-	test('browser localStorage style storage migrates legacy bytes on first read', () => {
-		// Simulate createPersistedState reading a legacy blob: the schema runs
-		// on the raw parsed JSON and produces the new shape.
-		const raw = JSON.stringify(legacyValue);
-		const migrated = PersistedAuthSchema.assert(JSON.parse(raw));
-		expect(migrated).toEqual({
-			grant: grant(),
-			localIdentity: { subject: 'user-1', keyring: [...keyring] },
-		});
-	});
-
-	test('chrome.storage.local style storage migrates legacy object on first read', () => {
-		// chrome.storage hands back an object instead of a string; same path.
-		const migrated = PersistedAuthSchema.assert(legacyValue);
-		expect(migrated).toEqual({
-			grant: grant(),
-			localIdentity: { subject: 'user-1', keyring: [...keyring] },
-		});
-	});
-
-	test('createOAuthAppAuth normalizes legacy cells in memory', async () => {
-		const setup = createStorage(
-			PersistedAuthSchema.assert(legacyValue) as PersistedAuth,
-		);
-		const auth = createOAuthAppAuth({
-			baseURL: 'http://localhost:8787',
-			clientId: 'client-1',
-			now: () => now,
-			persistedAuthStorage: setup.storage,
-			launcher: { startSignIn: async () => Ok(null) },
-			fetch: async () => json(apiMeBody('user-1')),
-		});
-
-		expect(auth.state).toEqual({
-			status: 'signed-in',
-			localIdentity: { subject: 'user-1', keyring: [...keyring] },
-		});
-		auth[Symbol.dispose]();
-	});
 });
 
 describe('removed legacy surface', () => {
