@@ -142,9 +142,9 @@ function parsePermanentFailure(event: {
 			parsed !== null &&
 			typeof parsed === 'object' &&
 			'code' in parsed &&
-			typeof (parsed as { code: unknown }).code === 'string'
+			typeof parsed.code === 'string'
 		) {
-			return { type: 'auth', code: (parsed as { code: string }).code };
+			return { type: 'auth', code: parsed.code };
 		}
 	} catch {
 		// fall through to 'unknown'
