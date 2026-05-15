@@ -225,20 +225,20 @@ describe('attachSqliteMaterializer', () => {
 				testSetup.workspace.tables.posts.set({
 					id: 'post-1',
 					title: 'Hello mirror',
-					published: true,
 					_v: 1,
 				});
 				testSetup.workspace.tables.posts.set({
 					id: 'post-2',
 					title: 'Second row',
+					published: true,
 					_v: 1,
 				});
 
 				await testSetup.workspace.sqlite.whenFlushed;
 
 				expect(getRows(testSetup.db, 'posts')).toEqual([
-					{ id: 'post-1', _v: 1, published: 1, title: 'Hello mirror' },
-					{ id: 'post-2', _v: 1, published: null, title: 'Second row' },
+					{ id: 'post-1', _v: 1, published: null, title: 'Hello mirror' },
+					{ id: 'post-2', _v: 1, published: 1, title: 'Second row' },
 				]);
 			} finally {
 				await cleanup(testSetup);
@@ -473,6 +473,21 @@ describe('attachSqliteMaterializer', () => {
 				await cleanup(testSetup);
 			}
 		});
+
+		test('count propagates SQLite failures for registered tables', async () => {
+			const testSetup = setup();
+
+			try {
+				await testSetup.workspace.sqlite.whenFlushed;
+				testSetup.db.run('DROP TABLE "posts"');
+
+				await expect(
+					testSetup.workspace.sqlite.count({ table: 'posts' }),
+				).rejects.toThrow();
+			} finally {
+				await cleanup(testSetup);
+			}
+		});
 	});
 
 	// ============================================================================
@@ -496,7 +511,7 @@ describe('attachSqliteMaterializer', () => {
 				await waitForSyncCycle();
 
 				// The ydoc is destroyed, so further writes to tables are no-ops
-				// as far as materialization is concerned — the observer has been
+				// as far as materialization is concerned; the observer has been
 				// unsubscribed via materializer dispose.
 				await waitForSyncCycle();
 

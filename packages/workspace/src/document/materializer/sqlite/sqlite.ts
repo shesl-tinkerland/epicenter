@@ -1,10 +1,10 @@
 /**
- * SQLite materializer — mirrors workspace table rows into queryable SQLite tables.
+ * SQLite materializer: mirrors workspace table rows into queryable SQLite tables.
  *
  * `attachSqliteMaterializer(ydoc, { db })` returns a chainable builder where
  * `.table(tableRef, config?)` opts in per table. Nothing materializes by default.
  *
- * Teardown is hooked to the ydoc via `ydoc.once('destroy', ...)` — callers
+ * Teardown is hooked to the ydoc via `ydoc.once('destroy', ...)`; callers
  * never call a dispose method; destroying the ydoc cascades.
  *
  * @module
@@ -69,7 +69,7 @@ type TableConfig<TRow extends BaseRow> = {
 
 type RegisteredTable = {
 	table: AnyTable;
-	// biome-ignore lint/suspicious/noExplicitAny: internal storage — variance across heterogeneous row types
+	// biome-ignore lint/suspicious/noExplicitAny: internal storage, variance across heterogeneous row types
 	config: TableConfig<any>;
 	unsubscribe?: () => void;
 };
@@ -121,7 +121,7 @@ export function attachSqliteMaterializer(
 	let isDisposed = false;
 	/**
 	 * Closed once `initialize()` commits (past `await waitFor`). Any `.table()`
-	 * call after this throws — the materializer is past the point where late
+	 * call after this throws: the materializer is past the point where late
 	 * registrations would be picked up for DDL + full-load.
 	 */
 	let isRegistrationOpen = true;
@@ -155,10 +155,7 @@ export function attachSqliteMaterializer(
 		const rows = table.getAllValid();
 		if (rows.length === 0) return;
 
-		const firstRow = rows[0];
-		if (firstRow === undefined) return;
-
-		const keys = Object.keys(firstRow);
+		const keys = collectRowKeys(rows);
 		const placeholders = keys.map(() => '?').join(', ');
 		const columns = keys.map(quoteIdentifier).join(', ');
 		const stmt = await db.prepare(
@@ -232,15 +229,14 @@ export function attachSqliteMaterializer(
 
 	async function count(tableName: string): Promise<number> {
 		if (isDisposed) return 0;
-		try {
-			const stmt = await db.prepare(
-				`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
-			);
-			const row = (await stmt.get()) as Record<string, unknown> | null;
-			return Number(row?.count ?? 0);
-		} catch {
-			return 0;
-		}
+		if (!registered.has(tableName)) return 0;
+
+		const stmt = await db.prepare(
+			`SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)}`,
+		);
+		const row = await stmt.get();
+		if (!isRecord(row)) return 0;
+		return Number(row.count ?? 0);
 	}
 
 	async function rebuild(tableName?: string): Promise<void> {
@@ -250,7 +246,7 @@ export function attachSqliteMaterializer(
 			const entry = registered.get(tableName);
 			if (entry === undefined) {
 				throw new Error(
-					`Cannot rebuild "${tableName}" — not in the materialized table set.`,
+					`Cannot rebuild "${tableName}": not in the materialized table set.`,
 				);
 			}
 			await db.run('BEGIN');
@@ -408,7 +404,7 @@ export function attachSqliteMaterializer(
 // ════════════════════════════════════════════════════════════════════════════
 
 function tableDefinitionToJsonSchema(
-	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly — defineTable already constrains schemas
+	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly, defineTable already constrains schemas
 	definition: TableDefinition<any>,
 	tableName: string,
 ): Record<string, unknown> {
@@ -424,6 +420,18 @@ function tableDefinitionToJsonSchema(
 		);
 	}
 	return standardSchemaToJsonSchema(schema as StandardJSONSchemaV1);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function collectRowKeys(rows: readonly BaseRow[]): string[] {
+	const keys = new Set<string>();
+	for (const row of rows) {
+		for (const key of Object.keys(row)) keys.add(key);
+	}
+	return [...keys];
 }
 
 /**

@@ -110,8 +110,7 @@ export function generateDdl(
  *   ],
  * });
  *
- * // Picks the `_v: 2` schema
- * console.log((resolved.properties as Record<string, unknown>).title);
+ * // Picks the `_v: 2` schema, including its `title` property.
  * ```
  */
 export function resolveSchema(schema: JsonSchema): JsonSchema {

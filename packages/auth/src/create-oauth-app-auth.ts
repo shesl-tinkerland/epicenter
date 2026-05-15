@@ -310,16 +310,12 @@ export function createOAuthAppAuth({
 				networkAuthPaused = false;
 				publishState();
 				if (refreshTokenToRevoke) {
-					void Promise.resolve()
-						.then(() =>
-							revokeOAuthRefreshTokenWithEndpoint({
-								baseURL,
-								clientId,
-								refreshToken: refreshTokenToRevoke,
-								fetch: fetchImpl,
-							}),
-						)
-						.catch(() => undefined);
+					void revokeOAuthRefreshTokenWithEndpoint({
+						baseURL,
+						clientId,
+						refreshToken: refreshTokenToRevoke,
+						fetch: fetchImpl,
+					}).catch(() => undefined);
 				}
 				return Ok(undefined);
 			} catch (cause) {
