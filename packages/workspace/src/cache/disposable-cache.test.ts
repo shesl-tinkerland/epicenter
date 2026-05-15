@@ -147,9 +147,10 @@ describe('arbitrary fields flow through the handle', () => {
 
 		const handle = cache.open('a');
 		let resolved = false;
-		void handle.whenReady.then(() => {
+		void (async () => {
+			await handle.whenReady;
 			resolved = true;
-		});
+		})();
 
 		await new Promise((r) => setTimeout(r, 5));
 		expect(resolved).toBe(false);

@@ -162,16 +162,18 @@ export function openCollaboration<TActions extends ActionRegistry>(
 	// Client-side orphan sweep. If a previous run crashed between writing a
 	// call and reaching `finally { rpc.delete(id) }`, the entry persists in
 	// the workspace doc. Sweep anything older than 1h once we are online.
-	// Wrapped in `.catch` because the supervisor rejects `whenConnected` on
-	// permanent auth failure, and we do not want to surface that here.
-	void supervisor.whenConnected
-		.then(() => {
+	void (async () => {
+		try {
+			await supervisor.whenConnected;
 			const cutoff = Date.now() - 1000 * 60 * 60;
 			for (const [id, entry] of rpc.entries()) {
 				if (entry.val.sent_at < cutoff) rpc.delete(id);
 			}
-		})
-		.catch(() => {});
+		} catch {
+			// The supervisor rejects `whenConnected` on permanent auth failure, and
+			// orphan cleanup should not surface that failure here.
+		}
+	})();
 
 	return {
 		replicaId,

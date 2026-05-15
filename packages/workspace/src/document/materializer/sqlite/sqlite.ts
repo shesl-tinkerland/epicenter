@@ -155,7 +155,10 @@ export function attachSqliteMaterializer(
 		const rows = table.getAllValid();
 		if (rows.length === 0) return;
 
-		const keys = Object.keys(rows[0]!);
+		const firstRow = rows[0];
+		if (firstRow === undefined) return;
+
+		const keys = Object.keys(firstRow);
 		const placeholders = keys.map(() => '?').join(', ');
 		const columns = keys.map(quoteIdentifier).join(', ');
 		const stmt = await db.prepare(
@@ -185,11 +188,9 @@ export function attachSqliteMaterializer(
 
 		syncTimeout = setTimeout(() => {
 			syncTimeout = null;
-			syncQueue = syncQueue
-				.then(() => flushPendingSync())
-				.catch((cause: unknown) => {
-					log.error(SqliteMaterializerError.SyncFailed({ cause }));
-				});
+			syncQueue = syncQueue.then(flushPendingSync).catch((cause: unknown) => {
+				log.error(SqliteMaterializerError.SyncFailed({ cause }));
+			});
 		}, debounceMs);
 	}
 

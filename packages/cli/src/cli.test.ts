@@ -8,7 +8,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { createCLI } from './cli';
 
-function captureHelp(argv: string[] = ['--help']): Promise<string> {
+async function captureHelp(argv: string[] = ['--help']): Promise<string> {
 	const chunks: string[] = [];
 	const logSpy = spyOn(console, 'log').mockImplementation(
 		(...args: unknown[]) => {
@@ -20,14 +20,15 @@ function captureHelp(argv: string[] = ['--help']): Promise<string> {
 			chunks.push(args.map((a) => String(a)).join(' '));
 		},
 	);
-	return createCLI()
-		.run(argv)
-		.catch(() => {})
-		.finally(() => {
-			logSpy.mockRestore();
-			errSpy.mockRestore();
-		})
-		.then(() => chunks.join('\n'));
+	try {
+		await createCLI()
+			.run(argv)
+			.catch(() => {});
+		return chunks.join('\n');
+	} finally {
+		logSpy.mockRestore();
+		errSpy.mockRestore();
+	}
 }
 
 describe('createCLI', () => {
