@@ -182,6 +182,10 @@ export function createSyncSupervisor(
 			case 'offline':
 				log.info('sync offline', { phase: next.phase, docGuid: ydoc.guid });
 				break;
+			case 'connecting':
+				break;
+			default:
+				next satisfies never;
 		}
 	}
 
