@@ -663,6 +663,7 @@
       "name": "@epicenter/sync",
       "version": "0.1.0",
       "dependencies": {
+        "@epicenter/constants": "workspace:*",
         "lib0": "catalog:",
         "wellcrafted": "catalog:",
         "y-protocols": "catalog:",

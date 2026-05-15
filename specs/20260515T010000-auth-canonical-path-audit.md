@@ -411,22 +411,29 @@ apps/api/src/auth/trusted-oauth-clients.ts
 
 ### Phase 1: Prove Existing Invariants
 
-- [ ] Add auth tests for stale refresh write after sign-out.
-- [ ] Add auth tests for stale `/api/me` key-update write after sign-out.
+- [x] Add auth tests for stale refresh write after sign-out.
+  > Evidence: `packages/auth/src/contract.test.ts` covers `concurrent refresh shares one promise and signOut during refresh wins`. The test proves a refresh response that resolves after sign-out does not restore storage, bearer attachment, or signed-in state.
+- [x] Add auth tests for stale `/api/me` key-update write after sign-out.
+  > Evidence: `packages/auth/src/contract.test.ts` covers `/api/me key update after signOut is discarded without writing unlock`. The test resolves `/api/me` with rotated encryption keys after sign-out and proves the rotated unlock is not written.
 - [ ] Add a session test for same-user identity-bearing transitions.
 - [ ] Add or update a test proving `reauth-required` keeps the workspace mounted.
 - [ ] Add a transport test proving protected sync does not open an anonymous WebSocket when auth verification fails.
 
 ### Phase 2: Harden Auth Core
 
-- [ ] Fix stale storage writes in refresh and `/api/me` verification.
-- [ ] Decide whether `AuthClient.signOut()` should await revoke in machine contexts or stay best effort everywhere.
-- [ ] Share the OAuth token response parser across browser, extension, refresh, and OOB launchers.
-- [ ] Import the bearer subprotocol prefix from `@epicenter/sync` or move it to a shared no-cycle package.
+- [x] Fix stale storage writes in refresh and `/api/me` verification.
+  > Evidence: `packages/auth/src/create-oauth-app-auth.ts` re-checks the started cell before and after storage writes, and the two Phase 1 stale-response tests cover refresh and `/api/me` unlock updates after sign-out.
+- [x] Decide whether `AuthClient.signOut()` should await revoke in machine contexts or stay best effort everywhere.
+  > Decision: keep storage-first sign-out plus best-effort revoke everywhere. Evidence: `packages/auth/src/contract.test.ts` covers `signOut clears cell and network pause even when revoke fails`; `packages/auth/src/node/machine-auth.test.ts` covers `logout survives revoke failure and still deletes the file`; `packages/cli/README.md` now says logout clears the local file first, then makes a best-effort RFC 7009 revoke call.
+- [x] Share the OAuth token response parser across browser, extension, refresh, and OOB launchers.
+  > Evidence: `packages/auth/src/oauth-token-response.ts` is used by `packages/auth/src/oauth-launchers/index.ts`, `packages/auth/src/node/oob-launcher.ts`, and `packages/auth/src/create-oauth-app-auth.ts`.
+- [x] Import the bearer subprotocol prefix from `@epicenter/sync` or move it to a shared no-cycle package.
+  > Evidence: `packages/constants/src/auth.ts` owns `BEARER_SUBPROTOCOL_PREFIX`; `packages/sync/src/auth-subprotocol.ts` re-exports it; `packages/auth/src/create-oauth-app-auth.ts` imports the same constant directly. This keeps the dependency direction clean.
 
 ### Phase 3: Harden Machine OOB
 
-- [ ] Fix OOB state semantics by copying `{ code, state }`, or remove the local state check language.
+- [x] Fix OOB state semantics by copying `{ code, state }`, or remove the local state check language.
+  > Evidence: `packages/auth/src/node/oob-launcher.ts` no longer sends an unverifiable `state` parameter in the OOB authorize URL. `packages/auth/src/node/oob-launcher.test.ts` asserts the authorize URL has no `state`.
 - [ ] Replace the fixed auth temp path with a unique temp path.
 - [ ] Decide self-hosted CLI callback registration. Either require explicit `redirectUri` for non-production `baseURL`, or seed trusted redirect URIs through setup.
 
@@ -436,6 +443,7 @@ apps/api/src/auth/trusted-oauth-clients.ts
 - [ ] Make network-only controls show reconnect while local workspace controls remain usable.
 - [ ] Keep profile queries in account surfaces, not auth state.
 - [ ] Update stale docs that still show `auth.state.identity`, `OAuthSession`, `getToken`, or direct `openWebSocket: auth.openWebSocket` examples that contradict the current transport shape.
+  > Partial evidence: `packages/cli/README.md` was updated so daemon route examples consume injected `auth` from `start({ auth })` instead of constructing route-local machine auth. Broader docs remain deferred.
 
 ### Phase 5: Sync Identity Cleanup
 
@@ -477,6 +485,147 @@ No em dash or en dash in changed files.
 
 Historical specs may still contain rejected terms, but new implementation specs must point back here and say they are historical.
 
+## Phase 1 Execution Evidence
+
+Completed on 2026-05-15.
+
+Falsification gate result:
+
+```txt
+No architecture-changing contradiction found.
+
+Live contradictions found and handled:
+1. Machine OOB generated state, but the paste flow only accepted code.
+2. Logout docs implied guaranteed revoke, while code is storage-first plus best-effort revoke.
+3. Auth and sync duplicated the bearer WebSocket subprotocol prefix.
+4. Browser callback, OOB callback, and refresh parsed OAuth token responses separately.
+5. CLI README daemon example constructed machine auth inside the route instead of consuming injected auth.
+
+Live non-blocking findings deferred:
+1. `apps/api` still has the historical `device_code` table and migration metadata, but no active device-authorization runtime path was found.
+2. `apps/tab-manager/src/lib/platform/auth/auth.ts` has a legacy-storage comment that mentions `OAuthSession`.
+3. `packages/workspace/src/document/README.md` still has an old `auth.state.identity` example.
+```
+
+Implemented changes:
+
+```txt
+Canonical launch path count:
+  3 launch paths: browser app, extension, machine OOB.
+  1 shared runtime after launch.
+  Daemon is not a fourth auth path.
+
+Persisted auth naming decision:
+  Keep PersistedAuth = { grant, unlock }.
+  Do not rename grant or unlock in this phase.
+
+OOB state:
+  packages/auth/src/node/oob-launcher.ts
+    removed generated state from the OOB authorize URL because the CLI paste
+    flow does not receive state back from the hosted callback page.
+
+OAuth token parsing:
+  packages/auth/src/oauth-token-response.ts
+    added one shared parser for access_token, refresh_token, expires_in,
+    and bearer token_type validation.
+  packages/auth/src/oauth-launchers/index.ts
+    browser and extension auth-code exchange use the shared parser.
+  packages/auth/src/node/oob-launcher.ts
+    OOB auth-code exchange uses the shared parser.
+  packages/auth/src/create-oauth-app-auth.ts
+    refresh uses the shared parser and keeps the previous refresh token
+    when the refresh response omits rotation.
+
+WebSocket bearer prefix:
+  packages/constants/src/auth.ts
+    owns BEARER_SUBPROTOCOL_PREFIX.
+  packages/sync/src/auth-subprotocol.ts
+    re-exports the shared prefix for server and sync callers.
+  packages/auth/src/create-oauth-app-auth.ts
+    imports the same shared prefix for client WebSocket construction.
+
+Logout semantics:
+  packages/cli/README.md
+    now documents logout as local file clear first, then best-effort RFC 7009
+    revoke.
+  packages/auth/src/contract.test.ts
+    covers local sign-out plus best-effort revoke failure.
+  packages/auth/src/node/machine-auth.test.ts
+    covers machine logout surviving revoke failure and deleting the file.
+
+Daemon docs:
+  packages/cli/README.md
+    daemon route example now receives injected auth through start({ auth })
+    and no longer calls createMachineAuthClient() inside the route.
+```
+
+Deferred changes:
+
+```txt
+Session tests:
+  Same-user identity-bearing transition and reauth-required mounted-session
+  tests remain deferred. The live implementation documents the invariant in
+  packages/svelte-utils/src/session.svelte.ts, but this pass did not add a
+  Svelte-runes test harness.
+
+Protected sync anonymous WebSocket behavior:
+  Deferred because changing openWebSocket failure behavior would alter the
+  auth/sync contract. Current coverage proves bearer insertion waits for
+  /api/me verification, not that protected sync rejects anonymous opens.
+
+Machine temp-file collision:
+  Deferred. packages/auth/src/node/machine-tokens-store.ts still uses a fixed
+  .tmp path. That is Phase 3 hardening and not required for the Phase 1
+  canonicalization pass.
+
+Self-hosted CLI callback registration:
+  Deferred pending the trusted-client setup decision.
+
+Broader stale docs:
+  Deferred outside packages/cli/README.md. Historical docs and package READMEs
+  still contain rejected terms and old examples.
+```
+
+Commands run during Phase 1 execution:
+
+```bash
+bun install
+bun test packages/auth
+bun test packages/sync
+rg -n "OAuthSession|AuthIdentity|WorkspaceIdentityStore|/workspace-identity|getToken\\(|bearerToken|auth\\.state\\.identity|auth\\.state\\.email|deviceAuthorization|deviceAuthorizationClient|device_code|deviceCode" packages apps -g '!**/*.test.ts' -g '!**/*.bench.ts'
+rg -n "createMachineAuthClient\\(" packages apps docs -g '*.md' -g '*.ts' -g '!**/*.test.ts'
+rg -n "const BEARER_SUBPROTOCOL_PREFIX = 'bearer\\.'|parseTokenResponse|readPositiveNumber|readOptionalString|readString\\(" packages/auth/src packages/sync/src packages/constants/src
+LC_ALL=C perl -ne 'print "$ARGV:$.:$_" if /\\xE2\\x80[\\x93\\x94]/' packages/auth/src/create-oauth-app-auth.ts packages/auth/src/oauth-token-response.ts packages/auth/src/oauth-launchers/index.ts packages/auth/src/node/oob-launcher.ts packages/auth/src/contract.test.ts packages/auth/src/oauth-launchers/index.test.ts packages/auth/src/node/oob-launcher.test.ts packages/sync/src/auth-subprotocol.ts packages/sync/src/auth-subprotocol.test.ts packages/constants/src/auth.ts packages/cli/README.md specs/20260515T010000-auth-canonical-path-audit.md
+```
+
+Results:
+
+```txt
+bun install:
+  Pass. Saved lockfile. Checked 1610 installs across 1690 packages.
+
+bun test packages/auth:
+  First run after adding the stale key-update test failed because the test
+  temporarily referenced a removed helper. This was a test edit mistake.
+  Final run passed: 50 pass, 0 fail, 159 expect calls.
+
+bun test packages/sync:
+  Pass: 27 pass, 0 fail, 52 expect calls.
+
+apps/api tests:
+  Not run because no apps/api auth code changed.
+
+Live grep results:
+  device_code remains only in DB schema and migration metadata.
+  OAuthSession remains in a legacy storage comment in tab-manager.
+  auth.state.identity remains in packages/workspace/src/document/README.md.
+  No live runtime raw token getter or device authorization machine path was
+  found in packages or apps.
+
+Dash check:
+  Pass after replacing two existing dashes in packages/sync/src/auth-subprotocol.ts.
+```
+
 ## Rejected Alternatives
 
 | Alternative | Refusal |
@@ -496,11 +645,17 @@ Historical specs may still contain rejected terms, but new implementation specs 
 
 These are implementation choices, not architecture blockers:
 
-1. Should machine logout await revoke, or should all logout remain storage-first and revoke-best-effort?
-2. Should protected sync reject anonymous `openWebSocket` attempts in auth or in workspace sync?
-3. Should `createSession` rebuild on a different `unlock.userId`, or should auth guarantee a signed-out transition first?
-4. Should self-hosted CLI login require explicit trusted-client setup, or should setup seed redirect URIs?
-5. Should `/api/me` remain both network verification and account profile fetch, or should account profile get a separate route later?
+1. Should protected sync reject anonymous `openWebSocket` attempts in auth or in workspace sync?
+2. Should `createSession` rebuild on a different `unlock.userId`, or should auth guarantee a signed-out transition first?
+3. Should self-hosted CLI login require explicit trusted-client setup, or should setup seed redirect URIs?
+4. Should `/api/me` remain both network verification and account profile fetch, or should account profile get a separate route later?
+
+Resolved during Phase 1 execution:
+
+```txt
+Machine logout does not await revoke. All logout remains storage-first and
+revoke-best-effort.
+```
 
 ## Pause Conditions
 

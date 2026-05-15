@@ -51,7 +51,8 @@ The persisted shape is `PersistedAuth = { grant, unlock }`:
 
 - `grant` (`{ accessToken, refreshToken, accessTokenExpiresAt }`) is the
   online server-access material. The refresh token rotates on every
-  refresh; revoked on `epicenter auth logout` via RFC 7009.
+  refresh. `epicenter auth logout` clears the local file first, then makes a
+  best-effort RFC 7009 revoke call.
 - `unlock` (`{ userId, encryptionKeys }`) is the local capability to
   decrypt workspace Yjs data without a network roundtrip. Loaded once at
   sign-in from `GET /api/me` and re-confirmed at cold-boot when online.
@@ -161,13 +162,13 @@ import {
 	roomWsUrl,
 } from '@epicenter/workspace';
 import { defineConfig } from '@epicenter/workspace/daemon';
-import { createMachineAuthClient } from '@epicenter/auth/node';
+import type { AuthClient } from '@epicenter/auth';
 import Type from 'typebox';
 import { type } from 'arktype';
 
 const SavedTab = defineTable(type({ id: 'string', title: 'string', url: 'string', _v: '1' }));
 
-async function openTabManagerDaemon() {
+async function openTabManagerDaemon({ auth }: { auth: AuthClient }) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.tab-manager' });
 	const tables = attachTables(ydoc, { savedTabs: SavedTab });
 	const actions = defineActions({
@@ -181,7 +182,6 @@ async function openTabManagerDaemon() {
 			handler: ({ id }) => tables.savedTabs.delete(id),
 		}),
 	});
-	const auth = await createMachineAuthClient();
 	const collaboration = openCollaboration(ydoc, {
 		url: roomWsUrl('https://api.epicenter.so', ydoc.guid),
 		openWebSocket: auth.openWebSocket,
@@ -207,10 +207,20 @@ async function openTabManagerDaemon() {
 
 export default defineConfig({
 	daemon: {
-		routes: [{ route: 'tabManager', start: () => openTabManagerDaemon() }],
+		routes: [
+			{
+				route: 'tabManager',
+				start: ({ auth }) => openTabManagerDaemon({ auth }),
+			},
+		],
 	},
 });
 ```
+
+The CLI loader creates one machine auth client from
+`~/.epicenter/auth.json` and injects it into every route starter as
+`start({ auth, projectDir, route })`. Route modules should consume that
+`auth`; they should not call `createMachineAuthClient()` themselves.
 
 App packages publish their schema on npm. Runtime recipes (script entries,
 daemon routes) ship as jsrepo blocks the consumer copies into their tree.
@@ -229,9 +239,8 @@ export default defineConfig({
 ```
 
 Add the block with `bunx jsrepo add epicenter/fuji/daemon-route`. The block
-defaults auth through `createMachineAuthClient()` from `@epicenter/auth/node`
-and is yours to edit (override the auth source, the sync URL, the route name,
-etc.) without breaking sync compatibility.
+defaults to the injected daemon auth and is yours to edit (override the sync
+URL, the route name, etc.) without breaking sync compatibility.
 
 ## Exposing operations via CLI
 

@@ -315,3 +315,34 @@ test('handleCallback rejects a token response without expires_in', async () => {
 
 	expect(error?.name).toBe('MissingExpiresIn');
 });
+
+test('handleCallback rejects a non-bearer token response', async () => {
+	const { storage } = createMemoryStorage({
+		'epicenter.oauth.client-1': JSON.stringify({
+			state: 'state-1',
+			codeVerifier: 'verifier-1',
+			redirectUri: 'http://app.test/auth/callback',
+		}),
+	});
+	const client = createOAuthClient({
+		issuer: 'http://auth.test/auth',
+		clientId: 'client-1',
+		redirectUri: 'http://app.test/auth/callback',
+		resource: 'http://auth.test',
+		storage,
+		fetch: createFetch({
+			tokenBody: {
+				access_token: 'access-token',
+				refresh_token: 'refresh-token',
+				expires_in: 900,
+				token_type: 'mac',
+			},
+		}),
+	});
+
+	const { error } = await client.handleCallback(
+		'http://app.test/auth/callback?code=code-1&state=state-1',
+	);
+
+	expect(error?.name).toBe('TokenExchangeFailed');
+});

@@ -17,10 +17,6 @@ import { createOobOAuthLauncher } from './oob-launcher.js';
 
 const NOW = 1_700_000_000_000;
 
-function asFetch(impl: AuthFetch): AuthFetch {
-	return impl;
-}
-
 function makeJsonResponse(value: unknown, init?: ResponseInit) {
 	return new Response(JSON.stringify(value), {
 		status: 200,
@@ -61,7 +57,7 @@ function setup({
 } = {}) {
 	const printed: string[] = [];
 	const tokenRequests: Array<{ url: string; body: URLSearchParams }> = [];
-	const defaultFetch = asFetch(async (req, init) => {
+	const defaultFetch: AuthFetch = async (req, init) => {
 		const url =
 			typeof req === 'string'
 				? req
@@ -78,7 +74,7 @@ function setup({
 			expires_in: 3600,
 			token_type: 'bearer',
 		});
-	});
+	};
 	const launcher = createOobOAuthLauncher({
 		baseURL: 'http://localhost:8787',
 		clientId: 'epicenter-cli',
@@ -120,7 +116,7 @@ test('PKCE verifier and challenge are linked', async () => {
 	const launcher = createOobOAuthLauncher({
 		baseURL: 'http://localhost:8787',
 		clientId: 'epicenter-cli',
-		fetch: asFetch(async (_input, init) => {
+		fetch: async (_input, init) => {
 			const body = captureBody(init?.body ?? null);
 			receivedVerifier = body.get('code_verifier');
 			return makeJsonResponse({
@@ -129,7 +125,7 @@ test('PKCE verifier and challenge are linked', async () => {
 				expires_in: 3600,
 				token_type: 'bearer',
 			});
-		}),
+		},
 		now: () => NOW,
 		print: (line) => printed.push(line),
 		openBrowser: async () => {},
@@ -141,6 +137,7 @@ test('PKCE verifier and challenge are linked', async () => {
 	const urlLine = printed[0];
 	expect(urlLine).toBeDefined();
 	const url = new URL(urlLine!);
+	expect(url.searchParams.get('state')).toBeNull();
 	const challenge = url.searchParams.get('code_challenge');
 	const method = url.searchParams.get('code_challenge_method');
 	expect(method).toBe('S256');
@@ -152,10 +149,10 @@ test('cancellation: empty paste returns Err(AuthorizationCancelled) and no netwo
 	let fetched = false;
 	const { launcher } = setup({
 		readCode: async () => '   ',
-		fetchImpl: asFetch(async () => {
+		fetchImpl: async () => {
 			fetched = true;
 			return new Response(null, { status: 500 });
-		}),
+		},
 	});
 	const result = await launcher.startSignIn();
 	expect(fetched).toBe(false);
@@ -165,14 +162,13 @@ test('cancellation: empty paste returns Err(AuthorizationCancelled) and no netwo
 
 test('invalid token_type returns Err(InvalidTokenResponse)', async () => {
 	const { launcher } = setup({
-		fetchImpl: asFetch(async () =>
+		fetchImpl: async () =>
 			makeJsonResponse({
 				access_token: 'a',
 				refresh_token: 'r',
 				expires_in: 3600,
 				token_type: 'mac',
 			}),
-		),
 	});
 	const result = await launcher.startSignIn();
 	const err = result.error as { name?: string } | null;
@@ -181,13 +177,11 @@ test('invalid token_type returns Err(InvalidTokenResponse)', async () => {
 
 test('server 400 returns Err(TokenExchangeFailed) with status + body', async () => {
 	const { launcher } = setup({
-		fetchImpl: asFetch(
-			async () =>
-				new Response(JSON.stringify({ error: 'invalid_grant' }), {
-					status: 400,
-					headers: { 'content-type': 'application/json' },
-				}),
-		),
+		fetchImpl: async () =>
+			new Response(JSON.stringify({ error: 'invalid_grant' }), {
+				status: 400,
+				headers: { 'content-type': 'application/json' },
+			}),
 	});
 	const result = await launcher.startSignIn();
 	const err = result.error as {
@@ -213,14 +207,13 @@ test('openBrowser failure does not abort the flow', async () => {
 
 test('case-insensitive token_type check', async () => {
 	const { launcher } = setup({
-		fetchImpl: asFetch(async () =>
+		fetchImpl: async () =>
 			makeJsonResponse({
 				access_token: 'a',
 				refresh_token: 'r',
 				expires_in: 3600,
 				token_type: 'Bearer',
 			}),
-		),
 	});
 	const result = await launcher.startSignIn();
 	expect(result.error).toBeNull();

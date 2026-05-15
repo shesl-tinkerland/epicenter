@@ -77,10 +77,6 @@ type RecordedRequest = {
 
 type Route = (request: RecordedRequest) => Response | Promise<Response>;
 
-function asFetch(impl: AuthFetch): AuthFetch {
-	return impl;
-}
-
 function createFetch({
 	tokenRoute,
 	apiMeRoute,
@@ -94,7 +90,7 @@ function createFetch({
 	recorded: RecordedRequest[];
 } {
 	const recorded: RecordedRequest[] = [];
-	const fetchImpl = asFetch(async (rawInput, rawInit) => {
+	const fetchImpl: AuthFetch = async (rawInput, rawInit) => {
 		const input = rawInput;
 		const init = rawInit;
 		const url =
@@ -131,7 +127,7 @@ function createFetch({
 			return apiMeRoute(request);
 		}
 		return new Response(null, { status: 404 });
-	});
+	};
 	return { fetch: fetchImpl, recorded };
 }
 
@@ -282,9 +278,9 @@ test('status valid when /api/me returns 200 with same userId', async () => {
 test('status unverified on network failure preserves cell', async () => {
 	const filePath = tmpAuthPath();
 	const cell = await preWriteCell(filePath, 'user-1');
-	const fetchImpl = asFetch(async () => {
+	const fetchImpl: AuthFetch = async () => {
 		throw new Error('network down');
-	});
+	};
 	const result = await status({
 		baseURL: BASE_URL,
 		clientId: CLIENT_ID,
@@ -410,7 +406,7 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 	await preWriteCell(filePath, 'user-1');
 
 	const recorded: RecordedRequest[] = [];
-	const fetchImpl = asFetch(async (input, init) => {
+	const fetchImpl: AuthFetch = async (input, init) => {
 		const url =
 			typeof input === 'string'
 				? input
@@ -440,7 +436,7 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 			return new Response(null, { status: 200 });
 		}
 		return new Response(null, { status: 404 });
-	});
+	};
 
 	const auth = await createMachineAuthClient({
 		baseURL: BASE_URL,

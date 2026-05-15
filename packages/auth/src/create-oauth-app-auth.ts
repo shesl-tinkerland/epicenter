@@ -1,4 +1,5 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
+import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
 import { EncryptionKeys, encryptionKeysEqual } from '@epicenter/encryption';
 import { type } from 'arktype';
 import { Ok, type Result } from 'wellcrafted/result';
@@ -10,6 +11,7 @@ import {
 	type OAuthTokenGrant,
 	type PersistedAuth as PersistedAuthType,
 } from './auth-types.js';
+import { parseOAuthTokenGrant } from './oauth-token-response.js';
 import { headersFromRequest } from './request-headers.js';
 
 /**
@@ -57,7 +59,6 @@ export type CreateOAuthAppAuthConfig = {
 };
 
 const REFRESH_SKEW_MS = 60_000;
-const BEARER_SUBPROTOCOL_PREFIX = 'bearer.';
 
 export function createOAuthAppAuth({
 	baseURL = EPICENTER_API_URL,
@@ -391,16 +392,10 @@ async function refreshOAuthTokenWithEndpoint({
 		throw new Error(`OAuth refresh failed with ${response.status}.`);
 	}
 	const data = await response.json();
-	const tokenType = readString(data, 'token_type');
-	if (tokenType.toLowerCase() !== 'bearer') {
-		throw new Error(`Expected token_type to be bearer, got ${tokenType}.`);
-	}
-	return {
-		accessToken: readString(data, 'access_token'),
-		refreshToken:
-			readOptionalString(data, 'refresh_token') ?? grant.refreshToken,
-		accessTokenExpiresAt: now() + readPositiveNumber(data, 'expires_in') * 1000,
-	} satisfies OAuthTokenGrant;
+	return parseOAuthTokenGrant(data, {
+		now,
+		fallbackRefreshToken: grant.refreshToken,
+	});
 }
 
 async function revokeOAuthRefreshTokenWithEndpoint({
@@ -428,39 +423,4 @@ async function revokeOAuthRefreshTokenWithEndpoint({
 	if (!response.ok) {
 		throw new Error(`OAuth revoke failed with ${response.status}.`);
 	}
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error('Expected OAuth token response to be an object.');
-	}
-	return value as Record<string, unknown>;
-}
-
-function readString(value: unknown, key: string) {
-	const record = readRecord(value);
-	const field = record[key];
-	if (typeof field !== 'string') {
-		throw new Error(`Expected ${key} to be a string.`);
-	}
-	return field;
-}
-
-function readOptionalString(value: unknown, key: string) {
-	const record = readRecord(value);
-	const field = record[key];
-	if (field === undefined || field === null) return null;
-	if (typeof field !== 'string') {
-		throw new Error(`Expected ${key} to be a string.`);
-	}
-	return field;
-}
-
-function readPositiveNumber(value: unknown, key: string) {
-	const record = readRecord(value);
-	const field = record[key];
-	if (typeof field !== 'number' || !Number.isFinite(field) || field <= 0) {
-		throw new Error(`Expected ${key} to be a positive number.`);
-	}
-	return field;
 }

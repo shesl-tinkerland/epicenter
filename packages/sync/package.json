@@ -28,6 +28,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@epicenter/constants": "workspace:*",
 		"lib0": "catalog:",
 		"wellcrafted": "catalog:",
 		"y-protocols": "catalog:"

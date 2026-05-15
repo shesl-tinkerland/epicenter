@@ -12,6 +12,7 @@
 	},
 	"exports": {
 		"./apps": "./src/apps.ts",
+		"./auth": "./src/auth.ts",
 		"./oauth": "./src/oauth.ts",
 		"./vite": "./src/vite.ts",
 		"./versions": "./src/versions.ts",

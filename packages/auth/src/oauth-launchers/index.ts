@@ -7,6 +7,10 @@ import {
 import { Ok, type Result } from 'wellcrafted/result';
 import type { OAuthTokenGrant } from '../auth-types.js';
 import type { AuthFetch } from '../create-oauth-app-auth.js';
+import {
+	OAuthTokenResponseError,
+	parseOAuthTokenGrant,
+} from '../oauth-token-response.js';
 
 export const OAuthClientError = defineErrors({
 	MissingCallbackTransaction: () => ({
@@ -297,21 +301,24 @@ export function createOAuthClient({
 function parseTokenResult(
 	tokenResponse: oauth.TokenEndpointResponse,
 ): Result<OAuthTokenGrant, OAuthClientError> {
-	if (!tokenResponse.access_token) return OAuthClientError.MissingAccessToken();
-	if (!tokenResponse.refresh_token)
-		return OAuthClientError.MissingRefreshToken();
-	if (
-		typeof tokenResponse.expires_in !== 'number' ||
-		!Number.isFinite(tokenResponse.expires_in) ||
-		tokenResponse.expires_in <= 0
-	) {
-		return OAuthClientError.MissingExpiresIn();
+	try {
+		return Ok(parseOAuthTokenGrant(tokenResponse, { now: Date.now }));
+	} catch (cause) {
+		if (cause instanceof OAuthTokenResponseError) {
+			switch (cause.issue) {
+				case 'missing_access_token':
+					return OAuthClientError.MissingAccessToken();
+				case 'missing_refresh_token':
+					return OAuthClientError.MissingRefreshToken();
+				case 'missing_expires_in':
+					return OAuthClientError.MissingExpiresIn();
+				case 'invalid_response':
+				case 'invalid_token_type':
+					return OAuthClientError.TokenExchangeFailed({ cause });
+			}
+		}
+		return OAuthClientError.TokenExchangeFailed({ cause });
 	}
-	return Ok({
-		accessToken: tokenResponse.access_token,
-		refreshToken: tokenResponse.refresh_token,
-		accessTokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000,
-	});
 }
 
 function currentUrl() {
