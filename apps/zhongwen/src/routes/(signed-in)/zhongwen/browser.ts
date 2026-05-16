@@ -1,12 +1,9 @@
 import { type LocalOwner } from '@epicenter/workspace';
-import { zhongwenKv, zhongwenTables } from '@epicenter/zhongwen';
-import * as Y from 'yjs';
+import { openZhongwenWorkspace } from '@epicenter/zhongwen';
 
 export function openZhongwenBrowser({ owner }: { owner: LocalOwner }) {
-	const ydoc = new Y.Doc({ guid: 'epicenter.zhongwen', gc: false });
-	const encryption = owner.attachEncryption(ydoc);
-	const tables = encryption.attachTables(zhongwenTables);
-	const kv = encryption.attachKv(zhongwenKv);
+	const workspace = openZhongwenWorkspace(owner.attachEncryption);
+	const { ydoc, tables, kv, encryption } = workspace;
 	const idb = owner.attachIndexedDb(ydoc);
 	owner.attachBroadcastChannel(ydoc);
 
@@ -15,7 +12,7 @@ export function openZhongwenBrowser({ owner }: { owner: LocalOwner }) {
 		tables,
 		kv,
 		encryption,
-		batch: (fn: () => void) => ydoc.transact(fn),
+		batch: workspace.batch,
 		idb,
 		async wipe() {
 			ydoc.destroy();

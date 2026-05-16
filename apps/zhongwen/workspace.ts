@@ -1,16 +1,11 @@
 /**
  * Zhongwen workspace: schema definition with branded IDs and table/kv defs.
  *
- * Browser-agnostic: no IndexedDB, no Svelte imports, no Y.Doc construction.
- * The Y.Doc and attachments live in `blocks/script.ts` (Bun) and `browser.ts`
- * (env-bound), composed through `openZhongwenBrowser`.
- *
- * Distribution: this file is both the `@epicenter/zhongwen` npm root export
- * AND the `epicenter/zhongwen/workspace` jsrepo block. The table and KV
- * shapes here are the wire contract for sync: forking a column shape breaks
- * sync compatibility with peers running the canonical schema. Recipes
- * (script.ts, daemon-route.ts) are yours to edit freely. See apps/README.md
- * for the dual-channel convention.
+ * Distribution: this file is the `@epicenter/zhongwen` package root export.
+ * The table and KV shapes here are the wire contract for sync: forking a
+ * column shape breaks sync compatibility with peers running the canonical
+ * schema. Browser and daemon entrypoints compose runtime-specific attachments
+ * around the shared opener below.
  */
 
 import {
@@ -19,10 +14,12 @@ import {
 	generateId,
 	type Id,
 	type InferTableRow,
+	type LocalOwner,
 } from '@epicenter/workspace';
 import { type } from 'arktype';
 import type { Brand } from 'wellcrafted/brand';
 import type { JsonValue } from 'wellcrafted/json';
+import * as Y from 'yjs';
 
 export const ZHONGWEN_WORKSPACE_ID = 'epicenter.zhongwen';
 
@@ -81,3 +78,27 @@ export const zhongwenTables = {
 export const zhongwenKv = {
 	showPinyin: defineKv(type('boolean'), true),
 };
+type AttachZhongwenEncryption = LocalOwner['attachEncryption'];
+
+export function openZhongwenWorkspace(
+	attachEncryption: AttachZhongwenEncryption,
+	options: { clientId?: number } = {},
+) {
+	const ydoc = new Y.Doc({ guid: ZHONGWEN_WORKSPACE_ID, gc: false });
+	if (options.clientId !== undefined) {
+		ydoc.clientID = options.clientId;
+	}
+	const encryption = attachEncryption(ydoc);
+	const tables = encryption.attachTables(zhongwenTables);
+	const kv = encryption.attachKv(zhongwenKv);
+
+	return {
+		ydoc,
+		encryption,
+		tables,
+		kv,
+		batch: (fn: () => void) => ydoc.transact(fn),
+	};
+}
+
+export type ZhongwenWorkspace = ReturnType<typeof openZhongwenWorkspace>;

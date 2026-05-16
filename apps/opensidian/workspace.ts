@@ -1,15 +1,14 @@
 /**
- * Opensidian workspace definition — files plus chat metadata.
+ * Opensidian workspace definition: files plus chat metadata.
  *
  * This file stays isomorphic so the same schema can be imported by the app,
  * CLI tooling, and any future sync or migration code.
  *
- * Distribution: this file is both the `opensidian` npm root export AND the
- * `epicenter/opensidian/workspace` jsrepo block. The table shapes here are
- * the wire contract for sync: forking a column shape breaks sync
- * compatibility with peers running the canonical schema. Recipes (script.ts,
- * daemon-route.ts) are yours to edit freely. See apps/README.md for the
- * dual-channel convention.
+ * Distribution: this file is the `opensidian` package root export. The table
+ * shapes here are the wire contract for sync: forking a column shape breaks
+ * sync compatibility with peers running the canonical schema. Browser and
+ * daemon entrypoints compose runtime-specific attachments around the shared
+ * opener below.
  */
 
 import { filesTable } from '@epicenter/filesystem';
@@ -18,10 +17,12 @@ import {
 	generateId,
 	type Id,
 	type InferTableRow,
+	type LocalOwner,
 } from '@epicenter/workspace';
 import { type } from 'arktype';
 import type { Brand } from 'wellcrafted/brand';
 import type { JsonValue } from 'wellcrafted/json';
+import * as Y from 'yjs';
 
 export const OPENSIDIAN_WORKSPACE_ID = 'epicenter.opensidian';
 
@@ -131,3 +132,27 @@ export const opensidianTables = {
 	chatMessages: chatMessagesTable,
 	toolTrust: toolTrustTable,
 };
+type AttachOpensidianEncryption = LocalOwner['attachEncryption'];
+
+export function openOpensidianWorkspace(
+	attachEncryption: AttachOpensidianEncryption,
+	options: { clientId?: number } = {},
+) {
+	const ydoc = new Y.Doc({ guid: OPENSIDIAN_WORKSPACE_ID, gc: false });
+	if (options.clientId !== undefined) {
+		ydoc.clientID = options.clientId;
+	}
+	const encryption = attachEncryption(ydoc);
+	const tables = encryption.attachTables(opensidianTables);
+	const kv = encryption.attachKv({});
+
+	return {
+		ydoc,
+		encryption,
+		tables,
+		kv,
+		batch: (fn: () => void) => ydoc.transact(fn),
+	};
+}
+
+export type OpensidianWorkspace = ReturnType<typeof openOpensidianWorkspace>;
