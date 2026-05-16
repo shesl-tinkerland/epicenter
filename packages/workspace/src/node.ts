@@ -5,6 +5,11 @@
  * bundles do not traverse modules that import `node:*` or `bun:*`.
  */
 
+export {
+	attachDaemonInfrastructure,
+	type AttachDaemonInfrastructureOptions,
+	type DaemonInfrastructure,
+} from './daemon/attach-daemon-infrastructure.js';
 export { connectDaemonActions } from './client/connect-daemon-actions.js';
 export type {
 	DaemonActionOptions,

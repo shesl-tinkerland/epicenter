@@ -1,37 +1,24 @@
 /**
  * Honeycrisp daemon extension entrypoint.
  *
- * Composes daemon-only attachments (Yjs log, collaboration, SQLite materializer,
- * Markdown materializer) around the shared
- * `openHoneycrispWorkspace(attachEncryption)` opener. The browser composes
- * browser-only attachments around the same opener.
- *
- * Folder-routed daemon extension contract: the default export is a
- * `DaemonWorkspaceModule` whose `open(ctx)` receives capabilities (the
- * encryption attacher, the auth-bound WebSocket factory) and identity
- * (`projectDir`, `route`, `clientId`, `replicaId`) from the host. The host
- * refuses to open extensions when auth is signed-out, so the keyring closure
- * baked into `ctx.attachEncryption` is the only auth touchpoint on this side.
- *
- * Actions and the Y.Doc clientID are owned by the shared workspace opener;
- * this file only composes daemon-side disk/network attachments.
+ * Composes daemon-only attachments around the shared
+ * `openHoneycrispWorkspace`: Yjs log + sync (via
+ * `attachDaemonInfrastructure`), SQLite materializer for folders and notes,
+ * and Markdown materializer for notes.
  */
 
-import { EPICENTER_API_URL } from '@epicenter/constants/apps';
-import { openCollaboration, roomWsUrl } from '@epicenter/workspace';
+import {
+	attachDaemonInfrastructure,
+	markdownPath,
+	openWriterSqlite,
+	sqlitePath,
+} from '@epicenter/workspace/node';
 import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
 import {
 	attachMarkdownMaterializer,
 	slugFilename,
 } from '@epicenter/workspace/document/materializer/markdown';
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
-import {
-	attachYjsLog,
-	markdownPath,
-	openWriterSqlite,
-	sqlitePath,
-	yjsPath,
-} from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
 import { openHoneycrispWorkspace } from './workspace.js';
 
@@ -46,12 +33,8 @@ export default defineDaemonWorkspace({
 	}) {
 		const workspace = openHoneycrispWorkspace(attachEncryption, { clientId });
 
-		const yjsLog = attachYjsLog(workspace.ydoc, {
-			filePath: yjsPath(projectDir, workspace.ydoc.guid),
-		});
-
-		const collaboration = openCollaboration(workspace.ydoc, {
-			url: roomWsUrl(EPICENTER_API_URL, workspace.ydoc.guid),
+		const infra = attachDaemonInfrastructure(workspace.ydoc, {
+			projectDir,
 			openWebSocket,
 			replicaId,
 			actions: workspace.actions,
@@ -71,16 +54,6 @@ export default defineDaemonWorkspace({
 			dir: markdownPath(projectDir, workspace.ydoc.guid),
 		}).table(workspace.tables.notes, { filename: slugFilename('title') });
 
-		return {
-			collaboration,
-			yjsLog,
-			async [Symbol.asyncDispose]() {
-				workspace.ydoc.destroy();
-				await Promise.all([
-					collaboration.whenDisposed,
-					yjsLog.whenDisposed,
-				]);
-			},
-		};
+		return infra;
 	},
 });
