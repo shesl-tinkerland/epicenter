@@ -25,7 +25,7 @@ export function openFujiBrowser({
 	replicaId: string;
 	openWebSocket?: OpenWebSocket;
 }) {
-	const workspace = openFujiWorkspace(owner);
+	const workspace = openFujiWorkspace(owner.attachEncryption);
 	const { ydoc: rootYdoc, tables, kv } = workspace;
 
 	const idb = owner.attachIndexedDb(rootYdoc);

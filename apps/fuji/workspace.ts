@@ -73,6 +73,7 @@ export type Entry = InferTableRow<typeof entriesTable>;
 
 export const fujiTables = { entries: entriesTable };
 export type FujiTables = Tables<typeof fujiTables>;
+type AttachFujiEncryption = LocalOwner['attachEncryption'];
 
 /**
  * Compute the deterministic guid of an entry's rich-text content sub-doc.
@@ -108,14 +109,14 @@ export function entryContentDocGuid({
  * daemons in different project directories produce distinct update streams.
  */
 export function openFujiWorkspace(
-	owner: Pick<LocalOwner, 'attachEncryption'>,
+	attachEncryption: AttachFujiEncryption,
 	options: { clientId?: number } = {},
 ) {
 	const ydoc = createFujiYdoc();
 	if (options.clientId !== undefined) {
 		ydoc.clientID = options.clientId;
 	}
-	return attachFujiWorkspace(ydoc, owner);
+	return attachFujiWorkspace(ydoc, attachEncryption);
 }
 
 export type FujiWorkspace = ReturnType<typeof openFujiWorkspace>;
@@ -126,9 +127,9 @@ function createFujiYdoc(): Y.Doc {
 
 function attachFujiWorkspace(
 	ydoc: Y.Doc,
-	owner: Pick<LocalOwner, 'attachEncryption'>,
+	attachEncryption: AttachFujiEncryption,
 ) {
-	const encryption = owner.attachEncryption(ydoc);
+	const encryption = attachEncryption(ydoc);
 	const tables = encryption.attachTables(fujiTables);
 	const kv = encryption.attachKv({});
 

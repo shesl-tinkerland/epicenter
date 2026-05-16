@@ -3,7 +3,7 @@
  *
  * Composes daemon-only attachments (Yjs log, collaboration, SQLite materializer,
  * Markdown materializer, CLI/script actions) around the shared
- * `openFujiWorkspace(owner)` opener. The browser composes browser-only
+ * `openFujiWorkspace(attachEncryption)` opener. The browser composes browser-only
  * attachments around the same opener.
  *
  * Wave 1 still publishes through the existing `DaemonRouteDefinition` shape so
@@ -14,7 +14,6 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	attachEncryption,
-	type LocalOwner,
 	openCollaboration,
 	roomWsUrl,
 } from '@epicenter/workspace';
@@ -43,8 +42,8 @@ export function defineFujiDaemon({ route = 'fuji' }: { route?: string } = {}) {
 				throw new Error('[fuji-daemon] auth signed-out at start.');
 			}
 
-			const owner: Pick<LocalOwner, 'attachEncryption'> = {
-				attachEncryption(ydoc) {
+			const workspace = openFujiWorkspace(
+				(ydoc) => {
 					return attachEncryption(ydoc, {
 						keyring: () => {
 							if (auth.state.status === 'signed-out') {
@@ -54,11 +53,10 @@ export function defineFujiDaemon({ route = 'fuji' }: { route?: string } = {}) {
 						},
 					});
 				},
-			};
-
-			const workspace = openFujiWorkspace(owner, {
-				clientId: hashClientId(projectDir),
-			});
+				{
+					clientId: hashClientId(projectDir),
+				},
+			);
 			const actions = createFujiActions(workspace.tables);
 
 			const yjsLog = attachYjsLog(workspace.ydoc, {
