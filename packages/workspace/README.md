@@ -109,7 +109,7 @@ Every exported function in this package falls into one of three verbs. The prefi
 | Verb | Side effect | Input | Output | Examples |
 |---|---|---|---|---|
 | `define*` | **None**: pure data | Schemas, defaults | Plain config object | `defineTable`, `defineKv`, `defineMutation`, `defineQuery` |
-| `attach*` | **Mutates a Y.Doc**: binds a slot, registers `ydoc.on('destroy')` | An existing `Y.Doc` + config | Typed handle, non-idempotent, hold the reference | `attachTable`, `attachTables`, `attachKv`, `attachRichText`, `attachPlainText`, `attachTimeline`, `attachAwareness`, `attachIndexedDb`, `attachYjsLog`, `attachBroadcastChannel`, `attachOwnedBroadcastChannel`, `attachYjsSync`, `attachEncryption` (with `.attachTable` / `.attachTables` / `.attachKv` methods), `attachMarkdownMaterializer`, `attachSqliteMaterializer` |
+| `attach*` | **Mutates a Y.Doc**: binds a slot, registers `ydoc.on('destroy')` | An existing `Y.Doc` + config | Typed handle, non-idempotent, hold the reference | `attachTable`, `attachTables`, `attachKv`, `attachRichText`, `attachPlainText`, `attachTimeline`, `attachAwareness`, `attachIndexedDb`, `attachYjsLog`, `attachBroadcastChannel`, `attachYjsSync`, `attachEncryption` (with `.attachTable` / `.attachTables` / `.attachKv` methods), `attachMarkdownMaterializer`, `attachSqliteMaterializer` |
 | `create*` | **Pure construction**: no listeners, no subscriptions, no destroy registration at call time. | Definitions or a builder closure | A usable definition or cache | `createDisposableCache` |
 | `open*` | **Opens a runtime over a Y.Doc or a local resource**: returns a typed handle with its own teardown. The Y.Doc-bound case (`openCollaboration`) registers `ydoc.on('destroy')` like `attach*` does; the resource case (`openSqliteReader`) takes no Y.Doc and returns a `[Symbol.dispose]()` handle. | Y.Doc + config, or resource config | Typed runtime handle | `openCollaboration`, `openSqliteReader`, `openWriterSqlite` |
 
@@ -128,34 +128,29 @@ Minimal encrypted workspace: encryption + IndexedDB + cross-tab + collaboration 
 
 ```typescript
 import {
-	attachEncryption,
-	createLocalOwner,
+	createReplicaId,
+	type LocalOwner,
+	type OpenWebSocket,
 	openCollaboration,
-	type Replica,
 	roomWsUrl,
 } from '@epicenter/workspace';
-import type { SubjectKeyring } from '@epicenter/encryption';
+import { createSession } from '@epicenter/svelte';
 import * as Y from 'yjs';
+import { auth } from '$lib/auth';
 import { appTables } from '$lib/workspace/definition';
 
 export function openApp({
-	ownerId,
-	replica,
+	owner,
+	replicaId,
 	openWebSocket,
-	keyring,
 }: {
-	ownerId: string;
-	replica: Replica;
-	openWebSocket?: (
-		url: string | URL,
-		protocols?: string[],
-	) => WebSocket | Promise<WebSocket>;
-	keyring: () => SubjectKeyring;
+	owner: LocalOwner;
+	replicaId: string;
+	openWebSocket?: OpenWebSocket;
 }) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.my-app', gc: false });
 
-	const owner = createLocalOwner({ ownerId, keyring });
-	const encryption = attachEncryption(ydoc, { keyring });
+	const encryption = owner.attachEncryption(ydoc);
 	const tables = encryption.attachTables(appTables);
 
 	const idb = owner.attachIndexedDb(ydoc);
@@ -165,7 +160,7 @@ export function openApp({
 		url: roomWsUrl('https://api.epicenter.so', ydoc.guid),
 		waitFor: idb.whenLoaded,
 		openWebSocket,
-		replica,
+		replicaId,
 		actions: {},
 	});
 
@@ -185,16 +180,14 @@ export function openApp({
 	};
 }
 
-export const workspace = openApp({
-	subject,
-	replica: { id: 'macbook', platform: 'tauri' },
-	openWebSocket: auth.openWebSocket,
-	keyring: () => {
-		if (auth.state.status === 'signed-out') {
-			throw new Error('[workspace] auth signed-out.');
-		}
-		return auth.state.localIdentity.keyring;
-	},
+export const session = createSession({
+	auth,
+	build: ({ owner }) =>
+		openApp({
+			owner,
+			replicaId: createReplicaId({ storage: localStorage }),
+			openWebSocket: auth.openWebSocket,
+		}),
 });
 ```
 
@@ -815,7 +808,6 @@ Attachments are the opt-in capabilities you compose inside a builder. Browser-sa
 ```typescript
 import {
 	attachBroadcastChannel,
-	attachOwnedBroadcastChannel,
 	attachIndexedDb,
 	attachTables,
 	attachYjsSync,
@@ -835,7 +827,7 @@ Browser apps use `attachIndexedDb(ydoc)`. Bun/Node daemons use `attachYjsLog(ydo
 | `attachIndexedDb(ydoc)` | browser | `whenLoaded`, `whenDisposed` | `clearLocal()` | Local Yjs persistence via `y-indexeddb` |
 | `attachYjsLog(ydoc, { filePath })` | Bun/Node | `whenDisposed` (sync replay; no `whenLoaded` needed) | `clearLocal()` | Append-log SQLite file the daemon writes |
 
-Authenticated browser workspaces can call `wipeOwnerLocalYjsData({ userId, ydocGuids })` after disposal to delete owner-scoped local Yjs databases.
+Authenticated browser workspaces usually receive a `LocalOwner` from `createSession`. Call `owner.wipeLocalYjsData(ydocGuids)` after disposal to delete owner-scoped local Yjs databases.
 
 `attachSqliteMaterializer` and `attachMarkdownMaterializer` are not persistence: they project workspace rows into queryable SQLite tables or `.md` files. See the materializer subsections below.
 
@@ -869,7 +861,7 @@ void openNotes;
 
 ### Sync
 
-Two primitives wrap the WebSocket transport: `openCollaboration` for the workspace document (sync + presence + RPC + peers), and `attachYjsSync` for content documents that only need bytes-on-the-wire. Compose either with `attachBroadcastChannel(ydoc)` for local-only documents, or `attachOwnedBroadcastChannel(ydoc, { userId })` for authenticated browser workspaces.
+Two primitives wrap the WebSocket transport: `openCollaboration` for the workspace document (sync + presence + RPC + peers), and `attachYjsSync` for content documents that only need bytes-on-the-wire. Compose either with `attachBroadcastChannel(ydoc)` for local-only documents, or `owner.attachBroadcastChannel(ydoc)` for authenticated browser workspaces opened through `createSession`.
 
 ```typescript
 import * as Y from 'yjs';

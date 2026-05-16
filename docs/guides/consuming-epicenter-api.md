@@ -24,21 +24,16 @@ On the client, `@epicenter/workspace` provides the primitives: define your schem
 
 ```typescript
 import {
-	attachEncryption,
-	attachOwnedBroadcastChannel,
+	createReplicaId,
 	defineTable,
-	type EncryptionKeys,
-	getOrCreateInstallationId,
+	type LocalOwner,
 	openCollaboration,
-	type PeerIdentity,
 	roomWsUrl,
-	wipeOwnerLocalYjsData,
 } from '@epicenter/workspace';
-import { requireSignedIn } from '@epicenter/auth';
-import { createCookieAuth } from '@epicenter/auth-svelte';
 import { createSession, type InferSignedIn } from '@epicenter/svelte';
 import * as Y from 'yjs';
 import { type } from 'arktype';
+import { auth } from './auth';
 
 const appTables = {
 	notes: defineTable(
@@ -50,41 +45,35 @@ const appTables = {
 	),
 };
 
-export const auth = createCookieAuth({
-	baseURL: 'https://api.epicenter.so',
-});
-
-function openMyAppDoc({ encryptionKeys }: { encryptionKeys: () => EncryptionKeys }) {
+function openMyAppDoc({ owner }: { owner: LocalOwner }) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.my-app', gc: false });
-	const encryption = attachEncryption(ydoc, { encryptionKeys });
+	const encryption = owner.attachEncryption(ydoc);
 	const tables = encryption.attachTables(appTables);
 	const kv = encryption.attachKv({});
 	return { ydoc, encryption, tables, kv };
 }
 
 function openMyApp({
-	userId,
-	identity,
+	owner,
+	replicaId,
 	openWebSocket,
-	encryptionKeys,
 }: {
-	userId: string;
-	identity: PeerIdentity;
+	owner: LocalOwner;
+	replicaId: string;
 	openWebSocket?: (
 		url: string | URL,
 		protocols?: string[],
 	) => WebSocket | Promise<WebSocket>;
-	encryptionKeys: () => EncryptionKeys;
 }) {
-	const doc = openMyAppDoc({ encryptionKeys });
-	const idb = doc.encryption.attachIndexedDb(doc.ydoc, { userId });
-	attachOwnedBroadcastChannel(doc.ydoc, { userId });
+	const doc = openMyAppDoc({ owner });
+	const idb = owner.attachIndexedDb(doc.ydoc);
+	owner.attachBroadcastChannel(doc.ydoc);
 
 	const collaboration = openCollaboration(doc.ydoc, {
 		url: roomWsUrl('https://api.epicenter.so', doc.ydoc.guid),
 		openWebSocket,
 		waitFor: idb.whenLoaded,
-		identity,
+		replicaId,
 		actions: {},
 	});
 
@@ -97,10 +86,7 @@ function openMyApp({
 			doc.ydoc.destroy();
 			await collaboration.whenDisposed;
 			await idb.whenDisposed;
-			await wipeOwnerLocalYjsData({
-				userId,
-				ydocGuids: [doc.ydoc.guid],
-			});
+			await owner.wipeLocalYjsData([doc.ydoc.guid]);
 		},
 		[Symbol.dispose]() {
 			doc.ydoc.destroy();
@@ -110,20 +96,13 @@ function openMyApp({
 
 export const session = createSession({
 	auth,
-	build: (identity) => {
-		const userId = identity.user.id;
+	build: ({ owner }) => {
 		const workspace = openMyApp({
-			userId,
-			peer: {
-				id: getOrCreateInstallationId(localStorage),
-				name: 'My app',
-				platform: 'web',
-			},
-			bearerToken: () => auth.bearerToken,
-			encryptionKeys: () => requireSignedIn(auth).encryptionKeys,
+			owner,
+			replicaId: createReplicaId({ storage: localStorage }),
+			openWebSocket: auth.openWebSocket,
 		});
 		return {
-			userId,
 			workspace,
 			[Symbol.dispose]() {
 				workspace[Symbol.dispose]();
@@ -136,5 +115,5 @@ export type MyAppSignedIn = InferSignedIn<typeof session>;
 ```
 
 The `ydoc.guid` becomes the sync room name. Namespace it to your app, for example `epicenter.my-app`, to avoid collisions when multiple apps share the same IndexedDB origin.
-For authenticated browser workspaces, local IndexedDB and BroadcastChannel names are scoped inside the primitives from `userId`. App code passes `{ userId }`, not a prebuilt storage key. The session module captures `userId` once at build time because IDB and BroadcastChannel keys are immutable for the workspace's lifetime.
-`createSession` reconciles `auth.state` against the live workspace: a sign-out disposes the workspace, a same-user identity update is a no-op at the session boundary, and a different-user transition disposes the workspace and reloads the page. Auth-bound callbacks still read `auth.state` at their own boundaries: sync can see refreshed bearer tokens on connection attempts, while encrypted stores keep the keyring they derived when they were attached.
+For authenticated browser workspaces, `createSession` gives app code a `LocalOwner`. The owner hides the subject to owner translation and scopes local IndexedDB, BroadcastChannel, and wipe paths for the signed-in subject.
+`createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-subject identity updates keep the workspace mounted. A different subject from `/api/me` is rejected by auth before the workspace is reused. Auth-bound callbacks still read `auth.state` at their own boundaries: sync can see refreshed bearer tokens on connection attempts, while encrypted stores keep the keyring they derived when they were attached.

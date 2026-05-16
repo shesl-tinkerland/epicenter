@@ -17,7 +17,7 @@ The pattern: a vanilla `openX()` function constructs the workspace's `Y.Doc`, co
 | attachTable / attachTables / attachKv                          |
 | attachEncryption -> .attachTable / .attachTables / .attachKv    |
 | attachIndexedDb / attachYjsLog / attachBroadcastChannel        |
-| attachOwnedBroadcastChannel                                    |
+| LocalOwner -> attachIndexedDb / attachBroadcastChannel / wipe   |
 | openCollaboration (sync + presence + RPC + peers; actions: {} for content docs)|
 | attachSqliteMaterializer                                       |
 +----------------------------------------------------------------+
@@ -90,28 +90,30 @@ requests, and exposes a `peers` surface for cross-peer dispatch.
 
 ```typescript
 import {
-  createLocalOwner,
+  type LocalOwner,
   openCollaboration,
   roomWsUrl,
 } from '@epicenter/workspace';
-import { auth } from './auth';
 
-function openBlog() {
+function openBlog({
+  owner,
+  openWebSocket,
+}: {
+  owner: LocalOwner;
+  openWebSocket?: (
+    url: string | URL,
+    protocols?: string[],
+  ) => WebSocket | Promise<WebSocket>;
+}) {
   const ydoc = new Y.Doc({ guid: 'blog' });
   const tables = attachTables(ydoc, myTables);
-  if (auth.state.status === 'signed-out') return null;
-
-  const owner = createLocalOwner({
-    ownerId: auth.state.localIdentity.subject,
-    keyring: () => auth.state.localIdentity.keyring,
-  });
   const idb = owner.attachIndexedDb(ydoc);
   owner.attachBroadcastChannel(ydoc);
   const collaboration = openCollaboration(ydoc, {
     url: roomWsUrl('https://api.example.com', ydoc.guid),
-    openWebSocket: auth.openWebSocket,
+    openWebSocket,
     waitFor: idb.whenLoaded,
-    identity: { id: 'browser', name: 'Browser', platform: 'web' },
+    replicaId: 'browser',
     actions: {},
   });
 

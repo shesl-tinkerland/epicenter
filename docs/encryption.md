@@ -55,18 +55,16 @@ Keys come through `/api/me`.
 `apps/api/src/app.ts` mounts `GET /api/me` behind the bearer + `workspaces:open` scope check from `resolveRequestWorkspaceIdentity`. The handler returns `{ user: { id, email }, localIdentity: { subject, keyring } }`.
 `@epicenter/auth` calls `/api/me` at sign-in and at cold-boot when online, persists `{ subject, keyring }` as the `localIdentity` section of the cell, and exposes it through `auth.state.localIdentity.keyring` whenever the auth state is not `signed-out`.
 Cold-boot offline keeps the cached `localIdentity` so the workspace can decrypt local Yjs data without a network roundtrip; the bearer is not attached to outbound requests until `/api/me` re-confirms the cell in this runtime.
-The workspace does not hold an independently mutable copy of the keys. `attachEncryption` takes a `keyring` callback and calls it when an encrypted table, KV store, or IndexedDB provider attaches. Each attached store keeps the keyring derived at that attachment boundary. In per-app session modules, the workspace builder reads `auth.state.localIdentity.keyring` directly:
+The workspace does not hold an independently mutable copy of the keys. `attachEncryption` takes a `keyring` callback and calls it when an encrypted table, KV store, or IndexedDB provider attaches. Each attached store keeps the keyring derived at that attachment boundary. Browser app session modules usually receive a `LocalOwner` from `createSession`; that owner carries the lazy keyring reader:
 ```ts
-const fuji = openFuji({
-	subject,
-	peer,
-	bearerToken: () => auth.bearerToken,
-	keyring: () => {
-		if (auth.state.status === 'signed-out') {
-			throw new Error('[fuji] auth signed-out.');
-		}
-		return auth.state.localIdentity.keyring;
-	},
+export const session = createSession({
+	auth,
+	build: ({ owner }) =>
+		openMyApp({
+			owner,
+			replicaId: createReplicaId({ storage: localStorage }),
+			openWebSocket: auth.openWebSocket,
+		}),
 });
 ```
 Same-subject identity updates do not remount the workspace. Auth callbacks read `auth.state` at the boundary that asks for them: sync can see refreshed bearer tokens on connection attempts, while encrypted stores keep the keyring they derived when they were attached. There is no mutation hook on the workspace.
@@ -74,23 +72,20 @@ Same-subject identity updates do not remount the workspace. Auth callbacks read 
 ## Browser local persistence
 Authenticated browser workspaces open local IndexedDB only after auth has settled into a signed-in state. The session module guarantees that boundary: it builds the workspace lazily once `auth.state.status === 'signed-in'` and disposes it on sign-out.
 Two inputs flow into the workspace:
-- `ownerId` scopes local IndexedDB and BroadcastChannel names to the owner. Session code passes `localIdentity.subject` as the owner id. It is captured once at build time because IDB and BroadcastChannel keys are immutable for the lifetime of the workspace.
-- `keyring: () => SubjectKeyring` is a callback the encryption coordinator invokes when an encrypted store is attached. Already-attached stores keep their derived keyring; same-subject key rotation needs a re-attach to affect those stores.
+- `owner: LocalOwner` scopes local IndexedDB and BroadcastChannel names to the owner. `createSession` builds it from `localIdentity.subject` once at session mount because IDB and BroadcastChannel keys are immutable for the lifetime of the workspace.
+- The owner also carries a `keyring: () => SubjectKeyring` callback. The encryption coordinator invokes it when an encrypted store is attached. Already-attached stores keep their derived keyring; same-subject key rotation needs a re-attach to affect those stores.
 
 The browser factory shape is:
 ```ts
 export function openMyApp({
-	ownerId,
-	peer,
-	bearerToken,
-	keyring,
+	owner,
+	replicaId,
+	openWebSocket,
 }: {
-	ownerId: string;
-	peer: PeerIdentity;
-	bearerToken?: () => string | null;
-	keyring: () => SubjectKeyring;
+	owner: LocalOwner;
+	replicaId: string;
+	openWebSocket?: OpenWebSocket;
 }) {
-	const owner = createLocalOwner({ ownerId, keyring });
 	const doc = openMyAppDoc({ owner });
 
 	const idb = owner.attachIndexedDb(doc.ydoc);
@@ -113,7 +108,7 @@ Sign-out disposes the live workspace after the auth session changes.
 It does not wipe local IndexedDB data.
 The reviewed code still does not show an explicit in-memory key wipe inside `createEncryptedYkvLww`; workspace disposal is the current key-drop boundary for `createSession` apps.
 The closest Bitwarden analogy is lock, not logout: Bitwarden documents unlock as using encrypted data already stored on disk and lock as deleting decrypted vault data and the account encryption key from memory. Bitwarden separately documents that logout wipes PIN settings. See [Understand Log In vs. Unlock](https://bitwarden.com/help/understand-log-in-vs-unlock/) and [Unlock With PIN](https://bitwarden.com/help/unlock-with-pin/).
-The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: a sign-out disposes the workspace, a same-user update is a no-op at the session boundary, and a different-user transition disposes the workspace and reloads the page:
+The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-subject updates are a no-op at the session boundary. A different subject from `/api/me` is rejected by auth before the workspace is reused:
 ```ts
 import { createSession, type InferSignedIn } from '@epicenter/svelte';
 
@@ -122,8 +117,8 @@ export const session = createSession({
 	build: ({ owner }) => {
 		const workspace = openMyApp({
 			owner,
-			peer,
-			bearerToken: () => auth.bearerToken,
+			replicaId: createReplicaId({ storage: localStorage }),
+			openWebSocket: auth.openWebSocket,
 		});
 		return {
 			workspace,
@@ -139,7 +134,7 @@ export type MyAppSignedIn = InferSignedIn<typeof session>;
 So these points are implemented and verifiable:
 - keys are loaded on login
 - sign-out disposes the live workspace
-- identity switch reloads the browser client
+- a different `/api/me` subject wipes the persisted auth cell and publishes `signed-out`
 - owner-scoped IndexedDB data remains available for the same authenticated owner after reload
 This point is not visible as an explicit step in the reviewed code:
 - clearing the in-memory encryption state after logout
