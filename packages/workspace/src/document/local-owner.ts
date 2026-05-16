@@ -19,7 +19,7 @@
 import type { SubjectKeyring } from '@epicenter/encryption';
 import { clearDocument } from 'y-indexeddb';
 import type * as Y from 'yjs';
-import { attachBroadcastChannelWithKey } from './attach-broadcast-channel.js';
+import { attachBroadcastChannel } from './attach-broadcast-channel.js';
 import { attachEncryptedIndexedDb } from './attach-encrypted-indexed-db.js';
 import { attachEncryption } from './attach-encryption.js';
 import { createOwnedYjsKey, getOwnedYjsPrefix } from './local-yjs-key.js';
@@ -68,7 +68,7 @@ export function createLocalOwner({
 		 * updates through BroadcastChannel.
 		 */
 		attachBroadcastChannel(ydoc: Y.Doc) {
-			attachBroadcastChannelWithKey(ydoc, createOwnedYjsKey(ownerId, ydoc.guid));
+			attachBroadcastChannel(ydoc, createOwnedYjsKey(ownerId, ydoc.guid));
 		},
 		/**
 		 * Delete every owner-scoped IndexedDB database currently visible to
