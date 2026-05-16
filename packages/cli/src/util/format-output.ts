@@ -31,13 +31,6 @@ export function output(value: unknown, { format }: FormatOptions = {}): void {
 	}
 }
 
-/**
- * Output an error message to stderr
- */
-export function outputError(message: string): void {
-	console.error(message);
-}
-
 /** Yargs options for the shared format flag. */
 export const formatOptions = {
 	format: {
