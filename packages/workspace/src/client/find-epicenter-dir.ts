@@ -39,9 +39,8 @@
 
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { WORKSPACES_DIRNAME } from '../daemon/route-validation.js';
 import type { ProjectDir } from '../shared/types.js';
-
-const WORKSPACES_DIRNAME = 'workspaces';
 
 export function findEpicenterDir(start: string = process.cwd()): ProjectDir {
 	let current = resolve(start);

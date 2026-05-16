@@ -12,14 +12,17 @@ import { join, resolve } from 'node:path';
 
 import { Ok, type Result } from 'wellcrafted/result';
 
-import { validateDaemonRouteNames } from '../daemon/route-validation.js';
+import {
+	validateDaemonRouteNames,
+	WORKSPACES_DIRNAME,
+} from '../daemon/route-validation.js';
 import type { ProjectDir } from '../shared/types.js';
 import {
 	WorkspaceAppError,
 	type WorkspaceAppError as WorkspaceAppErrorType,
 } from './errors.js';
 
-export const WORKSPACES_DIRNAME = 'workspaces';
+export { WORKSPACES_DIRNAME };
 export const DAEMON_ENTRY_FILENAME = 'daemon.ts';
 
 /**
