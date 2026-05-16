@@ -160,4 +160,4 @@ export {
 } from './document/open-collaboration.js';
 export { type PresenceEntry } from './document/presence.js';
 export { DispatchError } from './document/rpc.js';
-export { roomUrl, roomWsUrl, websocketUrl } from './document/transport.js';
+export { roomWsUrl, websocketUrl } from './document/transport.js';
