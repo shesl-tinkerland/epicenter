@@ -1,6 +1,6 @@
 import type { Result } from 'wellcrafted/result';
 import type { AuthError } from './auth-errors.js';
-import type { LocalWorkspaceIdentity } from './auth-types.js';
+import type { SubjectIdentity } from './auth-types.js';
 
 /**
  * Three variants. `localIdentity` is always present in `signed-in` and
@@ -12,11 +12,11 @@ export type AuthState =
 	| { status: 'signed-out' }
 	| {
 			status: 'signed-in';
-			localIdentity: LocalWorkspaceIdentity;
+			localIdentity: SubjectIdentity;
 	  }
 	| {
 			status: 'reauth-required';
-			localIdentity: LocalWorkspaceIdentity;
+			localIdentity: SubjectIdentity;
 	  };
 
 export type AuthClient = {

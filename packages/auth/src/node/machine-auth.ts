@@ -19,7 +19,6 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
 import type { SubjectKeyring } from '@epicenter/encryption';
-import { type } from 'arktype';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -29,8 +28,7 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient } from '../auth-contract.js';
 import {
-	AuthUser,
-	LocalWorkspaceIdentity,
+	ApiMeResponse,
 	type PersistedAuth,
 } from '../auth-types.js';
 import {
@@ -60,17 +58,10 @@ export type MachineAuthRequestError = InferErrors<
  * <email>" without a second round-trip. `email` may be empty when the
  * machine is offline during `status`.
  */
-export type WorkspaceIdentity = {
+export type MachineIdentity = {
 	user: { id: string; email: string };
 	keyring: SubjectKeyring;
 };
-
-const ApiMeResponse = type({
-	'+': 'delete',
-	user: AuthUser,
-	localIdentity: LocalWorkspaceIdentity,
-});
-type ApiMeResponse = typeof ApiMeResponse.infer;
 
 type CommonConfig = {
 	baseURL?: string;
@@ -88,12 +79,12 @@ export type LoginWithOobConfig = CommonConfig & {
 	readCode?: () => Promise<string>;
 };
 
-export type LoginWithOobResult = { identity: WorkspaceIdentity };
+export type LoginWithOobResult = { identity: MachineIdentity };
 
 export type StatusResult =
 	| { status: 'signedOut' }
-	| { status: 'valid'; identity: WorkspaceIdentity }
-	| { status: 'unverified'; identity: WorkspaceIdentity };
+	| { status: 'valid'; identity: MachineIdentity }
+	| { status: 'unverified'; identity: MachineIdentity };
 
 export type LogoutResult = { status: 'signedOut' } | { status: 'loggedOut' };
 

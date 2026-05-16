@@ -26,10 +26,10 @@ import {
 } from './auth/oauth-metadata';
 import { createOAuthUnauthorizedResourceResponse } from './auth/oauth-resource';
 import {
+	resolveRequestApiMe,
 	resolveRequestOAuthUser,
-	resolveRequestWorkspaceIdentity,
-	type WorkspaceIdentity,
 } from './auth/resource-boundary';
+import type { ApiMeResponse, AuthUser } from '@epicenter/auth';
 import { singleCredential } from './auth/single-credential';
 import { ensureTrustedOAuthClients } from './auth/trusted-oauth-clients';
 import {
@@ -105,7 +105,7 @@ export type Env = {
 		db: Db;
 		auth: Auth;
 		authBaseURL: string;
-		user: WorkspaceIdentity['user'];
+		user: AuthUser;
 		afterResponse: AfterResponseQueue;
 		/** Current plan ID. Only set by ensureAutumnCustomer middleware on /ai/* routes. */
 		planId: string | undefined;
@@ -270,9 +270,9 @@ app.get(
 // the persisted localIdentity cell.
 //
 // Inherits the bearer + workspaces:open scope check from
-// resolveRequestWorkspaceIdentity, so unauthenticated/under-scoped callers
-// get the standard 401/403 OAuth resource responses (WWW-Authenticate +
-// JSON body) without a separate middleware layer.
+// resolveRequestApiMe, so unauthenticated/under-scoped callers get the
+// standard 401/403 OAuth resource responses (WWW-Authenticate + JSON body)
+// without a separate middleware layer.
 app.get(
 	'/api/me',
 	describeRoute({
@@ -281,12 +281,12 @@ app.get(
 		tags: ['auth'],
 	}),
 	async (c) => {
-		const { data: identity, error } = await resolveRequestWorkspaceIdentity(
+		const { data: identity, error } = await resolveRequestApiMe(
 			c,
 			deriveSubjectKeyring,
 		);
 		if (error) return createOAuthUnauthorizedResourceResponse(c, error);
-		return c.json(identity);
+		return c.json(identity satisfies ApiMeResponse);
 	},
 );
 // OAuth discovery. Register issuer-path routes before the /auth/* catch-all
@@ -413,37 +413,43 @@ app.post(
 // ---------------------------------------------------------------------------
 
 /**
- * DO name namespacing: `user:{userId}:rooms:{room}`
+ * DO name namespacing: `subject:{subject}:rooms:{room}`
  *
- * We use user-scoped DO names (Google Docs model) rather than org-scoped names
- * (Vercel/Supabase model). Each user gets their own DO instance per room.
+ * We use subject-scoped DO names (Google Docs model) rather than org-scoped
+ * names (Vercel/Supabase model). Each owner gets their own DO instance per
+ * room. `subject` mirrors the client-side `localIdentity.subject` and equals
+ * the Better Auth `user.id` today; naming the prefix `subject:` matches the
+ * encryption derivation labels (`subject:{subject}`, `workspace:{wsId}`) and
+ * the local IndexedDB prefix (`epicenter.subject.{subject}.yjs.{guid}`).
  *
  * Alternatives considered:
  *
- * - **Org-scoped (`org:{orgId}:{name}`)**: Evaluated for enterprise and self-hosted.
- *   Problems: most rooms hold personal data that should not merge into a
- *   shared Y.Doc. Org-scoped would require a per-room `scope` flag anyway,
- *   adding complexity without simplifying.
+ * - **Org-scoped (`org:{orgId}:{name}`)**: Evaluated for enterprise and
+ *   self-hosted. Problems: most rooms hold personal data that should not
+ *   merge into a shared Y.Doc. Org-scoped would require a per-room `scope`
+ *   flag anyway, adding complexity without simplifying.
  *
- * - **Org-scoped with personal sub-scope (`org:{orgId}:user:{userId}:{name}`)**:
- *   Embeds org management in the app. For self-hosted enterprise, the deployment
- *   itself IS the org boundary (like GitLab, Outline, Mattermost), so org tables
- *   and Better Auth organization plugin are unnecessary overhead.
+ * - **Org-scoped with personal sub-scope (`org:{orgId}:subject:{subject}:{name}`)**:
+ *   Embeds org management in the app. For self-hosted enterprise, the
+ *   deployment itself IS the org boundary (like GitLab, Outline, Mattermost),
+ *   so org tables and Better Auth organization plugin are unnecessary overhead.
  *
- * Current scheme keeps the app auth-simple ("user has account, user accesses
- * their data") and works for both cloud and self-hosted without org infrastructure.
- * When sharing is needed, it follows the Google Docs pattern: the owner's DO
- * name stays the same, an ACL table grants access to other users, and auth
- * middleware checks "is this user the owner OR in the ACL?"
+ * Current scheme keeps the app auth-simple ("subject has account, subject
+ * accesses their data") and works for both cloud and self-hosted without org
+ * infrastructure. When sharing is needed, it follows the Google Docs pattern:
+ * the owner's DO name stays the same, an ACL table grants access to other
+ * subjects, and auth middleware checks "is this caller the owner OR in the
+ * ACL?"
  *
  * Multi-tenant cloud isolation (if needed later) is a platform-layer concern,
- * a tenant prefix added at the routing layer, not embedded in the app's data model.
+ * a tenant prefix added at the routing layer, not embedded in the app's data
+ * model.
  */
 
-/** Get a Room DO stub and its DO name for the authenticated user's room. */
+/** Get a Room DO stub and its DO name for the authenticated subject's room. */
 function getRoomStub(c: Context<Env>) {
 	const room = c.req.param('room')!;
-	const doName = `user:${c.var.user.id}:rooms:${room}`;
+	const doName = `subject:${c.var.user.id}:rooms:${room}`;
 	return {
 		stub: c.env.ROOM.get(c.env.ROOM.idFromName(doName)),
 		doName,

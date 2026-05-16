@@ -25,18 +25,25 @@ export const OAuthTokenGrant = type({
 export type OAuthTokenGrant = typeof OAuthTokenGrant.infer;
 
 /**
- * Device capability to decrypt local Yjs data without the server. Persisted
- * under `PersistedAuth.localIdentity`. `subject` is an opaque owner label
- * bound to the keyring; today it equals the Better Auth `user.id`, but the
- * persisted shape does not depend on that.
+ * Local workspace identity returned by `/api/me` and cached on this device.
+ *
+ * `subject` is the server-issued identity label used to derive the subject
+ * keyring. Today it is the Better Auth `user.id`. It is not a profile record,
+ * email address, or display user. Future servers may choose a scoped value,
+ * such as `issuer:userId` or `tenant:userId`, without changing this client
+ * shape.
+ *
+ * Workspace code treats this same value as the owner id for browser-local Yjs
+ * storage and BroadcastChannel names. In other words: auth names the keyed
+ * identity `subject`; local persistence uses that subject as the owner.
  */
-export const LocalWorkspaceIdentity = type({
+export const SubjectIdentity = type({
 	'+': 'delete',
 	subject: 'string',
 	keyring: SubjectKeyring,
 });
 
-export type LocalWorkspaceIdentity = typeof LocalWorkspaceIdentity.infer;
+export type SubjectIdentity = typeof SubjectIdentity.infer;
 
 /**
  * The single persisted auth cell. Two clearly-labeled sections.
@@ -51,7 +58,23 @@ export type LocalWorkspaceIdentity = typeof LocalWorkspaceIdentity.infer;
 export const PersistedAuth = type({
 	'+': 'delete',
 	grant: OAuthTokenGrant,
-	localIdentity: LocalWorkspaceIdentity,
+	localIdentity: SubjectIdentity,
 });
 
 export type PersistedAuth = typeof PersistedAuth.infer;
+
+/**
+ * Canonical `/api/me` response shape. The single contract between the API
+ * and every Epicenter auth client (browser, extension, CLI machine, daemon).
+ *
+ * `user` is the Better Auth profile slice displayed in account UI.
+ * `localIdentity` is the offline-decrypt material the client persists into
+ * `PersistedAuth.localIdentity`.
+ */
+export const ApiMeResponse = type({
+	'+': 'delete',
+	user: AuthUser,
+	localIdentity: SubjectIdentity,
+});
+
+export type ApiMeResponse = typeof ApiMeResponse.infer;

@@ -110,12 +110,12 @@ export class PresenceWriteForbidden extends Error {
  * Better Auth before calling RPC methods or forwarding fetch. The DO
  * itself does not re-validate (it trusts the Worker boundary).
  *
- * DO names are user-scoped: the Worker constructs
- * `user:{userId}:rooms:{room}` before calling `idFromName()`. This ensures
- * each user's data is isolated in separate DO instances, even if multiple
- * users access rooms with the same name (e.g., "epicenter.tab-manager").
+ * DO names are subject-scoped: the Worker constructs
+ * `subject:{subject}:rooms:{room}` before calling `idFromName()`. This ensures
+ * each owner's data is isolated in separate DO instances, even if multiple
+ * subjects access rooms with the same name (e.g., "epicenter.tab-manager").
  *
- * We chose user-scoped DO names (Google Docs model) over org-scoped names
+ * We chose subject-scoped DO names (Google Docs model) over org-scoped names
  * (Vercel/Supabase model) because most rooms hold personal data. For
  * enterprise self-hosted, the deployment itself is the org boundary.
  * See `getRoomStub` in app.ts for the full rationale.
@@ -516,10 +516,10 @@ export class Room extends DurableObject {
 // ============================================================================
 
 /**
- * Extract the owning user id (`subject`) from the DO name.
+ * Extract the owning subject from the DO name.
  *
  * DO names are formatted by `getRoomStub` in app.ts as
- * `user:{userId}:rooms:{room}`. Every connection to this DO shares the
+ * `subject:{subject}:rooms:{room}`. Every connection to this DO shares the
  * same auth context, so `subject` is room-scoped, not connection-scoped.
  * Parsing once at construction lets the value survive hibernation without
  * extra plumbing through `WsAttachment`.
@@ -530,11 +530,11 @@ export class Room extends DurableObject {
  * subject on every presence row.
  */
 function subjectFromDoName(name: string | undefined): string {
-	const match = name?.match(/^user:([^:]+):/);
+	const match = name?.match(/^subject:([^:]+):/);
 	if (!match) {
 		throw new Error(
 			`[room] DO name does not match expected ` +
-				`"user:{userId}:rooms:{room}" format: ${JSON.stringify(name)}`,
+				`"subject:{subject}:rooms:{room}" format: ${JSON.stringify(name)}`,
 		);
 	}
 	return match[1] as string;

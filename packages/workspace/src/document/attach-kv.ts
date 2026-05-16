@@ -6,7 +6,7 @@
  * invalid or missing values return the default value from the KV definition.
  *
  * For encrypted storage, call `encryption.attachKv` on the coordinator
- * returned by `attachEncryption(ydoc, { encryptionKeys })`.
+ * returned by `attachEncryption(ydoc, { keyring })`.
  */
 
 import type { StandardSchemaV1 } from '@standard-schema/spec';

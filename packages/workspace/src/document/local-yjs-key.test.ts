@@ -4,7 +4,7 @@ import { createOwnedYjsKey } from './local-yjs-key.js';
 describe('createOwnedYjsKey', () => {
 	test('uses the owner-scoped local Yjs key shape', () => {
 		expect(createOwnedYjsKey('user-123', 'epicenter.fuji')).toBe(
-			'epicenter.v1.subject.user-123.yjs.epicenter.fuji',
+			'epicenter.subject.user-123.yjs.epicenter.fuji',
 		);
 	});
 

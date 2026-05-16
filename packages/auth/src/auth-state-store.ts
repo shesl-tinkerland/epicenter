@@ -6,7 +6,7 @@ import {
 } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import type { AuthState } from './auth-contract.js';
-import type { LocalWorkspaceIdentity } from './auth-types.js';
+import type { SubjectIdentity } from './auth-types.js';
 
 export const AuthStateStoreError = defineErrors({
 	SubscriberThrew: ({ cause }: { cause: unknown }) => ({
@@ -59,8 +59,8 @@ function authStatesEqual(left: AuthState, right: AuthState): boolean {
 }
 
 function localIdentitiesEqual(
-	left: LocalWorkspaceIdentity,
-	right: LocalWorkspaceIdentity,
+	left: SubjectIdentity,
+	right: SubjectIdentity,
 ): boolean {
 	return (
 		left.subject === right.subject &&

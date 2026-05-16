@@ -67,6 +67,7 @@ import {
 	encryptValue,
 	getKeyVersion,
 	isEncryptedBlob,
+	type ReadonlyWorkspaceKeyring,
 } from '@epicenter/encryption';
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
@@ -98,7 +99,7 @@ const textEncoder = new TextEncoder();
 const REENCRYPT_ORIGIN = Symbol('re-encrypt');
 
 type EncryptionState = {
-	keyring: ReadonlyMap<number, Uint8Array>;
+	keyring: ReadonlyWorkspaceKeyring;
 	currentKey: Uint8Array;
 	currentVersion: number;
 };
@@ -306,7 +307,7 @@ export function createEncryptedYkvLww<T>(
 		 *
 		 * @param keyring Map from version number to 32-byte encryption key
 		 */
-		activateEncryption(keyring: ReadonlyMap<number, Uint8Array>): void {
+		activateEncryption(keyring: ReadonlyWorkspaceKeyring): void {
 			if (keyring.size === 0)
 				throw new Error('Keyring must contain at least one key');
 			const previousEncryption = encryption;

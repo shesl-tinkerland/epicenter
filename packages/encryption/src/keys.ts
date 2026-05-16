@@ -30,6 +30,24 @@ export type SubjectKeyringEntry = typeof SubjectKeyringEntry.infer;
 export type SubjectKeyring = typeof SubjectKeyring.infer;
 
 /**
+ * Per-workspace HKDF keyring derived locally from a `SubjectKeyring`.
+ *
+ * Each entry maps a key version to the raw 32-byte workspace key derived via
+ * `deriveWorkspaceKey(subjectKey, workspaceId)`. The map is rebuilt at every
+ * `attachEncryption` site so workspace key bytes do not outlive the Y.Doc.
+ *
+ * The version axis equals the version axis of the source `SubjectKeyring`:
+ * one workspace key per subject keyring entry, never persisted.
+ */
+export type WorkspaceKeyring = Map<number, Uint8Array>;
+
+/**
+ * Readonly view of a `WorkspaceKeyring`. Encrypt/decrypt boundaries take this
+ * shape so the cipher cannot mutate the caller's derived keyring.
+ */
+export type ReadonlyWorkspaceKeyring = ReadonlyMap<number, Uint8Array>;
+
+/**
  * Reject versions that cannot be represented in the encrypted blob header.
  *
  * Blob byte 1 stores the key version. Validating this at public entry points

@@ -1,8 +1,7 @@
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
 import {
+	type ApiMeResponse,
 	AuthUser,
-	type AuthUser as AuthUserType,
-	type LocalWorkspaceIdentity,
 } from '@epicenter/auth';
 import type { SubjectKeyring } from '@epicenter/encryption';
 import type { User } from 'better-auth';
@@ -15,11 +14,6 @@ import { hasScope, OAuthError, WORKSPACES_OPEN_SCOPE } from './oauth-error.js';
 import { createOAuthIssuerURL, createOAuthJwksURL } from './oauth-metadata.js';
 
 export { WORKSPACES_OPEN_SCOPE };
-
-export type WorkspaceIdentity = {
-	user: AuthUserType;
-	localIdentity: LocalWorkspaceIdentity;
-};
 
 type VerifyOAuthAccessToken = ReturnType<
 	ReturnType<typeof oauthProviderResourceClient>['getActions']
@@ -114,7 +108,7 @@ export async function resolveBearerIdentity(
 	deps: ResolverDeps & {
 		deriveSubjectKeyring(subject: string): Promise<SubjectKeyring>;
 	},
-): Promise<Result<WorkspaceIdentity, OAuthError>> {
+): Promise<Result<ApiMeResponse, OAuthError>> {
 	const { data: user, error } = await verifyBearerToUser(deps);
 	if (error) return Err(error);
 	return Ok({
@@ -137,12 +131,12 @@ export function resolveRequestOAuthUser<E extends RequestOAuthEnv>(
 }
 
 /**
- * Resolve the OAuth bearer on the current request to the full workspace
- * identity payload. Subject keyring derivation stays injected so this module
- * remains free of Worker-only imports and easy to test through the pure
- * resolver.
+ * Resolve the OAuth bearer on the current request into the canonical
+ * `/api/me` response payload. Subject keyring derivation stays injected so
+ * this module remains free of Worker-only imports and easy to test through
+ * the pure resolver.
  */
-export function resolveRequestWorkspaceIdentity<E extends RequestOAuthEnv>(
+export function resolveRequestApiMe<E extends RequestOAuthEnv>(
 	c: Context<E>,
 	deriveSubjectKeyring: (subject: string) => Promise<SubjectKeyring>,
 ) {

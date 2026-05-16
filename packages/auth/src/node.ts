@@ -8,7 +8,7 @@ export {
 	MachineAuthRequestError,
 	type StatusResult,
 	status,
-	type WorkspaceIdentity,
+	type MachineIdentity,
 } from './node/machine-auth.js';
 export {
 	loadMachineTokens,

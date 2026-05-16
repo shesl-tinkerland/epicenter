@@ -16,7 +16,7 @@ import { describe, expect, test } from 'bun:test';
 import { Ok } from 'wellcrafted/result';
 import type {
 	AuthClient,
-	LocalWorkspaceIdentity,
+	SubjectIdentity,
 	OAuthTokenGrant,
 	PersistedAuth,
 	PersistedAuthStorage,
@@ -443,7 +443,7 @@ test('cold-boot offline keeps signed-in with localIdentity and no profile field'
 	});
 	expect('email' in auth.state).toBe(false);
 	expect(
-		(auth.state as { localIdentity: LocalWorkspaceIdentity }).localIdentity,
+		(auth.state as { localIdentity: SubjectIdentity }).localIdentity,
 	).toEqual({
 		subject: 'user-1',
 		keyring: [...keyring],
@@ -725,7 +725,7 @@ describe('removed legacy surface', () => {
 		expect(mod.requireSession).toBeUndefined();
 		// @ts-expect-error: OAuthSession deleted; use PersistedAuth.
 		expect(mod.OAuthSession).toBeUndefined();
-		// @ts-expect-error: LocalUnlockBundle replaced by LocalWorkspaceIdentity.
+		// @ts-expect-error: LocalUnlockBundle replaced by SubjectIdentity.
 		expect(mod.LocalUnlockBundle).toBeUndefined();
 	});
 });

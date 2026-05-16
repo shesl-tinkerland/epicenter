@@ -6,7 +6,7 @@
  * schema validation and migration on read.
  *
  * For encrypted storage, call `encryption.attachTable` / `encryption.attachKv`
- * on the coordinator returned by `attachEncryption(ydoc, { encryptionKeys })`.
+ * on the coordinator returned by `attachEncryption(ydoc, { keyring })`.
  *
  * @example
  * ```typescript
@@ -316,7 +316,7 @@ export function attachReadonlyTable<
  * table name.
  *
  * For encrypted storage, call `encryption.attachTables` on the coordinator
- * returned by `attachEncryption(ydoc, { encryptionKeys })`.
+ * returned by `attachEncryption(ydoc, { keyring })`.
  */
 export function attachTables<T extends TableDefinitions>(
 	ydoc: Y.Doc,

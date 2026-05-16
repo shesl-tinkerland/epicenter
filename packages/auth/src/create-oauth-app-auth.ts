@@ -1,15 +1,13 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { BEARER_SUBPROTOCOL_PREFIX } from '@epicenter/constants/auth';
 import { subjectKeyringsEqual } from '@epicenter/encryption';
-import { type } from 'arktype';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient, AuthState } from './auth-contract.js';
 import { AuthError } from './auth-errors.js';
 import { createAuthStateStore } from './auth-state-store.js';
 import {
-	AuthUser,
-	LocalWorkspaceIdentity,
+	ApiMeResponse,
 	type OAuthTokenGrant,
 	type PersistedAuth as PersistedAuthType,
 } from './auth-types.js';
@@ -38,17 +36,6 @@ export type AuthFetch = (
 	input: AuthFetchInput,
 	init?: RequestInit,
 ) => Promise<Response>;
-
-/**
- * Shape returned by `GET /api/me`. Internal; not exported as a top-level
- * domain type because identity is no longer one thing.
- */
-const ApiMeResponse = type({
-	'+': 'delete',
-	user: AuthUser,
-	localIdentity: LocalWorkspaceIdentity,
-});
-type ApiMeResponse = typeof ApiMeResponse.infer;
 
 export type CreateOAuthAppAuthConfig = {
 	baseURL?: string;

@@ -1,7 +1,10 @@
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import type { Brand } from 'wellcrafted/brand';
-import { assertEncryptionKeyVersion } from './keys.js';
+import {
+	assertEncryptionKeyVersion,
+	type ReadonlyWorkspaceKeyring,
+} from './keys.js';
 
 const NONCE_LENGTH = 24;
 const TAG_LENGTH = 16;
@@ -28,7 +31,7 @@ export type EncryptBytesOptions = {
 };
 
 export type DecryptBytesOptions = {
-	keyring: ReadonlyMap<number, Uint8Array>;
+	keyring: ReadonlyWorkspaceKeyring;
 	blob: EncryptedBlob;
 	aad?: Uint8Array;
 };

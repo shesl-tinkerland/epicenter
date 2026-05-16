@@ -1,16 +1,16 @@
 /// <reference lib="dom" />
 
 /**
- * createLocalOwner: identity-scoped facade for authenticated browser
- * workspaces.
+ * Browser-local owner facade for an authenticated workspace session.
  *
- * One owner per signed-in subject. Every browser-local Yjs artifact
- * (IndexedDB database name, BroadcastChannel key, wipe namespace) is keyed by
- * `(subject, ydocGuid)`, and every encrypted resource is bound to the same
- * subject's keyring. The owner is the one named place that knows the pair.
+ * Auth calls the server-issued identity label a `subject` because it is the
+ * value used to derive a `SubjectKeyring`. Local workspace code uses that
+ * same value as the owner id for IndexedDB, BroadcastChannel, and wipe
+ * boundaries. Keeping the owner facade here prevents app code from rebuilding
+ * those names by hand.
  *
- * Daemons do not construct an owner: they call `attachEncryption` directly
- * with just `keyring` and persist via filesystem instead of IDB.
+ * Daemons do not construct an owner. They call `attachEncryption` directly
+ * with `keyring` and persist through the filesystem instead of IndexedDB.
  */
 
 import type { SubjectKeyring } from '@epicenter/encryption';
@@ -27,6 +27,13 @@ export function createLocalOwner({
 	subject,
 	keyring,
 }: {
+	/**
+	 * Server-issued identity label for the local workspace owner.
+	 *
+	 * Usually this is the Better Auth user id. It may later be a scoped auth
+	 * subject such as `issuer:userId` or `tenant:userId`; local storage only
+	 * requires it to be stable for the owner whose data is being opened.
+	 */
 	subject: string;
 	keyring: () => SubjectKeyring;
 }) {
@@ -41,9 +48,9 @@ export function createLocalOwner({
 		},
 		/**
 		 * Attach encrypted local IndexedDB persistence. The database name is
-		 * `createOwnedYjsKey(subject, ydoc.guid)` so other signed-in subjects
-		 * on the same browser profile cannot read this subject's persisted
-		 * CRDT state.
+		 * `createOwnedYjsKey(subject, ydoc.guid)`. Another signed-in subject in
+		 * the same browser profile gets a different database name for the same
+		 * document guid.
 		 */
 		attachIndexedDb(ydoc: Y.Doc) {
 			return attachEncryptedIndexedDb(ydoc, {
@@ -66,7 +73,7 @@ export function createLocalOwner({
 		 * from a clean slate.
 		 */
 		async wipeLocalYjsData(ydocGuids: Iterable<string> = []) {
-			const prefix = `epicenter.v1.subject.${subject}.yjs.`;
+			const prefix = `epicenter.subject.${subject}.yjs.`;
 			const names = new Set<string>();
 
 			for (const guid of ydocGuids) {
