@@ -18,18 +18,27 @@ import type { DaemonRuntime } from './types.js';
  * Context handed to `open()` for one daemon extension. The host fills it in
  * from the discovered folder entry and the shared auth client.
  *
- * - `auth` is the shared machine auth client. The host owns its lifetime.
+ * - `auth` is the shared machine auth client. The host owns its lifetime,
+ *   and refuses to call `open` when auth is signed-out.
  * - `projectDir` is the resolved project root (same value the daemon lease
  *   owns). Disk-writing helpers like `yjsPath` derive every absolute path
  *   from it.
  * - `route` is the folder-derived route name. Pinned here so extensions do
- *   not re-encode the same string as a constant; replicaIds, error messages,
- *   and logger names all read it off the context.
+ *   not re-encode the same string as a constant; error messages and logger
+ *   names read it off the context.
+ * - `clientId` is the deterministic Y.Doc clientID for this daemon
+ *   (derived from `projectDir` so two daemons in different projects
+ *   produce distinct update streams). Pass it to the workspace opener.
+ * - `replicaId` is the conventional collaboration replicaId for the
+ *   daemon side of this route (`<route>-daemon`). Pass it to
+ *   `openCollaboration`.
  */
 export type DaemonWorkspaceContext = {
 	auth: AuthClient;
 	projectDir: ProjectDir;
 	route: string;
+	clientId: number;
+	replicaId: string;
 };
 
 /**

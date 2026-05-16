@@ -16,6 +16,7 @@ import { Ok, type Result } from 'wellcrafted/result';
 
 import type { DaemonWorkspaceContext } from '../daemon/define-daemon-workspace.js';
 import type { DaemonRuntime, StartedDaemonRoute } from '../daemon/index.js';
+import { hashClientId } from '../shared/client-id.js';
 import type { ProjectDir } from '../shared/types.js';
 import {
 	discoverWorkspaceApps,
@@ -48,6 +49,9 @@ export async function startDaemonWorkspaceApps(
 ): Promise<Result<StartDaemonWorkspaceAppsResult, WorkspaceAppErrorType>> {
 	const { auth } = options;
 	const projectDir = resolve(options.projectDir) as ProjectDir;
+	if (auth.state.status === 'signed-out') {
+		return WorkspaceAppError.WorkspaceAuthSignedOut();
+	}
 
 	const discovery = discoverWorkspaceApps(projectDir);
 	if (discovery.error) return discovery;
@@ -65,7 +69,6 @@ export async function startDaemonWorkspaceApps(
 			if (firstError === null) {
 				firstError = WorkspaceAppError.WorkspaceOpenFailed({
 					route: '<unknown>',
-					daemonEntryPath: '<unknown>',
 					cause: result.reason,
 				}).error;
 			}
@@ -106,7 +109,6 @@ async function openOneWorkspaceApp({
 	} catch (cause) {
 		return WorkspaceAppError.WorkspaceOpenFailed({
 			route: entry.route,
-			daemonEntryPath: entry.daemonEntryPath,
 			cause,
 		});
 	}
@@ -123,6 +125,8 @@ async function openOneWorkspaceApp({
 		auth,
 		projectDir,
 		route: entry.route,
+		clientId: hashClientId(projectDir),
+		replicaId: `${entry.route}-daemon`,
 	};
 	try {
 		const runtime = (await open(ctx)) as DaemonRuntime;
@@ -130,7 +134,6 @@ async function openOneWorkspaceApp({
 	} catch (cause) {
 		return WorkspaceAppError.WorkspaceOpenFailed({
 			route: entry.route,
-			daemonEntryPath: entry.daemonEntryPath,
 			cause,
 		});
 	}

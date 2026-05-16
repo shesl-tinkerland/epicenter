@@ -8,7 +8,13 @@
  *
  * Folder-routed daemon extension contract: the default export is a
  * `DaemonWorkspaceModule` whose `open(ctx)` receives the shared auth client,
- * the resolved project directory, and the folder-derived route from the host.
+ * the resolved project directory, the folder-derived route, plus the
+ * host-derived `clientId` and `replicaId`. The host refuses to call `open`
+ * when auth is signed-out, so this body only guards inside the lazy keyring
+ * closure for late sign-outs.
+ *
+ * Actions and the Y.Doc clientID are owned by the shared workspace opener;
+ * this file only composes daemon-side disk/network attachments.
  */
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
@@ -25,24 +31,16 @@ import {
 import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
 	attachYjsLog,
-	hashClientId,
 	markdownPath,
 	openWriterSqlite,
 	sqlitePath,
 	yjsPath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
-import {
-	createHoneycrispActions,
-	openHoneycrispWorkspace,
-} from './workspace.js';
+import { openHoneycrispWorkspace } from './workspace.js';
 
 export default defineDaemonWorkspace({
-	async open({ auth, projectDir, route }) {
-		if (auth.state.status === 'signed-out') {
-			throw new Error(`[${route}-daemon] auth signed-out at start.`);
-		}
-
+	async open({ auth, projectDir, route, clientId, replicaId }) {
 		const workspace = openHoneycrispWorkspace(
 			(ydoc) =>
 				attachEncryption(ydoc, {
@@ -53,9 +51,8 @@ export default defineDaemonWorkspace({
 						return auth.state.localIdentity.keyring;
 					},
 				}),
-			{ clientId: hashClientId(projectDir) },
+			{ clientId },
 		);
-		const actions = createHoneycrispActions(workspace.tables);
 
 		const yjsLog = attachYjsLog(workspace.ydoc, {
 			filePath: yjsPath(projectDir, workspace.ydoc.guid),
@@ -64,8 +61,8 @@ export default defineDaemonWorkspace({
 		const collaboration = openCollaboration(workspace.ydoc, {
 			url: roomWsUrl(EPICENTER_API_URL, workspace.ydoc.guid),
 			openWebSocket: auth.openWebSocket,
-			replicaId: `${route}-daemon`,
-			actions,
+			replicaId,
+			actions: workspace.actions,
 		});
 
 		const sqliteDb = openWriterSqlite({
