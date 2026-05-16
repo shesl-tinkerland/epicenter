@@ -12,7 +12,6 @@
  */
 
 import {
-	type DaemonMetadata,
 	enumerateDaemons,
 	pingDaemon,
 	socketPathFor,
