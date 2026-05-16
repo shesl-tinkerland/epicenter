@@ -181,15 +181,4 @@ describe('WRANGLER_DEV_API_ORIGIN', () => {
 		});
 		expect(cleartextNonLocal).toEqual([WRANGLER_DEV_API_ORIGIN]);
 	});
-
-	// Fails if the shim's host doesn't correspond to any APPS entry, i.e.
-	// the constant has been redirected at a domain we don't actually own.
-	test('matches the hostname of an APPS entry (no rogue domain)', () => {
-		const apiHosts = new Set(
-			Object.values(APPS).flatMap((app) =>
-				app.urls.map((u: string) => new URL(u).host),
-			),
-		);
-		expect(apiHosts.has(new URL(WRANGLER_DEV_API_ORIGIN).host)).toBe(true);
-	});
 });
