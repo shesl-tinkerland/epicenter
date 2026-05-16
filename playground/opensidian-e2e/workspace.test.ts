@@ -5,7 +5,7 @@
  * works end-to-end with persistence and document content.
  *
  * Key behaviors:
- * - loadDaemonConfig() discovers the hosted workspace from the default config
+ * - folder-routed daemon discovery can host this workspace from workspaces/
  * - Table CRUD works for the files table (folders + files)
  * - Document content round-trips through write → read
  * - Persistence survives restart (table data + document content)
@@ -15,11 +15,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFileContentDoc, type FileId } from '@epicenter/filesystem';
+import { fileContentDocGuid, type FileId } from '@epicenter/filesystem';
 import {
 	attachEncryption,
+	attachTimeline,
 	createDisposableCache,
-	type EncryptionKeys,
 	generateId,
 } from '@epicenter/workspace';
 import { assembleMarkdown } from '@epicenter/workspace/markdown';
@@ -32,9 +32,10 @@ const WORKSPACE_ID = 'opensidian';
 const TEST_ENCRYPTION_KEYS = [
 	{
 		version: 1,
-		userKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
+		subjectKeyBase64:
+			'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 	},
-] satisfies EncryptionKeys;
+];
 
 const PERSISTENCE_DIR = join(
 	import.meta.dir,
@@ -49,23 +50,30 @@ function dbPath(id: string) {
 function createTestClient() {
 	const ydoc = new Y.Doc({ guid: WORKSPACE_ID, gc: false });
 	const encryption = attachEncryption(ydoc, {
-		encryptionKeys: () => TEST_ENCRYPTION_KEYS,
+		keyring: () => TEST_ENCRYPTION_KEYS,
 	});
 	const tables = encryption.attachTables(opensidianTables);
 	const kv = encryption.attachKv({});
 	const persistence = attachYjsLog(ydoc, { filePath: dbPath(WORKSPACE_ID) });
 
 	const contentDocs = createDisposableCache(
-		(fileId: FileId) =>
-			createFileContentDoc({
-				fileId,
-				workspaceId: WORKSPACE_ID,
-				filesTable: tables.files,
-				attachPersistence: (contentDoc) =>
-					attachYjsLog(contentDoc, {
-						filePath: join(PERSISTENCE_DIR, 'content', `${contentDoc.guid}.db`),
-					}),
-			}),
+		(fileId: FileId) => {
+			const contentDoc = new Y.Doc({
+				guid: fileContentDocGuid({ workspaceId: WORKSPACE_ID, fileId }),
+				gc: false,
+			});
+			attachYjsLog(contentDoc, {
+				filePath: join(PERSISTENCE_DIR, 'content', `${contentDoc.guid}.db`),
+			});
+			return {
+				ydoc: contentDoc,
+				content: attachTimeline(contentDoc),
+				whenReady: Promise.resolve(),
+				[Symbol.dispose]() {
+					contentDoc.destroy();
+				},
+			};
+		},
 		{ gcTime: 0 },
 	);
 
@@ -211,7 +219,7 @@ describe('e2e: opensidian pushFromMarkdown', () => {
 	function createImportClient() {
 		const ydoc = new Y.Doc({ guid: WORKSPACE_ID, gc: false });
 		const encryption = attachEncryption(ydoc, {
-			encryptionKeys: () => TEST_ENCRYPTION_KEYS,
+			keyring: () => TEST_ENCRYPTION_KEYS,
 		});
 		const tables = encryption.attachTables(opensidianTables);
 		const kv = encryption.attachKv({});
@@ -220,20 +228,27 @@ describe('e2e: opensidian pushFromMarkdown', () => {
 		});
 
 		const contentDocs = createDisposableCache(
-			(fileId: FileId) =>
-				createFileContentDoc({
-					fileId,
-					workspaceId: WORKSPACE_ID,
-					filesTable: tables.files,
-					attachPersistence: (contentDoc) =>
-						attachYjsLog(contentDoc, {
-							filePath: join(
-								IMPORT_PERSISTENCE,
-								'content',
-								`${contentDoc.guid}.db`,
-							),
-						}),
-				}),
+			(fileId: FileId) => {
+				const contentDoc = new Y.Doc({
+					guid: fileContentDocGuid({ workspaceId: WORKSPACE_ID, fileId }),
+					gc: false,
+				});
+				attachYjsLog(contentDoc, {
+					filePath: join(
+						IMPORT_PERSISTENCE,
+						'content',
+						`${contentDoc.guid}.db`,
+					),
+				});
+				return {
+					ydoc: contentDoc,
+					content: attachTimeline(contentDoc),
+					whenReady: Promise.resolve(),
+					[Symbol.dispose]() {
+						contentDoc.destroy();
+					},
+				};
+			},
 			{ gcTime: 0 },
 		);
 
