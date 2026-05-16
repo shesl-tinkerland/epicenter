@@ -43,15 +43,11 @@ import type { ProjectDir } from '../shared/types.js';
 
 const CONFIG_FILENAME = 'epicenter.config.ts';
 
-function epicenterProjectDir(projectDir: string): string {
-	return join(projectDir, '.epicenter');
-}
-
 export function findEpicenterDir(start: string = process.cwd()): ProjectDir {
 	let current = resolve(start);
 	while (true) {
 		const hasConfig = existsSync(join(current, CONFIG_FILENAME));
-		const hasDir = existsSync(epicenterProjectDir(current));
+		const hasDir = existsSync(join(current, '.epicenter'));
 		if (hasConfig || hasDir) return current as ProjectDir;
 		const parent = dirname(current);
 		if (parent === current) {
