@@ -134,14 +134,6 @@ export function createExtensionOAuthLauncher({
 	} satisfies OAuthLauncher;
 }
 
-export function createStorageAdapter(storage: Storage) {
-	return {
-		getItem: (key) => storage.getItem(key),
-		setItem: (key, value) => storage.setItem(key, value),
-		removeItem: (key) => storage.removeItem(key),
-	} satisfies OAuthTemporaryStorage;
-}
-
 export function createOAuthClient({
 	issuer,
 	clientId,

@@ -1,8 +1,5 @@
 import { PersistedAuth } from '@epicenter/auth';
-import {
-	createBrowserOAuthLauncher,
-	createStorageAdapter,
-} from '@epicenter/auth/oauth-launchers';
+import { createBrowserOAuthLauncher } from '@epicenter/auth/oauth-launchers';
 import { createOAuthAppAuth } from '@epicenter/auth-svelte';
 import { EPICENTER_OPENSIDIAN_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
 import { APP_URLS } from '@epicenter/constants/vite';
@@ -22,7 +19,7 @@ export const auth = createOAuthAppAuth({
 		clientId: EPICENTER_OPENSIDIAN_OAUTH_CLIENT_ID,
 		redirectUri: `${window.location.origin}${base}/auth/callback`,
 		resource: APP_URLS.API,
-		storage: createStorageAdapter(window.sessionStorage),
+		storage: window.sessionStorage,
 	}),
 });
 

@@ -1,8 +1,5 @@
 import { PersistedAuth } from '@epicenter/auth';
-import {
-	createBrowserOAuthLauncher,
-	createStorageAdapter,
-} from '@epicenter/auth/oauth-launchers';
+import { createBrowserOAuthLauncher } from '@epicenter/auth/oauth-launchers';
 import { createOAuthAppAuth } from '@epicenter/auth-svelte';
 import { EPICENTER_DASHBOARD_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
 import { createPersistedState } from '@epicenter/svelte';
@@ -23,7 +20,7 @@ export const auth = createOAuthAppAuth({
 		clientId: EPICENTER_DASHBOARD_OAUTH_CLIENT_ID,
 		redirectUri: `${window.location.origin}${base}/auth/callback`,
 		resource: apiBaseURL,
-		storage: createStorageAdapter(window.sessionStorage),
+		storage: window.sessionStorage,
 	}),
 });
 
