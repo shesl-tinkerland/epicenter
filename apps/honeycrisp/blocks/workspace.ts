@@ -69,6 +69,16 @@ const foldersTable = defineTable(
 );
 export type Folder = InferTableRow<typeof foldersTable>;
 
+const noteBase = type({
+	id: NoteId,
+	'folderId?': FolderId.or('undefined'),
+	title: 'string',
+	preview: 'string',
+	pinned: 'boolean',
+	createdAt: DateTimeString,
+	updatedAt: DateTimeString,
+});
+
 /**
  * Notes table: individual notes with rich-text bodies.
  *
@@ -86,26 +96,12 @@ export type Folder = InferTableRow<typeof foldersTable>;
  * `onLocalUpdate`.
  */
 const notesTable = defineTable(
-	type({
-		id: NoteId,
-		'folderId?': FolderId.or('undefined'),
-		title: 'string',
-		preview: 'string',
-		pinned: 'boolean',
-		createdAt: DateTimeString,
-		updatedAt: DateTimeString,
+	noteBase.merge({
 		_v: '1',
 	}),
-	type({
-		id: NoteId,
-		'folderId?': FolderId.or('undefined'),
-		title: 'string',
-		preview: 'string',
-		pinned: 'boolean',
+	noteBase.merge({
 		'deletedAt?': DateTimeString.or('undefined'),
 		'wordCount?': 'number | undefined',
-		createdAt: DateTimeString,
-		updatedAt: DateTimeString,
 		_v: '2',
 	}),
 ).migrate((row) => {
