@@ -12,7 +12,6 @@ import {
 	type PersistedAuth as PersistedAuthType,
 } from './auth-types.js';
 import { parseOAuthTokenGrant } from './oauth-token-response.js';
-import { headersFromRequest } from './request-headers.js';
 
 /**
  * Storage adapter for the single `PersistedAuth` cell (grant + localIdentity).
@@ -342,6 +341,69 @@ function normalizeFetchInput(
 		return new URL(input, baseURL).toString();
 	}
 	return input;
+}
+
+function headersFromRequest(
+	input: Request | string | URL,
+	init?: RequestInit,
+) {
+	const headers = new Headers(
+		input instanceof Request ? input.headers : undefined,
+	);
+	copyHeaders(headers, init?.headers);
+	return headers;
+}
+
+function copyHeaders(target: Headers, source: RequestInit['headers']) {
+	if (!source) return;
+
+	if (source instanceof Headers) {
+		source.forEach((value, key) => target.set(key, value));
+		return;
+	}
+
+	const value = source as unknown;
+
+	if (Array.isArray(value)) {
+		for (const [key, headerValue] of value) {
+			setHeaderValue(target, key, headerValue);
+		}
+		return;
+	}
+
+	if (isHeaderIterable(value)) {
+		for (const [key, headerValue] of value) {
+			setHeaderValue(target, key, headerValue);
+		}
+		return;
+	}
+
+	for (const [key, headerValue] of Object.entries(
+		value as Record<string, string | readonly string[] | undefined>,
+	)) {
+		setHeaderValue(target, key, headerValue);
+	}
+}
+
+function setHeaderValue(
+	target: Headers,
+	key: string,
+	value: string | readonly string[] | undefined,
+) {
+	if (value === undefined) return;
+	if (typeof value === 'string') {
+		target.set(key, value);
+		return;
+	}
+	for (const item of value) target.append(key, item);
+}
+
+function isHeaderIterable(
+	value: unknown,
+): value is Iterable<readonly [string, string]> {
+	return (
+		value !== null && typeof value === 'object' && Symbol.iterator in value
+	);
 }
 
 async function refreshOAuthTokenWithEndpoint({
