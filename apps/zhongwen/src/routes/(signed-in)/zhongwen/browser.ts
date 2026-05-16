@@ -4,8 +4,7 @@ import { openZhongwenWorkspace } from '@epicenter/zhongwen';
 export function openZhongwenBrowser({ owner }: { owner: LocalOwner }) {
 	const workspace = openZhongwenWorkspace(owner.attachEncryption);
 	const { ydoc, tables, kv, encryption } = workspace;
-	const idb = owner.attachIndexedDb(ydoc);
-	owner.attachBroadcastChannel(ydoc);
+	const idb = owner.attachLocal(ydoc);
 
 	return {
 		ydoc,

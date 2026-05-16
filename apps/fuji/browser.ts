@@ -39,8 +39,7 @@ export function openFujiBrowser({
 	const workspace = openFujiWorkspace(owner.attachEncryption);
 	const { ydoc: rootYdoc, tables, kv } = workspace;
 
-	const idb = owner.attachIndexedDb(rootYdoc);
-	owner.attachBroadcastChannel(rootYdoc);
+	const idb = owner.attachLocal(rootYdoc);
 
 	const entryContentDocs = createDisposableCache((entryId: EntryId) => {
 		const ydoc = new Y.Doc({
@@ -48,8 +47,7 @@ export function openFujiBrowser({
 			gc: false,
 		});
 		const body = attachRichText(ydoc);
-		const childIdb = owner.attachIndexedDb(ydoc);
-		owner.attachBroadcastChannel(ydoc);
+		const childIdb = owner.attachLocal(ydoc);
 		// Each rich-text body is its own Y.Doc (its own sync room keyed by the
 		// content guid), so opening a per-body WebSocket here is intentional:
 		// the server multiplexes by room, not by client. Tear-down lives in

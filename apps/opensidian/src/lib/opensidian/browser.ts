@@ -31,8 +31,7 @@ export function openOpensidianBrowser({
 	const workspace = openOpensidianWorkspace(owner.attachEncryption);
 	const { ydoc: rootYdoc, tables, kv } = workspace;
 
-	const idb = owner.attachIndexedDb(rootYdoc);
-	owner.attachBroadcastChannel(rootYdoc);
+	const idb = owner.attachLocal(rootYdoc);
 
 	const fileContentDocs = createDisposableCache((fileId: FileId) => {
 		const ydoc = new Y.Doc({
@@ -45,8 +44,7 @@ export function openOpensidianBrowser({
 		onLocalUpdate(ydoc, () =>
 			tables.files.update(fileId, { updatedAt: Date.now() }),
 		);
-		const childIdb = owner.attachIndexedDb(ydoc);
-		owner.attachBroadcastChannel(ydoc);
+		const childIdb = owner.attachLocal(ydoc);
 		return {
 			ydoc,
 			content: attachTimeline(ydoc),
