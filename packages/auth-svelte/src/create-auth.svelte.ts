@@ -10,41 +10,19 @@ export type { AuthClient };
 /**
  * Svelte 5 wrapper around `@epicenter/auth`.
  *
- * Bridges the core state listener into Svelte reactivity.
+ * Spreads the closure-bound client and overrides `state` with a getter that
+ * calls `subscribe()` so reads inside `$derived` / `$effect` track changes.
  */
-function withReactiveState(auth: AuthClient) {
-	const subscribe = createSubscriber((update) => {
-		return auth.onStateChange(update);
-	});
-
+export function createOAuthAppAuth(
+	config: CreateOAuthAppAuthConfig,
+): AuthClient {
+	const auth = createCoreOAuthAppAuth(config);
+	const subscribe = createSubscriber((update) => auth.onStateChange(update));
 	return {
+		...auth,
 		get state() {
 			subscribe();
 			return auth.state;
 		},
-		onStateChange(fn) {
-			return auth.onStateChange(fn);
-		},
-		startSignIn() {
-			return auth.startSignIn();
-		},
-		signOut() {
-			return auth.signOut();
-		},
-		fetch(input, init) {
-			return auth.fetch(input, init);
-		},
-		openWebSocket(url, protocols) {
-			return auth.openWebSocket(url, protocols);
-		},
-		[Symbol.dispose]() {
-			auth[Symbol.dispose]();
-		},
-	} satisfies AuthClient;
-}
-
-export function createOAuthAppAuth(
-	config: CreateOAuthAppAuthConfig,
-): AuthClient {
-	return withReactiveState(createCoreOAuthAppAuth(config));
+	};
 }
