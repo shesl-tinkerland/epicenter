@@ -55,10 +55,9 @@ export function parseBearer(value: string | null): string | null {
  * resolve the calling Better Auth user. The single source of truth for what
  * "a token good enough to reach a protected resource" means in this codebase.
  *
- * Wrappers project the user differently:
- * - `resolveBearerUser` returns the lean `AuthUser` for the middleware path.
- * - `resolveBearerIdentity` adds the derived local workspace identity for
- *   `/api/me`.
+ * Both wrappers (`resolveBearerUser`, `resolveBearerIdentity`) project the
+ * Better Auth `User` through `AuthUser.assert`, then `resolveBearerIdentity`
+ * additionally derives the subject keyring.
  */
 async function verifyBearerToUser(
 	deps: ResolverDeps,
@@ -96,7 +95,7 @@ export async function resolveBearerUser(
 ): Promise<Result<AuthUser, OAuthError>> {
 	const { data: user, error } = await verifyBearerToUser(deps);
 	if (error) return Err(error);
-	return Ok({ id: user.id, email: user.email });
+	return Ok(AuthUser.assert(user));
 }
 
 /**

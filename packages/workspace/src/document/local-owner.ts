@@ -3,11 +3,9 @@
 /**
  * Browser-local owner facade for an authenticated workspace session.
  *
- * Auth calls the server-issued identity label a `subject` because it is the
- * value used to derive a `SubjectKeyring`. Local workspace code uses that
- * same value as the owner id for IndexedDB, BroadcastChannel, and wipe
- * boundaries. Keeping the owner facade here prevents app code from rebuilding
- * those names by hand.
+ * Auth calls the server-issued identity label a `subject` because it derives
+ * a `SubjectKeyring`. This package calls the same value `ownerId` once it is
+ * used to name IndexedDB, BroadcastChannel, and wipe boundaries.
  *
  * Daemons do not construct an owner. They call `attachEncryption` directly
  * with `keyring` and persist through the filesystem instead of IndexedDB.
@@ -19,22 +17,22 @@ import type * as Y from 'yjs';
 import { attachBroadcastChannelWithKey } from './attach-broadcast-channel.js';
 import { attachEncryptedIndexedDb } from './attach-encrypted-indexed-db.js';
 import { attachEncryption } from './attach-encryption.js';
-import { createOwnedYjsKey } from './local-yjs-key.js';
+import { createOwnedYjsKey, getOwnedYjsPrefix } from './local-yjs-key.js';
 
 export type LocalOwner = ReturnType<typeof createLocalOwner>;
 
 export function createLocalOwner({
-	subject,
+	ownerId,
 	keyring,
 }: {
 	/**
-	 * Server-issued identity label for the local workspace owner.
+	 * Stable local owner label for browser-local workspace data.
 	 *
-	 * Usually this is the Better Auth user id. It may later be a scoped auth
-	 * subject such as `issuer:userId` or `tenant:userId`; local storage only
-	 * requires it to be stable for the owner whose data is being opened.
+	 * Callers usually pass `auth.state.localIdentity.subject` here. The rename
+	 * is intentional: auth derives keys for a subject; workspace storage belongs
+	 * to an owner.
 	 */
-	subject: string;
+	ownerId: string;
 	keyring: () => SubjectKeyring;
 }) {
 	return {
@@ -48,13 +46,13 @@ export function createLocalOwner({
 		},
 		/**
 		 * Attach encrypted local IndexedDB persistence. The database name is
-		 * `createOwnedYjsKey(subject, ydoc.guid)`. Another signed-in subject in
+		 * `createOwnedYjsKey(ownerId, ydoc.guid)`. Another signed-in owner in
 		 * the same browser profile gets a different database name for the same
 		 * document guid.
 		 */
 		attachIndexedDb(ydoc: Y.Doc) {
 			return attachEncryptedIndexedDb(ydoc, {
-				databaseName: createOwnedYjsKey(subject, ydoc.guid),
+				databaseName: createOwnedYjsKey(ownerId, ydoc.guid),
 				keyring,
 			});
 		},
@@ -64,7 +62,7 @@ export function createLocalOwner({
 		 * updates through BroadcastChannel.
 		 */
 		attachBroadcastChannel(ydoc: Y.Doc) {
-			attachBroadcastChannelWithKey(ydoc, createOwnedYjsKey(subject, ydoc.guid));
+			attachBroadcastChannelWithKey(ydoc, createOwnedYjsKey(ownerId, ydoc.guid));
 		},
 		/**
 		 * Delete every owner-scoped IndexedDB database currently visible to
@@ -73,11 +71,11 @@ export function createLocalOwner({
 		 * from a clean slate.
 		 */
 		async wipeLocalYjsData(ydocGuids: Iterable<string> = []) {
-			const prefix = `epicenter.subject.${subject}.yjs.`;
+			const prefix = getOwnedYjsPrefix(ownerId);
 			const names = new Set<string>();
 
 			for (const guid of ydocGuids) {
-				names.add(createOwnedYjsKey(subject, guid));
+				names.add(createOwnedYjsKey(ownerId, guid));
 			}
 
 			if ('databases' in indexedDB) {

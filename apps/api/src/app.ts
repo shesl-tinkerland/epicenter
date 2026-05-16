@@ -419,8 +419,9 @@ app.post(
  * names (Vercel/Supabase model). Each owner gets their own DO instance per
  * room. `subject` mirrors the client-side `localIdentity.subject` and equals
  * the Better Auth `user.id` today; naming the prefix `subject:` matches the
- * encryption derivation labels (`subject:{subject}`, `workspace:{wsId}`) and
- * the local IndexedDB prefix (`epicenter.subject.{subject}.yjs.{guid}`).
+ * encryption derivation labels (`subject:{subject}`, `workspace:{wsId}`).
+ * Browser-local storage receives this same value as `ownerId`; it is named
+ * for its storage role there, not for its auth role.
  *
  * Alternatives considered:
  *
