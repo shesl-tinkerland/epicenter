@@ -238,7 +238,12 @@ export function createOAuthAppAuth({
 		} else {
 			headers.delete('Authorization');
 		}
-		const normalizedInput = normalizeFetchInput(input, baseURL);
+		let normalizedInput: AuthFetchInput = input;
+		if (input instanceof Request) {
+			normalizedInput = input.clone();
+		} else if (typeof input === 'string' && input.startsWith('/')) {
+			normalizedInput = new URL(input, baseURL).toString();
+		}
 		return fetchImpl(normalizedInput, {
 			...init,
 			headers,
@@ -328,17 +333,6 @@ export function createOAuthAppAuth({
 			stateStore.clearListeners();
 		},
 	};
-}
-
-function normalizeFetchInput(
-	input: AuthFetchInput,
-	baseURL: string,
-): AuthFetchInput {
-	if (input instanceof Request) return input.clone() as Request;
-	if (typeof input === 'string' && input.startsWith('/')) {
-		return new URL(input, baseURL).toString();
-	}
-	return input;
 }
 
 function headersFromRequest(
