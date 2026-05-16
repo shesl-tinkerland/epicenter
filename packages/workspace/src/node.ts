@@ -41,11 +41,7 @@ export {
 	runtimeDir,
 	socketPathFor,
 } from './daemon/paths.js';
-export {
-	findDuplicateDaemonRoute,
-	isValidDaemonRoute,
-	validateDaemonRouteNames,
-} from './daemon/route-validation.js';
+export { validateDaemonRouteNames } from './daemon/route-validation.js';
 export {
 	RunError,
 	type RunResponse,

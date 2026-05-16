@@ -11,30 +11,16 @@ export type DaemonRouteNameIssue = {
 	reason: 'invalid' | 'duplicate';
 };
 
-export function isValidDaemonRoute(route: string): boolean {
-	return ROUTE_PATTERN.test(route) && !RESERVED_OBJECT_ROUTE_KEYS.has(route);
-}
-
-export function findDuplicateDaemonRoute(
-	routes: readonly string[],
-): string | null {
-	const seen = new Set<string>();
-	for (const route of routes) {
-		if (seen.has(route)) return route;
-		seen.add(route);
-	}
-	return null;
-}
-
 export function validateDaemonRouteNames(
 	routes: readonly string[],
 ): DaemonRouteNameIssue | null {
-	const duplicate = findDuplicateDaemonRoute(routes);
-	if (duplicate !== null) {
-		return { route: duplicate, reason: 'duplicate' };
+	const seen = new Set<string>();
+	for (const route of routes) {
+		if (seen.has(route)) return { route, reason: 'duplicate' };
+		seen.add(route);
 	}
 	for (const route of routes) {
-		if (!isValidDaemonRoute(route)) {
+		if (!ROUTE_PATTERN.test(route) || RESERVED_OBJECT_ROUTE_KEYS.has(route)) {
 			return { route, reason: 'invalid' };
 		}
 	}
