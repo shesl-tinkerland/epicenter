@@ -32,32 +32,25 @@ export const FUJI_WORKSPACE_ID = 'epicenter.fuji';
 export type EntryId = string & Brand<'EntryId'>;
 export const EntryId = type('string').pipe((s): EntryId => s as EntryId);
 
+const entryBase = type({
+	id: EntryId,
+	title: 'string',
+	subtitle: 'string',
+	type: 'string[]',
+	tags: 'string[]',
+	pinned: 'boolean',
+	'deletedAt?': DateTimeString.or('undefined'),
+	date: DateTimeString,
+	createdAt: DateTimeString,
+	updatedAt: DateTimeString,
+});
+
 const entriesTable = defineTable(
-	type({
-		id: EntryId,
-		title: 'string',
-		subtitle: 'string',
-		type: 'string[]',
-		tags: 'string[]',
-		pinned: 'boolean',
-		'deletedAt?': DateTimeString.or('undefined'),
-		date: DateTimeString,
-		createdAt: DateTimeString,
-		updatedAt: DateTimeString,
+	entryBase.merge({
 		_v: '1',
 	}),
-	type({
-		id: EntryId,
-		title: 'string',
-		subtitle: 'string',
-		type: 'string[]',
-		tags: 'string[]',
-		pinned: 'boolean',
+	entryBase.merge({
 		rating: 'number',
-		'deletedAt?': DateTimeString.or('undefined'),
-		date: DateTimeString,
-		createdAt: DateTimeString,
-		updatedAt: DateTimeString,
 		_v: '2',
 	}),
 ).migrate((row) => {
