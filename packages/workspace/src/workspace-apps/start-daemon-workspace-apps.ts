@@ -195,5 +195,3 @@ async function disposeOpenedRuntimes(
 		),
 	);
 }
-
-export type { DaemonRuntime, StartedDaemonRoute };
