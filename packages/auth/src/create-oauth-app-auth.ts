@@ -87,7 +87,9 @@ export function createOAuthAppAuth({
 
 	async function refreshGrant(force: boolean): Promise<boolean> {
 		if (persisted === null || networkAuthPaused) return false;
-		if (!force && !shouldRefreshGrant(persisted.grant, now())) return true;
+		if (!force && persisted.grant.accessTokenExpiresAt > now() + REFRESH_SKEW_MS) {
+			return true;
+		}
 		if (refreshPromise) return refreshPromise;
 
 		const startedFrom = persisted;
@@ -326,10 +328,6 @@ export function createOAuthAppAuth({
 			stateStore.clearListeners();
 		},
 	};
-}
-
-function shouldRefreshGrant(grant: OAuthTokenGrant, now: number) {
-	return grant.accessTokenExpiresAt <= now + REFRESH_SKEW_MS;
 }
 
 function normalizeFetchInput(
