@@ -2,14 +2,12 @@ import { APP_URLS } from '@epicenter/constants/vite';
 import {
 	createFujiActions,
 	type EntryId,
-	FUJI_WORKSPACE_ID,
-	fujiTables,
+	openFujiWorkspace,
 } from '@epicenter/fuji';
 import {
 	attachRichText,
 	createDisposableCache,
 	DateTimeString,
-	docGuid,
 	type LocalOwner,
 	type OpenWebSocket,
 	onLocalUpdate,
@@ -17,21 +15,6 @@ import {
 	roomWsUrl,
 } from '@epicenter/workspace';
 import * as Y from 'yjs';
-
-function entryContentDocGuid({
-	workspaceId,
-	entryId,
-}: {
-	workspaceId: string;
-	entryId: EntryId;
-}): string {
-	return docGuid({
-		workspaceId,
-		collection: 'entries',
-		rowId: entryId,
-		field: 'content',
-	});
-}
 
 export function openFujiBrowser({
 	owner,
@@ -42,20 +25,15 @@ export function openFujiBrowser({
 	replicaId: string;
 	openWebSocket?: OpenWebSocket;
 }) {
-	const rootYdoc = new Y.Doc({ guid: FUJI_WORKSPACE_ID, gc: false });
-	const encryption = owner.attachEncryption(rootYdoc);
-	const tables = encryption.attachTables(fujiTables);
-	const kv = encryption.attachKv({});
+	const workspace = openFujiWorkspace(owner);
+	const { ydoc: rootYdoc, tables, kv } = workspace;
 
 	const idb = owner.attachIndexedDb(rootYdoc);
 	owner.attachBroadcastChannel(rootYdoc);
 
 	const entryContentDocs = createDisposableCache((entryId: EntryId) => {
 		const ydoc = new Y.Doc({
-			guid: entryContentDocGuid({
-				workspaceId: rootYdoc.guid,
-				entryId,
-			}),
+			guid: workspace.entryContentDocGuid(entryId),
 			gc: false,
 		});
 		const body = attachRichText(ydoc);
@@ -104,19 +82,16 @@ export function openFujiBrowser({
 		ydoc: rootYdoc,
 		tables,
 		kv,
-		batch: (fn: () => void) => rootYdoc.transact(fn),
+		batch: workspace.batch,
 		idb,
 		entryContentDocs,
 		collaboration,
 		async wipe() {
 			const fallbackGuids = [
 				rootYdoc.guid,
-				...tables.entries.getAllValid().map((entry) =>
-					entryContentDocGuid({
-						workspaceId: rootYdoc.guid,
-						entryId: entry.id,
-					}),
-				),
+				...tables.entries
+					.getAllValid()
+					.map((entry) => workspace.entryContentDocGuid(entry.id)),
 			];
 			entryContentDocs[Symbol.dispose]();
 			rootYdoc.destroy();
