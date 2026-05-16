@@ -122,8 +122,3 @@ export function requireTabManager() {
 	return session.require();
 }
 
-export async function forgetTabManagerDevice(): Promise<void> {
-	const tabManager = requireTabManager();
-	await tabManager.wipe();
-	window.location.reload();
-}
