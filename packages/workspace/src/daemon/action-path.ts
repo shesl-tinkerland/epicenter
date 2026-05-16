@@ -4,7 +4,8 @@
  * `/list` publishes action keys in this format, and `/run` accepts the same
  * format from the CLI. Route validation rejects dots in route names, so the
  * first dot belongs to the route boundary. Everything after it is the
- * route-local action path and may contain more dots.
+ * route-local action key. Valid action keys are snake_case, so additional dots
+ * remain part of an invalid key and resolve as ActionNotFound.
  */
 import {
 	type ActionManifest,
@@ -40,8 +41,8 @@ export function joinDaemonActionPath(
  * Split a daemon-visible action path into route and route-local pieces.
  *
  * This does not validate that the route exists. It only applies the wire
- * format: first segment is the daemon route, the rest belongs to the action
- * registry hosted by that route.
+ * format: the first segment is the daemon route, and the rest is the action key
+ * hosted by that route.
  */
 export function parseDaemonActionPath(
 	actionPath: string,

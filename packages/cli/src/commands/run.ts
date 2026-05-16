@@ -1,6 +1,6 @@
 /**
- * `epicenter run <route.action_key> [input]`: invoke a `defineQuery` /
- * `defineMutation` by route-qualified action key through the local
+ * `epicenter run <route.action_key> [input]`: invoke a `defineQuery` or
+ * `defineMutation` by route-qualified snake_case action key through the local
  * `epicenter daemon up` daemon.
  *
  * `input` is JSON: inline positional, `@file.json` (curl convention), or stdin.
@@ -64,7 +64,7 @@ export const runCommand = cmd({
 			})
 			.option('wait', {
 				type: 'number',
-				description: `Total ms to wait for peer resolution + RPC; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
+				description: `RPC deadline in ms for the peer call; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
 			})
 			.implies('wait', 'peer')
 			.options(formatOptions)

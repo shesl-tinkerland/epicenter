@@ -1,7 +1,7 @@
 /**
  * `epicenter list [route.action_key]`: render actions exposed by this project.
  *
- * The daemon returns route-qualified action keys for every host in
+ * The daemon returns route-qualified snake_case action keys for every host in
  * `epicenter.config.ts`. The CLI only filters and renders that manifest.
  *
  * Per-peer schema introspection is a script concern. The CLI lists the local

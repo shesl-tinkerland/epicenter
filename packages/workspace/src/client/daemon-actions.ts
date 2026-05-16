@@ -10,6 +10,7 @@
  */
 
 import type { Result } from 'wellcrafted/result';
+import { joinDaemonActionPath } from '../daemon/action-path.js';
 import type { DaemonClient, DaemonError } from '../daemon/client.js';
 import type { RunError } from '../daemon/run-errors.js';
 import type { Action, ActionRegistry } from '../shared/actions.js';
@@ -66,7 +67,7 @@ export function buildDaemonActions<TActions extends ActionRegistry>(
 			if (prop === 'then') return undefined;
 			return (input?: unknown, options?: DaemonActionOptions) =>
 				client.run({
-					actionPath: `${route}.${prop}`,
+					actionPath: joinDaemonActionPath(route, prop),
 					input,
 					waitMs: options?.waitMs ?? DEFAULT_RUN_WAIT_MS,
 				});

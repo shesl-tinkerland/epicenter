@@ -516,7 +516,7 @@ If this feels heavy for README examples, that is useful feedback. It means the R
 For the daemon CLI, these are not independent optional features. They form a path:
 
 ```text
-run --peer bob notes.entries.create
+run --peer bob notes.entries_create
   |
   v
 route "notes" selects HostedDaemonWorkspace
@@ -525,10 +525,10 @@ route "notes" selects HostedDaemonWorkspace
 presence.waitForPeer("bob") finds clientID
   |
   v
-rpc.rpc(clientID, "entries.create", input)
+rpc.rpc(clientID, "entries_create", input)
   |
   v
-remote peer invokes its actions.entries.create
+remote peer invokes its actions.entries_create
 ```
 
 Removing any one part breaks the peer story:

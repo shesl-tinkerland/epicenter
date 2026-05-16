@@ -33,7 +33,7 @@ describe('daemon action path helpers', () => {
 		});
 	});
 
-	test('parseDaemonActionPath preserves dotted local action paths', () => {
+	test('parseDaemonActionPath preserves invalid dotted action suffixes', () => {
 		expect(parseDaemonActionPath('demo.counter.get')).toEqual({
 			routeName: 'demo',
 			localPath: 'counter.get',
