@@ -117,11 +117,14 @@ type AttachHoneycrispEncryption = LocalOwner['attachEncryption'];
 
 /**
  * Compute the deterministic guid of a note's rich-text body sub-doc.
+ * Browser editors, daemon materializers, and wipe paths reach this through
+ * the `workspace.noteBodyDocGuid(noteId)` method so every layer points at
+ * the same Y.Doc identity.
  *
- * Both browser and daemon use this so that materializers, browser editors,
- * and wipe paths all reference the exact same Y.Doc identity.
+ * Kept private so callers go through the workspace bundle (which already
+ * knows its own `ydoc.guid`) rather than re-deriving `workspaceId` by hand.
  */
-export function noteBodyDocGuid({
+function noteBodyDocGuid({
 	workspaceId,
 	noteId,
 }: {
@@ -172,12 +175,20 @@ function attachHoneycrispWorkspace(
 	const encryption = attachEncryption(ydoc);
 	const tables = encryption.attachTables(honeycrispTables);
 	const kv = encryption.attachKv({});
+	/**
+	 * Single source of truth for the Honeycrisp action surface. Browser and
+	 * daemon both pass this directly to `openCollaboration({ actions })`, so
+	 * the action handlers (and their inputs/outputs) are guaranteed identical
+	 * across layers without a second `createHoneycrispActions(tables)` call.
+	 */
+	const actions = createHoneycrispActions(tables);
 
 	return {
 		ydoc,
 		encryption,
 		tables,
 		kv,
+		actions,
 		batch: (fn: () => void) => ydoc.transact(fn),
 		noteBodyDocGuid(noteId: NoteId) {
 			return noteBodyDocGuid({ workspaceId: ydoc.guid, noteId });

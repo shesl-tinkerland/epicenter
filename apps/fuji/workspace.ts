@@ -70,11 +70,14 @@ type AttachFujiEncryption = LocalOwner['attachEncryption'];
 
 /**
  * Compute the deterministic guid of an entry's rich-text content sub-doc.
+ * Browser editors, daemon materializers, and wipe paths reach this through
+ * the `workspace.entryContentDocGuid(entryId)` method so every layer points
+ * at the same Y.Doc identity.
  *
- * Both browser and daemon use this so that materializers, browser editors,
- * and wipe paths all reference the exact same Y.Doc identity.
+ * Kept private so callers go through the workspace bundle (which already
+ * knows its own `ydoc.guid`) rather than re-deriving `workspaceId` by hand.
  */
-export function entryContentDocGuid({
+function entryContentDocGuid({
 	workspaceId,
 	entryId,
 }: {
@@ -125,12 +128,20 @@ function attachFujiWorkspace(
 	const encryption = attachEncryption(ydoc);
 	const tables = encryption.attachTables(fujiTables);
 	const kv = encryption.attachKv({});
+	/**
+	 * Single source of truth for the Fuji action surface. Browser and daemon
+	 * both pass this directly to `openCollaboration({ actions })`, so the
+	 * action handlers (and their inputs/outputs) are guaranteed identical
+	 * across layers without a second `createFujiActions(tables)` call.
+	 */
+	const actions = createFujiActions(tables);
 
 	return {
 		ydoc,
 		encryption,
 		tables,
 		kv,
+		actions,
 		batch: (fn: () => void) => ydoc.transact(fn),
 		touchEntry(entryId: EntryId) {
 			tables.entries.update(entryId, {
