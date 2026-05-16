@@ -240,7 +240,7 @@ export function createOAuthAppAuth({
 		}
 		let normalizedInput: AuthFetchInput = input;
 		if (input instanceof Request) {
-			normalizedInput = input.clone();
+			normalizedInput = input.clone() as Request;
 		} else if (typeof input === 'string' && input.startsWith('/')) {
 			normalizedInput = new URL(input, baseURL).toString();
 		}
