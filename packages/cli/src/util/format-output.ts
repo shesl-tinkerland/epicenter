@@ -1,9 +1,9 @@
 import type { Options } from 'yargs';
 
-export const outputFormats = ['json', 'jsonl'] as const;
+const outputFormats = ['json', 'jsonl'] as const;
 export type OutputFormat = (typeof outputFormats)[number];
 
-export type FormatOptions = {
+type FormatOptions = {
 	/** Override format (default: json, auto-pretty for TTY) */
 	format?: OutputFormat;
 };
