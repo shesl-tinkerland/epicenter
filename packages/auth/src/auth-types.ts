@@ -25,17 +25,23 @@ export const OAuthTokenGrant = type({
 export type OAuthTokenGrant = typeof OAuthTokenGrant.infer;
 
 /**
- * Local workspace identity returned by `/api/me` and cached on this device.
+ * Local-first workspace identity returned by `/api/me` and cached on this
+ * device.
  *
- * `subject` is the server-issued identity label used to derive the subject
- * keyring. Today it is the Better Auth `user.id`. It is not a profile record,
- * email address, or display user. Future servers may choose a scoped value,
- * such as `issuer:userId` or `tenant:userId`, without changing this client
- * shape.
+ * This is the part of auth that belongs to local workspace operations. The app
+ * keeps it so a signed-in workspace can still open offline, choose the right
+ * local storage owner, and decrypt local data when the OAuth grant cannot be
+ * refreshed yet.
  *
- * Workspace code treats this same value as the owner id for browser-local Yjs
- * storage and BroadcastChannel names. In other words: auth names the keyed
- * identity `subject`; local persistence uses that subject as the owner.
+ * `subject` is the server-issued owner label for local data. Today it is the
+ * Better Auth `user.id`. It is not a profile record, email address, or display
+ * user. Future servers may choose a scoped value, such as `issuer:userId` or
+ * `tenant:userId`, without changing this client shape.
+ *
+ * Workspace code calls this same value `ownerId` once it is used to name
+ * browser-local Yjs storage and BroadcastChannel channels. Auth names the value
+ * by where it comes from: a server subject. Workspace names the value by what
+ * it owns locally: workspace data.
  */
 export const SubjectIdentity = type({
 	'+': 'delete',
@@ -58,6 +64,13 @@ export type SubjectIdentity = typeof SubjectIdentity.infer;
 export const PersistedAuth = type({
 	'+': 'delete',
 	grant: OAuthTokenGrant,
+	/**
+	 * Cached local-first workspace identity.
+	 *
+	 * This is persisted separately from the OAuth grant because it remains useful
+	 * offline. The grant lets the app call the server; `localIdentity` lets the
+	 * app select and decrypt this user's local workspace data.
+	 */
 	localIdentity: SubjectIdentity,
 });
 
@@ -68,12 +81,19 @@ export type PersistedAuth = typeof PersistedAuth.infer;
  * and every Epicenter auth client (browser, extension, CLI machine, daemon).
  *
  * `user` is the Better Auth profile slice displayed in account UI.
- * `localIdentity` is the offline-decrypt material the client persists into
- * `PersistedAuth.localIdentity`.
+ * `localIdentity` is the local-first workspace identity: the owner label and
+ * keyring used to open local workspace data, including while offline.
  */
 export const ApiMeResponse = type({
 	'+': 'delete',
 	user: AuthUser,
+	/**
+	 * Local-first workspace identity for this account.
+	 *
+	 * This is the part of auth that belongs to local workspace operations. It is
+	 * cached into `PersistedAuth.localIdentity` so workspace boot and decryption
+	 * do not depend on a live network request.
+	 */
 	localIdentity: SubjectIdentity,
 });
 

@@ -90,8 +90,7 @@ requests, and exposes a `peers` surface for cross-peer dispatch.
 
 ```typescript
 import {
-  attachIndexedDb,
-  attachOwnedBroadcastChannel,
+  createLocalOwner,
   openCollaboration,
   roomWsUrl,
 } from '@epicenter/workspace';
@@ -102,8 +101,12 @@ function openBlog() {
   const tables = attachTables(ydoc, myTables);
   if (auth.state.status === 'signed-out') return null;
 
-  const idb = attachIndexedDb(ydoc);
-  attachOwnedBroadcastChannel(ydoc, { subject: auth.state.localIdentity.subject });
+  const owner = createLocalOwner({
+    ownerId: auth.state.localIdentity.subject,
+    keyring: () => auth.state.localIdentity.keyring,
+  });
+  const idb = owner.attachIndexedDb(ydoc);
+  owner.attachBroadcastChannel(ydoc);
   const collaboration = openCollaboration(ydoc, {
     url: roomWsUrl('https://api.example.com', ydoc.guid),
     openWebSocket: auth.openWebSocket,

@@ -2,7 +2,7 @@
  * LocalOwner behavior tests.
  *
  * Covers the three identity-scoped surfaces exposed by `createLocalOwner`:
- * - `attachIndexedDb`: encrypted persistence keyed by `(subject, ydoc.guid)`,
+ * - `attachIndexedDb`: encrypted persistence keyed by `(ownerId, ydoc.guid)`,
  *   including the round-trip and guid-bound storage key invariants moved
  *   here from `attach-encryption.test.ts`.
  * - `attachBroadcastChannel`: owner-scoped channel key without mutating
@@ -10,7 +10,7 @@
  * - `wipeLocalYjsData`: deletes known guids and enumerated owner-scoped
  *   databases, leaves other owners and unscoped local docs alone.
  *
- * These tests pin the durable IndexedDB prefix at `epicenter.subject.`
+ * These tests pin the durable IndexedDB prefix at `epicenter.owner.`
  * so any accidental rename of the storage label is caught here.
  */
 
@@ -100,7 +100,7 @@ describe('LocalOwner.attachIndexedDb', () => {
 	test('throws when keyring throws', () => {
 		const ydoc = new Y.Doc({ guid: 'encrypted-idb-no-keys', gc: false });
 		const owner = createLocalOwner({
-			subject: 'user-no-keys',
+			ownerId: 'user-no-keys',
 			keyring: () => {
 				throw new Error('not signed-in');
 			},
@@ -110,9 +110,9 @@ describe('LocalOwner.attachIndexedDb', () => {
 		ydoc.destroy();
 	});
 
-	test('round trips encrypted Yjs updates through IndexedDB at the v1 subject prefix', async () => {
-		const subject = `user-${crypto.randomUUID()}`;
-		const databaseName = `epicenter.subject.${subject}.yjs.encrypted-idb-roundtrip`;
+	test('round trips encrypted Yjs updates through IndexedDB at the owner prefix', async () => {
+		const ownerId = `user-${crypto.randomUUID()}`;
+		const databaseName = `epicenter.owner.${ownerId}.yjs.encrypted-idb-roundtrip`;
 		const keyring = toKeyring(randomBytes(32));
 
 		const firstDoc = new Y.Doc({
@@ -120,7 +120,7 @@ describe('LocalOwner.attachIndexedDb', () => {
 			gc: false,
 		});
 		const firstOwner = createLocalOwner({
-			subject,
+			ownerId,
 			keyring: () => keyring,
 		});
 		const firstIdb = firstOwner.attachIndexedDb(firstDoc);
@@ -139,7 +139,7 @@ describe('LocalOwner.attachIndexedDb', () => {
 			gc: false,
 		});
 		const secondOwner = createLocalOwner({
-			subject,
+			ownerId,
 			keyring: () => keyring,
 		});
 		const secondIdb = secondOwner.attachIndexedDb(secondDoc);
@@ -152,11 +152,11 @@ describe('LocalOwner.attachIndexedDb', () => {
 	});
 
 	test('target guid changes the derived storage key', async () => {
-		const subject = `user-${crypto.randomUUID()}`;
-		const databaseName = `epicenter.subject.${subject}.yjs.encrypted-idb-guid-a`;
+		const ownerId = `user-${crypto.randomUUID()}`;
+		const databaseName = `epicenter.owner.${ownerId}.yjs.encrypted-idb-guid-a`;
 		const keyring = toKeyring(randomBytes(32));
 		const ydoc = new Y.Doc({ guid: 'encrypted-idb-guid-a', gc: false });
-		const owner = createLocalOwner({ subject, keyring: () => keyring });
+		const owner = createLocalOwner({ ownerId, keyring: () => keyring });
 		const idb = owner.attachIndexedDb(ydoc);
 		await idb.whenLoaded;
 		ydoc.getText('body').insert(0, 'guid bound');
@@ -178,12 +178,12 @@ describe('LocalOwner.attachIndexedDb', () => {
 	});
 
 	test('clearLocal clears the encrypted IndexedDB database', async () => {
-		const subject = `user-${crypto.randomUUID()}`;
+		const ownerId = `user-${crypto.randomUUID()}`;
 		const keyring = toKeyring(randomBytes(32));
 
 		const firstDoc = new Y.Doc({ guid: 'encrypted-idb-clear', gc: false });
 		const firstOwner = createLocalOwner({
-			subject,
+			ownerId,
 			keyring: () => keyring,
 		});
 		const firstIdb = firstOwner.attachIndexedDb(firstDoc);
@@ -196,7 +196,7 @@ describe('LocalOwner.attachIndexedDb', () => {
 
 		const secondDoc = new Y.Doc({ guid: 'encrypted-idb-clear', gc: false });
 		const secondOwner = createLocalOwner({
-			subject,
+			ownerId,
 			keyring: () => keyring,
 		});
 		const secondIdb = secondOwner.attachIndexedDb(secondDoc);
@@ -239,14 +239,14 @@ describe('LocalOwner.attachBroadcastChannel', () => {
 	test('uses an owner-scoped channel key without changing ydoc.guid', () => {
 		const ydoc = new Y.Doc({ guid: 'epicenter.fuji' });
 		const owner = createLocalOwner({
-			subject: 'user-123',
+			ownerId: 'user-123',
 			keyring: noKeys,
 		});
 
 		owner.attachBroadcastChannel(ydoc);
 
 		expect(FakeBroadcastChannel.names).toEqual([
-			'yjs.epicenter.subject.user-123.yjs.epicenter.fuji',
+			'yjs.epicenter.owner.user-123.yjs.epicenter.fuji',
 		]);
 		expect(ydoc.guid).toBe('epicenter.fuji');
 		ydoc.destroy();
@@ -260,37 +260,37 @@ describe('LocalOwner.wipeLocalYjsData', () => {
 		);
 	});
 
-	test('clears known scoped document keys at the v1 subject prefix', async () => {
-		await createDatabase('epicenter.subject.user-1.yjs.doc-a');
-		await createDatabase('epicenter.subject.user-1.yjs.doc-b');
+	test('clears known scoped document keys at the owner prefix', async () => {
+		await createDatabase('epicenter.owner.user-1.yjs.doc-a');
+		await createDatabase('epicenter.owner.user-1.yjs.doc-b');
 
 		const owner = createLocalOwner({
-			subject: 'user-1',
+			ownerId: 'user-1',
 			keyring: noKeys,
 		});
 		await owner.wipeLocalYjsData(['doc-a', 'doc-b']);
 
 		const remaining = await databaseNames();
-		expect(remaining).not.toContain('epicenter.subject.user-1.yjs.doc-a');
-		expect(remaining).not.toContain('epicenter.subject.user-1.yjs.doc-b');
+		expect(remaining).not.toContain('epicenter.owner.user-1.yjs.doc-a');
+		expect(remaining).not.toContain('epicenter.owner.user-1.yjs.doc-b');
 	});
 
 	test('also clears enumerated scoped database names and leaves others alone', async () => {
-		await createDatabase('epicenter.subject.user-1.yjs.doc-a');
-		await createDatabase('epicenter.subject.user-1.yjs.doc-b');
-		await createDatabase('epicenter.subject.user-2.yjs.doc-c');
+		await createDatabase('epicenter.owner.user-1.yjs.doc-a');
+		await createDatabase('epicenter.owner.user-1.yjs.doc-b');
+		await createDatabase('epicenter.owner.user-2.yjs.doc-c');
 		await createDatabase('unscoped-doc');
 
 		const owner = createLocalOwner({
-			subject: 'user-1',
+			ownerId: 'user-1',
 			keyring: noKeys,
 		});
 		await owner.wipeLocalYjsData(['doc-a']);
 
 		const remaining = await databaseNames();
-		expect(remaining).not.toContain('epicenter.subject.user-1.yjs.doc-a');
-		expect(remaining).not.toContain('epicenter.subject.user-1.yjs.doc-b');
-		expect(remaining).toContain('epicenter.subject.user-2.yjs.doc-c');
+		expect(remaining).not.toContain('epicenter.owner.user-1.yjs.doc-a');
+		expect(remaining).not.toContain('epicenter.owner.user-1.yjs.doc-b');
+		expect(remaining).toContain('epicenter.owner.user-2.yjs.doc-c');
 		expect(remaining).toContain('unscoped-doc');
 	});
 });

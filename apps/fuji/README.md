@@ -21,16 +21,16 @@ Workspace ID: `epicenter.fuji`. Rich-text content and entry metadata are separat
 
 ### Client wiring
 
-Fuji's root workspace is built once per signed-in session by `createSession`. `openFujiBrowser()` owns the `new Y.Doc(...)` call, composes every attachment inline, and returns the bundle directly. The session module captures `userId` once at build time because IDB and BroadcastChannel keys are immutable for the workspace's lifetime. It passes auth-bound callbacks to the workspace at construction time: sync opens sockets through auth on connection attempts, while encrypted stores keep the keyring derived when they attach.
+Fuji's root workspace is built once per signed-in session by `createSession`. `openFujiBrowser()` owns the `new Y.Doc(...)` call, composes every attachment inline, and returns the bundle directly. The session module passes `localIdentity.subject` as `ownerId` once at build time because IDB and BroadcastChannel keys are immutable for the workspace's lifetime. It passes auth-bound callbacks to the workspace at construction time: sync opens sockets through auth on connection attempts, while encrypted stores keep the keyring derived when they attach.
 
 ```ts
 export function openFujiBrowser({
-  subject,
+  ownerId,
   peer,
   openWebSocket,
   keyring,
 }: {
-  subject: string;
+  ownerId: string;
   peer: PeerIdentity;
   openWebSocket?: (
     url: string | URL,
@@ -39,11 +39,12 @@ export function openFujiBrowser({
   keyring: () => SubjectKeyring;
 }) {
   const rootYdoc = new Y.Doc({ guid: FUJI_WORKSPACE_ID, gc: false });
+  const owner = createLocalOwner({ ownerId, keyring });
   const encryption = attachEncryption(rootYdoc, { keyring });
   const tables = encryption.attachTables(fujiTables);
   const kv = encryption.attachKv({});
-  const idb = encryption.attachIndexedDb(rootYdoc, { subject });
-  attachOwnedBroadcastChannel(rootYdoc, { subject });
+  const idb = owner.attachIndexedDb(rootYdoc);
+  owner.attachBroadcastChannel(rootYdoc);
   const actions = createFujiActions(tables);
   const collaboration = openCollaboration(rootYdoc, {
     url: roomWsUrl(APP_URLS.API, rootYdoc.guid),

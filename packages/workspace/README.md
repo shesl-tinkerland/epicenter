@@ -129,7 +129,7 @@ Minimal encrypted workspace: encryption + IndexedDB + cross-tab + collaboration 
 ```typescript
 import {
 	attachEncryption,
-	attachOwnedBroadcastChannel,
+	createLocalOwner,
 	openCollaboration,
 	type Replica,
 	roomWsUrl,
@@ -139,12 +139,12 @@ import * as Y from 'yjs';
 import { appTables } from '$lib/workspace/definition';
 
 export function openApp({
-	subject,
+	ownerId,
 	replica,
 	openWebSocket,
 	keyring,
 }: {
-	subject: string;
+	ownerId: string;
 	replica: Replica;
 	openWebSocket?: (
 		url: string | URL,
@@ -154,11 +154,12 @@ export function openApp({
 }) {
 	const ydoc = new Y.Doc({ guid: 'epicenter.my-app', gc: false });
 
+	const owner = createLocalOwner({ ownerId, keyring });
 	const encryption = attachEncryption(ydoc, { keyring });
 	const tables = encryption.attachTables(appTables);
 
-	const idb = encryption.attachIndexedDb(ydoc, { subject });
-	attachOwnedBroadcastChannel(ydoc, { subject });
+	const idb = owner.attachIndexedDb(ydoc);
+	owner.attachBroadcastChannel(ydoc);
 
 	const collaboration = openCollaboration(ydoc, {
 		url: roomWsUrl('https://api.epicenter.so', ydoc.guid),

@@ -74,36 +74,35 @@ Same-subject identity updates do not remount the workspace. Auth callbacks read 
 ## Browser local persistence
 Authenticated browser workspaces open local IndexedDB only after auth has settled into a signed-in state. The session module guarantees that boundary: it builds the workspace lazily once `auth.state.status === 'signed-in'` and disposes it on sign-out.
 Two inputs flow into the workspace:
-- `subject` scopes local IndexedDB and BroadcastChannel names to the owner. It is captured once at build time because IDB and BroadcastChannel keys are immutable for the lifetime of the workspace.
+- `ownerId` scopes local IndexedDB and BroadcastChannel names to the owner. Session code passes `localIdentity.subject` as the owner id. It is captured once at build time because IDB and BroadcastChannel keys are immutable for the lifetime of the workspace.
 - `keyring: () => SubjectKeyring` is a callback the encryption coordinator invokes when an encrypted store is attached. Already-attached stores keep their derived keyring; same-subject key rotation needs a re-attach to affect those stores.
 
 The browser factory shape is:
 ```ts
 export function openMyApp({
-	subject,
+	ownerId,
 	peer,
 	bearerToken,
 	keyring,
 }: {
-	subject: string;
+	ownerId: string;
 	peer: PeerIdentity;
 	bearerToken?: () => string | null;
 	keyring: () => SubjectKeyring;
 }) {
-	const doc = openMyAppDoc({ keyring });
+	const owner = createLocalOwner({ ownerId, keyring });
+	const doc = openMyAppDoc({ owner });
 
-	const idb = doc.encryption.attachIndexedDb(doc.ydoc, { subject });
-	attachOwnedBroadcastChannel(doc.ydoc, { subject });
+	const idb = owner.attachIndexedDb(doc.ydoc);
+	owner.attachBroadcastChannel(doc.ydoc);
 	// ...
 }
 ```
 
 The storage name is derived inside `@epicenter/workspace` as:
 ```text
-epicenter.v1.subject.{subject}.yjs.{ydocGuid}
+epicenter.owner.{ownerId}.yjs.{ydocGuid}
 ```
-
-The `v1` segment names the local Yjs storage namespace. It gives future cleanup or migration code one prefix to target, while app code still treats the full string as an implementation detail.
 
 App code should not build that string. Device cleanup uses `owner.wipeLocalYjsData(ydocGuids)`, which deletes known document databases and also sweeps enumerable IndexedDB names with the same owner prefix when the browser exposes `indexedDB.databases()`.
 

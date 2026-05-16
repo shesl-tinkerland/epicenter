@@ -7,6 +7,11 @@
  * a `SubjectKeyring`. This package calls the same value `ownerId` once it is
  * used to name IndexedDB, BroadcastChannel, and wipe boundaries.
  *
+ * Auth exposes this value as `auth.state.localIdentity.subject`. The workspace
+ * layer receives the same string as `ownerId`. The rename is intentional: auth
+ * names where the value comes from, while workspace names what the value owns
+ * locally.
+ *
  * Daemons do not construct an owner. They call `attachEncryption` directly
  * with `keyring` and persist through the filesystem instead of IndexedDB.
  */
@@ -26,11 +31,12 @@ export function createLocalOwner({
 	keyring,
 }: {
 	/**
-	 * Stable local owner label for browser-local workspace data.
+	 * Stable owner label for browser-local workspace data.
 	 *
-	 * Callers usually pass `auth.state.localIdentity.subject` here. The rename
-	 * is intentional: auth derives keys for a subject; workspace storage belongs
-	 * to an owner.
+	 * The auth package exposes this value as `localIdentity.subject`; workspace
+	 * code receives the same string as `ownerId`. This scopes IndexedDB
+	 * databases, BroadcastChannel names, and wipe boundaries so two accounts in
+	 * the same browser profile do not share local workspace data.
 	 */
 	ownerId: string;
 	keyring: () => SubjectKeyring;

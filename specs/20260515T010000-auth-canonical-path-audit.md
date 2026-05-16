@@ -409,7 +409,7 @@ auth signed-out
 
 auth signed-in or reauth-required
   if no payload:
-    build LocalOwner from localIdentity.subject and lazy keyring()
+    build LocalOwner from ownerId = localIdentity.subject and lazy keyring()
   if payload exists:
     keep it mounted
 ```
@@ -419,8 +419,8 @@ The migration must harden the same-user assumption. Today, `createSession` keeps
 ### Local Owner
 
 ```txt
-owner.subject
-  -> createOwnedYjsKey(subject, ydoc.guid)
+owner.ownerId
+  -> createOwnedYjsKey(ownerId, ydoc.guid)
   -> encrypted IndexedDB database name
   -> BroadcastChannel key
   -> wipe prefix
@@ -1165,7 +1165,7 @@ of deferred. This section records the new canonical names and the reasoning.
 | --- | --- | --- |
 | HKDF subject info | `user:{subject}` | `subject:{subject}` |
 | HKDF workspace info | `workspace:{workspaceId}` | unchanged |
-| IndexedDB prefix | `epicenter.v1.user.{s}.yjs.{guid}` | `epicenter.subject.{s}.yjs.{guid}` |
+| IndexedDB prefix | `epicenter.v1.user.{s}.yjs.{guid}` | `epicenter.owner.{ownerId}.yjs.{guid}` |
 | DO name format | `user:{userId}:rooms:{room}` | `subject:{subject}:rooms:{room}` |
 | Public type | `LocalWorkspaceIdentity` | `SubjectIdentity` |
 | Public type | `WorkspaceKeyring` (anonymous `Map<number, Uint8Array>`) | `WorkspaceKeyring` (named alias) |
@@ -1187,7 +1187,7 @@ The IndexedDB prefix similarly drops `v1`. The y-indexeddb database schema is
 owned by the library; if a future change cannot live under the same prefix,
 that change ships under a sibling prefix, not under an inner version segment.
 
-### Why `subject:` Over `epicenter.subject:` Or Versioned Variants
+### Why `subject:` For HKDF And `epicenter.owner.` For Storage
 
 HKDF info strings are domain separators. Different inputs (root key vs
 subject key) already cannot collide via info string; the info just needs to
@@ -1197,19 +1197,21 @@ nothing because we never share root key material with other tools.
 
 The IndexedDB prefix does benefit from the `epicenter` namespace because the
 same browser profile can host multiple tools on the same origin. Inside that
-namespace, `subject` describes the per-owner scope; if a sibling scope (org,
-cache, telemetry) ever appears, it gets its own label.
+namespace, `owner` describes the local persistence role. Session code passes
+`localIdentity.subject` as `ownerId`; storage names do not need to expose the
+auth term.
 
 ### Why DO Names Move To `subject:`
 
 The previous spec argued for keeping `user:` in DO names because the DO is
 server-side and `user.id` is server-side. The clean-break revisits that and
 unifies on `subject` because the DO addresses the same workspace whose Yjs
-data is encrypted under the subject-derived keys. Naming everything
-identity-scoped `subject:` makes the encryption labels, the IDB prefix, the
-DO name, and the `localIdentity.subject` field read as one model. The
-abstraction boundary stays inside `apps/api/src/auth/`, where Better Auth's
-`user` table is still the row identity.
+data is encrypted under the subject-derived keys. Server-side DO names and
+HKDF labels stay in auth vocabulary. Browser-local IndexedDB and
+BroadcastChannel names use `owner` because their job is local persistence
+isolation, not token identity. The abstraction boundary stays inside
+`apps/api/src/auth/`, where Better Auth's `user` table is still the row
+identity.
 
 ### Why `SubjectIdentity` Over `LocalWorkspaceIdentity`
 

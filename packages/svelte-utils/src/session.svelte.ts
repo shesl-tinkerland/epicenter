@@ -7,10 +7,14 @@ import { createLocalOwner, type LocalOwner } from '@epicenter/workspace';
  * sessions are single-subject by structure, so two consecutive identity-bearing
  * states are always the same subject.
  *
- * The build callback receives a `LocalOwner` (`@epicenter/workspace`) that
- * carries `subject` plus a lazy `keyring()` reader. The reader pulls from
- * the live `state.localIdentity` so refreshed keyrings (after `/api/me`
- * rotates them) are picked up on next access without rebuilding the payload.
+ * The build callback receives a `LocalOwner` (`@epicenter/workspace`). It uses
+ * `state.localIdentity.subject` as the local `ownerId`, plus a lazy `keyring()`
+ * reader. That local identity is the part of auth that belongs to local-first
+ * workspace operations: it chooses the local storage owner and decrypts local
+ * data, including while server auth needs reauth.
+ *
+ * The reader pulls from the live `state.localIdentity` so refreshed keyrings
+ * from `/api/me` are picked up on next access without rebuilding the payload.
  *
  * Requires an `AuthClient` whose `state` is Svelte-reactive (use
  * `@epicenter/auth-svelte`, not `@epicenter/auth` directly).
@@ -33,7 +37,7 @@ export function createSession<T extends Disposable>({
 		if (payload) return;
 		payload = build({
 			owner: createLocalOwner({
-				subject: state.localIdentity.subject,
+				ownerId: state.localIdentity.subject,
 				keyring: () => {
 					if (auth.state.status === 'signed-out') {
 						throw new Error(
