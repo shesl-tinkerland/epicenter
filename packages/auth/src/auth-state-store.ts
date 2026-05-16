@@ -2,19 +2,16 @@ import { subjectKeyringsEqual } from '@epicenter/encryption';
 import {
 	defineErrors,
 	extractErrorMessage,
-	type InferErrors,
 } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import type { AuthState } from './auth-contract.js';
-import type { SubjectIdentity } from './auth-types.js';
 
-export const AuthStateStoreError = defineErrors({
+const AuthStateStoreError = defineErrors({
 	SubscriberThrew: ({ cause }: { cause: unknown }) => ({
 		message: `Auth state subscriber threw: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
 });
-export type AuthStateStoreError = InferErrors<typeof AuthStateStoreError>;
 
 export function createAuthStateStore(
 	initialState: AuthState,
@@ -55,15 +52,11 @@ function authStatesEqual(left: AuthState, right: AuthState): boolean {
 	if (left.status === 'signed-out' || right.status === 'signed-out') {
 		return left.status === right.status;
 	}
-	return localIdentitiesEqual(left.localIdentity, right.localIdentity);
-}
-
-function localIdentitiesEqual(
-	left: SubjectIdentity,
-	right: SubjectIdentity,
-): boolean {
 	return (
-		left.subject === right.subject &&
-		subjectKeyringsEqual(left.keyring, right.keyring)
+		left.localIdentity.subject === right.localIdentity.subject &&
+		subjectKeyringsEqual(
+			left.localIdentity.keyring,
+			right.localIdentity.keyring,
+		)
 	);
 }
