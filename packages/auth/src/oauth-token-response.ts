@@ -1,6 +1,6 @@
 import type { OAuthTokenGrant } from './auth-types.js';
 
-export type OAuthTokenResponseIssue =
+type OAuthTokenResponseIssue =
 	| 'missing_access_token'
 	| 'missing_refresh_token'
 	| 'missing_expires_in'
