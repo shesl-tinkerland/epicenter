@@ -46,7 +46,7 @@ function disposeMarkerPath(route: string): string {
 }
 
 function stubAuthClient(): AuthClient {
-	return {} as AuthClient;
+	return { state: { status: 'signed-in' } } as AuthClient;
 }
 
 describe('startDaemonWorkspaceApps', () => {
@@ -151,5 +151,24 @@ describe('startDaemonWorkspaceApps', () => {
 		});
 		expect(result.error).toBeNull();
 		expect(result.data!.routes).toEqual([]);
+	});
+
+	test('refuses to open workspaces when machine auth is signed out', async () => {
+		writeWorkspaceDaemon(
+			'alpha',
+			`export default {
+				async open() {
+					throw new Error('must not open');
+				},
+			};
+			`,
+		);
+
+		const result = await startDaemonWorkspaceApps({
+			projectDir,
+			auth: { state: { status: 'signed-out' } } as AuthClient,
+		});
+		expect(result.data).toBeNull();
+		expect(result.error?.name).toBe('WorkspaceAuthSignedOut');
 	});
 });

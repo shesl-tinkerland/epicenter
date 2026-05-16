@@ -7,22 +7,18 @@
  * browser-only attachments around the same opener.
  *
  * Folder-routed daemon extension contract: the default export is a
- * `DaemonWorkspaceModule` whose `open(ctx)` receives the shared auth client,
- * the resolved project directory, the folder-derived route, plus the
- * host-derived `clientId` and `replicaId`. The host refuses to call `open`
- * when auth is signed-out, so this body only guards inside the lazy keyring
- * closure for late sign-outs.
+ * `DaemonWorkspaceModule` whose `open(ctx)` receives capabilities (the
+ * encryption attacher, the auth-bound WebSocket factory) and identity
+ * (`projectDir`, `route`, `clientId`, `replicaId`) from the host. The host
+ * refuses to open extensions when auth is signed-out, so the keyring closure
+ * baked into `ctx.attachEncryption` is the only auth touchpoint on this side.
  *
  * Actions and the Y.Doc clientID are owned by the shared workspace opener;
  * this file only composes daemon-side disk/network attachments.
  */
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
-import {
-	attachEncryption,
-	openCollaboration,
-	roomWsUrl,
-} from '@epicenter/workspace';
+import { openCollaboration, roomWsUrl } from '@epicenter/workspace';
 import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
 import {
 	attachMarkdownMaterializer,
@@ -40,19 +36,15 @@ import { createLogger } from 'wellcrafted/logger';
 import { openFujiWorkspace } from './workspace.js';
 
 export default defineDaemonWorkspace({
-	async open({ auth, projectDir, route, clientId, replicaId }) {
-		const workspace = openFujiWorkspace(
-			(ydoc) =>
-				attachEncryption(ydoc, {
-					keyring: () => {
-						if (auth.state.status === 'signed-out') {
-							throw new Error(`[${route}-daemon] auth signed-out.`);
-						}
-						return auth.state.localIdentity.keyring;
-					},
-				}),
-			{ clientId },
-		);
+	async open({
+		projectDir,
+		route,
+		clientId,
+		replicaId,
+		attachEncryption,
+		openWebSocket,
+	}) {
+		const workspace = openFujiWorkspace(attachEncryption, { clientId });
 
 		const yjsLog = attachYjsLog(workspace.ydoc, {
 			filePath: yjsPath(projectDir, workspace.ydoc.guid),
@@ -60,7 +52,7 @@ export default defineDaemonWorkspace({
 
 		const collaboration = openCollaboration(workspace.ydoc, {
 			url: roomWsUrl(EPICENTER_API_URL, workspace.ydoc.guid),
-			openWebSocket: auth.openWebSocket,
+			openWebSocket,
 			replicaId,
 			actions: workspace.actions,
 		});

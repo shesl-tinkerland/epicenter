@@ -55,10 +55,7 @@ export {
 } from './daemon/server.js';
 export { StartupError } from './daemon/startup-errors.js';
 export type {
-	DaemonRouteContext,
-	DaemonRouteDefinition,
 	DaemonRuntime,
-	EpicenterConfig,
 	StartedDaemonRoute,
 } from './daemon/types.js';
 export {

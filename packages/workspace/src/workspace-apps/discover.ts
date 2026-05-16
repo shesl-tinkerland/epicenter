@@ -2,9 +2,9 @@
  * Folder-routed daemon extension discovery.
  *
  * `discoverWorkspaceApps(projectDir)` scans `<projectDir>/workspaces/*`,
- * skips dotfile folders, validates each folder name as a route, rejects
- * case-insensitive collisions, requires a `daemon.ts` entrypoint, and returns
- * the paths the loader needs.
+ * skips dotfile folders and folders without a `daemon.ts`, validates each
+ * daemon folder name as a route, rejects case-insensitive collisions, and
+ * returns the paths the loader needs.
  */
 
 import { readdirSync, statSync } from 'node:fs';
@@ -27,15 +27,11 @@ export const DAEMON_ENTRY_FILENAME = 'daemon.ts';
  * `<projectDir>/workspaces/<route>`.
  *
  * - `route` is the folder name and the daemon's routing identity.
- * - `workspaceDir` is the extension package root. Retained for callers that
- *   walk the folder for siblings; the daemon context itself does not receive
- *   this path.
  * - `daemonEntryPath` is the resolved path to `daemon.ts`. The host imports
  *   this module on startup.
  */
 export type WorkspaceAppEntry = {
 	route: string;
-	workspaceDir: string;
 	daemonEntryPath: string;
 };
 
@@ -78,16 +74,11 @@ export function discoverWorkspaceApps(
 
 		const daemonEntryPath = join(workspaceDir, DAEMON_ENTRY_FILENAME);
 		const daemonStat = safeStat(daemonEntryPath);
-		if (daemonStat === null || !daemonStat.isFile()) {
-			return WorkspaceAppError.WorkspaceDaemonMissing({
-				route: folderName,
-				daemonEntryPath,
-			});
-		}
+		if (daemonStat === null) continue;
+		if (!daemonStat.isFile()) continue;
 
 		entries.push({
 			route: folderName,
-			workspaceDir,
 			daemonEntryPath,
 		});
 	}

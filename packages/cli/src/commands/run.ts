@@ -13,7 +13,7 @@
  *
  * Exit codes:
  *   1: usage error (unknown route, unknown action, invalid input for
- *      `--peer`), or no daemon / config (`MissingConfig`, `Required`,
+ *      `--peer`), or no daemon / workspace folder (`MissingConfig`, `Required`,
  *      transport error)
  *   2: runtime error (local action returned Err, or remote RPC failed)
  *   3: peer not found (`--peer <target>` did not resolve within `--wait`)

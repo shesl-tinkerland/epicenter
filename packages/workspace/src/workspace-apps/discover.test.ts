@@ -69,12 +69,10 @@ describe('discoverWorkspaceApps', () => {
 		expect(entries).toEqual([
 			{
 				route: 'fuji',
-				workspaceDir: fujiDir,
 				daemonEntryPath: join(fujiDir, 'daemon.ts'),
 			},
 			{
 				route: 'opensidian',
-				workspaceDir: opensidianDir,
 				daemonEntryPath: join(opensidianDir, 'daemon.ts'),
 			},
 		]);
@@ -90,22 +88,13 @@ describe('discoverWorkspaceApps', () => {
 		expect(result.data!.map((entry) => entry.route)).toEqual(['fuji']);
 	});
 
-	test('rejects a workspace folder missing daemon.ts', () => {
+	test('skips a workspace folder missing daemon.ts', () => {
 		makeWorkspace('fuji');
 		makeWorkspace('headless', { withDaemon: false });
 
 		const result = discoverWorkspaceApps(projectDir);
-		expect(result.data).toBeNull();
-		expect(result.error?.name).toBe('WorkspaceDaemonMissing');
-		expect(result.error).toMatchObject({
-			route: 'headless',
-			daemonEntryPath: join(
-				projectDir,
-				'workspaces',
-				'headless',
-				'daemon.ts',
-			),
-		});
+		expect(result.error).toBeNull();
+		expect(result.data!.map((entry) => entry.route)).toEqual(['fuji']);
 	});
 
 	test('rejects invalid folder names before requiring daemon.ts', () => {

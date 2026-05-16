@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import yargs from 'yargs';
@@ -17,7 +17,7 @@ afterEach(() => {
 function tempProject() {
 	const root = mkdtempSync(join(tmpdir(), 'ep-cli-project-'));
 	roots.push(root);
-	writeFileSync(join(root, 'epicenter.config.ts'), 'export default {};\n');
+	mkdirSync(join(root, 'workspaces'));
 	const nested = join(root, 'nested', 'child');
 	mkdirSync(nested, { recursive: true });
 	return { root, nested };

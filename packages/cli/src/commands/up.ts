@@ -100,7 +100,7 @@ export async function runUp(
 		dir: projectDir,
 		startedAt: new Date().toISOString(),
 		cliVersion: options.cliVersion ?? CLI_VERSION,
-		configMtime: 0,
+		discoveredAt: new Date().toISOString(),
 	};
 
 	let metadataWritten = false;

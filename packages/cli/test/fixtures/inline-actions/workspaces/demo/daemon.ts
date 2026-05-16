@@ -2,13 +2,13 @@
  * Minimal fixture: one daemon route with inline `defineQuery` /
  * `defineMutation` nodes grouped under `actions:`. No sqlite or encryption,
  * no real WebSocket: a hand-stubbed `collaboration` matches the daemon's
- * structural contract so `loadDaemonConfig` accepts it.
+ * structural contract so folder-routed daemon startup accepts it.
  *
  * CLI paths are `demo.counter_{get,increment,set}`.
  */
 
 import { defineMutation, defineQuery } from '@epicenter/workspace';
-import { defineConfig } from '@epicenter/workspace/daemon';
+import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
 import Type from 'typebox';
 import * as Y from 'yjs';
 
@@ -70,8 +70,6 @@ export const demo = {
 	ydoc,
 };
 
-export default defineConfig({
-	daemon: {
-		routes: [{ route: 'demo', start: () => demo }],
-	},
+export default defineDaemonWorkspace({
+	open: () => demo,
 });

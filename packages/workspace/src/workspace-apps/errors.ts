@@ -1,11 +1,12 @@
 /**
  * Structured errors for folder-routed daemon extension discovery and startup.
  *
- * Discovery surfaces `WorkspaceFolderInvalid`, `WorkspaceFolderCollision`, and
- * `WorkspaceDaemonMissing` when scanning `<projectDir>/workspaces/*`.
- * Daemon-entry validation surfaces `WorkspaceDaemonInvalidExport`. Startup
- * wraps any throw from a daemon's `open(ctx)` in `WorkspaceOpenFailed` so
- * callers can dispose siblings on failure.
+ * Discovery surfaces `WorkspaceFolderInvalid` and `WorkspaceFolderCollision`
+ * when scanning `<projectDir>/workspaces/*`. Folders without daemon.ts are
+ * ignored so monorepos can symlink `workspaces -> apps`. Daemon-entry
+ * validation surfaces `WorkspaceDaemonInvalidExport`. Startup wraps any throw
+ * from a daemon's `open(ctx)` in `WorkspaceOpenFailed` so callers can dispose
+ * siblings on failure.
  */
 
 import {
@@ -45,17 +46,6 @@ export const WorkspaceAppError = defineErrors({
 		route,
 		folderNames,
 	}),
-	WorkspaceDaemonMissing: ({
-		route,
-		daemonEntryPath,
-	}: {
-		route: string;
-		daemonEntryPath: string;
-	}) => ({
-		message: `Workspace "${route}" is missing a daemon entrypoint at ${daemonEntryPath}.`,
-		route,
-		daemonEntryPath,
-	}),
 	WorkspaceDaemonInvalidExport: ({
 		route,
 		daemonEntryPath,
@@ -69,20 +59,19 @@ export const WorkspaceAppError = defineErrors({
 		route,
 		daemonEntryPath,
 	}),
+	WorkspaceAuthSignedOut: () => ({
+		message:
+			'Cannot open daemon extensions while machine auth is signed out. Run `epicenter auth login` first.',
+	}),
 	WorkspaceOpenFailed: ({
 		route,
-		daemonEntryPath,
 		cause,
 	}: {
 		route: string;
-		daemonEntryPath: string;
 		cause: unknown;
 	}) => ({
-		message:
-			`Workspace "${route}" failed to open at ${daemonEntryPath}: ` +
-			extractErrorMessage(cause),
+		message: `Workspace "${route}" failed to open: ${extractErrorMessage(cause)}`,
 		route,
-		daemonEntryPath,
 		cause,
 	}),
 });

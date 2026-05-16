@@ -49,7 +49,7 @@ The folder name is the route. Renaming the folder renames the route. Nothing els
 import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
 
 export default defineDaemonWorkspace({
-  async open({ auth, projectDir, route }) {
+  async open({ auth, projectDir, route, clientId, replicaId }) {
     // construct the long-lived workspace runtime
     // return a DaemonRuntime
   },
@@ -62,6 +62,8 @@ Context fields (final shape):
 auth        machine auth client, host-owned, shared across extensions
 projectDir  absolute resolved project root for path derivation
 route       folder-derived route name for replicaIds, error messages, logger
+clientId    deterministic Y.Doc clientID derived from projectDir
+replicaId   route-derived collaboration replicaId, `${route}-daemon`
 ```
 
 Refused fields and rationale:
@@ -78,6 +80,7 @@ The host calls `open(ctx)` exactly once per extension on `epicenter daemon up`. 
 ```txt
 yes:
   discover workspaces/*/daemon.ts
+  skip folders without daemon.ts
   validate folder names and reject collisions
   import each daemon.ts and call open(ctx) in parallel
   bind a unix socket
@@ -117,12 +120,10 @@ logger in ctx                         aspirational DI; daemons make their own
 
 ## Future Asymmetric Win
 
-The current daemon contract is `open(ctx) → DaemonRuntime`. Fuji and Honeycrisp's `open()` is ~50 lines each, of which ~40 lines are identical boilerplate:
+The current daemon contract is `open(ctx) → DaemonRuntime`. Fuji and Honeycrisp's `open()` is ~50 lines each, of which ~35 lines are identical boilerplate:
 
 ```ts
 // every daemon does this
-auth signed-out guard
-clientId: hashClientId(projectDir)
 yjsLog at yjsPath(projectDir, guid)
 collaboration with replicaId: `${route}-daemon`
 sqlite db at sqlitePath, dispose on ydoc destroy
@@ -147,34 +148,39 @@ Not now. The current `open(ctx)` contract is the minimum surface that works; the
 
 ## Deferred Migrations
 
-These are out of scope for this round but remain on the path:
+Nothing remains deferred for the old config path.
+
+Landed in this cleanup:
 
 ```txt
-apps/opensidian/blocks/daemon-route.ts    still old DaemonRouteDefinition shape
-apps/zhongwen/blocks/daemon-route.ts      still old DaemonRouteDefinition shape
-playground/tab-manager-e2e/epicenter.config.ts    standalone Bun script,
-playground/opensidian-e2e/epicenter.config.ts     does not boot through CLI
-packages/cli/test/fixtures/inline-actions/        CLI fixture for legacy path
-packages/cli/src/load-config.ts                   no longer wired into up.ts,
-                                                  retained for the playground
-EpicenterConfig, DaemonRouteDefinition,           legacy types kept until
-defineConfig in @epicenter/workspace/daemon       playground migrates
+apps/opensidian/daemon.ts                  folder-routed daemon extension
+apps/opensidian/workspace.ts               package-root shared opener
+apps/zhongwen/daemon.ts                    folder-routed daemon extension
+apps/zhongwen/workspace.ts                 package-root shared opener
+playground/tab-manager-e2e/workspaces/     boots through folder discovery
+playground/opensidian-e2e/workspaces/      boots through folder discovery
+packages/cli/test/fixtures/inline-actions/ fixture moved under workspaces/demo
+packages/cli/src/load-config.ts            deleted
+@epicenter/workspace/daemon                no config registry exports
 ```
 
-`epicenter daemon up` no longer reads `epicenter.config.ts`. Playground scripts continue to run as `bun run playground/.../epicenter.config.ts` until they migrate to folder-routed.
+`epicenter daemon up` does not read `epicenter.config.ts`. Folders under
+`workspaces/` without a `daemon.ts` are ignored, which lets this monorepo use a
+single `workspaces -> apps` symlink even though not every app has a daemon
+extension.
 
 ## Implementation Notes for This Round
 
 ### Daemon side
 
-- `packages/workspace/src/daemon/define-daemon-workspace.ts`: drop `workspaceDir` and `logger` from `DaemonWorkspaceContext`.
+- `packages/workspace/src/daemon/define-daemon-workspace.ts`: drop `workspaceDir` and `logger` from `DaemonWorkspaceContext`; add host-owned `clientId` and `replicaId`.
 - `packages/workspace/src/workspace-apps/`: restore `start-daemon-workspace-apps.ts` and the `WorkspaceOpenFailed` / `WorkspaceDaemonInvalidExport` errors, but drop `staticApps` and `appBuildDir` from the result shape and from `WorkspaceAppEntry`.
 - `packages/workspace/src/daemon/static-app.ts` + test: deleted. The `buildDaemonApp` signature returns to `(runtimes, triggerShutdown)`.
 - `packages/workspace/src/daemon/index.ts` and `node.ts`: drop static-app exports.
 
 ### CLI side
 
-- `packages/cli/src/commands/up.ts`: load only from `workspaces/`. If the folder is missing or empty, surface a discoverable error. No `epicenter.config.ts` fallback.
+- `packages/cli/src/commands/up.ts`: load only from `workspaces/`. No `epicenter.config.ts` fallback. Folders without `daemon.ts` are ignored so monorepo `workspaces -> apps` works without forcing every app to expose a daemon.
 - `packages/cli/src/commands/app.ts` + `app-build.ts` + test: deleted. CLI no longer registers `app` subcommand.
 - `packages/cli/src/cli.ts`: drop `appCommand` registration.
 
@@ -198,12 +204,12 @@ bun test packages/cli  # up.test.ts cases on the config path will need rework
 
 ## Completion Checklist
 
-- [ ] Daemon discovers `workspaces/*/daemon.ts` and opens each on `up`
-- [ ] `DaemonWorkspaceContext = { auth, projectDir, route }`
-- [ ] Fuji and Honeycrisp daemon.ts use the trimmed contract with inlined owner adapter
-- [ ] Daemon serves no `/apps/<route>/` static files
-- [ ] No `epicenter app build` command
-- [ ] No `EPICENTER_APP_BASE` in app svelte configs
-- [ ] `up.ts` no longer reads `epicenter.config.ts`
-- [ ] Legacy `defineConfig` / `DaemonRouteDefinition` types remain only for playground scripts and unmigrated apps
-- [ ] Deferred migrations are documented in this spec
+- [x] Daemon discovers `workspaces/*/daemon.ts` and opens each on `up`
+- [x] `DaemonWorkspaceContext = { auth, projectDir, route, clientId, replicaId }`
+- [x] Fuji and Honeycrisp daemon.ts use the trimmed contract with inlined owner adapter
+- [x] Daemon serves no `/apps/<route>/` static files
+- [x] No `epicenter app build` command
+- [x] No `EPICENTER_APP_BASE` in app svelte configs
+- [x] `up.ts` no longer reads `epicenter.config.ts`
+- [x] Legacy `defineConfig` / `DaemonRouteDefinition` exports are deleted from `@epicenter/workspace/daemon`
+- [x] Deferred migrations are documented in this spec

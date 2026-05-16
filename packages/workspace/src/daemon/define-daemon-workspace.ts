@@ -9,36 +9,45 @@
  * See `specs/20260516T180000-folder-routed-daemon-extensions.md`.
  */
 
-import type { AuthClient } from '@epicenter/auth';
-
+import type { EncryptionAttachment } from '../document/attach-encryption.js';
+import type { OpenWebSocket } from '../document/internal/sync-supervisor.js';
 import type { MaybePromise, ProjectDir } from '../shared/types.js';
+import type * as Y from 'yjs';
 import type { DaemonRuntime } from './types.js';
 
 /**
- * Context handed to `open()` for one daemon extension. The host fills it in
- * from the discovered folder entry and the shared auth client.
+ * Context handed to `open()` for one daemon extension.
  *
- * - `auth` is the shared machine auth client. The host owns its lifetime,
- *   and refuses to call `open` when auth is signed-out.
+ * The host owns auth: it refuses to call `open` when machine auth is
+ * signed-out, builds the encryption attacher around the keyring lookup, and
+ * passes the WebSocket opener through. Daemon code never touches the auth
+ * client directly; it composes a workspace runtime out of the capabilities
+ * below and returns it.
+ *
  * - `projectDir` is the resolved project root (same value the daemon lease
  *   owns). Disk-writing helpers like `yjsPath` derive every absolute path
  *   from it.
  * - `route` is the folder-derived route name. Pinned here so extensions do
- *   not re-encode the same string as a constant; error messages and logger
- *   names read it off the context.
- * - `clientId` is the deterministic Y.Doc clientID for this daemon
- *   (derived from `projectDir` so two daemons in different projects
- *   produce distinct update streams). Pass it to the workspace opener.
- * - `replicaId` is the conventional collaboration replicaId for the
- *   daemon side of this route (`<route>-daemon`). Pass it to
+ *   not re-encode the same string as a constant.
+ * - `clientId` is the deterministic Y.Doc clientID for this daemon (derived
+ *   from `projectDir` so two daemons in different projects produce distinct
+ *   update streams). Pass it to the workspace opener.
+ * - `replicaId` is the conventional collaboration replicaId for the daemon
+ *   side of this route (`<route>-daemon`). Pass it to `openCollaboration`.
+ * - `attachEncryption` mirrors `LocalOwner.attachEncryption`: hand it a
+ *   `Y.Doc` and get back the encryption attachment. The host bakes the
+ *   keyring lookup (including the late-sign-out guard) into the closure so
+ *   the daemon never touches auth state.
+ * - `openWebSocket` is the auth-bound WebSocket factory for
  *   `openCollaboration`.
  */
 export type DaemonWorkspaceContext = {
-	auth: AuthClient;
 	projectDir: ProjectDir;
 	route: string;
 	clientId: number;
 	replicaId: string;
+	attachEncryption: (ydoc: Y.Doc) => EncryptionAttachment;
+	openWebSocket: OpenWebSocket;
 };
 
 /**
