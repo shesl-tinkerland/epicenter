@@ -1,9 +1,20 @@
+/**
+ * Honeycrisp browser runtime composition.
+ *
+ * Wraps `openHoneycrispWorkspace(owner.attachEncryption)` with browser-only
+ * attachments (encrypted IndexedDB, BroadcastChannel, root collaboration) and
+ * a disposable cache of per-note rich-text body sub-docs that each open their
+ * own IDB/BroadcastChannel/sync. The action set comes from the shared
+ * workspace opener so daemon-side and browser-side action surfaces stay
+ * identical without a second factory call here.
+ *
+ * The bundle's `wipe()` drops every encrypted IDB database for this owner;
+ * `Symbol.dispose` tears down the root + cached child Y.Docs without
+ * touching local storage.
+ */
+
 import { APP_URLS } from '@epicenter/constants/vite';
-import {
-	createHoneycrispActions,
-	type NoteId,
-	openHoneycrispWorkspace,
-} from '@epicenter/honeycrisp';
+import { type NoteId, openHoneycrispWorkspace } from '@epicenter/honeycrisp';
 import {
 	attachRichText,
 	createDisposableCache,
@@ -39,6 +50,10 @@ export function openHoneycrispBrowser({
 		const body = attachRichText(ydoc);
 		const childIdb = owner.attachIndexedDb(ydoc);
 		owner.attachBroadcastChannel(ydoc);
+		// Each rich-text body is its own Y.Doc (its own sync room keyed by the
+		// body guid), so opening a per-body WebSocket here is intentional:
+		// the server multiplexes by room, not by client. Tear-down lives in
+		// the cache's `Symbol.dispose`.
 		const childSync = openCollaboration(ydoc, {
 			url: roomWsUrl(APP_URLS.API, ydoc.guid),
 			waitFor: childIdb.whenLoaded,
@@ -69,13 +84,12 @@ export function openHoneycrispBrowser({
 		};
 	});
 
-	const actions = createHoneycrispActions(tables);
 	const collaboration = openCollaboration(rootYdoc, {
 		url: roomWsUrl(APP_URLS.API, rootYdoc.guid),
 		waitFor: idb.whenLoaded,
 		openWebSocket,
 		replicaId,
-		actions,
+		actions: workspace.actions,
 	});
 
 	return {

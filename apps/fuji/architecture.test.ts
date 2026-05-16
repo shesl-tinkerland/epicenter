@@ -19,7 +19,7 @@ const workspaceSource = readFileSync(
 	'utf8',
 );
 const browserSource = readFileSync(
-	join(fujiDir, 'src/routes/(signed-in)/fuji/browser.ts'),
+	join(fujiDir, 'browser.ts'),
 	'utf8',
 );
 const daemonSource = readFileSync(join(fujiDir, 'daemon.ts'), 'utf8');
@@ -42,7 +42,8 @@ describe('Fuji workspace architecture', () => {
 
 	test('daemon composes daemon runtime around the shared opener', () => {
 		expect(daemonSource).toContain('openFujiWorkspace');
-		expect(daemonSource).toContain('clientId: hashClientId(projectDir)');
+		expect(daemonSource).toContain('{ clientId }');
+		expect(daemonSource).toContain('replicaId');
 		expect(daemonSource).toContain('attachYjsLog');
 		expect(daemonSource).toContain('attachSqliteMaterializer');
 		expect(daemonSource).toContain('attachMarkdownMaterializer');
