@@ -1,10 +1,10 @@
 /**
- * Fuji daemon extension entrypoint.
+ * Honeycrisp daemon extension entrypoint.
  *
  * Composes daemon-only attachments (Yjs log, collaboration, SQLite materializer,
- * Markdown materializer, CLI/script actions) around the shared
- * `openFujiWorkspace(attachEncryption)` opener. The browser composes browser-only
- * attachments around the same opener.
+ * Markdown materializer) around the shared
+ * `openHoneycrispWorkspace(attachEncryption)` opener. The browser composes
+ * browser-only attachments around the same opener.
  *
  * Folder-routed daemon extension contract: the default export is a
  * `DaemonWorkspaceModule` whose `open(ctx)` receives the shared auth client,
@@ -32,7 +32,10 @@ import {
 	yjsPath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
-import { createFujiActions, openFujiWorkspace } from './workspace.js';
+import {
+	createHoneycrispActions,
+	openHoneycrispWorkspace,
+} from './workspace.js';
 
 export default defineDaemonWorkspace({
 	async open({ auth, projectDir, route }) {
@@ -40,7 +43,7 @@ export default defineDaemonWorkspace({
 			throw new Error(`[${route}-daemon] auth signed-out at start.`);
 		}
 
-		const workspace = openFujiWorkspace(
+		const workspace = openHoneycrispWorkspace(
 			(ydoc) =>
 				attachEncryption(ydoc, {
 					keyring: () => {
@@ -52,7 +55,7 @@ export default defineDaemonWorkspace({
 				}),
 			{ clientId: hashClientId(projectDir) },
 		);
-		const actions = createFujiActions(workspace.tables);
+		const actions = createHoneycrispActions(workspace.tables);
 
 		const yjsLog = attachYjsLog(workspace.ydoc, {
 			filePath: yjsPath(projectDir, workspace.ydoc.guid),
@@ -71,12 +74,13 @@ export default defineDaemonWorkspace({
 		});
 		workspace.ydoc.once('destroy', () => sqliteDb.close());
 
-		attachSqliteMaterializer(workspace.ydoc, { db: sqliteDb }).table(
-			workspace.tables.entries,
-		);
+		const sqlite = attachSqliteMaterializer(workspace.ydoc, { db: sqliteDb });
+		sqlite.table(workspace.tables.folders);
+		sqlite.table(workspace.tables.notes);
+
 		attachMarkdownMaterializer(workspace.ydoc, {
 			dir: markdownPath(projectDir, workspace.ydoc.guid),
-		}).table(workspace.tables.entries, { filename: slugFilename('title') });
+		}).table(workspace.tables.notes, { filename: slugFilename('title') });
 
 		return {
 			collaboration,

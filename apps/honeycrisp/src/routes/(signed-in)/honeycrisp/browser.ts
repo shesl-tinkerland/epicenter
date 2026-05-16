@@ -1,14 +1,13 @@
 import { APP_URLS } from '@epicenter/constants/vite';
 import {
 	createHoneycrispActions,
-	honeycrispTables,
 	type NoteId,
+	openHoneycrispWorkspace,
 } from '@epicenter/honeycrisp';
 import {
 	attachRichText,
 	createDisposableCache,
 	DateTimeString,
-	docGuid,
 	type LocalOwner,
 	type OpenWebSocket,
 	onLocalUpdate,
@@ -16,21 +15,6 @@ import {
 	roomWsUrl,
 } from '@epicenter/workspace';
 import * as Y from 'yjs';
-
-function noteBodyDocGuid({
-	workspaceId,
-	noteId,
-}: {
-	workspaceId: string;
-	noteId: NoteId;
-}): string {
-	return docGuid({
-		workspaceId,
-		collection: 'notes',
-		rowId: noteId,
-		field: 'body',
-	});
-}
 
 export function openHoneycrispBrowser({
 	owner,
@@ -41,20 +25,15 @@ export function openHoneycrispBrowser({
 	replicaId: string;
 	openWebSocket?: OpenWebSocket;
 }) {
-	const rootYdoc = new Y.Doc({ guid: 'epicenter.honeycrisp', gc: false });
-	const encryption = owner.attachEncryption(rootYdoc);
-	const tables = encryption.attachTables(honeycrispTables);
-	const kv = encryption.attachKv({});
+	const workspace = openHoneycrispWorkspace(owner.attachEncryption);
+	const { ydoc: rootYdoc, tables, kv } = workspace;
 
 	const idb = owner.attachIndexedDb(rootYdoc);
 	owner.attachBroadcastChannel(rootYdoc);
 
 	const noteBodyDocs = createDisposableCache((noteId: NoteId) => {
 		const ydoc = new Y.Doc({
-			guid: noteBodyDocGuid({
-				workspaceId: rootYdoc.guid,
-				noteId,
-			}),
+			guid: workspace.noteBodyDocGuid(noteId),
 			gc: false,
 		});
 		const body = attachRichText(ydoc);
@@ -103,19 +82,16 @@ export function openHoneycrispBrowser({
 		ydoc: rootYdoc,
 		tables,
 		kv,
-		batch: (fn: () => void) => rootYdoc.transact(fn),
+		batch: workspace.batch,
 		idb,
 		noteBodyDocs,
 		collaboration,
 		async wipe() {
 			const fallbackGuids = [
 				rootYdoc.guid,
-				...tables.notes.getAllValid().map((note) =>
-					noteBodyDocGuid({
-						workspaceId: rootYdoc.guid,
-						noteId: note.id,
-					}),
-				),
+				...tables.notes
+					.getAllValid()
+					.map((note) => workspace.noteBodyDocGuid(note.id)),
 			];
 			noteBodyDocs[Symbol.dispose]();
 			rootYdoc.destroy();

@@ -1,11 +1,10 @@
 /**
  * Source-shape lock for the Fuji workspace boundary.
  *
- * Wave 1 of the folder-routed workspace app spec proves the composition model
- * for Fuji. This test reads the touched files as text and asserts that
- * `workspace.ts` owns the shared opener while the browser and daemon files
- * compose runtime around it. It deliberately does not exercise runtime
- * behavior; behavior tests live in workspace.test.ts.
+ * This test reads the touched files as text and asserts that `workspace.ts`
+ * owns the shared opener while the browser and optional daemon extension files
+ * compose runtime around it. It deliberately does not exercise runtime behavior;
+ * behavior tests live in workspace.test.ts.
  */
 
 import { readFileSync } from 'node:fs';

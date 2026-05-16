@@ -1,8 +1,24 @@
 # Folder Routed Workspace Apps Clean Break
 
 **Date**: 2026-05-15
-**Status**: Draft (design pivot, ready for implementation review)
+**Status**: Superseded by `20260516T130000-hosted-apps-with-optional-daemon-extensions.md`
 **Author**: Braden + AI-assisted
+
+## Supersession Note
+
+This spec captured the source-installed app package path: copy one full app
+folder into `workspaces/<route>/`, build its SPA locally, and let the daemon
+serve the generated files.
+
+The product direction has changed. The default app distribution path is now
+hosted UI over local core. Source-installed apps stay useful for app authors,
+private/internal apps, and local development, but they are no longer the
+primary user path. See
+`specs/20260516T130000-hosted-apps-with-optional-daemon-extensions.md`.
+
+Treat the implementation plan below as historical context, not a backlog. Do
+not implement the local-build or daemon-served SPA tasks as the default product
+path.
 
 ## One Sentence
 
