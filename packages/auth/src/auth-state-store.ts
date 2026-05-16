@@ -25,7 +25,19 @@ export function createAuthStateStore(
 			return state;
 		},
 		setState(next: AuthState) {
-			if (authStatesEqual(state, next)) return;
+			if (state.status === next.status) {
+				if (state.status === 'signed-out') return;
+				if (
+					next.status !== 'signed-out' &&
+					state.localIdentity.subject === next.localIdentity.subject &&
+					subjectKeyringsEqual(
+						state.localIdentity.keyring,
+						next.localIdentity.keyring,
+					)
+				) {
+					return;
+				}
+			}
 			state = next;
 			for (const listener of stateChangeListeners) {
 				try {
@@ -45,18 +57,4 @@ export function createAuthStateStore(
 			stateChangeListeners.clear();
 		},
 	};
-}
-
-function authStatesEqual(left: AuthState, right: AuthState): boolean {
-	if (left.status !== right.status) return false;
-	if (left.status === 'signed-out' || right.status === 'signed-out') {
-		return left.status === right.status;
-	}
-	return (
-		left.localIdentity.subject === right.localIdentity.subject &&
-		subjectKeyringsEqual(
-			left.localIdentity.keyring,
-			right.localIdentity.keyring,
-		)
-	);
 }
