@@ -26,13 +26,11 @@ import {
 	StartupError,
 	type StartupError as StartupErrorType,
 	startDaemonServer,
+	startDaemonWorkspaceApps,
+	type WorkspaceAppError,
 	unlinkMetadata,
 	writeMetadata,
 } from '@epicenter/workspace/node';
-import {
-	startDaemonWorkspaceApps,
-	type WorkspaceAppError,
-} from '@epicenter/workspace/workspace-apps';
 import { Ok, type Result, trySync } from 'wellcrafted/result';
 import packageJson from '../../package.json' with { type: 'json' };
 import { cmd } from '../util/cmd.js';

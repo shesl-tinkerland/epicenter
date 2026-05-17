@@ -30,7 +30,6 @@
 		"./markdown": "./src/markdown/index.ts",
 		"./document/materializer/markdown": "./src/document/materializer/markdown/index.ts",
 		"./daemon": "./src/daemon/index.ts",
-		"./workspace-apps": "./src/workspace-apps/index.ts",
 		"./ai": "./src/ai/index.ts",
 		"./node": "./src/node.ts",
 		"./document/materializer/sqlite": "./src/document/materializer/sqlite/index.ts",

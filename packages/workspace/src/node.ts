@@ -18,7 +18,7 @@ export type {
 export { buildDaemonActions } from './client/daemon-actions.js';
 export { epicenterPaths } from './client/epicenter-paths.js';
 export { findEpicenterDir } from './client/find-epicenter-dir.js';
-export { buildDaemonApp, PeerSnapshot, RunRequest } from './daemon/app.js';
+export { PeerSnapshot, RunRequest } from './daemon/app.js';
 export {
 	type DaemonClient,
 	DaemonError,
@@ -46,7 +46,12 @@ export {
 	runtimeDir,
 	socketPathFor,
 } from './daemon/paths.js';
-export { validateDaemonRouteNames } from './daemon/route-validation.js';
+export {
+	type StartDaemonWorkspaceAppsOptions,
+	type StartDaemonWorkspaceAppsResult,
+	startDaemonWorkspaceApps,
+} from './workspace-apps/start-daemon-workspace-apps.js';
+export { WorkspaceAppError } from './workspace-apps/errors.js';
 export {
 	RunError,
 	type RunResponse,
