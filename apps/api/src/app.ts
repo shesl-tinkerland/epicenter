@@ -3,7 +3,7 @@ import {
 	oauthProviderOpenIdConfigMetadata,
 } from '@better-auth/oauth-provider';
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
-import { type ApiMeResponse, AuthUser } from '@epicenter/auth';
+import { type ApiSessionResponse, AuthUser } from '@epicenter/auth';
 import { APPS } from '@epicenter/constants/apps';
 import { sValidator } from '@hono/standard-validator';
 import { type } from 'arktype';
@@ -293,9 +293,9 @@ app.get(
 		);
 	},
 );
-// Current-user endpoint: returns the authenticated user record plus their
-// local workspace identity (subject + per-subject keyring). This is the
-// single Epicenter identity surface every client (browser apps, browser
+// Session projection endpoint: returns the authenticated user record plus
+// their local workspace identity (subject + per-subject keyring). This is the
+// single Epicenter session surface every client (browser apps, browser
 // extension, CLI) calls at sign-in and at cold-boot when online to refresh
 // the persisted localIdentity cell.
 //
@@ -304,10 +304,9 @@ app.get(
 // callers implicitly satisfy it (the session was minted by Better Auth and is
 // fully trusted within the parent domain).
 app.get(
-	'/api/me',
+	'/api/session',
 	describeRoute({
-		description:
-			'Return the authenticated user and their local workspace identity',
+		description: 'Return the authenticated session projection',
 		tags: ['auth'],
 	}),
 	requireUser,
@@ -319,7 +318,7 @@ app.get(
 				subject: user.id,
 				keyring: await deriveSubjectKeyring(user.id),
 			},
-		} satisfies ApiMeResponse);
+		} satisfies ApiSessionResponse);
 	},
 );
 // OAuth discovery. Register issuer-path routes before the /auth/* catch-all

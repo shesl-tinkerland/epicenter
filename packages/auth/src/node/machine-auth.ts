@@ -1,7 +1,7 @@
 /**
  * Machine auth API surface for CLI and daemons.
  *
- * `loginWithOob` runs the OOB OAuth dance once, fetches `/api/me` to derive
+ * `loginWithOob` runs the OOB OAuth dance once, fetches `/api/session` to derive
  * the local workspace identity, and persists a `PersistedAuth` cell to
  * `~/.epicenter/auth.json` (mode 0o600). `status` and `logout` read that
  * cell and reach the server through a regular `createOAuthAppAuth` client.
@@ -11,8 +11,8 @@
  * Architectural note: `loginWithOob` deliberately bypasses
  * `createOAuthAppAuth`. The factory is for daemons (long-lived, refresh on
  * 401, network gate); login is a one-shot human action that fetches a grant,
- * calls `/api/me`, persists, and exits. Routing login through the factory
- * would double the round-trip count (the factory would call `/api/me`
+ * calls `/api/session`, persists, and exits. Routing login through the factory
+ * would double the round-trip count (the factory would call `/api/session`
  * internally, but the CLI also needs the email for "Signed in as ...").
  */
 
@@ -27,7 +27,7 @@ import {
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient } from '../auth-contract.js';
-import { ApiMeResponse, type PersistedAuth } from '../auth-types.js';
+import { ApiSessionResponse, type PersistedAuth } from '../auth-types.js';
 import {
 	type AuthFetch,
 	createOAuthAppAuth,
@@ -51,7 +51,7 @@ export type MachineAuthRequestError = InferErrors<
 
 /**
  * Identity returned to the CLI for display. `user.email` is fetched from
- * `/api/me` and returned by value here so the CLI can print "Signed in as
+ * `/api/session` and returned by value here so the CLI can print "Signed in as
  * <email>" without a second round-trip. `email` may be empty when the
  * machine is offline during `status`.
  */
@@ -86,7 +86,7 @@ export type StatusResult =
 export type LogoutResult = { status: 'signedOut' } | { status: 'loggedOut' };
 
 /**
- * Run the OOB OAuth dance, call `/api/me` for the local workspace identity,
+ * Run the OOB OAuth dance, call `/api/session` for the local workspace identity,
  * persist `PersistedAuth`, and return the identity for the CLI to display.
  */
 export async function loginWithOob({
@@ -130,17 +130,17 @@ export async function loginWithOob({
 	}
 	const grant = grantResult.data;
 
-	const meResult = await fetchApiMe({
+	const sessionResult = await fetchApiSession({
 		baseURL,
 		accessToken: grant.accessToken,
 		fetch,
 	});
-	if (meResult.error) return Err(meResult.error);
-	const me = meResult.data;
+	if (sessionResult.error) return Err(sessionResult.error);
+	const session = sessionResult.data;
 
 	const cell: PersistedAuth = {
 		grant,
-		localIdentity: me.localIdentity,
+		localIdentity: session.localIdentity,
 	};
 	const saved = await saveMachineTokens(
 		cell,
@@ -150,14 +150,14 @@ export async function loginWithOob({
 
 	return Ok({
 		identity: {
-			user: { id: me.user.id, email: me.user.email },
-			keyring: me.localIdentity.keyring,
+			user: { id: session.user.id, email: session.user.email },
+			keyring: session.localIdentity.keyring,
 		},
 	});
 }
 
 /**
- * Load the persisted cell and verify it by hitting `/api/me` through a
+ * Load the persisted cell and verify it by hitting `/api/session` through a
  * regular `createOAuthAppAuth` client (so refresh-on-401 fires automatically
  * and the same-subject guard wipes the cell on mismatch). Returns `unverified`
  * on network failures so the CLI can still report the cached identity.
@@ -191,7 +191,7 @@ export async function status({
 
 	let response: Response;
 	try {
-		response = await client.fetch('/api/me');
+		response = await client.fetch('/api/session');
 	} catch (cause) {
 		void cause;
 		return Ok({
@@ -210,24 +210,24 @@ export async function status({
 		} catch (cause) {
 			return Err(MachineAuthRequestError.RequestFailed({ cause }).error);
 		}
-		let me: ApiMeResponse;
+		let session: ApiSessionResponse;
 		try {
-			me = ApiMeResponse.assert(body);
+			session = ApiSessionResponse.assert(body);
 		} catch (cause) {
 			return Err(MachineAuthRequestError.RequestFailed({ cause }).error);
 		}
 		return Ok({
 			status: 'valid' as const,
 			identity: {
-				user: { id: me.user.id, email: me.user.email },
-				keyring: me.localIdentity.keyring,
+				user: { id: session.user.id, email: session.user.email },
+				keyring: session.localIdentity.keyring,
 			},
 		});
 	}
 
 	// Network or auth failure. Cell may still be valid for local decrypt; the
 	// underlying auth client will have wiped it on same-subject mismatch or
-	// reauth-required already. Email is unknown without /api/me.
+	// reauth-required already. Email is unknown without /api/session.
 	return Ok({
 		status: 'unverified' as const,
 		identity: {
@@ -321,7 +321,7 @@ export async function createMachineAuthClient({
 	});
 }
 
-async function fetchApiMe({
+async function fetchApiSession({
 	baseURL,
 	accessToken,
 	fetch,
@@ -329,10 +329,10 @@ async function fetchApiMe({
 	baseURL: string;
 	accessToken: string;
 	fetch: AuthFetch;
-}): Promise<Result<ApiMeResponse, MachineAuthRequestError>> {
+}): Promise<Result<ApiSessionResponse, MachineAuthRequestError>> {
 	let response: Response;
 	try {
-		response = await fetch(`${baseURL}/api/me`, {
+		response = await fetch(`${baseURL}/api/session`, {
 			headers: { Authorization: `Bearer ${accessToken}` },
 			credentials: 'omit',
 		});
@@ -342,7 +342,7 @@ async function fetchApiMe({
 	if (response.status !== 200) {
 		return Err(
 			MachineAuthRequestError.RequestFailed({
-				cause: new Error(`/api/me returned ${response.status}.`),
+				cause: new Error(`/api/session returned ${response.status}.`),
 			}).error,
 		);
 	}
@@ -353,7 +353,7 @@ async function fetchApiMe({
 		return Err(MachineAuthRequestError.RequestFailed({ cause }).error);
 	}
 	try {
-		return Ok(ApiMeResponse.assert(payload));
+		return Ok(ApiSessionResponse.assert(payload));
 	} catch (cause) {
 		return Err(MachineAuthRequestError.RequestFailed({ cause }).error);
 	}

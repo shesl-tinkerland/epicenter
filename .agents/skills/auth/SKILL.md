@@ -42,9 +42,9 @@ Epicenter uses Better Auth for auth-server machinery, OAuth for the app/resource
 
 That means Better Auth owns users, account cookies, login, consent, token
 issuing, revocation, JWKS, and metadata. Epicenter clients store
-`OAuthSession`, not Better Auth sessions. `/me` is the adapter that verifies an
-OAuth access token, loads the Better Auth user, derives encryption keys, and
-returns `AuthIdentity`.
+`OAuthSession`, not Better Auth sessions. `/api/session` is the adapter that
+verifies an OAuth access token, loads the Better Auth user, derives encryption
+keys, and returns the session projection (`{ user, localIdentity }`).
 
 When the user asks whether this is idiomatic Better Auth, be precise:
 

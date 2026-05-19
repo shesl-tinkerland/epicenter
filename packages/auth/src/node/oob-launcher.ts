@@ -7,7 +7,7 @@
  * at `/auth/oauth2/token` with PKCE. Returns a 3-field `OAuthTokenGrant`.
  *
  * The launcher is concerned only with the OAuth dance. The caller pairs
- * the returned grant with `GET /api/me` to build the `localIdentity` section
+ * the returned grant with `GET /api/session` to build the `localIdentity` section
  * of `PersistedAuth`.
  */
 

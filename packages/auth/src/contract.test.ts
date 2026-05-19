@@ -5,8 +5,8 @@
  * - PersistedAuth = { grant, localIdentity } shape
  * - AuthState three variants; profile data is absent from state
  * - Refresh writes only grant, localIdentity byte-identical
- * - Same-subject guard at /api/me response
- * - Network gate: bearer not attached until /api/me confirms same subject
+ * - Same-subject guard at /api/session response
+ * - Network gate: bearer not attached until /api/session confirms same subject
  * - Cold-boot offline keeps signed-in with localIdentity and no profile field
  */
 
@@ -98,7 +98,7 @@ function oauthTokenResponse({
 	return json(body);
 }
 
-function apiMeBody(subject = 'user-1') {
+function apiSessionBody(subject = 'user-1') {
 	return {
 		user: { id: subject, email: `${subject}@example.com` },
 		localIdentity: { subject, keyring: [...keyring] },
@@ -148,7 +148,7 @@ test('cold-boot signed-in exposes localIdentity immediately without profile data
 	auth[Symbol.dispose]();
 });
 
-test('startSignIn calls /api/me and writes both sections', async () => {
+test('startSignIn calls /api/session and writes both sections', async () => {
 	const setup = createStorage(null);
 	const fetches: string[] = [];
 	const auth = createOAuthAppAuth({
@@ -166,13 +166,13 @@ test('startSignIn calls /api/me and writes both sections', async () => {
 		},
 		fetch: async (input) => {
 			fetches.push(String(input));
-			return json(apiMeBody('user-1'));
+			return json(apiSessionBody('user-1'));
 		},
 	});
 
 	const result = await auth.startSignIn();
 	expect(result).toEqual(Ok(undefined));
-	expect(fetches[0]).toBe('http://localhost:8787/api/me');
+	expect(fetches[0]).toBe('http://localhost:8787/api/session');
 	expect(setup.saved[0]).toEqual({
 		grant: {
 			accessToken: 'sign-in-access',
@@ -198,7 +198,7 @@ test('refresh writes ONLY the grant section; localIdentity byte-identical', asyn
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return oauthTokenResponse();
 			}
@@ -227,7 +227,7 @@ test('refresh keeps existing refresh token when token response omits rotation', 
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return oauthTokenResponse({ refreshToken: null });
 			}
@@ -244,7 +244,7 @@ test('refresh keeps existing refresh token when token response omits rotation', 
 	auth[Symbol.dispose]();
 });
 
-test('same-subject guard wipes the cell when /api/me returns a different subject', async () => {
+test('same-subject guard wipes the cell when /api/session returns a different subject', async () => {
 	const setup = createStorage(cell({ subject: 'alice' }));
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -253,7 +253,7 @@ test('same-subject guard wipes the cell when /api/me returns a different subject
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) return json(apiMeBody('bob'));
+			if (String(input).endsWith('/api/session')) return json(apiSessionBody('bob'));
 			return new Response(null, { status: 204 });
 		},
 	});
@@ -265,7 +265,7 @@ test('same-subject guard wipes the cell when /api/me returns a different subject
 	auth[Symbol.dispose]();
 });
 
-test('same-subject /api/me preserves state when keyring is unchanged', async () => {
+test('same-subject /api/session preserves state when keyring is unchanged', async () => {
 	const setup = createStorage(cell());
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -274,7 +274,7 @@ test('same-subject /api/me preserves state when keyring is unchanged', async () 
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
 			return new Response(null, { status: 204 });
 		},
 	});
@@ -303,7 +303,7 @@ test('keyring rotation updates persisted localIdentity', async () => {
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) {
+			if (String(input).endsWith('/api/session')) {
 				return json({
 					user: { id: 'user-1', email: 'user-1@example.com' },
 					localIdentity: { subject: 'user-1', keyring: rotated },
@@ -324,12 +324,12 @@ test('keyring rotation updates persisted localIdentity', async () => {
 	auth[Symbol.dispose]();
 });
 
-test('network gate: no Authorization header until /api/me confirms same subject', async () => {
+test('network gate: no Authorization header until /api/session confirms same subject', async () => {
 	const setup = createStorage(cell());
 	const seenAuth: Array<string | null> = [];
-	let resolveApiMe!: (response: Response) => void;
-	const apiMePromise = new Promise<Response>((r) => {
-		resolveApiMe = r;
+	let resolveApiSession!: (response: Response) => void;
+	const apiSessionPromise = new Promise<Response>((r) => {
+		resolveApiSession = r;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -338,7 +338,7 @@ test('network gate: no Authorization header until /api/me confirms same subject'
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
-			if (String(input).endsWith('/api/me')) return apiMePromise;
+			if (String(input).endsWith('/api/session')) return apiSessionPromise;
 			seenAuth.push(new Headers(init?.headers).get('authorization'));
 			return new Response(null, { status: 204 });
 		},
@@ -347,7 +347,7 @@ test('network gate: no Authorization header until /api/me confirms same subject'
 	const fetchPromise = auth.fetch('http://localhost:8787/resource');
 	await Promise.resolve();
 	expect(seenAuth).toEqual([]);
-	resolveApiMe(json(apiMeBody('user-1')));
+	resolveApiSession(json(apiSessionBody('user-1')));
 	await fetchPromise;
 	expect(seenAuth).toEqual(['Bearer access-token']);
 	auth[Symbol.dispose]();
@@ -367,31 +367,31 @@ test('auth.fetch resolves relative API paths against the auth base URL', async (
 				url: String(input),
 				authorization: new Headers(init?.headers).get('authorization'),
 			});
-			return json(apiMeBody('user-1'));
+			return json(apiSessionBody('user-1'));
 		},
 	});
 
-	const response = await auth.fetch('/api/me');
+	const response = await auth.fetch('/api/session');
 	expect(response.status).toBe(200);
 	expect(fetches).toEqual([
 		{
-			url: 'http://localhost:8787/api/me',
+			url: 'http://localhost:8787/api/session',
 			authorization: 'Bearer access-token',
 		},
 		{
-			url: 'http://localhost:8787/api/me',
+			url: 'http://localhost:8787/api/session',
 			authorization: 'Bearer access-token',
 		},
 	]);
 	auth[Symbol.dispose]();
 });
 
-test('network gate: no WebSocket bearer protocol until /api/me confirms same subject', async () => {
+test('network gate: no WebSocket bearer protocol until /api/session confirms same subject', async () => {
 	const setup = createStorage(cell());
 	const { openings, WebSocketRecorder } = createWebSocketRecorder();
-	let resolveApiMe!: (response: Response) => void;
-	const apiMePromise = new Promise<Response>((r) => {
-		resolveApiMe = r;
+	let resolveApiSession!: (response: Response) => void;
+	const apiSessionPromise = new Promise<Response>((r) => {
+		resolveApiSession = r;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -401,7 +401,7 @@ test('network gate: no WebSocket bearer protocol until /api/me confirms same sub
 		launcher: { startSignIn: async () => Ok(null) },
 		WebSocket: WebSocketRecorder,
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/me')) return apiMePromise;
+			if (String(input).endsWith('/api/session')) return apiSessionPromise;
 			return new Response(null, { status: 204 });
 		},
 	});
@@ -411,7 +411,7 @@ test('network gate: no WebSocket bearer protocol until /api/me confirms same sub
 	]);
 	await Promise.resolve();
 	expect(openings).toEqual([]);
-	resolveApiMe(json(apiMeBody('user-1')));
+	resolveApiSession(json(apiSessionBody('user-1')));
 	await socketPromise;
 	expect(openings).toEqual([
 		{
@@ -467,7 +467,7 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
-			if (String(input).endsWith('/api/me')) return json(apiMeBody('user-1'));
+			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return new Response(null, { status: 503 });
 			}
@@ -504,18 +504,18 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 	}
 });
 
-test('network verification clears on grant refresh until /api/me confirms new cell', async () => {
+test('network verification clears on grant refresh until /api/session confirms new cell', async () => {
 	const setup = createStorage(cell());
 	const resourceAuths: Array<string | null> = [];
-	const apiMeAuths: Array<string | null> = [];
-	let apiMeCalls = 0;
-	let resolveSecondApiMe!: (response: Response) => void;
-	let markSecondApiMeRequested!: () => void;
-	const secondApiMePromise = new Promise<Response>((r) => {
-		resolveSecondApiMe = r;
+	const apiSessionAuths: Array<string | null> = [];
+	let apiSessionCalls = 0;
+	let resolveSecondApiSession!: (response: Response) => void;
+	let markSecondApiSessionRequested!: () => void;
+	const secondApiSessionPromise = new Promise<Response>((r) => {
+		resolveSecondApiSession = r;
 	});
-	const secondApiMeRequested = new Promise<void>((r) => {
-		markSecondApiMeRequested = r;
+	const secondApiSessionRequested = new Promise<void>((r) => {
+		markSecondApiSessionRequested = r;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -525,12 +525,12 @@ test('network verification clears on grant refresh until /api/me confirms new ce
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
 			const authorization = new Headers(init?.headers).get('authorization');
-			if (String(input).endsWith('/api/me')) {
-				apiMeCalls += 1;
-				apiMeAuths.push(authorization);
-				if (apiMeCalls === 1) return json(apiMeBody('user-1'));
-				markSecondApiMeRequested();
-				return secondApiMePromise;
+			if (String(input).endsWith('/api/session')) {
+				apiSessionCalls += 1;
+				apiSessionAuths.push(authorization);
+				if (apiSessionCalls === 1) return json(apiSessionBody('user-1'));
+				markSecondApiSessionRequested();
+				return secondApiSessionPromise;
 			}
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return oauthTokenResponse();
@@ -547,16 +547,16 @@ test('network verification clears on grant refresh until /api/me confirms new ce
 	expect('email' in auth.state).toBe(false);
 
 	const retryPromise = auth.fetch('http://localhost:8787/resource');
-	await secondApiMeRequested;
+	await secondApiSessionRequested;
 	expect(auth.state).toEqual({
 		status: 'signed-in',
 		localIdentity: { subject: 'user-1', keyring: [...keyring] },
 	});
 	expect('email' in auth.state).toBe(false);
 	expect(resourceAuths).toEqual(['Bearer access-token', 'Bearer access-token']);
-	expect(apiMeAuths).toEqual(['Bearer access-token', 'Bearer new-access']);
+	expect(apiSessionAuths).toEqual(['Bearer access-token', 'Bearer new-access']);
 
-	resolveSecondApiMe(json(apiMeBody('user-1')));
+	resolveSecondApiSession(json(apiSessionBody('user-1')));
 	await retryPromise;
 	expect(auth.state).toMatchObject({ status: 'signed-in' });
 	expect('email' in auth.state).toBe(false);
@@ -623,12 +623,12 @@ test('concurrent refresh shares one promise and signOut during refresh wins', as
 	auth[Symbol.dispose]();
 });
 
-test('/api/me response after signOut is discarded without corrupting state', async () => {
+test('/api/session response after signOut is discarded without corrupting state', async () => {
 	const setup = createStorage(cell());
 	const resourceAuths: Array<string | null> = [];
-	let resolveApiMe!: (response: Response) => void;
-	const apiMePromise = new Promise<Response>((r) => {
-		resolveApiMe = r;
+	let resolveApiSession!: (response: Response) => void;
+	const apiSessionPromise = new Promise<Response>((r) => {
+		resolveApiSession = r;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -637,7 +637,7 @@ test('/api/me response after signOut is discarded without corrupting state', asy
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
-			if (String(input).endsWith('/api/me')) return apiMePromise;
+			if (String(input).endsWith('/api/session')) return apiSessionPromise;
 			if (String(input).endsWith('/auth/oauth2/revoke')) {
 				const body = new URLSearchParams(String(init?.body ?? ''));
 				expect(body.get('token')).toBe('refresh-token');
@@ -655,7 +655,7 @@ test('/api/me response after signOut is discarded without corrupting state', asy
 	expect(setup.current).toBeNull();
 	expect(auth.state).toEqual({ status: 'signed-out' });
 
-	resolveApiMe(json(apiMeBody('user-1')));
+	resolveApiSession(json(apiSessionBody('user-1')));
 	await fetchPromise;
 	expect(setup.current).toBeNull();
 	expect(auth.state).toEqual({ status: 'signed-out' });
@@ -663,7 +663,7 @@ test('/api/me response after signOut is discarded without corrupting state', asy
 	auth[Symbol.dispose]();
 });
 
-test('/api/me key update after signOut is discarded without writing localIdentity', async () => {
+test('/api/session key update after signOut is discarded without writing localIdentity', async () => {
 	const setup = createStorage(cell());
 	const rotated: SubjectKeyring = [
 		{
@@ -671,9 +671,9 @@ test('/api/me key update after signOut is discarded without writing localIdentit
 			subjectKeyBase64: 'AQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 		},
 	];
-	let resolveApiMe!: (response: Response) => void;
-	const apiMePromise = new Promise<Response>((r) => {
-		resolveApiMe = r;
+	let resolveApiSession!: (response: Response) => void;
+	const apiSessionPromise = new Promise<Response>((r) => {
+		resolveApiSession = r;
 	});
 	const auth = createOAuthAppAuth({
 		baseURL: 'http://localhost:8787',
@@ -682,7 +682,7 @@ test('/api/me key update after signOut is discarded without writing localIdentit
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
-			if (String(input).endsWith('/api/me')) return apiMePromise;
+			if (String(input).endsWith('/api/session')) return apiSessionPromise;
 			if (String(input).endsWith('/auth/oauth2/revoke')) {
 				const body = new URLSearchParams(String(init?.body ?? ''));
 				expect(body.get('token')).toBe('refresh-token');
@@ -697,7 +697,7 @@ test('/api/me key update after signOut is discarded without writing localIdentit
 	const signOutResult = await auth.signOut();
 	expect(signOutResult).toEqual(Ok(undefined));
 
-	resolveApiMe(
+	resolveApiSession(
 		json({
 			user: { id: 'user-1', email: 'user-1@example.com' },
 			localIdentity: { subject: 'user-1', keyring: rotated },

@@ -1,7 +1,7 @@
 export { type AuthClient, type AuthState } from './auth-contract.js';
 export * from './auth-errors.js';
 export {
-	ApiMeResponse,
+	ApiSessionResponse,
 	AuthUser,
 	type OAuthTokenGrant,
 	PersistedAuth,

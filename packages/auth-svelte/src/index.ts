@@ -1,5 +1,5 @@
 export {
-	ApiMeResponse,
+	ApiSessionResponse,
 	type AuthClient,
 	AuthError,
 	type AuthFetch,

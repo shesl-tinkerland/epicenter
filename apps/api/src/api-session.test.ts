@@ -1,7 +1,7 @@
 /**
- * GET /api/me integration tests.
+ * GET /api/session integration tests.
  *
- * The current-user endpoint is the single Epicenter identity surface
+ * The session projection endpoint is the single Epicenter session surface
  * clients fetch at sign-in and at cold-boot when online. It returns
  * { user: AuthUser, localIdentity: SubjectIdentity }; unauthenticated
  * or under-scoped callers get RFC 6750-shaped errors via
@@ -33,17 +33,17 @@ const keyring: SubjectKeyring = [
 		subjectKeyBase64: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
 	},
 ];
-let nextApiMeTestPort = 47_000 + Math.floor(Math.random() * 4_000);
+let nextApiSessionTestPort = 47_000 + Math.floor(Math.random() * 4_000);
 
-test('GET /api/me returns user + local workspace identity for a valid scoped bearer', async () => {
-	const setup = createApiMeTestServer();
+test('GET /api/session returns user + local workspace identity for a valid scoped bearer', async () => {
+	const setup = createApiSessionTestServer();
 	try {
 		const { accessToken } = await issueOAuthTokens(setup, {
-			clientName: 'Api Me Test Client',
-			email: 'api-me-test@example.com',
-			name: 'Api Me Test',
+			clientName: 'Api Session Test Client',
+			email: 'api-session-test@example.com',
+			name: 'Api Session Test',
 		});
-		const response = await setup.app.request('/api/me', {
+		const response = await setup.app.request('/api/session', {
 			headers: { authorization: `Bearer ${accessToken}` },
 		});
 
@@ -52,7 +52,7 @@ test('GET /api/me returns user + local workspace identity for a valid scoped bea
 			user: { id: string; email: string };
 			localIdentity: { subject: string; keyring: SubjectKeyring };
 		};
-		expect(body.user.email).toBe('api-me-test@example.com');
+		expect(body.user.email).toBe('api-session-test@example.com');
 		expect(typeof body.user.id).toBe('string');
 		expect(body.localIdentity.subject).toBe(body.user.id);
 		expect(body.localIdentity.keyring).toEqual(keyring);
@@ -61,10 +61,10 @@ test('GET /api/me returns user + local workspace identity for a valid scoped bea
 	}
 });
 
-test('GET /api/me returns 401 without a bearer', async () => {
-	const setup = createApiMeTestServer();
+test('GET /api/session returns 401 without a bearer', async () => {
+	const setup = createApiSessionTestServer();
 	try {
-		const response = await setup.app.request('/api/me');
+		const response = await setup.app.request('/api/session');
 
 		expect(response.status).toBe(401);
 		expect(response.headers.get('WWW-Authenticate')).toBe(
@@ -77,16 +77,16 @@ test('GET /api/me returns 401 without a bearer', async () => {
 	}
 });
 
-test('GET /api/me returns 403 when the token lacks workspaces:open scope', async () => {
-	const setup = createApiMeTestServer();
+test('GET /api/session returns 403 when the token lacks workspaces:open scope', async () => {
+	const setup = createApiSessionTestServer();
 	try {
 		const { accessToken } = await issueOAuthTokens(setup, {
-			clientName: 'Api Me Test Client',
-			email: 'api-me-test@example.com',
-			name: 'Api Me Test',
+			clientName: 'Api Session Test Client',
+			email: 'api-session-test@example.com',
+			name: 'Api Session Test',
 			scope: 'openid profile email offline_access',
 		});
-		const response = await setup.app.request('/api/me', {
+		const response = await setup.app.request('/api/session', {
 			headers: { authorization: `Bearer ${accessToken}` },
 		});
 
@@ -102,10 +102,10 @@ test('GET /api/me returns 403 when the token lacks workspaces:open scope', async
 	}
 });
 
-test('GET /api/me returns 401 for a malformed bearer', async () => {
-	const setup = createApiMeTestServer();
+test('GET /api/session returns 401 for a malformed bearer', async () => {
+	const setup = createApiSessionTestServer();
 	try {
-		const response = await setup.app.request('/api/me', {
+		const response = await setup.app.request('/api/session', {
 			headers: { authorization: 'Token not-a-bearer' },
 		});
 
@@ -119,11 +119,11 @@ test('GET /api/me returns 401 for a malformed bearer', async () => {
 // Test plumbing
 // ---------------------------------------------------------------------------
 
-function createApiMeTestServer() {
+function createApiSessionTestServer() {
 	const db = createOAuthTestDb();
 
 	for (let attempt = 0; attempt < 40; attempt += 1) {
-		const port = nextApiMeTestPort++;
+		const port = nextApiSessionTestPort++;
 		const baseURL = `http://localhost:${port}`;
 		const auth = betterAuth({
 			database: memoryAdapter(db),
@@ -162,7 +162,7 @@ function createApiMeTestServer() {
 
 			const resource = oauthProviderResourceClient();
 			const app = new Hono();
-			app.get('/api/me', async (c) => {
+			app.get('/api/session', async (c) => {
 				const { data: identity, error } = await resolveBearerIdentity({
 					authorization: c.req.header('authorization') ?? null,
 					audience: baseURL,
@@ -184,5 +184,5 @@ function createApiMeTestServer() {
 		}
 	}
 
-	throw new Error('Failed to find an available /api/me test port.');
+	throw new Error('Failed to find an available /api/session test port.');
 }

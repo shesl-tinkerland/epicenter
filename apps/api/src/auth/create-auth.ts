@@ -28,7 +28,7 @@ type Db = NodePgDatabase<typeof schema>;
  * - Autumn billing customer creation on user signup
  * - Cloudflare KV secondary storage for session caching
  *
- * `/api/me` is the single Epicenter identity surface; this builder no longer
+ * `/api/session` is the single Epicenter session surface; this builder no longer
  * enriches `/auth/get-session` with encryption keys.
  */
 export function createAuth({

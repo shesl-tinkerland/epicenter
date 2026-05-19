@@ -1,5 +1,5 @@
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
-import { type ApiMeResponse, AuthUser } from '@epicenter/auth';
+import { type ApiSessionResponse, AuthUser } from '@epicenter/auth';
 import type { SubjectKeyring } from '@epicenter/encryption';
 import type { User } from 'better-auth';
 import { eq } from 'drizzle-orm';
@@ -96,7 +96,7 @@ export async function resolveBearerUser(
 }
 
 /**
- * Full resolver for `/api/me`. Returns the local-first payload the apps
+ * Full resolver for `/api/session`. Returns the local-first payload the apps
  * need at boot: the calling user plus the per-subject keyring derived from
  * the root keyring.
  */
@@ -104,7 +104,7 @@ export async function resolveBearerIdentity(
 	deps: ResolverDeps & {
 		deriveSubjectKeyring(subject: string): Promise<SubjectKeyring>;
 	},
-): Promise<Result<ApiMeResponse, OAuthError>> {
+): Promise<Result<ApiSessionResponse, OAuthError>> {
 	const { data: user, error } = await verifyBearerToUser(deps);
 	if (error) return Err(error);
 	return Ok({

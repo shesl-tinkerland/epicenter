@@ -3,11 +3,12 @@
  *
  * Covers loginWithOob / status / logout / createMachineAuthClient against
  * tmpfile-backed `~/.epicenter/auth.json` cells. Stubs `fetch` for both
- * `/auth/oauth2/token` (launcher) and `/api/me` (createOAuthAppAuth's
+ * `/auth/oauth2/token` (launcher) and `/api/session` (createOAuthAppAuth's
  * identity probe).
  */
 
 import { afterEach, expect, test } from 'bun:test';
+import { expectOk } from '@epicenter/test-utils/result';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
@@ -82,11 +83,11 @@ type Route = (request: RecordedRequest) => Response | Promise<Response>;
 
 function createFetch({
 	tokenRoute,
-	apiMeRoute,
+	apiSessionRoute,
 	revokeRoute,
 }: {
 	tokenRoute?: Route;
-	apiMeRoute?: Route;
+	apiSessionRoute?: Route;
 	revokeRoute?: Route;
 } = {}): {
 	fetch: AuthFetch;
@@ -126,8 +127,8 @@ function createFetch({
 		if (url.endsWith('/auth/oauth2/revoke') && revokeRoute) {
 			return revokeRoute(request);
 		}
-		if (url.endsWith('/api/me') && apiMeRoute) {
-			return apiMeRoute(request);
+		if (url.endsWith('/api/session') && apiSessionRoute) {
+			return apiSessionRoute(request);
 		}
 		return new Response(null, { status: 404 });
 	};
@@ -144,7 +145,7 @@ function tokenSuccess(): Route {
 		});
 }
 
-function apiMeOk(subject = 'user-1'): Route {
+function apiSessionOk(subject = 'user-1'): Route {
 	return () =>
 		jsonResponse({
 			user: { id: subject, email: `${subject}@example.com` },
@@ -156,7 +157,7 @@ test('loginWithOob writes PersistedAuth and returns identity', async () => {
 	const filePath = tmpAuthPath();
 	const { fetch } = createFetch({
 		tokenRoute: tokenSuccess(),
-		apiMeRoute: apiMeOk('user-1'),
+		apiSessionRoute: apiSessionOk('user-1'),
 	});
 
 	const result = await loginWithOob({
@@ -169,15 +170,14 @@ test('loginWithOob writes PersistedAuth and returns identity', async () => {
 		openBrowser: () => {},
 		readCode: async () => 'CODE',
 	});
-	expect(result.error).toBeNull();
-	expect(result.data?.identity.user).toEqual({
+	const data = expectOk(result);
+	expect(data.identity.user).toEqual({
 		id: 'user-1',
 		email: 'user-1@example.com',
 	});
 
-	const loaded = await loadMachineTokens({ filePath });
-	expect(loaded.error).toBeNull();
-	expect(loaded.data).toEqual({
+	const loaded = expectOk(await loadMachineTokens({ filePath }));
+	expect(loaded).toEqual({
 		grant: {
 			accessToken: 'access-1',
 			refreshToken: 'refresh-1',
@@ -196,7 +196,7 @@ test('loginWithOob with empty paste writes no file', async () => {
 	const filePath = tmpAuthPath();
 	const { fetch } = createFetch({
 		tokenRoute: tokenSuccess(),
-		apiMeRoute: apiMeOk(),
+		apiSessionRoute: apiSessionOk(),
 	});
 	const result = await loginWithOob({
 		baseURL: BASE_URL,
@@ -218,11 +218,11 @@ test('loginWithOob with empty paste writes no file', async () => {
 	expect(exists).toBe(false);
 });
 
-test('loginWithOob with /api/me 401 returns Err and writes no file', async () => {
+test('loginWithOob with /api/session 401 returns Err and writes no file', async () => {
 	const filePath = tmpAuthPath();
 	const { fetch } = createFetch({
 		tokenRoute: tokenSuccess(),
-		apiMeRoute: () => new Response(null, { status: 401 }),
+		apiSessionRoute: () => new Response(null, { status: 401 }),
 	});
 	const result = await loginWithOob({
 		baseURL: BASE_URL,
@@ -262,7 +262,7 @@ test('sign-in writes the new persisted shape', async () => {
 	const filePath = tmpAuthPath();
 	const { fetch } = createFetch({
 		tokenRoute: tokenSuccess(),
-		apiMeRoute: apiMeOk('user-1'),
+		apiSessionRoute: apiSessionOk('user-1'),
 	});
 
 	const result = await loginWithOob({
@@ -275,17 +275,17 @@ test('sign-in writes the new persisted shape', async () => {
 		openBrowser: () => {},
 		readCode: async () => 'CODE',
 	});
-	expect(result.error).toBeNull();
+	expectOk(result);
 	const raw = await fs.readFile(filePath, 'utf-8');
 	const parsed = JSON.parse(raw) as Record<string, unknown>;
 	expect(Object.keys(parsed).sort()).toEqual(['grant', 'localIdentity']);
 	expect('unlock' in parsed).toBe(false);
 });
 
-test('status valid when /api/me returns 200 with same subject', async () => {
+test('status valid when /api/session returns 200 with same subject', async () => {
 	const filePath = tmpAuthPath();
 	await preWriteCell(filePath, 'user-1');
-	const { fetch } = createFetch({ apiMeRoute: apiMeOk('user-1') });
+	const { fetch } = createFetch({ apiSessionRoute: apiSessionOk('user-1') });
 	const result = await status({
 		baseURL: BASE_URL,
 		clientId: CLIENT_ID,
@@ -293,8 +293,8 @@ test('status valid when /api/me returns 200 with same subject', async () => {
 		fetch,
 		now: () => NOW,
 	});
-	expect(result.error).toBeNull();
-	expect(result.data).toMatchObject({
+	const data = expectOk(result);
+	expect(data).toMatchObject({
 		status: 'valid',
 		identity: {
 			user: { id: 'user-1', email: 'user-1@example.com' },
@@ -315,10 +315,10 @@ test('status unverified on network failure preserves cell', async () => {
 		fetch: fetchImpl,
 		now: () => NOW,
 	});
-	expect(result.error).toBeNull();
-	expect(result.data?.status).toBe('unverified');
-	const stillThere = await loadMachineTokens({ filePath });
-	expect(stillThere.data).toEqual(cell);
+	const data = expectOk(result);
+	expect(data.status).toBe('unverified');
+	const stillThere = expectOk(await loadMachineTokens({ filePath }));
+	expect(stillThere).toEqual(cell);
 });
 
 test('status signedOut when no file', async () => {
@@ -331,14 +331,14 @@ test('status signedOut when no file', async () => {
 		fetch,
 		now: () => NOW,
 	});
-	expect(result.error).toBeNull();
-	expect(result.data).toEqual({ status: 'signedOut' });
+	const data = expectOk(result);
+	expect(data).toEqual({ status: 'signedOut' });
 });
 
-test('same-subject guard wipes cell when /api/me returns different subject', async () => {
+test('same-subject guard wipes cell when /api/session returns different subject', async () => {
 	const filePath = tmpAuthPath();
 	await preWriteCell(filePath, 'alice');
-	const { fetch } = createFetch({ apiMeRoute: apiMeOk('bob') });
+	const { fetch } = createFetch({ apiSessionRoute: apiSessionOk('bob') });
 	await status({
 		baseURL: BASE_URL,
 		clientId: CLIENT_ID,
@@ -368,8 +368,8 @@ test('logout revokes refresh token and deletes the file', async () => {
 		fetch,
 		now: () => NOW,
 	});
-	expect(result.error).toBeNull();
-	expect(result.data).toEqual({ status: 'loggedOut' });
+	const data = expectOk(result);
+	expect(data).toEqual({ status: 'loggedOut' });
 	const revoke = recorded.find((r) => r.url.endsWith('/auth/oauth2/revoke'));
 	expect(revoke).toBeDefined();
 	const body = new URLSearchParams(revoke!.body ?? '');
@@ -398,8 +398,8 @@ test('logout survives revoke failure and still deletes the file', async () => {
 		fetch,
 		now: () => NOW,
 	});
-	expect(result.error).toBeNull();
-	expect(result.data).toEqual({ status: 'loggedOut' });
+	const data = expectOk(result);
+	expect(data).toEqual({ status: 'loggedOut' });
 	let exists = true;
 	try {
 		await fs.stat(filePath);
@@ -453,7 +453,7 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 			body: null,
 			headers,
 		});
-		if (url.endsWith('/api/me')) {
+		if (url.endsWith('/api/session')) {
 			return jsonResponse({
 				user: { id: 'user-1', email: 'user-1@example.com' },
 				localIdentity: { subject: 'user-1', keyring: [...keyring] },
@@ -475,13 +475,13 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 	const response = await auth.fetch('/api/something');
 	expect(response.status).toBe(200);
 
-	const meIndex = recorded.findIndex((r) => r.url.endsWith('/api/me'));
+	const sessionIndex = recorded.findIndex((r) => r.url.endsWith('/api/session'));
 	const somethingIndex = recorded.findIndex((r) =>
 		r.url.endsWith('/api/something'),
 	);
-	expect(meIndex).toBeGreaterThanOrEqual(0);
+	expect(sessionIndex).toBeGreaterThanOrEqual(0);
 	expect(somethingIndex).toBeGreaterThanOrEqual(0);
-	expect(meIndex).toBeLessThan(somethingIndex);
+	expect(sessionIndex).toBeLessThan(somethingIndex);
 
 	const somethingReq = recorded[somethingIndex]!;
 	expect(somethingReq.headers['authorization']).toBe('Bearer access-stored');

@@ -14,7 +14,7 @@ export const AuthError = defineErrors({
 		cause,
 	}),
 	/**
-	 * `/api/me` failed during sign-in or cold boot. Non-fatal on cold boot:
+	 * `/api/session` failed during sign-in or cold boot. Non-fatal on cold boot:
 	 * the cached `localIdentity` keeps the user signed-in and able to decrypt
 	 * local Yjs data.
 	 */

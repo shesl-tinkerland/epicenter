@@ -85,7 +85,7 @@
 		() => ({
 			queryKey: ['account-profile', profileSubject],
 			queryFn: async (): Promise<AccountProfile> => {
-				const response = await auth.fetch('/api/me');
+				const response = await auth.fetch('/api/session');
 				if (!response.ok) {
 					throw new Error(`Failed to load account (${response.status}).`);
 				}

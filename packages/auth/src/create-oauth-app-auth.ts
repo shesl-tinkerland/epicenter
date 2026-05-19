@@ -7,7 +7,7 @@ import { Ok, type Result } from 'wellcrafted/result';
 import type { AuthClient, AuthState } from './auth-contract.js';
 import { AuthError } from './auth-errors.js';
 import {
-	ApiMeResponse,
+	ApiSessionResponse,
 	type OAuthTokenGrant,
 	type PersistedAuth as PersistedAuthType,
 } from './auth-types.js';
@@ -70,7 +70,7 @@ export function createOAuthAppAuth({
 	let verifiedPersisted: PersistedAuthType | null = null;
 	let networkAuthPaused = false;
 	let refreshPromise: Promise<boolean> | null = null;
-	let identityPromise: Promise<Result<ApiMeResponse, AuthError>> | null = null;
+	let identityPromise: Promise<Result<ApiSessionResponse, AuthError>> | null = null;
 
 	let state = deriveState();
 	const stateChangeListeners = new Set<(state: AuthState) => void>();
@@ -160,12 +160,12 @@ export function createOAuthAppAuth({
 		return refreshPromise;
 	}
 
-	async function callApiMe(
+	async function callApiSession(
 		grant: OAuthTokenGrant,
-	): Promise<Result<ApiMeResponse, AuthError>> {
+	): Promise<Result<ApiSessionResponse, AuthError>> {
 		let response: Response;
 		try {
-			response = await fetchImpl(`${baseURL}/api/me`, {
+			response = await fetchImpl(`${baseURL}/api/session`, {
 				headers: { Authorization: `Bearer ${grant.accessToken}` },
 				credentials: 'omit',
 			});
@@ -174,57 +174,57 @@ export function createOAuthAppAuth({
 		}
 		if (!response.ok) {
 			return AuthError.VerifyIdentityFailed({
-				cause: new Error(`/api/me failed with ${response.status}.`),
+				cause: new Error(`/api/session failed with ${response.status}.`),
 			});
 		}
 		try {
-			return Ok(ApiMeResponse.assert(await response.json()));
+			return Ok(ApiSessionResponse.assert(await response.json()));
 		} catch (cause) {
 			return AuthError.VerifyIdentityFailed({ cause });
 		}
 	}
 
 	/**
-	 * Verify `/api/me` against the persisted cell. Marks the cell verified;
+	 * Verify `/api/session` against the persisted cell. Marks the cell verified;
 	 * writes the localIdentity cell only when the keyring actually changed.
 	 * Wipes the cell on same-subject-guard mismatch. Single-flight: concurrent
 	 * callers share the in-flight promise.
 	 */
 	async function verifyIdentity(
 		startedFrom: PersistedAuthType,
-	): Promise<Result<ApiMeResponse, AuthError>> {
+	): Promise<Result<ApiSessionResponse, AuthError>> {
 		if (identityPromise) return identityPromise;
-		identityPromise = (async (): Promise<Result<ApiMeResponse, AuthError>> => {
-			const { data: apiMe, error } = await callApiMe(startedFrom.grant);
+		identityPromise = (async (): Promise<Result<ApiSessionResponse, AuthError>> => {
+			const { data: session, error } = await callApiSession(startedFrom.grant);
 			if (error) return AuthError.VerifyIdentityFailed({ cause: error });
-			if (persisted !== startedFrom) return Ok(apiMe);
+			if (persisted !== startedFrom) return Ok(session);
 
-			if (persisted.localIdentity.subject !== apiMe.localIdentity.subject) {
+			if (persisted.localIdentity.subject !== session.localIdentity.subject) {
 				await persistedAuthStorage.set(null);
 				persisted = null;
 				verifiedPersisted = null;
 				networkAuthPaused = false;
 				publishState();
-				return Ok(apiMe);
+				return Ok(session);
 			}
 
 			if (
 				!subjectKeyringsEqual(
 					persisted.localIdentity.keyring,
-					apiMe.localIdentity.keyring,
+					session.localIdentity.keyring,
 				)
 			) {
 				const next: PersistedAuthType = {
 					grant: persisted.grant,
-					localIdentity: apiMe.localIdentity,
+					localIdentity: session.localIdentity,
 				};
 				await persistedAuthStorage.set(next);
-				if (persisted !== startedFrom) return Ok(apiMe);
+				if (persisted !== startedFrom) return Ok(session);
 				persisted = next;
 			}
 			verifiedPersisted = persisted;
 			publishState();
-			return Ok(apiMe);
+			return Ok(session);
 		})().finally(() => {
 			identityPromise = null;
 		});
@@ -236,9 +236,9 @@ export function createOAuthAppAuth({
 	 * Network gate. Returns the access token to attach to a bearer-bearing
 	 * request, or `null` if no bearer should be attached.
 	 *
-	 * Refuses to attach unless `/api/me` has confirmed the current cell in
+	 * Refuses to attach unless `/api/session` has confirmed the current cell in
 	 * this runtime. Cold boot online: refresh grant if
-	 * stale, call `/api/me`, then attach. Offline: fails closed; local
+	 * stale, call `/api/session`, then attach. Offline: fails closed; local
 	 * workspace decrypt continues via `localIdentity`.
 	 */
 	async function bearerForNetwork(force: boolean): Promise<string | null> {
@@ -286,14 +286,14 @@ export function createOAuthAppAuth({
 	async function applySignIn(
 		grant: OAuthTokenGrant,
 	): Promise<Result<undefined, AuthError>> {
-		const callResult = await callApiMe(grant);
+		const callResult = await callApiSession(grant);
 		if (callResult.error) {
 			return AuthError.StartSignInFailed({ cause: callResult.error });
 		}
-		const apiMe = callResult.data;
+		const session = callResult.data;
 		const next: PersistedAuthType = {
 			grant,
-			localIdentity: apiMe.localIdentity,
+			localIdentity: session.localIdentity,
 		};
 		await persistedAuthStorage.set(next);
 		persisted = next;

@@ -43,7 +43,7 @@ Both bytes are part of the on-disk and on-wire encryption envelope. Bumping them
 Other apps validate inputs against these by name and shape. Renaming a field or changing a brand silently invalidates their parsers.
 
 - `PersistedAuth`
-- `ApiMeResponse`
+- `ApiSessionResponse`
 - `SubjectKeyring`
 - `RootKeyring`
 

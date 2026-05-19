@@ -14,7 +14,7 @@ import { createLocalOwner, type LocalOwner } from '@epicenter/workspace';
  * data, including while server auth needs reauth.
  *
  * The reader pulls from the live `state.localIdentity` so refreshed keyrings
- * from `/api/me` are picked up on next access without rebuilding the payload.
+ * from `/api/session` are picked up on next access without rebuilding the payload.
  *
  * Requires an `AuthClient` whose `state` is Svelte-reactive (use
  * `@epicenter/auth-svelte`, not `@epicenter/auth` directly).

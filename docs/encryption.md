@@ -51,10 +51,10 @@ On the client, the encryption coordinator (`attachEncryption(ydoc, { keyring })`
 The highest version becomes the current key for new writes.
 
 ## How keys reach the client
-Keys come through `/api/me`.
-`apps/api/src/app.ts` mounts `GET /api/me` behind the bearer + `workspaces:open` scope check from `resolveRequestWorkspaceIdentity`. The handler returns `{ user: { id, email }, localIdentity: { subject, keyring } }`.
-`@epicenter/auth` calls `/api/me` at sign-in and at cold-boot when online, persists `{ subject, keyring }` as the `localIdentity` section of the cell, and exposes it through `auth.state.localIdentity.keyring` whenever the auth state is not `signed-out`.
-Cold-boot offline keeps the cached `localIdentity` so the workspace can decrypt local Yjs data without a network roundtrip; the bearer is not attached to outbound requests until `/api/me` re-confirms the cell in this runtime.
+Keys come through `/api/session`.
+`apps/api/src/app.ts` mounts `GET /api/session` behind `requireUser` (cookie OR bearer); bearer callers are checked for the `workspaces:open` scope inside `resolveRequestOAuthUser`. The handler returns `{ user: { id, email }, localIdentity: { subject, keyring } }`.
+`@epicenter/auth` calls `/api/session` at sign-in and at cold-boot when online, persists `{ subject, keyring }` as the `localIdentity` section of the cell, and exposes it through `auth.state.localIdentity.keyring` whenever the auth state is not `signed-out`.
+Cold-boot offline keeps the cached `localIdentity` so the workspace can decrypt local Yjs data without a network roundtrip; the bearer is not attached to outbound requests until `/api/session` re-confirms the cell in this runtime.
 The workspace does not hold an independently mutable copy of the keys. `attachEncryption` takes a `keyring` callback and calls it when an encrypted table, KV store, or IndexedDB provider attaches. Each attached store keeps the keyring derived at that attachment boundary. Browser app session modules usually receive a `LocalOwner` from `createSession`; that owner carries the lazy keyring reader:
 ```ts
 export const session = createSession({
@@ -108,7 +108,7 @@ Sign-out disposes the live workspace after the auth session changes.
 It does not wipe local IndexedDB data.
 The reviewed code still does not show an explicit in-memory key wipe inside `createEncryptedYkvLww`; workspace disposal is the current key-drop boundary for `createSession` apps.
 The closest Bitwarden analogy is lock, not logout: Bitwarden documents unlock as using encrypted data already stored on disk and lock as deleting decrypted vault data and the account encryption key from memory. Bitwarden separately documents that logout wipes PIN settings. See [Understand Log In vs. Unlock](https://bitwarden.com/help/understand-log-in-vs-unlock/) and [Unlock With PIN](https://bitwarden.com/help/unlock-with-pin/).
-The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-subject updates are a no-op at the session boundary. A different subject from `/api/me` is rejected by auth before the workspace is reused:
+The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-subject updates are a no-op at the session boundary. A different subject from `/api/session` is rejected by auth before the workspace is reused:
 ```ts
 import { createSession, type InferSignedIn } from '@epicenter/svelte';
 
@@ -134,7 +134,7 @@ export type MyAppSignedIn = InferSignedIn<typeof session>;
 So these points are implemented and verifiable:
 - keys are loaded on login
 - sign-out disposes the live workspace
-- a different `/api/me` subject wipes the persisted auth cell and publishes `signed-out`
+- a different `/api/session` subject wipes the persisted auth cell and publishes `signed-out`
 - owner-scoped IndexedDB data remains available for the same authenticated owner after reload
 This point is not visible as an explicit step in the reviewed code:
 - clearing the in-memory encryption state after logout

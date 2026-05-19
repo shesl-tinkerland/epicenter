@@ -19,13 +19,22 @@ export const OAuthTokenGrant = type({
 	'+': 'delete',
 	accessToken: 'string',
 	refreshToken: 'string',
+	/**
+	 * Absolute access-token expiry as epoch milliseconds.
+	 *
+	 * Computed from the OAuth `expires_in` seconds returned with the token
+	 * grant (`accessTokenExpiresAt = now() + expires_in * 1000`). Used only as
+	 * a transport refresh hint: the resource server is still the source of
+	 * truth for token validity, so this value is checked locally to decide
+	 * when to refresh, never to authorize a request.
+	 */
 	accessTokenExpiresAt: 'number',
 });
 
 export type OAuthTokenGrant = typeof OAuthTokenGrant.infer;
 
 /**
- * Local-first workspace identity returned by `/api/me` and cached on this
+ * Local-first workspace identity returned by `/api/session` and cached on this
  * device.
  *
  * This is the part of auth that belongs to local workspace operations. The app
@@ -77,14 +86,15 @@ export const PersistedAuth = type({
 export type PersistedAuth = typeof PersistedAuth.infer;
 
 /**
- * Canonical `/api/me` response shape. The single contract between the API
- * and every Epicenter auth client (browser, extension, CLI machine, daemon).
+ * Canonical `/api/session` response shape. The single contract between the
+ * API and every Epicenter auth client (browser, extension, CLI machine,
+ * daemon).
  *
  * `user` is the Better Auth profile slice displayed in account UI.
  * `localIdentity` is the local-first workspace identity: the owner label and
  * keyring used to open local workspace data, including while offline.
  */
-export const ApiMeResponse = type({
+export const ApiSessionResponse = type({
 	'+': 'delete',
 	user: AuthUser,
 	/**
@@ -97,4 +107,4 @@ export const ApiMeResponse = type({
 	localIdentity: SubjectIdentity,
 });
 
-export type ApiMeResponse = typeof ApiMeResponse.infer;
+export type ApiSessionResponse = typeof ApiSessionResponse.infer;
