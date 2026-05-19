@@ -1,104 +1,247 @@
 # Fuji
 
-Fuji is a local-first CMS where every entry's body is its own CRDT. Write offline, sync later, and collaborate on a single entry without touching the rest of your content. Think of it as a structured journal, knowledge base, or portfolio, whatever you tag and type your entries as.
+Fuji is a local-first CMS for entries with structured metadata and collaborative rich text bodies. It works as a journal, writing archive, lightweight knowledge base, or small portfolio backend.
 
-Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT licensed.
+The browser app is the editing surface. The daemon is the local runtime for scripts, SQLite reads, Markdown files, and cross-device sync.
 
----
+## How It Loads
 
-## How it works
+Fuji has three construction layers:
 
-### Layout
+```txt
+src/lib/session.ts
+  createSession({ auth, build })
+    |
+    v
+src/lib/browser.ts
+  openFujiBrowser({ owner, installationId, openWebSocket })
+    |
+    +-- openFujiWorkspace(owner.attachEncryption)
+    +-- encrypted local storage
+    +-- browser sync
+    +-- per-entry rich text document cache
 
-SvelteKit app (static adapter, SSR disabled) with three panels: a sidebar for filtering by type, tags, and search; a main area that toggles between table and timeline views; and an editor panel for rich-text content.
-
-### Data model
-
-Workspace ID: `epicenter.fuji`. Rich-text content and entry metadata are separate CRDTs. The entries table stays lean: just IDs, titles, tags, timestamps. Each entry's body lives in its own Y.Doc opened by a `createDisposableCache` keyed on the entry id; the child document builder owns the storage guid. Loading a list of 500 entries doesn't mean loading 500 rich-text trees; the editor and the list never contend for the same document.
-
-- `entries` table: `id` (EntryId), `title`, `subtitle`, `type` (string[]), `tags` (string[]), `createdAt`, `updatedAt`, `_v`. Each entry's body is opened on demand from a disposable cache and bound to ProseMirror via `y-prosemirror`.
-- KV keys: `selectedEntryId`, `viewMode` (`'table' | 'timeline'`), `sidebarCollapsed`.
-
-### Client wiring
-
-Fuji's root workspace is built once per signed-in session by `createSession`. `openFujiBrowser()` owns the `new Y.Doc(...)` call, composes every attachment inline, and returns the bundle directly. The session module receives a `LocalOwner` from `createSession` and passes it into the browser factory. The owner hides the subject to owner handoff and carries the lazy keyring reader. Sync opens sockets through auth on connection attempts, while encrypted stores keep the keyring derived when they attach.
-
-```ts
-export function openFujiBrowser({
-  owner,
-  installationId,
-  openWebSocket,
-}: {
-  owner: LocalOwner;
-  installationId: string;
-  openWebSocket?: (
-    url: string | URL,
-    protocols?: string[],
-  ) => WebSocket | Promise<WebSocket>;
-}) {
-  const rootYdoc = new Y.Doc({ guid: FUJI_WORKSPACE_ID, gc: true });
-  const encryption = owner.attachEncryption(rootYdoc);
-  const tables = encryption.attachTables(fujiTables);
-  const kv = encryption.attachKv({});
-  const idb = owner.attachIndexedDb(rootYdoc);
-  owner.attachBroadcastChannel(rootYdoc);
-  const actions = createFujiActions(tables);
-  const collaboration = openCollaboration(rootYdoc, {
-    url: roomWsUrl(APP_URLS.API, rootYdoc.guid),
-    waitFor: idb.whenLoaded,
-    openWebSocket,
-    installationId,
-    actions,
-  });
-  return { ydoc: rootYdoc, tables, kv, idb, collaboration };
-}
+src/lib/workspace.ts
+  schema, migrations, actions, shared workspace opener
 ```
 
-The browser bundle exposes concrete resources like `idb`, `collaboration`, and child document collections. Auth state flows through `session.current`; when present, it carries the app binding, and pages reach it via the module-level `requireApp()` exported from `$lib/session` (throws if called without an authenticated session). Local cleanup is a separate explicit action, not part of sign-out.
+`session.ts` is the only browser singleton. It waits for a signed-in owner, opens Fuji, creates reactive entry state, and disposes everything during HMR or sign-out.
 
-For a sibling example of the same pattern (plus a Tauri-side materializer), see `apps/whispering/src/lib/whispering/client.ts`.
+`browser.ts` is browser-only runtime wiring. It attaches encrypted local storage, opens the root sync room, and creates a `createDisposableCache` for entry bodies.
 
-### Editor
+`workspace.ts` is the shared contract. Browser code, daemon code, and scripts all use the same table schema and action registry.
 
-ProseMirror with `y-prosemirror` binds directly to the entry's `Y.Text`. Edits are conflict-free by default; two sessions editing the same entry merge automatically.
+## Data Model
 
-### Keyboard shortcuts
+Fuji keeps metadata and content in separate Y.Docs:
 
-- `Cmd+N`: new entry
-- `Escape`: deselect current entry
+```txt
+Root doc: epicenter.fuji
+  entries table
+    id
+    title
+    subtitle
+    type[]
+    tags[]
+    pinned
+    rating
+    date
+    deletedAt
+    createdAt
+    updatedAt
 
----
+Entry content doc: docGuid(epicenter.fuji, entries, <entryId>, content)
+  Y.XmlFragment bound to ProseMirror
+```
+
+The entries table stays small enough for sidebars, filters, table view, timeline view, trash, and scripts. The rich text body opens only when an entry editor needs it.
+
+That split is the main performance choice. Loading 10,000 entries does not mean loading 10,000 rich text trees.
+
+## Browser Runtime
+
+The browser opens Fuji like this:
+
+```ts
+const fuji = openFujiBrowser({
+	owner,
+	installationId: createInstallationId({ storage: localStorage }),
+	openWebSocket: auth.openWebSocket,
+});
+```
+
+The returned handle includes:
+
+```txt
+ydoc              root Y.Doc
+tables            encrypted entries table
+kv                encrypted key-value store
+entryContentDocs  disposable cache of per-entry body docs
+collaboration     root sync and action dispatch
+wipe()            forget local encrypted data for this owner
+```
+
+UI code reads the signed-in handle through `requireFuji()` from `$lib/session`.
+
+## Daemon Runtime
+
+The package exports a daemon module at `@epicenter/fuji/daemon`. A project can register Fuji by creating this file:
+
+```txt
+<project>/
+  workspaces/
+    fuji/
+      daemon.ts
+```
+
+```ts
+export { default } from '@epicenter/fuji/daemon';
+```
+
+Then start the local daemon from the project root:
+
+```bash
+bun run cli daemon up
+```
+
+The daemon scans `workspaces/*/daemon.ts`. The folder name becomes the route, so the example above exposes Fuji actions under the `fuji` route.
+
+`.epicenter/` is not where the daemon is registered. It is where the daemon writes runtime state:
+
+```txt
+<project>/
+  .epicenter/
+    sqlite/       queryable materialized tables
+    yjs/          local Y.Doc update log
+    markdown/     generated Markdown files
+    daemon.sock   local IPC socket
+```
+
+Fuji's daemon does four things:
+
+```txt
+openFujiWorkspace(...)
+  |
+  +-- attachDaemonInfrastructure(...)
+  |     writes the Yjs log
+  |     opens sync
+  |     exposes daemon actions
+  |
+  +-- attachSqliteMaterializer(...)
+  |     mirrors entries into SQLite
+  |
+  +-- attachMarkdownMaterializer(...)
+        writes entry Markdown files
+```
+
+The actual daemon entrypoint is small:
+
+```ts
+import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
+import {
+	attachMarkdownMaterializer,
+	slugFilename,
+} from '@epicenter/workspace/document/materializer/markdown';
+import { attachSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
+import {
+	attachDaemonInfrastructure,
+	markdownPath,
+	openWriterSqlite,
+	sqlitePath,
+} from '@epicenter/workspace/node';
+import { createLogger } from 'wellcrafted/logger';
+import { openFujiWorkspace } from '@epicenter/fuji/workspace';
+
+export default defineDaemonWorkspace({
+	async open({
+		projectDir,
+		route,
+		clientId,
+		installationId,
+		attachEncryption,
+		openWebSocket,
+	}) {
+		const workspace = openFujiWorkspace(attachEncryption, { clientId });
+
+		const infra = attachDaemonInfrastructure(workspace.ydoc, {
+			projectDir,
+			openWebSocket,
+			installationId,
+			actions: workspace.actions,
+		});
+
+		const sqliteDb = openWriterSqlite({
+			filePath: sqlitePath(projectDir, workspace.ydoc.guid),
+			log: createLogger(`${route}-sqlite`),
+		});
+		workspace.ydoc.once('destroy', () => sqliteDb.close());
+
+		attachSqliteMaterializer(workspace.ydoc, { db: sqliteDb }).table(
+			workspace.tables.entries,
+		);
+
+		attachMarkdownMaterializer(workspace.ydoc, {
+			dir: markdownPath(projectDir, workspace.ydoc.guid),
+		}).table(workspace.tables.entries, { filename: slugFilename('title') });
+
+		return infra;
+	},
+});
+```
+
+Most projects should not copy that whole file. Use the one-line re-export unless you need to customize materializers.
+
+## Scripts
+
+Scripts read from SQLite and write through daemon actions:
+
+```ts
+import { connectDaemonActions } from '@epicenter/workspace';
+import { findEpicenterDir, openWorkspaceSqlite } from '@epicenter/workspace/node';
+import { FUJI_WORKSPACE_ID, type FujiActions } from '@epicenter/fuji';
+
+const projectDir = findEpicenterDir();
+
+const db = openWorkspaceSqlite(projectDir, FUJI_WORKSPACE_ID);
+const rows = db.query('SELECT * FROM entries').all();
+
+const fuji = await connectDaemonActions<FujiActions>({
+	route: 'fuji',
+	projectDir,
+});
+
+await fuji.entries_create({ title: `Imported ${rows.length} rows` });
+db.close();
+```
+
+Reads do not require a running daemon. Writes do, because the daemon is the single writer for the live Y.Doc.
 
 ## Development
 
-Prerequisites: [Bun](https://bun.sh).
-
 ```bash
-git clone https://github.com/EpicenterHQ/epicenter.git
-cd epicenter
 bun install
-cd apps/fuji
-bun dev
+bun run --cwd apps/fuji dev
 ```
 
-This starts the app dev server on port 5174. Auth and sync expect the local API on `localhost:8787`; start it from the repo root with `bun run dev:api`.
+Auth and sync expect the local API on `localhost:8787`:
 
----
+```bash
+bun run dev:api
+```
 
-## Tech stack
+Useful checks:
 
-- [SvelteKit](https://kit.svelte.dev): UI framework (static adapter, SSR disabled)
-- [ProseMirror](https://prosemirror.net) + [y-prosemirror](https://github.com/yjs/y-prosemirror): collaborative rich-text editing
-- [TanStack Svelte Table](https://tanstack.com/table): entry list table view
-- [Yjs](https://yjs.dev): CRDT engine
-- [Tailwind CSS](https://tailwindcss.com): styling
-- `@epicenter/workspace`: CRDT-backed tables, versioning, documents
-- `@epicenter/auth-svelte`: Svelte 5 wrapper around `@epicenter/auth`
-- `@epicenter/svelte`: workspace gate and reactive table/KV bindings
-- `@epicenter/ui`: shadcn-svelte component library
+```bash
+bun test apps/fuji
+bun run --cwd apps/fuji typecheck
+bun run --cwd apps/fuji build
+```
 
----
+## Package Exports
 
-## License
-
-MIT
+```txt
+@epicenter/fuji            shared workspace contract
+@epicenter/fuji/workspace  shared workspace contract
+@epicenter/fuji/browser    browser runtime factory
+@epicenter/fuji/daemon     daemon module for workspaces/<route>/daemon.ts
+```

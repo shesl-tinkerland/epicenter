@@ -5,7 +5,10 @@
 	"version": "0.0.1",
 	"type": "module",
 	"exports": {
-		".": "./src/lib/workspace.ts"
+		".": "./src/lib/workspace.ts",
+		"./workspace": "./src/lib/workspace.ts",
+		"./browser": "./src/lib/browser.ts",
+		"./daemon": "./daemon.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -52,7 +55,7 @@
 		"prosemirror-schema-basic": "^1.2.0",
 		"prosemirror-schema-list": "^1.4.0",
 		"prosemirror-state": "^1.4.0",
-		"prosemirror-view": "^1.41.0",
+		"prosemirror-view": "1.41.6",
 		"typebox": "catalog:",
 		"wellcrafted": "catalog:",
 		"y-indexeddb": "catalog:",

@@ -56,6 +56,8 @@ epicenter peers -C ~/vault
 
 ## Daemon Extensions
 
+The daemon is the local runtime host for workspace apps. It does not own an app's schema or UI. It discovers trusted workspace source, opens each long-lived runtime once, and serves the route's actions over a project-local socket.
+
 One folder is one route:
 
 ```
@@ -70,17 +72,14 @@ my-vault/
 `workspaces/fuji/daemon.ts` default-exports a daemon workspace module:
 
 ```ts
-import { defineDaemonWorkspace } from '@epicenter/workspace/daemon';
-
-export default defineDaemonWorkspace({
-	async open({ auth, projectDir, route }) {
-		// Open the long-lived local runtime.
-		// Return { collaboration, [Symbol.asyncDispose] }.
-	},
-});
+export { default } from '@epicenter/fuji/daemon';
 ```
 
 The folder name is the CLI route prefix. `workspaces/fuji/daemon.ts` exposes actions as `fuji.<action_key>`.
+
+`.epicenter/` is runtime state, not registration. The daemon writes its socket, logs, Yjs update logs, SQLite mirrors, and materialized files there after a route starts.
+
+An app-owned daemon module receives host capabilities from the daemon process: `projectDir`, `route`, deterministic `clientId`, `installationId`, `attachEncryption`, and `openWebSocket`. Fuji uses those capabilities to open the shared workspace, attach the Yjs log, attach sync, expose action handlers, and materialize entries into SQLite and Markdown.
 
 ## Scripting
 
