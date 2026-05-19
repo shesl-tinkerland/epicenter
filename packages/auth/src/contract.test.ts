@@ -198,7 +198,8 @@ test('refresh writes ONLY the grant section; localIdentity byte-identical', asyn
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
+			if (String(input).endsWith('/api/session'))
+				return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return oauthTokenResponse();
 			}
@@ -227,7 +228,8 @@ test('refresh keeps existing refresh token when token response omits rotation', 
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
+			if (String(input).endsWith('/api/session'))
+				return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return oauthTokenResponse({ refreshToken: null });
 			}
@@ -253,7 +255,8 @@ test('same-subject guard wipes the cell when /api/session returns a different su
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/session')) return json(apiSessionBody('bob'));
+			if (String(input).endsWith('/api/session'))
+				return json(apiSessionBody('bob'));
 			return new Response(null, { status: 204 });
 		},
 	});
@@ -274,7 +277,8 @@ test('same-subject /api/session preserves state when keyring is unchanged', asyn
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input) => {
-			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
+			if (String(input).endsWith('/api/session'))
+				return json(apiSessionBody('user-1'));
 			return new Response(null, { status: 204 });
 		},
 	});
@@ -467,7 +471,8 @@ test('signOut clears cell and network pause even when revoke fails', async () =>
 		persistedAuthStorage: setup.storage,
 		launcher: { startSignIn: async () => Ok(null) },
 		fetch: async (input, init) => {
-			if (String(input).endsWith('/api/session')) return json(apiSessionBody('user-1'));
+			if (String(input).endsWith('/api/session'))
+				return json(apiSessionBody('user-1'));
 			if (String(input).endsWith('/auth/oauth2/token')) {
 				return new Response(null, { status: 503 });
 			}

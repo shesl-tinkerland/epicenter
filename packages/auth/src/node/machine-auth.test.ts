@@ -8,11 +8,11 @@
  */
 
 import { afterEach, expect, test } from 'bun:test';
-import { expectOk } from '@epicenter/test-utils/result';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { expectOk } from '@epicenter/test-utils/result';
 import type { PersistedAuth } from '../auth-types.js';
 import type { AuthFetch } from '../create-oauth-app-auth.js';
 import {
@@ -475,7 +475,9 @@ test('createMachineAuthClient loads file and attaches Bearer after gate', async 
 	const response = await auth.fetch('/api/something');
 	expect(response.status).toBe(200);
 
-	const sessionIndex = recorded.findIndex((r) => r.url.endsWith('/api/session'));
+	const sessionIndex = recorded.findIndex((r) =>
+		r.url.endsWith('/api/session'),
+	);
 	const somethingIndex = recorded.findIndex((r) =>
 		r.url.endsWith('/api/something'),
 	);
