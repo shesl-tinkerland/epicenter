@@ -592,3 +592,34 @@ Best final invariant:
   one session projection call proves the auth cell and returns the local identity needed to open the workspace.
 ```
 
+## Review
+
+**Implemented**: commit `2b39fb06f` on `codex/consolidate-open-threads`, 21 files.
+
+**Shape landed exactly as designed.** `GET /api/session` is the sole session projection route; no alias, no split. `ApiSessionResponse` is the canonical contract type. Cookie OR bearer behavior through `requireUser` is unchanged; bearer callers still require `workspaces:open`. `accessTokenExpiresAt` JSDoc now documents epoch milliseconds and explicit "transport refresh hint, never to authorize a request" semantics.
+
+**Verification**:
+
+```txt
+bun test packages/auth/src/contract.test.ts             18 pass
+bun test packages/auth/src/node/machine-auth.test.ts    12 pass
+bun test apps/api/src/api-session.test.ts                4 pass
+bun test apps/api/src/auth/resource-boundary.test.ts    11 pass
+bun test apps/api/src/auth/oauth-metadata.test.ts        3 pass
+
+bun run typecheck (packages/auth, packages/auth-svelte, apps/api)
+                                                         0 errors
+```
+
+**Straggler audit**: `Explore` and `code-reviewer` agents independently confirmed no live `/api/me`, `ApiMeResponse`, `callApiMe`, `fetchApiMe`, `apiMe*`, or `api-me` references remain in `apps/`, `packages/`, `docs/`, or `.agents/`.
+
+**Intentional carve-outs**:
+
+- `packages/cli/src/commands/auth.ts:11` keeps the literal historical spec filename `specs/20260514T200000-api-me-three-field-token-bundle.md`. Preserved as decision trail per Phase 4.4.
+- Older specs under `specs/` retain `/api/me` mentions where they document the prior framing. Not rewritten.
+
+**Deviations from plan**: none. Implementation matched the rename map exactly, plus one stale-doc fix in `docs/encryption.md` that referenced a long-removed `resolveRequestWorkspaceIdentity` helper.
+
+**Follow-ups**: none required by this spec.
+
+
