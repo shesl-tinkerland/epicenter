@@ -1,6 +1,6 @@
 import type { Result } from 'wellcrafted/result';
 import type { AuthError } from './auth-errors.js';
-import type { SubjectIdentity } from './auth-types.js';
+import type { LocalIdentity } from './auth-types.js';
 
 /**
  * Current auth state for local-first workspace clients.
@@ -24,7 +24,7 @@ export type AuthState =
 			 * local data. Do not treat it as the user's profile; account UI should
 			 * fetch display data separately.
 			 */
-			localIdentity: SubjectIdentity;
+			localIdentity: LocalIdentity;
 	  }
 	| {
 			status: 'reauth-required';
@@ -34,7 +34,7 @@ export type AuthState =
 			 * Reauth is required for server access, but local workspace data can still
 			 * open with this owner label and keyring.
 			 */
-			localIdentity: SubjectIdentity;
+			localIdentity: LocalIdentity;
 	  };
 
 export type AuthClient = {

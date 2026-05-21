@@ -2,15 +2,15 @@ import type { AuthUser } from '@epicenter/auth';
 
 const ROUTE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
-export type AuthorizedWorkspaceAppDoc = {
+export type AuthorizedWorkspaceSyncDoc = {
 	workspaceId: string;
 	appId: string;
 	docId: string;
 	roomName: string;
-	resourceName: string;
+	syncDocResourceName: string;
 };
 
-type ResolveAuthorizedWorkspaceAppDocInput = {
+type ResolveAuthorizedWorkspaceSyncDocInput = {
 	user: AuthUser;
 	workspaceId: string | undefined;
 	appId: string | undefined;
@@ -21,18 +21,18 @@ type ResolveAuthorizedWorkspaceAppDocInput = {
 	}) => Promise<boolean>;
 };
 
-type ResolveAuthorizedWorkspaceAppDocResult =
-	| { data: AuthorizedWorkspaceAppDoc; error?: never }
+type ResolveAuthorizedWorkspaceSyncDocResult =
+	| { data: AuthorizedWorkspaceSyncDoc; error?: never }
 	| {
 			data?: never;
 			error: {
-				name: 'InvalidWorkspaceAppDoc' | 'WorkspaceForbidden';
+				name: 'InvalidWorkspaceSyncDoc' | 'WorkspaceForbidden';
 				message: string;
 				status: 400 | 403;
 			};
 	  };
 
-export function buildWorkspaceAppDocRoomName(params: {
+export function buildWorkspaceSyncDocRoomName(params: {
 	workspaceId: string;
 	appId: string;
 	docId: string;
@@ -48,13 +48,13 @@ export function buildWorkspaceAppDocRoomName(params: {
 	].join(':');
 }
 
-export async function resolveAuthorizedWorkspaceAppDoc({
+export async function resolveAuthorizedWorkspaceSyncDoc({
 	user,
 	workspaceId,
 	appId,
 	docId,
 	checkWorkspaceMembership,
-}: ResolveAuthorizedWorkspaceAppDocInput): Promise<ResolveAuthorizedWorkspaceAppDocResult> {
+}: ResolveAuthorizedWorkspaceSyncDocInput): Promise<ResolveAuthorizedWorkspaceSyncDocResult> {
 	if (!isValidRouteId(workspaceId)) {
 		return invalid('workspaceId');
 	}
@@ -79,7 +79,7 @@ export async function resolveAuthorizedWorkspaceAppDoc({
 		};
 	}
 
-	const roomName = buildWorkspaceAppDocRoomName({
+	const roomName = buildWorkspaceSyncDocRoomName({
 		workspaceId,
 		appId,
 		docId,
@@ -91,7 +91,7 @@ export async function resolveAuthorizedWorkspaceAppDoc({
 			appId,
 			docId,
 			roomName,
-			resourceName: `${workspaceId}/${appId}/${docId}`,
+			syncDocResourceName: `${workspaceId}/${appId}/${docId}`,
 		},
 	};
 }
@@ -103,9 +103,9 @@ function isValidRouteId(value: string | undefined): value is string {
 function invalid(param: 'workspaceId' | 'appId' | 'docId') {
 	return {
 		error: {
-			name: 'InvalidWorkspaceAppDoc',
+			name: 'InvalidWorkspaceSyncDoc',
 			message: `Invalid ${param}`,
 			status: 400,
 		},
-	} satisfies ResolveAuthorizedWorkspaceAppDocResult;
+	} satisfies ResolveAuthorizedWorkspaceSyncDocResult;
 }

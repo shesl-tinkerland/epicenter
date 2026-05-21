@@ -11,10 +11,10 @@
  */
 
 import { expect, test } from 'bun:test';
-import type { AuthState, SubjectIdentity } from '@epicenter/auth';
+import type { AuthState, LocalIdentity } from '@epicenter/auth';
 import { resolveDefaultWorkspaceId } from './default-workspace.js';
 
-const localIdentity: SubjectIdentity = {
+const localIdentity: LocalIdentity = {
 	subject: 'user_1',
 	keyring: [
 		{

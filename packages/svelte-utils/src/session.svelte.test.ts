@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import type { AuthClient, AuthState, SubjectIdentity } from '@epicenter/auth';
+import type { AuthClient, AuthState, LocalIdentity } from '@epicenter/auth';
 import { Ok } from 'wellcrafted/result';
 import { createSession } from './session.svelte.js';
 
 (globalThis as unknown as { $state: <T>(value: T) => T }).$state = (value) =>
 	value;
 
-const localIdentity = (subject: string): SubjectIdentity => ({
+const localIdentity = (subject: string): LocalIdentity => ({
 	subject,
 	keyring: [
 		{

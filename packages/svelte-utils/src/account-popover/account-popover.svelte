@@ -75,14 +75,14 @@
 	let signInError = $state<string | null>(null);
 	let forgettingDevice = $state(false);
 	const isSignedIn = $derived(auth.state.status === 'signed-in');
-	const profileSubject = $derived(
+	const accountCacheKey = $derived(
 		auth.state.status === 'signed-out'
 			? null
 			: auth.state.localIdentity.subject,
 	);
 	const profile = createQuery(
 		() => ({
-			queryKey: ['account-profile', profileSubject],
+			queryKey: ['account-profile', accountCacheKey],
 			queryFn: async (): Promise<AccountProfile> => {
 				const response = await auth.fetch('/api/session');
 				if (!response.ok) {

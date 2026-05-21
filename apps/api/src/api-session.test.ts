@@ -3,7 +3,7 @@
  *
  * The session projection endpoint is the single Epicenter session surface
  * clients fetch at sign-in and at cold-boot when online. It returns
- * { user: AuthUser, localIdentity: SubjectIdentity }; unauthenticated
+ * { user: AuthUser, localIdentity: LocalIdentity }; unauthenticated
  * bearer callers get RFC 6750-shaped errors via
  * createOAuthUnauthorizedResourceResponse.
  *

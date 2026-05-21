@@ -44,21 +44,21 @@ export type OAuthTokenGrant = typeof OAuthTokenGrant.infer;
  *
  * `subject` is the server-issued owner label for local data. Today it is the
  * Better Auth `user.id`. It is not a profile record, email address, or display
- * user. Future servers may choose a scoped value, such as `issuer:userId` or
- * `tenant:userId`, without changing this client shape.
+ * user. Future servers may choose an issuer-scoped value without changing this
+ * client shape.
  *
  * Workspace code calls this same value `ownerId` once it is used to name
  * browser-local Yjs storage and BroadcastChannel channels. Auth names the value
  * by where it comes from: a server subject. Workspace names the value by what
  * it owns locally: workspace data.
  */
-export const SubjectIdentity = type({
+export const LocalIdentity = type({
 	'+': 'delete',
 	subject: 'string',
 	keyring: SubjectKeyring,
 });
 
-export type SubjectIdentity = typeof SubjectIdentity.infer;
+export type LocalIdentity = typeof LocalIdentity.infer;
 
 /**
  * The single persisted auth cell. Two clearly-labeled sections.
@@ -80,7 +80,7 @@ export const PersistedAuth = type({
 	 * offline. The grant lets the app call the server; `localIdentity` lets the
 	 * app select and decrypt this user's local workspace data.
 	 */
-	localIdentity: SubjectIdentity,
+	localIdentity: LocalIdentity,
 });
 
 export type PersistedAuth = typeof PersistedAuth.infer;
@@ -104,7 +104,7 @@ export const ApiSessionResponse = type({
 	 * cached into `PersistedAuth.localIdentity` so workspace boot and decryption
 	 * do not depend on a live network request.
 	 */
-	localIdentity: SubjectIdentity,
+	localIdentity: LocalIdentity,
 });
 
 export type ApiSessionResponse = typeof ApiSessionResponse.infer;

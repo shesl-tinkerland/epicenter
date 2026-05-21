@@ -1,5 +1,5 @@
 /**
- * Workspace App Doc Sync Boundary Tests
+ * Workspace Sync Doc Boundary Tests
  *
  * Verifies the product-shaped Cloud sync target resolver. The Hono route owns
  * Better Auth organization membership, validates public route ids, and passes
@@ -16,9 +16,9 @@
 import { expect, test } from 'bun:test';
 import type { AuthUser } from '@epicenter/auth';
 import {
-	buildWorkspaceAppDocRoomName,
-	resolveAuthorizedWorkspaceAppDoc,
-} from './workspace-app-doc-sync.js';
+	buildWorkspaceSyncDocRoomName,
+	resolveAuthorizedWorkspaceSyncDoc,
+} from './workspace-sync-doc.js';
 
 const user = {
 	id: 'user_1',
@@ -43,7 +43,7 @@ test('resolver rejects non-members before returning a room name', async () => {
 		member: false,
 	});
 
-	const result = await resolveAuthorizedWorkspaceAppDoc({
+	const result = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'whispering',
@@ -62,10 +62,10 @@ test('resolver rejects non-members before returning a room name', async () => {
 	]);
 });
 
-test('resolver accepts members and builds the workspace app doc room name', async () => {
+test('resolver accepts members and builds the workspace sync doc room name', async () => {
 	const { checkWorkspaceMembership } = setup({ member: true });
 
-	const result = await resolveAuthorizedWorkspaceAppDoc({
+	const result = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'whispering',
@@ -79,21 +79,21 @@ test('resolver accepts members and builds the workspace app doc room name', asyn
 		appId: 'whispering',
 		docId: 'root',
 		roomName: 'v1:workspace:workspace_1:app:whispering:doc:root',
-		resourceName: 'workspace_1/whispering/root',
+		syncDocResourceName: 'workspace_1/whispering/root',
 	});
 });
 
 test('resolver treats root as a normal valid doc id', async () => {
 	const { checkWorkspaceMembership } = setup();
 
-	const root = await resolveAuthorizedWorkspaceAppDoc({
+	const root = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'whispering',
 		docId: 'root',
 		checkWorkspaceMembership,
 	});
-	const child = await resolveAuthorizedWorkspaceAppDoc({
+	const child = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'whispering',
@@ -114,21 +114,21 @@ test('resolver treats root as a normal valid doc id', async () => {
 test('resolver rejects invalid workspaceId, appId, and docId before membership checks', async () => {
 	const { checkWorkspaceMembership, membershipChecks } = setup();
 
-	const invalidWorkspace = await resolveAuthorizedWorkspaceAppDoc({
+	const invalidWorkspace = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'bad/workspace',
 		appId: 'whispering',
 		docId: 'root',
 		checkWorkspaceMembership,
 	});
-	const invalidApp = await resolveAuthorizedWorkspaceAppDoc({
+	const invalidApp = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'bad/app',
 		docId: 'root',
 		checkWorkspaceMembership,
 	});
-	const invalidDoc = await resolveAuthorizedWorkspaceAppDoc({
+	const invalidDoc = await resolveAuthorizedWorkspaceSyncDoc({
 		user,
 		workspaceId: 'workspace_1',
 		appId: 'whispering',
@@ -137,17 +137,17 @@ test('resolver rejects invalid workspaceId, appId, and docId before membership c
 	});
 
 	expect(invalidWorkspace.error).toMatchObject({
-		name: 'InvalidWorkspaceAppDoc',
+		name: 'InvalidWorkspaceSyncDoc',
 		message: 'Invalid workspaceId',
 		status: 400,
 	});
 	expect(invalidApp.error).toMatchObject({
-		name: 'InvalidWorkspaceAppDoc',
+		name: 'InvalidWorkspaceSyncDoc',
 		message: 'Invalid appId',
 		status: 400,
 	});
 	expect(invalidDoc.error).toMatchObject({
-		name: 'InvalidWorkspaceAppDoc',
+		name: 'InvalidWorkspaceSyncDoc',
 		message: 'Invalid docId',
 		status: 400,
 	});
@@ -155,12 +155,12 @@ test('resolver rejects invalid workspaceId, appId, and docId before membership c
 });
 
 test('room name builder encodes parts so delimiter collisions cannot merge identities', () => {
-	const first = buildWorkspaceAppDocRoomName({
+	const first = buildWorkspaceSyncDocRoomName({
 		workspaceId: 'a:b',
 		appId: 'c',
 		docId: 'd',
 	});
-	const second = buildWorkspaceAppDocRoomName({
+	const second = buildWorkspaceSyncDocRoomName({
 		workspaceId: 'a',
 		appId: 'b:c',
 		docId: 'd',

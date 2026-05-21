@@ -10,6 +10,6 @@ export {
 	type OAuthTokenGrant,
 	PersistedAuth,
 	type PersistedAuthStorage,
-	type SubjectIdentity,
+	type LocalIdentity,
 } from '@epicenter/auth';
 export { createOAuthAppAuth } from './create-auth.svelte.js';
