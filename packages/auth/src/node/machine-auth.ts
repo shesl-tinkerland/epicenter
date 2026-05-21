@@ -130,7 +130,11 @@ export async function loginWithOob({
 	}
 	const grant = grantResult.data;
 
-	const sessionResult = await fetchApiSession(baseURL, grant.accessToken, fetch);
+	const sessionResult = await fetchApiSession(
+		baseURL,
+		grant.accessToken,
+		fetch,
+	);
 	if (sessionResult.error) return Err(sessionResult.error);
 	const session = sessionResult.data;
 

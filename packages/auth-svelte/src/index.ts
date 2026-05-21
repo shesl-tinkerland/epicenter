@@ -6,10 +6,10 @@ export {
 	type AuthState,
 	AuthUser,
 	type CreateOAuthAppAuthConfig,
+	type LocalIdentity,
 	type OAuthSignInLauncher,
 	type OAuthTokenGrant,
 	PersistedAuth,
 	type PersistedAuthStorage,
-	type LocalIdentity,
 } from '@epicenter/auth';
 export { createOAuthAppAuth } from './create-auth.svelte.js';

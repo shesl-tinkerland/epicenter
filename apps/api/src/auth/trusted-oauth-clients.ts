@@ -11,7 +11,10 @@ let trustedOAuthClientsSeed: Promise<void> | null = null;
 type TrustedOAuthClientInput = {
 	[K in 'clientId' | 'name']-?: NonNullable<SchemaClient[K]>;
 } & {
-	type: Extract<NonNullable<SchemaClient['type']>, 'native' | 'user-agent-based'>;
+	type: Extract<
+		NonNullable<SchemaClient['type']>,
+		'native' | 'user-agent-based'
+	>;
 	redirectUris: readonly string[];
 };
 
@@ -58,7 +61,8 @@ export function projectTrustedOAuthClientToRow(
 		updatedAt: now,
 		name: client.name,
 		redirectUris: [...client.redirectUris],
-		tokenEndpointAuthMethod: TRUSTED_OAUTH_CLIENT_POLICY.tokenEndpointAuthMethod,
+		tokenEndpointAuthMethod:
+			TRUSTED_OAUTH_CLIENT_POLICY.tokenEndpointAuthMethod,
 		grantTypes: TRUSTED_OAUTH_CLIENT_POLICY.grantTypes,
 		responseTypes: TRUSTED_OAUTH_CLIENT_POLICY.responseTypes,
 		public: TRUSTED_OAUTH_CLIENT_POLICY.public,
