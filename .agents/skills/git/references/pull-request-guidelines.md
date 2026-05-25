@@ -602,8 +602,8 @@ The old encryption system had five moving parts to answer one question: does thi
 ```typescript
 // Before — 3 steps, async, stateful
 const ydoc = new Y.Doc({ guid: id });
-const encryption = attachEncryption(ydoc, { encryptionKeys });
-const tables = encryption.attachTables(defs);
+const encryption = createLegacyEncryption(ydoc, { encryptionKeys });
+const tables = encryption.attachLegacyTables(defs);
 
 await encryption.unlock(keys);
 ```
@@ -625,7 +625,7 @@ The encrypted Y.Map wrapper no longer maintains a dual-cache: it encrypts on wri
 
 ```
 Before:
-  attachEncryption(ydoc, { encryptionKeys })
+  createLegacyEncryption(ydoc, { encryptionKeys })
     ├── encryption-runtime.ts (state machine)
     ├── user-key-store.ts (IndexedDB persistence)
     └── y-keyvalue-lww-encrypted.ts (dual-cache: encrypted + decrypted)

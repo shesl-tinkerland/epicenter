@@ -1,6 +1,6 @@
 ---
 name: workspace-app-layout
-description: 'File layout for workspace-backed apps under `apps/*`: iso doc factory (`index.ts`), environment factories (`browser.ts`, `extension.ts`, `tauri.ts`), daemon and script bindings, and the auth/session singleton split. Use when creating a new app, adding platform-specific imports, placing `daemon.ts` or `script.ts`, choosing between auth-gated (Shape A) vs module-singleton (Shape B), or wiring `createSession`/`open<App>`.'
+description: 'File layout for workspace-backed apps under `apps/*`: shared workspace definitions, environment factories (`browser.ts`, `extension.ts`, `tauri.ts`), daemon bindings, and the auth/session singleton split. Use when creating a new app, adding platform-specific imports, placing `daemon.ts`, choosing between auth-gated (Shape A) vs module-singleton (Shape B), or wiring `createSession`/`open<App>`.'
 metadata:
   author: epicenter
   version: '4.0'
@@ -16,29 +16,27 @@ shapes; pick by whether the app gates UI on signed-in identity.
 ```txt
 apps/<app>/src/lib/
 |- auth.ts                          createCookieAuth(), exports `auth`
-`- session.svelte.ts                singleton: createSession + HMR + getSignedInSession()
+`- session.svelte.ts                singleton: createSession + HMR + signed-in gating
 apps/<app>/src/routes/(signed-in)/<app>/
-|- index.ts                         iso doc factory: open<App>Doc({ encryptionKeys })
-|- browser.ts                       browser factory: open<App>({ userId, peer, bearerToken, encryptionKeys })
+|- workspace.ts                     schema, IDs, pure action factories
+|- browser.ts                       browser factory: open<App>Browser({ signedIn, deviceId })
 |- daemon.ts                        long-lived daemon factory (cli-side)
-|- script.ts                        one-shot script factory (cli-side)
 `- integration.test.ts
 ```
 
 No `client.ts`. The singleton lives in `session.svelte.ts`, where
-`createSession({ auth, build })` owns the workspace lifecycle. The iso and
-browser factories sit beside the signed-in routes because the app isn't a
-running thing until identity exists.
+`createSession({ auth, build })` owns the workspace lifecycle. The shared
+contract and browser factory sit beside the signed-in routes because the app
+isn't a running thing until identity exists.
 
 **Shape B**: module-level singleton apps (opensidian, tab-manager, whispering):
 
 ```txt
 apps/<app>/src/lib/<app>/
-|- index.ts                         iso doc factory
+|- index.ts                         schema, IDs, pure action factories
 |- browser.ts | extension.ts | tauri.ts   env binding (browser / chrome ext / Tauri)
 |- client.ts                        singleton: auth wait + module-level open<App>(...)
 |- daemon.ts                        long-lived daemon factory (if applicable)
-|- script.ts                        one-shot script factory (if applicable)
 `- integration.test.ts
 ```
 
@@ -50,32 +48,30 @@ Opensidian and tab-manager are scheduled to migrate to shape A
 then, do not move their singleton during unrelated changes; review churn
 isn't worth it.
 
-For both shapes, `index.ts`, `browser.ts`, `daemon.ts`, and `script.ts` stay
-pure construction surfaces. Side effects (auth subscriptions, HMR, persisted
+For both shapes, `index.ts` / `workspace.ts`, `browser.ts`, and `daemon.ts`
+stay construction surfaces. Side effects (auth subscriptions, HMR, persisted
 state, network) live only in the singleton (`session.svelte.ts` for shape A,
-`client.ts` for shape B).
+`client.ts` for shape B) or the runtime attachments they explicitly compose.
 
 ## Layers
 
 | File | Shape | Job | Imports | Returns |
 | --- | --- | --- | --- | --- |
-| `index.ts` or `core.ts` | A + B | Isomorphic doc factory | Workspace core, schemas, pure action factories | `ydoc`, tables, kv, encryption, actions, batch, dispose |
-| `browser.ts` | A + B | Browser factory | Iso factory plus IndexedDB, BroadcastChannel, sync, browser caches | Doc bundle plus browser resources |
-| `extension.ts` / `tauri.ts` | B | Env binding for non-web runtimes | Iso factory plus chrome.storage / Tauri APIs | Doc bundle plus runtime resources |
-| `daemon.ts` | A + B | Long-lived daemon factory | Iso factory plus `attachYjsLog`, `attachSync`, materializers | Doc bundle plus writer persistence and sync |
-| `script.ts` | A + B | One-shot script factory | Iso factory plus `attachYjsLogReader`, `attachSync` | Doc bundle plus readonly warm hydrate and sync |
+| `index.ts`, `workspace.ts`, or `core.ts` | A + B | Shared workspace contract | Workspace core, schemas, pure action factories | IDs, table/KV definitions, action factories |
+| `browser.ts` | A + B | Browser factory | Shared contract plus `attachEncryption`, `attachLocalStorage`, `openCollaboration`, browser caches | Doc bundle plus browser resources |
+| `extension.ts` / `tauri.ts` | B | Env binding for non-web runtimes | Shared contract plus chrome.storage / Tauri APIs | Doc bundle plus runtime resources |
+| `daemon.ts` | A + B | Long-lived daemon factory | Shared contract plus `attachEncryption`, materializers, `attachDaemonInfrastructure` | `DaemonRuntime` with writer persistence and sync |
 | `auth.ts` | A | Auth client construction | `createCookieAuth` (or `createBearerAuth`) | `auth` |
 | `session.svelte.ts` | A | App singleton + lifecycle | `createSession` from `@epicenter/svelte`, env factory, auth | `session`, `InferSignedIn`, module-level `getSignedInSession()` |
 | `client.ts` | B | App singleton + auth wait | One env factory plus auth/session lifecycle | `auth` plus a running app singleton; module-level `await session.whenReady` |
 
-Daemon and script factories live in the same directory as the iso/browser
-factories regardless of shape. Project configs import daemon modules and list
-them in `routes`; script entry points import script factories directly.
+Daemon factories live beside the shared contract or app binding regardless of
+shape. Project configs import daemon modules and list them in `routes`.
 
-## Iso Factory
+## Shared Workspace Factory
 
-The iso factory accepts an optional `clientID` so daemon and script peers can
-use stable Yjs identities.
+When an app keeps an isomorphic opener, it accepts an optional `clientID` so
+daemon peers can use stable Yjs identities.
 
 ```ts
 import type { Keyring } from '@epicenter/encryption';
@@ -107,148 +103,138 @@ export function openFuji({
 
 Rules:
 
-- Keep the iso factory free of `node:*`, `bun:*`, `chrome.*`, Tauri APIs,
-  `y-indexeddb`, `BroadcastChannel`, and runtime singletons.
-- Use relative imports for schemas when daemon or script files will import the
-  factory outside Vite alias resolution.
-- Put pure actions in the iso factory when they depend only on tables.
+- Keep the shared workspace factory free of `node:*`, `bun:*`, `chrome.*`,
+  Tauri APIs, `y-indexeddb`, `BroadcastChannel`, and runtime singletons.
+- Use relative imports for schemas when daemon files will import the factory
+  outside Vite alias resolution.
+- Put pure actions in the shared workspace factory when they depend only on
+  tables.
 - Keep env-bound actions in the env factory when they need filesystem, SQLite,
   shell, browser persistence, or other runtime state. Opensidian actions stay
   extracted in `actions.ts`.
 
 ## Browser Factory
 
-Browser factories hydrate local IndexedDB first and then attach sync with the
-current public remote-action API.
+Browser factories mount encrypted stores, encrypted local storage, and
+collaboration with the `SignedIn` payload from `createSession`.
 
 ```ts
-export function openFuji({
-	userId,
-	peer,
-	bearerToken,
-	encryptionKeys,
+export function openFujiBrowser({
+	signedIn,
+	deviceId,
 }: {
-	userId: string;
-	peer: PeerIdentity;
-	bearerToken?: () => string | null;
-	encryptionKeys: () => EncryptionKeys;
+	signedIn: SignedIn;
+	deviceId: DeviceId;
 }) {
-	const doc = openFujiDoc({ encryptionKeys });
-	const idb = doc.encryption.attachIndexedDb(doc.ydoc, { userId });
-	attachOwnedBroadcastChannel(doc.ydoc, { userId });
-	const awareness = attachAwareness(doc.ydoc, {
-		schema: { peer: PeerIdentity },
-		initial: { peer },
+	const ydoc = new Y.Doc({ guid: FUJI_ID, gc: true });
+	const { tables, kv } = attachEncryption(ydoc, {
+		keyring: signedIn.keyring,
+		tables: fujiTables,
+		kv: {},
 	});
-	const sync = attachSync(doc, {
-		url: roomWsUrl(APP_URLS.API, doc.ydoc.guid),
-		waitFor: idb,
-		bearerToken,
-		awareness,
+	const actions = createFujiActions(tables);
+	const idb = attachLocalStorage(ydoc, {
+		server: signedIn.server,
+		ownerId: signedIn.ownerId,
+		keyring: signedIn.keyring,
 	});
-	return { ...doc, idb, awareness, sync };
+	const collaboration = openCollaboration(ydoc, {
+		url: roomWsUrl({
+			baseURL: signedIn.baseURL,
+			ownerId: signedIn.ownerId,
+			guid: ydoc.guid,
+			deviceId,
+		}),
+		openWebSocket: signedIn.openWebSocket,
+		onReconnectSignal: signedIn.onReconnectSignal,
+		waitFor: idb.whenLoaded,
+		actions,
+	});
+	return { ydoc, tables, kv, actions, idb, collaboration };
 }
 ```
 
-Do not restore `sync.peer()` or `describePeer()`. Remote calls use
-`createRemoteActions`; manifest fetches use `describeRemoteActions`.
+Do not restore `sync.peer()` or `describePeer()`. Remote calls use the
+collaboration dispatch and presence surfaces.
 
 ## Daemon Factory
 
 Daemon factories own the writer side of local persistence.
 
 ```ts
-export function openFuji({
-	bearerToken,
-	encryptionKeys,
-	device,
-	projectDir = findProjectRoot(),
-	clientID = hashClientId(projectDir),
-	apiUrl = EPICENTER_API_URL,
-}: {
-	bearerToken?: () => string | null;
-	encryptionKeys: () => EncryptionKeys;
-	device: DeviceDescriptor;
-	projectDir?: ProjectDir;
-	clientID?: number;
-	apiUrl?: string;
-}) {
-	const doc = openFujiDoc({ clientID, encryptionKeys });
-	const persistence = attachYjsLog(doc.ydoc, {
-		filePath: yjsPath(projectDir, doc.ydoc.guid),
+export function openFujiDaemon({
+	projectDir,
+	route,
+	yDocClientId,
+	deviceId,
+	ownerId,
+	keyring,
+	openWebSocket,
+	onReconnectSignal,
+}: DaemonWorkspaceContext) {
+	const ydoc = new Y.Doc({ guid: FUJI_ID, gc: true });
+	ydoc.clientID = yDocClientId;
+	const { tables } = attachEncryption(ydoc, {
+		keyring,
+		tables: fujiTables,
+		kv: {},
 	});
-	const sync = attachSync(doc, {
-		url: roomWsUrl(apiUrl, doc.ydoc.guid),
-		bearerToken,
+	const actions = createFujiActions(tables);
+
+	attachBunSqliteMaterializer(ydoc, {
+		filePath: sqlitePath(projectDir, ydoc.guid),
+		log: createLogger(`${route}-sqlite`),
+		tables,
 	});
-	return { ...doc, persistence, sync };
+	attachMarkdownMaterializer(ydoc, {
+		dir: markdownPath(projectDir, ydoc.guid),
+		tables,
+		perTable: { entries: { filename: slugFilename('title') } },
+	});
+
+	return attachDaemonInfrastructure(ydoc, {
+		projectDir,
+		ownerId,
+		deviceId,
+		openWebSocket,
+		onReconnectSignal,
+		actions,
+	});
 }
 ```
-
-Defaults:
-
-- `projectDir = findProjectRoot()`
-- `clientID = hashClientId(projectDir)`
-- `apiUrl = EPICENTER_API_URL`
 
 The public lifecycle command is `epicenter daemon up`. Do not document daemon
 factories as `epicenter serve` consumers.
 
-Register daemon modules from the project root:
+Single-workspace projects default-export `defineWorkspace({ open })`. Multi-route
+projects register daemon modules from the project root:
 
 ```ts
 import { defineConfig } from '@epicenter/workspace';
 import fuji from './workspaces/fuji/daemon.ts';
 
 export default defineConfig({
-	routes: [fuji],
+	daemon: {
+		routes: { fuji },
+	},
 });
 ```
 
 `epicenter.config.ts` is the project marker and route registry. `.epicenter/`
 is project-local data, not a discovery marker.
 
-## Script Factory
+## Scripts
 
-Script factories read the daemon's local Yjs log and write through sync.
-
-```ts
-export function openFuji({
-	bearerToken,
-	encryptionKeys,
-	projectDir = findProjectRoot(),
-	clientID = hashClientId(Bun.main),
-	apiUrl = EPICENTER_API_URL,
-}: {
-	bearerToken?: () => string | null;
-	encryptionKeys: () => EncryptionKeys;
-	projectDir?: ProjectDir;
-	clientID?: number;
-	apiUrl?: string;
-}) {
-	const doc = openFujiDoc({ clientID, encryptionKeys });
-	const persistence = attachYjsLogReader(doc.ydoc, {
-		filePath: yjsPath(projectDir, doc.ydoc.guid),
-	});
-	const sync = attachSync(doc, {
-		url: roomWsUrl(apiUrl, doc.ydoc.guid),
-		bearerToken,
-	});
-	return { ...doc, persistence, sync };
-}
-```
-
-Defaults:
-
-- `projectDir = findProjectRoot()`
-- `clientID = hashClientId(Bun.main)`
-- `apiUrl = EPICENTER_API_URL`
+There is no `script.ts` recipe to copy. Scripts usually skip Yjs entirely:
+read materialized files or SQLite, then call daemon actions through
+`connectDaemonActions`. See `docs/scripting.md` before adding script-specific
+workspace construction.
 
 ## Package Exports
 
-Apps that expose daemon and script factories should export them explicitly.
-Point each subpath at the file's actual owner. Signed-in-owned apps may export
-from `src/routes/(signed-in)/...`; client-singleton apps usually export from
+Apps that expose daemon factories should export them explicitly. Point each
+subpath at the file's actual owner. Signed-in-owned apps may export from
+`src/routes/(signed-in)/...`; client-singleton apps usually export from
 `src/lib/...`.
 
 ```json
@@ -257,8 +243,7 @@ from `src/routes/(signed-in)/...`; client-singleton apps usually export from
 		"./workspace": "./src/routes/(signed-in)/fuji/workspace.ts",
 		"./openFuji": "./src/routes/(signed-in)/fuji/index.ts",
 		"./browser": "./src/routes/(signed-in)/fuji/browser.ts",
-		"./daemon": "./src/routes/(signed-in)/fuji/daemon.ts",
-		"./script": "./src/routes/(signed-in)/fuji/script.ts"
+		"./daemon": "./src/routes/(signed-in)/fuji/daemon.ts"
 	}
 }
 ```
@@ -269,20 +254,21 @@ Do not export a running `client.ts` singleton from package exports.
 
 ## Tests
 
-Every daemon/script pair should have a handoff test:
+Every daemon should have an infrastructure test when it adds custom storage,
+materializers, or actions:
 
 ```txt
 daemon opens projectDir
 daemon writes rows
 daemon disposes and closes writer persistence
-script opens the same projectDir
-script observes rows from attachYjsLogReader replay
+fresh daemon opens the same projectDir
+fresh daemon observes rows from Yjs log replay and materializer hydration
 ```
 
 ## Anti-Patterns
 
 - Putting auth, `createPersistedState`, `auth.onStateChange`, or HMR disposal in
-  `browser.ts`, `daemon.ts`, or `script.ts`.
+  `browser.ts` or `daemon.ts`.
 - Importing `daemon.ts` from browser code.
 - Restoring `serve` as the public lifecycle command.
 - Restoring `sync.peer()` or `describePeer()` as the primary remote action API.

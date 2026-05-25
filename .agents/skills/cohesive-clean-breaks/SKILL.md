@@ -332,7 +332,9 @@ Prefer:
 ```ts
 export default defineConfig({
 	daemon: {
-		routes: [defineFujiDaemon()],
+		routes: {
+			fuji: defineFujiDaemon(),
+		},
 	},
 });
 ```
@@ -419,7 +421,9 @@ validated boundary.
 export const fuji = defineFujiDaemon();
 
 export default defineConfig({
-	routes: [fuji],
+	daemon: {
+		routes: { fuji },
+	},
 });
 ```
 
