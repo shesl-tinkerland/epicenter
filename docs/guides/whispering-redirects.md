@@ -17,8 +17,8 @@ Use permanent redirects for old public domains:
 | --- | --- |
 | `https://getwhispering.com/*` | `https://epicenter.so/whispering` |
 | `https://www.getwhispering.com/*` | `https://epicenter.so/whispering` |
-| `https://whispering.studio/*` | `https://epicenter.so/whispering` |
-| `https://www.whispering.studio/*` | `https://epicenter.so/whispering` |
+| `https://whispering.studio/*` | `https://whispering.epicenter.so` |
+| `https://www.whispering.studio/*` | `https://whispering.epicenter.so` |
 | `https://whispering.bradenwong.com/*` | `https://epicenter.so/whispering` |
 | `https://whispering.epicenterhq.com/*` | `https://whispering.epicenter.so` |
 

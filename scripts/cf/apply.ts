@@ -69,9 +69,9 @@ const ZONES: readonly ZoneConfig[] = [
 			{
 				ref: 'whispering_legacy_studio_to_epicenter',
 				description:
-					'Redirect legacy Whispering studio domain to Epicenter product page',
+					'Redirect legacy Whispering studio domain to Epicenter web app',
 				hosts: ['whispering.studio', 'www.whispering.studio'],
-				targetUrl: 'https://epicenter.so/whispering',
+				targetUrl: 'https://whispering.epicenter.so',
 				statusCode: 301,
 				preserveQueryString: false,
 			},
