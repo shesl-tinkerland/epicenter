@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "epicenter",
@@ -913,7 +912,7 @@
     "typescript": "^5.9.3",
     "virtua": "^0.48.5",
     "vite": "^7.2.4",
-    "wellcrafted": "^0.38.0",
+    "wellcrafted": "^0.39.0",
     "wrangler": "^4.71.0",
     "y-indexeddb": "^9.0.12",
     "y-protocols": "^1.0.7",
@@ -3789,7 +3788,7 @@
 
     "webpack-virtual-modules": ["webpack-virtual-modules@0.6.2", "", {}, "sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ=="],
 
-    "wellcrafted": ["wellcrafted@0.38.0", "", {}, "sha512-T6t5pKxlJxSeXG+ZiBW6BuciJVkEuKObQXDBjFTpxm7bRyVZa5Ig2ZvHL8jwrxnUlHk/7MOZEE93dv8B/QcJsg=="],
+    "wellcrafted": ["wellcrafted@0.39.0", "", {}, "sha512-Hs4C2hquokcamsGIOBTVET3WfkjzP69g7GxOgLXoNKcn3NxgMHheXqnRm2jQxPBAXu5T+nshSV9Zjljv5fAGHw=="],
 
     "whatwg-url": ["whatwg-url@5.0.0", "", { "dependencies": { "tr46": "~0.0.3", "webidl-conversions": "^3.0.0" } }, "sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw=="],
 

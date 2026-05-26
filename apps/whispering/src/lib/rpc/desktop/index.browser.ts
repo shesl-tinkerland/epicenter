@@ -22,7 +22,7 @@ import type * as Tauri from './index.tauri';
 export const desktopRpc = {
 	autostart: {
 		isEnabled: defineQuery({
-			queryKey: ['autostart', 'isEnabled'] as const,
+			queryKey: ['autostart', 'isEnabled'],
 			queryFn: unreachable,
 			initialData: false,
 		}),
@@ -43,7 +43,7 @@ export const desktopRpc = {
 	},
 	ffmpeg: {
 		checkFfmpegInstalled: defineQuery({
-			queryKey: ['ffmpeg.checkInstalled'] as const,
+			queryKey: ['ffmpeg.checkInstalled'],
 			queryFn: unreachable,
 		}),
 	},

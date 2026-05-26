@@ -5,7 +5,7 @@ import { WhisperingErr } from '$lib/result';
 
 export const ffmpeg = {
 	checkFfmpegInstalled: defineQuery({
-		queryKey: ['ffmpeg.checkInstalled'] as const,
+		queryKey: ['ffmpeg.checkInstalled'],
 		queryFn: async () => {
 			const { data, error } = await FfmpegServiceLive.checkInstalled();
 			if (error) {
