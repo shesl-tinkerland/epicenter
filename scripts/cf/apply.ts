@@ -1,25 +1,42 @@
 #!/usr/bin/env bun
 /**
- * Reconcile Cloudflare zone settings, DNSSEC, and email DNS across every
- * zone we own. Idempotent: reads current values, diffs, PATCHes only what
- * differs. Safe to re-run any time.
+ * Reconcile Cloudflare zone settings, DNSSEC, email DNS, and redirect rules
+ * across every zone we own. Idempotent: reads current values, diffs, writes
+ * only what differs. Safe to re-run any time.
  *
  *   bun run cf:plan   preview; exits 2 if drift detected (CI signal)
  *   bun run cf:apply  write changes
  *
- * Token: CLOUDFLARE_ZONE_TOKEN with scopes Zone:Read, Zone Settings:Edit,
- * DNS:Edit, and Single Redirect:Edit on all zones in the account. Create at
+ * Token: CLOUDFLARE_ZONE_TOKEN with zone-level scopes on all zones:
+ * Zone:Read, Zone Settings:Edit, DNS:Edit, Dynamic Redirect:Edit (older
+ * docs call this last one "Single Redirect"; same permission). Create at
  * https://dash.cloudflare.com/profile/api-tokens.
  *
  * Adding a zone: add the domain to `ZONES` below. Zones marked `lockdown`
  * get SPF `-all` + DMARC `p=reject` so they cannot be used to spoof mail;
  * zones marked `managed-externally` (today only epicenter.so via Google
- * Workspace) have their email DNS left alone.
+ * Workspace) have their email DNS left alone. Add a `redirects` field to
+ * a zone entry to manage Cloudflare Single Redirect rules for that zone.
  */
 
 import { APPS } from '@epicenter/constants/apps';
 
-const ZONES = [
+type RedirectConfig = {
+	ref: string;
+	description: string;
+	hosts: readonly string[];
+	targetUrl: string;
+	statusCode: number;
+	preserveQueryString: boolean;
+};
+
+type ZoneConfig = {
+	name: string;
+	email: 'managed-externally' | 'lockdown';
+	redirects?: readonly RedirectConfig[];
+};
+
+const ZONES: readonly ZoneConfig[] = [
 	{ name: 'epicenter.so', email: 'managed-externally' }, // Google Workspace
 	{ name: 'epicenter.sh', email: 'lockdown' },
 	{ name: 'epicenter.audio', email: 'lockdown' },
@@ -29,10 +46,38 @@ const ZONES = [
 	{ name: 'epicenter.md', email: 'lockdown' },
 	{ name: 'epicenter.social', email: 'lockdown' },
 	{ name: 'getepicenter.com', email: 'lockdown' },
-	{ name: 'getwhispering.com', email: 'lockdown' },
+	{
+		name: 'getwhispering.com',
+		email: 'lockdown',
+		redirects: [
+			{
+				ref: 'whispering_legacy_getwhispering_to_epicenter',
+				description:
+					'Redirect legacy Whispering domain to Epicenter product page',
+				hosts: ['getwhispering.com', 'www.getwhispering.com'],
+				targetUrl: 'https://epicenter.so/whispering',
+				statusCode: 301,
+				preserveQueryString: false,
+			},
+		],
+	},
 	{ name: 'opensidian.com', email: 'lockdown' },
-	{ name: 'whispering.studio', email: 'lockdown' },
-] as const;
+	{
+		name: 'whispering.studio',
+		email: 'lockdown',
+		redirects: [
+			{
+				ref: 'whispering_legacy_studio_to_epicenter',
+				description:
+					'Redirect legacy Whispering studio domain to Epicenter product page',
+				hosts: ['whispering.studio', 'www.whispering.studio'],
+				targetUrl: 'https://epicenter.so/whispering',
+				statusCode: 301,
+				preserveQueryString: false,
+			},
+		],
+	},
+];
 
 const ZONE_BASELINE = {
 	always_use_https: 'on',
@@ -51,42 +96,10 @@ const ZONE_BASELINE = {
 } as const;
 
 const REDIRECT_RULESET_PHASE = 'http_request_dynamic_redirect';
+// RFC 5737 documentation address. Cloudflare applies Single Redirects at the
+// proxy edge, so this IP is never actually contacted: it exists only to make
+// the hostname proxiable.
 const REDIRECT_PLACEHOLDER_IP = '192.0.2.1';
-
-const REDIRECTS = [
-	{
-		zone: 'getwhispering.com',
-		ref: 'whispering_legacy_getwhispering_to_epicenter',
-		description: 'Redirect legacy Whispering domain to Epicenter product page',
-		hosts: ['getwhispering.com', 'www.getwhispering.com'],
-		targetUrl: 'https://epicenter.so/whispering',
-		statusCode: 301,
-		preserveQueryString: false,
-	},
-	{
-		zone: 'whispering.studio',
-		ref: 'whispering_legacy_studio_to_epicenter',
-		description:
-			'Redirect legacy Whispering studio domain to Epicenter product page',
-		hosts: ['whispering.studio', 'www.whispering.studio'],
-		targetUrl: 'https://epicenter.so/whispering',
-		statusCode: 301,
-		preserveQueryString: false,
-	},
-] as const;
-
-function emailLockdownRecords(zone: string) {
-	return [
-		{ type: 'TXT', name: zone, content: 'v=spf1 -all', ttl: 3600 },
-		{
-			type: 'TXT',
-			name: `_dmarc.${zone}`,
-			content:
-				'v=DMARC1; p=reject; rua=mailto:postmaster@epicenter.so; aspf=s; adkim=s',
-			ttl: 3600,
-		},
-	];
-}
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
 const token = process.env.CLOUDFLARE_ZONE_TOKEN;
@@ -96,22 +109,27 @@ if (!token) {
 		'CLOUDFLARE_ZONE_TOKEN is not set. Create one at https://dash.cloudflare.com/profile/api-tokens',
 	);
 	console.error(
-		'Required scopes: Zone:Read, Zone Settings:Edit, DNS:Edit, Single Redirect:Edit (all zones).',
+		'Required zone-level scopes (all zones): Zone:Read, Zone Settings:Edit, DNS:Edit, Dynamic Redirect:Edit (sometimes labeled "Single Redirect" in older docs).',
 	);
 	process.exit(1);
 }
 
-class CloudflareError extends Error {
-	constructor(
-		message: string,
-		readonly status: number,
-	) {
-		super(message);
-		this.name = 'CloudflareError';
-	}
-}
+/**
+ * Cloudflare API envelope. Every response uses this shape; `result` is the
+ * endpoint-specific payload that callers cast via `as T`.
+ */
+type CfResponse = {
+	success: boolean;
+	result: unknown;
+	errors?: Array<{ code: number; message: string }>;
+};
 
-async function cf<T>(method: string, path: string, body?: unknown): Promise<T> {
+/**
+ * Bearer-authed JSON fetch against the Cloudflare API. Returns the raw
+ * envelope so callers can branch on status (e.g., treat 404 as "not yet
+ * created") before deciding whether the response is an error.
+ */
+async function cfRequest(method: string, path: string, body?: unknown) {
 	const res = await fetch(`${CF_API}${path}`, {
 		method,
 		headers: {
@@ -120,19 +138,40 @@ async function cf<T>(method: string, path: string, body?: unknown): Promise<T> {
 		},
 		body: body === undefined ? undefined : JSON.stringify(body),
 	});
-	const json = (await res.json()) as {
-		success: boolean;
-		result: T;
-		errors?: Array<{ code: number; message: string }>;
+	return {
+		status: res.status,
+		ok: res.ok,
+		json: (await res.json()) as CfResponse,
 	};
-	if (!res.ok || !json.success) {
-		const errs = json.errors?.map((e) => `[${e.code}] ${e.message}`).join('; ');
-		throw new CloudflareError(
-			`Cloudflare ${method} ${path} failed (${res.status}): ${errs ?? 'unknown error'}`,
-			res.status,
-		);
-	}
-	return json.result;
+}
+
+/**
+ * Throw a Cloudflare error with HTTP status and any Cloudflare error codes
+ * concatenated. Return type `never` lets callers use it as a terminator
+ * (`if (...) cfFail(...)`) without TypeScript thinking the value is still
+ * defined afterwards.
+ */
+function cfFail(
+	method: string,
+	path: string,
+	status: number,
+	json: CfResponse,
+): never {
+	const errs = json.errors?.map((e) => `[${e.code}] ${e.message}`).join('; ');
+	throw new Error(
+		`Cloudflare ${method} ${path} failed (${status}): ${errs ?? 'unknown error'}`,
+	);
+}
+
+/**
+ * Call Cloudflare and return the typed `result`. Throws on any non-success
+ * response (including 404). Use a direct `cfRequest` call if 404 is a
+ * legitimate "not created yet" signal instead of an error.
+ */
+async function cf<T>(method: string, path: string, body?: unknown): Promise<T> {
+	const { status, ok, json } = await cfRequest(method, path, body);
+	if (!ok || !json.success) cfFail(method, path, status, json);
+	return json.result as T;
 }
 
 // Cross-check: every APPS URL must live on a declared zone. Adding an app on
@@ -225,21 +264,30 @@ for (const zone of ZONES) {
 		if (dnssec.ds) dsRecords.push({ zone: zone.name, ds: dnssec.ds });
 	}
 
-	const redirects = REDIRECTS.filter((redirect) => redirect.zone === zone.name);
-	if (redirects.length > 0) {
-		for (const redirect of redirects) {
+	if (zone.redirects?.length) {
+		for (const redirect of zone.redirects) {
 			for (const host of redirect.hosts) {
 				await reconcileRedirectDnsRecord(zone.name, zoneId, host);
 			}
 		}
-		await reconcileRedirectRuleset(zoneId, redirects);
+		await reconcileRedirectRuleset(zoneId, zone.redirects);
 	}
 
 	if (zone.email !== 'lockdown') {
 		console.log('    skip    email DNS (managed externally)');
 		continue;
 	}
-	for (const want of emailLockdownRecords(zone.name)) {
+	const lockdownRecords = [
+		{ type: 'TXT', name: zone.name, content: 'v=spf1 -all', ttl: 3600 },
+		{
+			type: 'TXT',
+			name: `_dmarc.${zone.name}`,
+			content:
+				'v=DMARC1; p=reject; rua=mailto:postmaster@epicenter.so; aspf=s; adkim=s',
+			ttl: 3600,
+		},
+	];
+	for (const want of lockdownRecords) {
 		const existing = await cf<Array<{ id: string; content: string }>>(
 			'GET',
 			`/zones/${zoneId}/dns_records?type=TXT&name=${encodeURIComponent(want.name)}`,
@@ -316,6 +364,20 @@ function shortJson(v: unknown): string {
 	return s.length > 80 ? `${s.slice(0, 77)}...` : s;
 }
 
+/**
+ * Make sure `host` has a proxied DNS record so Cloudflare's redirect rules
+ * actually run. Three outcomes:
+ *
+ *   1. Any proxied A/AAAA/CNAME exists, leave it alone (someone else owns
+ *      the origin; redirect rules still apply on top).
+ *   2. Our placeholder A exists but isn't proxied, flip it.
+ *   3. No address record exists, create the placeholder. If a non-proxied
+ *      address record points somewhere else, warn instead of clobbering.
+ *
+ * TXT/MX/etc. records at the same name are intentionally ignored: they
+ * don't affect HTTP routing and coexist fine with a proxied A. Filtering
+ * them out is what fixes the "SPF blocks redirect setup" bug at the apex.
+ */
 async function reconcileRedirectDnsRecord(
 	zoneName: string,
 	zoneId: string,
@@ -324,19 +386,18 @@ async function reconcileRedirectDnsRecord(
 	const records = await cf<
 		Array<{ id: string; type: string; content: string; proxied?: boolean }>
 	>('GET', `/zones/${zoneId}/dns_records?name=${encodeURIComponent(host)}`);
-	const usable = records.find(
+	const addressRecords = records.filter(
 		(record) =>
-			(record.type === 'A' ||
-				record.type === 'AAAA' ||
-				record.type === 'CNAME') &&
-			record.proxied === true,
+			record.type === 'A' || record.type === 'AAAA' || record.type === 'CNAME',
 	);
+
+	const usable = addressRecords.find((record) => record.proxied === true);
 	if (usable) {
 		console.log(`    ok      redirect dns ${host}`);
 		return;
 	}
 
-	const placeholder = records.find(
+	const placeholder = addressRecords.find(
 		(record) =>
 			record.type === 'A' && record.content === REDIRECT_PLACEHOLDER_IP,
 	);
@@ -357,10 +418,13 @@ async function reconcileRedirectDnsRecord(
 		return;
 	}
 
-	if (records.length > 0) {
+	if (addressRecords.length > 0) {
 		drift++;
+		const summary = addressRecords
+			.map((r) => `${r.type} ${r.content} proxied=${r.proxied ?? false}`)
+			.join(', ');
 		console.log(
-			`    warn    redirect dns ${host}: existing non-proxied records block Cloudflare redirects. Review DNS before replacing them.`,
+			`    warn    redirect dns ${host}: conflicting address records [${summary}] block Cloudflare redirects. Reconcile in the dashboard before re-running.`,
 		);
 		return;
 	}
@@ -376,38 +440,64 @@ async function reconcileRedirectDnsRecord(
 	}
 }
 
-type RedirectConfig = (typeof REDIRECTS)[number];
-
-type RedirectRule = {
+// Cloudflare returns extra read-only fields on rules (`version`,
+// `last_updated`, `categories`, etc.) that get rejected if echoed back on
+// PUT. `ApiRule` lists only the fields this script reads or writes; unknown
+// fields are stripped via `projectRule` before we send the array.
+type ApiRule = {
 	id?: string;
 	ref?: string;
 	description?: string;
 	expression: string;
-	action: 'redirect';
-	action_parameters: {
-		from_value: {
-			target_url: { value: string };
-			status_code: number;
-			preserve_query_string: boolean;
-		};
-	};
+	action: string;
+	action_parameters?: unknown;
 	enabled: boolean;
 };
 
-type RedirectRuleset = {
+type ApiRuleset = {
 	id: string;
 	name: string;
-	kind: 'zone';
-	phase: typeof REDIRECT_RULESET_PHASE;
-	rules: RedirectRule[];
+	kind: string;
+	phase: string;
+	rules: ApiRule[];
 };
 
+/**
+ * Reconcile the zone-level Single Redirect ruleset against `redirects`.
+ *
+ * If no ruleset exists for the dynamic-redirect phase, POST a fresh one.
+ * Otherwise, identify our managed rules by `ref`, upsert ours, and pass
+ * unrelated rules through untouched so a dashboard-added rule is not
+ * clobbered. Every PUT/POST body is projected through `projectRule` to
+ * strip server-only fields that Cloudflare rejects on write.
+ */
 async function reconcileRedirectRuleset(
 	zoneId: string,
 	redirects: readonly RedirectConfig[],
 ) {
-	const existing = await getRedirectRuleset(zoneId);
-	const desiredRules = redirects.map(toRedirectRule);
+	// A 404 on the phase entrypoint means "no ruleset yet", not an error.
+	// Inline the optional fetch rather than ship a one-call-site helper.
+	const path = `/zones/${zoneId}/rulesets/phases/${REDIRECT_RULESET_PHASE}/entrypoint`;
+	const { status, ok, json } = await cfRequest('GET', path);
+	if (status !== 404 && (!ok || !json.success)) {
+		cfFail('GET', path, status, json);
+	}
+	const existing = status === 404 ? null : (json.result as ApiRuleset);
+
+	const desiredRules: ApiRule[] = redirects.map((redirect) => ({
+		ref: redirect.ref,
+		description: redirect.description,
+		expression: `(${redirect.hosts.map((h) => `http.host eq "${h}"`).join(' or ')})`,
+		action: 'redirect',
+		action_parameters: {
+			from_value: {
+				target_url: { value: redirect.targetUrl },
+				status_code: redirect.statusCode,
+				preserve_query_string: redirect.preserveQueryString,
+			},
+		},
+		enabled: true,
+	}));
 
 	if (!existing) {
 		drift++;
@@ -417,14 +507,16 @@ async function reconcileRedirectRuleset(
 				name: 'Redirect rules',
 				kind: 'zone',
 				phase: REDIRECT_RULESET_PHASE,
-				rules: desiredRules,
+				rules: desiredRules.map(projectRule),
 			});
 			console.log('    applied redirect ruleset');
 		}
 		return;
 	}
 
-	const rules = [...existing.rules];
+	// Preserve unrelated rules (anything we don't manage by ref): start from
+	// existing rules and upsert ours by ref.
+	const rules: ApiRule[] = [...existing.rules];
 	let changed = false;
 	for (const desired of desiredRules) {
 		const index = rules.findIndex((rule) => rule.ref === desired.ref);
@@ -435,17 +527,15 @@ async function reconcileRedirectRuleset(
 			continue;
 		}
 		const current = rules[index];
-		if (!current) {
-			throw new Error(`Missing redirect rule at index ${index}`);
-		}
-		const next = { ...desired, id: current.id };
-		if (!deepEqual(current, next)) {
-			changed = true;
-			rules[index] = next;
-			console.log(`    diff    redirect rule ${desired.ref}`);
-		} else {
+		if (!current) throw new Error(`Missing redirect rule at index ${index}`);
+		const merged: ApiRule = { ...desired, id: current.id };
+		if (deepEqual(projectRule(current), projectRule(merged))) {
 			console.log(`    ok      redirect rule ${desired.ref}`);
+			continue;
 		}
+		changed = true;
+		rules[index] = merged;
+		console.log(`    diff    redirect rule ${desired.ref}`);
 	}
 
 	if (!changed) return;
@@ -455,41 +545,32 @@ async function reconcileRedirectRuleset(
 			name: existing.name,
 			kind: existing.kind,
 			phase: existing.phase,
-			rules,
+			rules: rules.map(projectRule),
 		});
 		console.log('    applied redirect ruleset');
 	}
 }
 
-async function getRedirectRuleset(zoneId: string) {
-	try {
-		return await cf<RedirectRuleset>(
-			'GET',
-			`/zones/${zoneId}/rulesets/phases/${REDIRECT_RULESET_PHASE}/entrypoint`,
-		);
-	} catch (error) {
-		if (error instanceof CloudflareError && error.status === 404) return null;
-		throw error;
-	}
-}
-
-function toRedirectRule(redirect: RedirectConfig): RedirectRule {
+/**
+ * Single projection used both as the PUT body and as the comparison shape.
+ *
+ * Cloudflare returns extra read-only fields on rules (`version`,
+ * `last_updated`, `categories`, ...) that get rejected if echoed back on
+ * PUT, and that also make `deepEqual` against our locally-constructed
+ * rules report false drift. Both problems are solved by one projection.
+ *
+ * `id` flows through: Cloudflare uses it to match the existing rule on
+ * PUT, and it's always set on both sides of a comparison (the API returns
+ * it on `current`, and we copy it via `{ ...desired, id: current.id }`).
+ */
+function projectRule(rule: ApiRule): ApiRule {
 	return {
-		ref: redirect.ref,
-		description: redirect.description,
-		expression: hostExpression(redirect.hosts),
-		action: 'redirect',
-		action_parameters: {
-			from_value: {
-				target_url: { value: redirect.targetUrl },
-				status_code: redirect.statusCode,
-				preserve_query_string: redirect.preserveQueryString,
-			},
-		},
-		enabled: true,
+		id: rule.id,
+		ref: rule.ref,
+		description: rule.description,
+		expression: rule.expression,
+		action: rule.action,
+		action_parameters: rule.action_parameters,
+		enabled: rule.enabled,
 	};
-}
-
-function hostExpression(hosts: readonly string[]) {
-	return `(${hosts.map((host) => `http.host eq "${host}"`).join(' or ')})`;
 }

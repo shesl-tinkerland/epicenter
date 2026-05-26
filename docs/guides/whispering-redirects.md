@@ -33,6 +33,8 @@ The repo script manages the Cloudflare pieces for zones listed in `scripts/cf/ap
 - `whispering.studio`
 - `www.whispering.studio`
 
+Each managed redirect lives next to its zone in `ZONES` under a `redirects` field, so adding a redirect for a new zone is a single inline edit.
+
 Preview the changes:
 
 ```bash
@@ -45,14 +47,18 @@ Apply them:
 bun run cf:apply
 ```
 
-The script creates proxied placeholder DNS records for redirect-only hosts, then upserts Cloudflare Single Redirect rules in the `http_request_dynamic_redirect` phase. This is required because Redirect Rules only run when traffic reaches Cloudflare's proxy.
+The script creates proxied placeholder DNS records (reserved IP `192.0.2.1`, RFC 5737) for redirect-only hosts, then upserts Cloudflare Single Redirect rules in the `http_request_dynamic_redirect` phase. This is required because Redirect Rules only run when traffic reaches Cloudflare's proxy.
 
-The token behind `CLOUDFLARE_ZONE_TOKEN` needs:
+Apex hostnames with an existing SPF or other TXT record are fine: only conflicting `A`, `AAAA`, or `CNAME` records block redirect setup, and the script reports them with enough detail to reconcile in the dashboard.
+
+The token behind `CLOUDFLARE_ZONE_TOKEN` needs these zone-level scopes on every zone in the account:
 
 - `Zone:Read`
 - `Zone Settings:Edit`
 - `DNS:Edit`
-- `Single Redirect:Edit`
+- `Dynamic Redirect:Edit`
+
+Older Cloudflare docs (and the URL forwarding pages) call the last one `Single Redirect:Edit`. It's the same permission and the same API surface (`/zones/{zone_id}/rulesets` in the `http_request_dynamic_redirect` phase); the dashboard UI just relabeled it. If you cannot find it under the redirects/rules category, use the dashboard search box for `redirect`. `Account Rulesets:Edit` at account scope works as a fallback.
 
 ## Manual Fallback
 
@@ -79,7 +85,7 @@ For `whispering.studio`:
 (http.host eq "whispering.studio" or http.host eq "www.whispering.studio")
 ```
 
-For old subdomains like `whispering.bradenwong.com` and `whispering.epicenterhq.com`, add redirect rules in the parent zones (`bradenwong.com` and `epicenterhq.com`). If those zones are not in this Cloudflare account, configure the same 301 at their DNS/hosting provider instead. To manage them from `scripts/cf/apply.ts`, first add those parent zones to the script's `ZONES` list, then add matching entries to `REDIRECTS`.
+For old subdomains like `whispering.bradenwong.com` and `whispering.epicenterhq.com`, add redirect rules in the parent zones (`bradenwong.com` and `epicenterhq.com`). If those zones are not in this Cloudflare account, configure the same 301 at their DNS/hosting provider instead. To manage them from `scripts/cf/apply.ts`, add the parent zone to `ZONES` with a `redirects` field describing the rule.
 
 ## Verification
 
