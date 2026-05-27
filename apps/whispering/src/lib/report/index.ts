@@ -45,7 +45,6 @@ export const report = {
 		return {
 			resolve: (r) => emit('success', r, id),
 			reject: (r) => emit('error', r, id),
-			update: (r) => emit('loading', r, id),
 		};
 	},
 };
