@@ -255,9 +255,7 @@ export type RecorderService = {
 	 * with the device acquisition outcome. The caller holds the RecordingSession
 	 * and uses its `stop`/`cancel`/`subscribe` for the rest of the session.
 	 */
-	startRecording(
-		params: StartRecordingParams,
-	): Promise<
+	startRecording(params: StartRecordingParams): Promise<
 		Result<
 			{
 				session: RecordingSession;
