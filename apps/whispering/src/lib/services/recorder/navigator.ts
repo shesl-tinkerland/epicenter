@@ -1,4 +1,4 @@
-import { Err, Ok, type Result, tryAsync, trySync } from 'wellcrafted/result';
+import { Err, Ok, tryAsync, trySync } from 'wellcrafted/result';
 import {
 	TIMESLICE_MS,
 	type WhisperingRecordingState,
@@ -69,12 +69,7 @@ function createNavigatorRecorder(): RecorderService {
 			recordingId,
 			backend: 'navigator',
 
-			stop: async ({ sendStatus }) => {
-				sendStatus({
-					title: '⏸️ Finishing Recording',
-					description: 'Saving your audio...',
-				});
-
+			stop: async () => {
 				const { data: blob, error: stopError } = await tryAsync({
 					try: () =>
 						new Promise<Blob>((resolve) => {
@@ -95,27 +90,12 @@ function createNavigatorRecorder(): RecorderService {
 
 				if (stopError) return Err(stopError);
 
-				sendStatus({
-					title: '✅ Recording Saved',
-					description: 'Your recording is ready for transcription!',
-				});
 				return Ok({ kind: 'blob', blob, recordingId, durationMs });
 			},
 
-			cancel: async ({ sendStatus }) => {
-				sendStatus({
-					title: '🛑 Cancelling',
-					description: 'Discarding your recording...',
-				});
-
+			cancel: async () => {
 				mediaRecorder.stop();
 				teardown();
-
-				sendStatus({
-					title: '✨ Cancelled',
-					description: 'Recording discarded successfully!',
-				});
-
 				return Ok({ status: 'cancelled' });
 			},
 
@@ -140,16 +120,6 @@ function createNavigatorRecorder(): RecorderService {
 	}
 
 	return {
-		getActiveRecording: async (): Promise<
-			Result<RecordingSession | null, RecorderError>
-		> => {
-			// Navigator state lives in this closure, so a JS reload zeroes it
-			// out; the MediaStream/MediaRecorder are also gone in that case.
-			// Always null after a reload; non-null only if startRecording fired
-			// within this module's lifetime and the session is still live.
-			return Ok(activeSession?.session ?? null);
-		},
-
 		enumerateDevices: async () => {
 			const { data: devices, error } = await enumerateDevices();
 			if (error) {
@@ -158,21 +128,17 @@ function createNavigatorRecorder(): RecorderService {
 			return Ok(devices);
 		},
 
-		startRecording: async (
-			{ selectedDeviceId, recordingId, bitrateKbps }: NavigatorRecordingParams,
-			{ sendStatus },
-		) => {
+		startRecording: async ({
+			selectedDeviceId,
+			recordingId,
+			bitrateKbps,
+		}: NavigatorRecordingParams) => {
 			if (activeSession) {
 				return RecorderError.AlreadyRecording();
 			}
 
-			sendStatus({
-				title: '🎙️ Starting Recording',
-				description: 'Setting up your microphone...',
-			});
-
 			const { data: streamResult, error: acquireStreamError } =
-				await getRecordingStream({ selectedDeviceId, sendStatus });
+				await getRecordingStream({ selectedDeviceId });
 			if (acquireStreamError) {
 				return (
 					categorizeRecorderError(acquireStreamError) ??

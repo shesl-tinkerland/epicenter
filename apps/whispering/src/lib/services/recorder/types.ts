@@ -11,65 +11,10 @@ import type {
 } from '$lib/constants/audio';
 
 /**
- * Callback function for providing real-time status updates during multi-step recording operations.
- * These status messages become user-facing toast notifications that provide encouraging progress
- * feedback during recording workflows. The messages are displayed as loading toasts in the UI,
- * helping users understand what's happening during potentially long-running operations.
- *
- * @example
- * ```typescript
- * // Good: User-friendly with emoji and encouraging tone
- * sendStatus({
- *   title: '🎙️ Starting Recording',
- *   description: 'Setting up your microphone...'
- * });
- *
- * sendStatus({
- *   title: '✅ Recording Saved',
- *   description: 'Your recording is ready for transcription!'
- * });
- *
- * // Bad: Technical language, no emoji, not encouraging
- * sendStatus({
- *   title: 'Initializing MediaStream',
- *   description: 'getUserMedia() call in progress'
- * });
- * ```
- */
-export type UpdateStatusMessageFn = (args: {
-	title: string;
-	description: string;
-}) => void;
-
-/**
  * Device acquisition outcome after attempting to connect to a recording device.
  *
- * This type represents the result of device selection during recording startup.
- * All outcomes include the deviceId that was ultimately used for recording.
- * When the outcome is 'fallback', appropriate status messages are automatically
- * sent via UpdateStatusMessageFn to inform users about device switching.
- *
- * @example
- * ```typescript
- * // Success: User's preferred device worked
- * { outcome: 'success', deviceId: 'preferred-device-id' as DeviceIdentifier }
- *
- * // Fallback: No device selected, used default
- * // Status message: "🔍 No Device Selected" -> "Using your default microphone instead"
- * {
- *   outcome: 'fallback',
- *   reason: 'no-device-selected',
- *   deviceId: 'default' as DeviceIdentifier
- * }
- *
- * // Fallback: Preferred device unavailable, used alternative
- * // Status message: "⚠️ Finding a New Microphone" -> "Using MacBook Pro Microphone instead"
- * {
- *   outcome: 'fallback',
- *   reason: 'preferred-device-unavailable',
- *   deviceId: 'MacBook Pro Microphone' as DeviceIdentifier
- * }
- * ```
+ * Structured fact returned from `startRecording`. The operation layer maps it
+ * to user-facing toast copy; services never emit copy themselves.
  */
 export type DeviceAcquisitionOutcome =
 	| {
@@ -279,12 +224,8 @@ export type StartRecordingParams =
 export type RecordingSession = {
 	readonly recordingId: string;
 	readonly backend: 'navigator' | 'cpal';
-	stop(callbacks: {
-		sendStatus: UpdateStatusMessageFn;
-	}): Promise<Result<RecorderStopResult, RecorderError>>;
-	cancel(callbacks: {
-		sendStatus: UpdateStatusMessageFn;
-	}): Promise<Result<CancelRecordingResult, RecorderError>>;
+	stop(): Promise<Result<RecorderStopResult, RecorderError>>;
+	cancel(): Promise<Result<CancelRecordingResult, RecorderError>>;
 	subscribe(handler: (state: WhisperingRecordingState) => void): () => void;
 };
 
@@ -292,18 +233,14 @@ export type RecordingSession = {
  * Factory for recording sessions. Services no longer carry mutable
  * start/stop state directly; instead `startRecording` returns a RecordingSession
  * whose methods are bound to the backend that produced it.
+ *
+ * Rehydration after a JS reload is intentionally not part of this contract:
+ * only CPAL can survive a reload (the Rust process keeps the stream alive),
+ * so the rehydration probe lives on `CpalRecorderServiceLive` directly. The
+ * navigator backend cannot rehydrate, so pretending it could in this
+ * interface would be a lie. See `manual-recorder.svelte.ts` bootstrap.
  */
 export type RecorderService = {
-	/**
-	 * Probe for a RecordingSession that already exists at module-load time. CPAL
-	 * sessions can outlive a JS reload because the Rust process keeps the
-	 * stream; navigator sessions cannot survive a reload and will always
-	 * return null after one.
-	 *
-	 * Returns the live RecordingSession bound to this backend, or null if none.
-	 */
-	getActiveRecording(): Promise<Result<RecordingSession | null, RecorderError>>;
-
 	/**
 	 * Enumerate available recording devices with their labels and identifiers
 	 */
@@ -316,9 +253,6 @@ export type RecorderService = {
 	 */
 	startRecording(
 		params: StartRecordingParams,
-		callbacks: {
-			sendStatus: UpdateStatusMessageFn;
-		},
 	): Promise<
 		Result<
 			{
@@ -328,4 +262,15 @@ export type RecorderService = {
 			RecorderError
 		>
 	>;
+};
+
+/**
+ * CPAL-only extension of `RecorderService`. CPAL sessions can outlive a JS
+ * reload because the Rust process keeps the stream alive, so the CPAL
+ * service exposes a probe that the manual recorder calls during bootstrap
+ * to rehydrate. Navigator cannot rehydrate, so this method is not on the
+ * base interface.
+ */
+export type CpalRecorderService = RecorderService & {
+	getActiveRecording(): Promise<Result<RecordingSession | null, RecorderError>>;
 };

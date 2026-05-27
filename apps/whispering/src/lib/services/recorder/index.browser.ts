@@ -1,5 +1,5 @@
 import { NavigatorRecorderServiceLive } from './navigator';
-import type { RecorderService } from './types';
+import type { CpalRecorderService } from './types';
 
 export type { RecorderError, RecorderService, RecordingSession } from './types';
 
@@ -13,4 +13,4 @@ export { NavigatorRecorderServiceLive };
  * a Tauri bundle, where `index.tauri.ts` overrides this to the real
  * service).
  */
-export const CpalRecorderServiceLive: RecorderService | null = null;
+export const CpalRecorderServiceLive: CpalRecorderService | null = null;

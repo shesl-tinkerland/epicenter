@@ -13,10 +13,7 @@ import {
 	enumerateDevices,
 	getRecordingStream,
 } from '$lib/services/device-stream';
-import {
-	asDeviceIdentifier,
-	type UpdateStatusMessageFn,
-} from '$lib/services/recorder/types';
+import { asDeviceIdentifier } from '$lib/services/recorder/types';
 import { deviceConfig } from '$lib/state/device-config.svelte';
 
 const VadRecorderError = defineErrors({
@@ -109,13 +106,11 @@ function createVadRecorder() {
 			onSpeechEnd,
 			onVADMisfire,
 			onSpeechRealStart,
-			sendStatus,
 		}: {
 			onSpeechStart: () => void;
 			onSpeechEnd: (blob: Blob) => void;
 			onVADMisfire?: () => void;
 			onSpeechRealStart?: () => void;
-			sendStatus: UpdateStatusMessageFn;
 		}) {
 			// Prevent starting if already active
 			if (_session) return VadRecorderError.AlreadyActive();
@@ -132,7 +127,6 @@ function createVadRecorder() {
 			const { data: streamResult, error: streamError } =
 				await getRecordingStream({
 					selectedDeviceId: deviceId,
-					sendStatus,
 				});
 
 			if (streamError) return Err(streamError);

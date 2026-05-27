@@ -250,14 +250,13 @@ export function createManualRecorderService() {
 	return {
 		startRecording: async (
 			recordingSettings,
-			{ sendStatus },
 		): Promise<Result<DeviceAcquisitionOutcome, RecorderError>> => {
 			if (activeRecording) {
 				return RecorderError.AlreadyRecording();
 			}
 
 			const { data: streamResult, error: acquireStreamError } =
-				await getRecordingStream(selectedDeviceId, sendStatus);
+				await getRecordingStream({ selectedDeviceId });
 
 			if (acquireStreamError) {
 				return RecorderError.StreamAcquisition({

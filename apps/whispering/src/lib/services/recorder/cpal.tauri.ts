@@ -5,11 +5,11 @@ import type { WhisperingRecordingState } from '$lib/constants/audio';
 import { categorizeRecorderError } from '$lib/services/recorder/categorize-error';
 import {
 	asDeviceIdentifier,
+	type CpalRecorderService,
 	type CpalRecordingParams,
 	type Device,
 	type DeviceAcquisitionOutcome,
 	RecorderError,
-	type RecorderService,
 	type RecordingSession,
 } from '$lib/services/recorder/types';
 import { commands } from '$lib/tauri/commands';
@@ -53,7 +53,7 @@ const enumerateDevices = async (): Promise<Result<Device[], RecorderError>> => {
  * to `<appDataDir>/recordings/{id}.wav` and the JS side refers to the
  * recording by id from then on. There is no raw PCM on the wire.
  */
-function createCpalRecorder(): RecorderService {
+function createCpalRecorder() {
 	let activeSession: RecordingSession | null = null;
 
 	function buildSession(recordingId: string): RecordingSession {
@@ -102,11 +102,7 @@ function createCpalRecorder(): RecorderService {
 			recordingId,
 			backend: 'cpal',
 
-			stop: async ({ sendStatus }) => {
-				sendStatus({
-					title: '⏸️ Saving recording',
-					description: 'Writing the WAV artifact to disk...',
-				});
+			stop: async () => {
 				const { data: artifact, error: stopRecordingError } =
 					await commands.stopRecording();
 				if (stopRecordingError !== null) {
@@ -118,10 +114,6 @@ function createCpalRecorder(): RecorderService {
 				// not close the worker; we still own the cpal stream and the
 				// worker thread. Send `close_recording_session` so Rust can
 				// join the worker and free the stream.
-				sendStatus({
-					title: '🔄 Closing Session',
-					description: 'Cleaning up recording resources...',
-				});
 				const { error: closeError } = await commands.closeRecordingSession();
 				if (closeError !== null)
 					log.error(RecorderError.StopFailed({ cause: closeError }));
@@ -130,24 +122,13 @@ function createCpalRecorder(): RecorderService {
 				return Ok({ kind: 'artifact', artifact });
 			},
 
-			cancel: async ({ sendStatus }) => {
-				sendStatus({
-					title: '🛑 Cancelling',
-					description:
-						'Safely stopping your recording and cleaning up resources...',
-				});
-
+			cancel: async () => {
 				// cancel_recording on the Rust side discards the in-flight
 				// samples and tears down the session worker. One round trip.
 				const { error: cancelError } = await commands.cancelRecording();
 				if (cancelError !== null) {
-					sendStatus({
-						title: '❌ Cancel Failed',
-						description:
-							'We hit a problem cancelling; continuing cleanup anyway...',
-					});
+					log.error(RecorderError.StopFailed({ cause: cancelError }));
 				}
-
 				teardown(session);
 				return Ok({ status: 'cancelled' });
 			},
@@ -189,10 +170,11 @@ function createCpalRecorder(): RecorderService {
 
 		enumerateDevices,
 
-		startRecording: async (
-			{ selectedDeviceId, recordingId, sampleRate }: CpalRecordingParams,
-			{ sendStatus },
-		) => {
+		startRecording: async ({
+			selectedDeviceId,
+			recordingId,
+			sampleRate,
+		}: CpalRecordingParams) => {
 			const { data: devices, error: enumerateError } = await enumerateDevices();
 			if (enumerateError !== null) return Err(enumerateError);
 
@@ -208,27 +190,15 @@ function createCpalRecorder(): RecorderService {
 
 			const deviceOutcome: DeviceAcquisitionOutcome = (() => {
 				if (!selectedDeviceId) {
-					sendStatus({
-						title: '🔍 No Device Selected',
-						description:
-							"No worries! We'll find the best microphone for you automatically...",
-					});
 					return {
 						outcome: 'fallback',
 						reason: 'no-device-selected',
 						deviceId: fallbackDeviceId,
 					};
 				}
-
 				if (deviceIds.includes(selectedDeviceId)) {
 					return { outcome: 'success', deviceId: selectedDeviceId };
 				}
-
-				sendStatus({
-					title: '⚠️ Finding a New Microphone',
-					description:
-						"That microphone isn't available. Let's try finding another one...",
-				});
 				return {
 					outcome: 'fallback',
 					reason: 'preferred-device-unavailable',
@@ -237,13 +207,6 @@ function createCpalRecorder(): RecorderService {
 			})();
 
 			const deviceIdentifier = deviceOutcome.deviceId;
-
-			sendStatus({
-				title: '🎤 Setting Up',
-				description:
-					'Initializing your recording session and checking microphone access...',
-			});
-
 			const sampleRateNum = sampleRate ? Number.parseInt(sampleRate, 10) : null;
 
 			const { error: initRecordingSessionError } =
@@ -260,11 +223,6 @@ function createCpalRecorder(): RecorderService {
 					})
 				);
 
-			sendStatus({
-				title: '🎙️ Starting Recording',
-				description:
-					'Recording session initialized, now starting to capture audio...',
-			});
 			const { error: startRecordingError } = await commands.startRecording();
 			if (startRecordingError !== null)
 				return (
@@ -279,4 +237,4 @@ function createCpalRecorder(): RecorderService {
 	};
 }
 
-export const CpalRecorderServiceLive: RecorderService = createCpalRecorder();
+export const CpalRecorderServiceLive: CpalRecorderService = createCpalRecorder();

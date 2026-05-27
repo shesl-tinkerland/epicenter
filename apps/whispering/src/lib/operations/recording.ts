@@ -56,9 +56,7 @@ export async function startManualRecording() {
 		description: 'Setting up your recording environment...',
 	});
 
-	const { data: outcome, error } = await manualRecorder.startRecording({
-		sendStatus: loading.update,
-	});
+	const { data: outcome, error } = await manualRecorder.startRecording();
 
 	if (error) {
 		loading.reject({ cause: error });
@@ -87,9 +85,7 @@ export async function stopManualRecording() {
 		description: 'Finalizing your audio capture...',
 	});
 
-	const { data: source, error } = await manualRecorder.stopRecording({
-		sendStatus: loading.update,
-	});
+	const { data: source, error } = await manualRecorder.stopRecording();
 
 	if (error) {
 		loading.reject({ cause: error });
@@ -133,9 +129,7 @@ export async function cancelManualRecording() {
 		description: 'Cleaning up recording session...',
 	});
 
-	const { data, error } = await manualRecorder.cancelRecording({
-		sendStatus: loading.update,
-	});
+	const { data, error } = await manualRecorder.cancelRecording();
 
 	if (error) {
 		loading.reject({ cause: error });
@@ -172,7 +166,6 @@ export async function startVadRecording() {
 	});
 
 	const { data: outcome, error } = await vadRecorder.startActiveListening({
-		sendStatus: loading.update,
 		onSpeechStart: () => {
 			report.success({
 				title: '🎙️ Speech started',
