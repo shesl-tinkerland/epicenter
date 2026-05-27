@@ -105,12 +105,10 @@ function createVadRecorder() {
 			onSpeechStart,
 			onSpeechEnd,
 			onVADMisfire,
-			onSpeechRealStart,
 		}: {
 			onSpeechStart: () => void;
 			onSpeechEnd: (blob: Blob) => void;
 			onVADMisfire?: () => void;
-			onSpeechRealStart?: () => void;
 		}) {
 			// Prevent starting if already active
 			if (_session) return VadRecorderError.AlreadyActive();
@@ -152,9 +150,6 @@ function createVadRecorder() {
 						onVADMisfire: () => {
 							if (_session) _session.state = 'LISTENING';
 							onVADMisfire?.();
-						},
-						onSpeechRealStart: () => {
-							onSpeechRealStart?.();
 						},
 						model: 'v5',
 					}),
