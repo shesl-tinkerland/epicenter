@@ -9,7 +9,10 @@ import { Err, Ok } from 'wellcrafted/result';
 import type { WhisperingRecordingState } from '$lib/constants/audio';
 import { defineQuery } from '$lib/rpc/client';
 import { services } from '$lib/services';
-import { CpalRecorderServiceLive } from '$lib/services/recorder';
+import {
+	CpalRecorderServiceLive,
+	probeActiveCpalRecording,
+} from '$lib/services/recorder';
 import {
 	asDeviceIdentifier,
 	type RecorderService,
@@ -58,9 +61,9 @@ export const manualRecorderKeys = defineKeys({
  * only one would ever fire; now `attach()` subscribes to the live
  * RecordingSession and `detach()` cleans up on stop/cancel.
  *
- * On Tauri, state is bootstrapped from `CpalRecorderServiceLive.getActiveRecording`
- * at module init (a Rust CPAL session can outlive a JS reload). The navigator
- * backend cannot rehydrate, so there is no navigator probe.
+ * On Tauri, state is bootstrapped from `probeActiveCpalRecording()` at module
+ * init (a Rust CPAL session can outlive a JS reload). The navigator backend
+ * cannot rehydrate, so there is no navigator probe.
  */
 
 /**
@@ -129,8 +132,8 @@ function createManualRecorder() {
 	// gate, a user action firing before the rehydration probe resolves would
 	// see a stale `_current === null` and either no-op the cancel (leaking
 	// the Rust session) or double-start on top of a rehydrated one.
-	const bootstrapped = CpalRecorderServiceLive
-		? CpalRecorderServiceLive.getActiveRecording().then(({ data }) => {
+	const bootstrapped = probeActiveCpalRecording
+		? probeActiveCpalRecording().then(({ data }) => {
 				if (data) attach(data);
 			})
 		: Promise.resolve();

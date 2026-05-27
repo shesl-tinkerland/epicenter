@@ -1,16 +1,17 @@
 import { NavigatorRecorderServiceLive } from './navigator';
-import type { CpalRecorderService } from './types';
+import type { ProbeActiveCpalRecording, RecorderService } from './types';
 
 export type { RecorderError, RecorderService, RecordingSession } from './types';
 
 export { NavigatorRecorderServiceLive };
 
 /**
- * CPAL is Tauri-only. On web the binding is `null`, so consumers can
- * still import it without a build-time conditional. Callers null-check
+ * CPAL is Tauri-only. On web both bindings are `null`, so consumers can
+ * still import them without a build-time conditional. Callers null-check
  * before use; this is the runtime-DI seam inside the build-time-DI
  * envelope (settings.recording.method = 'cpal' is only ever true inside
- * a Tauri bundle, where `index.tauri.ts` overrides this to the real
- * service).
+ * a Tauri bundle, where `index.tauri.ts` overrides these to the real
+ * implementations).
  */
-export const CpalRecorderServiceLive: CpalRecorderService | null = null;
+export const CpalRecorderServiceLive: RecorderService | null = null;
+export const probeActiveCpalRecording: ProbeActiveCpalRecording | null = null;

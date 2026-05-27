@@ -126,6 +126,10 @@ export const RecorderError = defineErrors({
 		message: `Failed to stop recording: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
+	CancelFailed: ({ cause }: { cause: unknown }) => ({
+		message: `Failed to cancel recording: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
 	StreamAcquisition: ({ cause }: { cause: unknown }) => ({
 		message: `Failed to acquire recording stream: ${extractErrorMessage(cause)}`,
 		cause,
@@ -265,12 +269,17 @@ export type RecorderService = {
 };
 
 /**
- * CPAL-only extension of `RecorderService`. CPAL sessions can outlive a JS
- * reload because the Rust process keeps the stream alive, so the CPAL
- * service exposes a probe that the manual recorder calls during bootstrap
- * to rehydrate. Navigator cannot rehydrate, so this method is not on the
- * base interface.
+ * Probe Rust for a cpal recording that outlived the current JS process.
+ *
+ * Rehydration is not part of the recorder service contract; it's a bootstrap
+ * concern specific to CPAL because the Rust process keeps the cpal stream
+ * alive across JS reloads. Navigator state lives in the JS closure and
+ * cannot survive a reload, so there is no navigator equivalent.
+ *
+ * Build-time DI: the Tauri build exports the real probe; the web build
+ * exports `null`. The manual recorder null-checks the binding once at
+ * module init and only awaits the probe when it exists.
  */
-export type CpalRecorderService = RecorderService & {
-	getActiveRecording(): Promise<Result<RecordingSession | null, RecorderError>>;
-};
+export type ProbeActiveCpalRecording = () => Promise<
+	Result<RecordingSession | null, RecorderError>
+>;
