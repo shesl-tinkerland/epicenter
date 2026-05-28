@@ -2,6 +2,7 @@
 	"extends": ["../../tsconfig.base.json", "./.svelte-kit/tsconfig.json"],
 	"compilerOptions": {
 		"checkJs": true,
-		"types": ["bun"]
+		"types": ["bun"],
+		"moduleSuffixes": [".tauri", ".browser", ""]
 	}
 }

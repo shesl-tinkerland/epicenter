@@ -6,7 +6,7 @@
  *
  *  1. workspace root doc (encrypted tables + KV via createFujiWorkspace)
  *  2. local storage + cloud sync for root (attachLocalStorage + openCollaboration)
- *  3. per-entry child docs (plaintext Y.XmlFragment + encrypted IDB storage)
+ *  3. runtime storage + sync around the shared per-entry child docs
  *
  * `openCollaboration` owns reconnect-on-auth-change internally, so this file
  * has no per-app onStateChange listener.
@@ -19,22 +19,15 @@
 import type { SignedIn } from '@epicenter/svelte';
 import {
 	attachLocalStorage,
-	attachRichText,
 	createDisposableCache,
-	DateTimeString,
 	type DeviceId,
-	onLocalUpdate,
+	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import * as Y from 'yjs';
-import {
-	createFujiActions,
-	createFujiWorkspace,
-	type EntryId,
-	entryContentDocGuid,
-} from './workspace';
+import { createFujiMarkdownActions } from './src/lib/markdown-materializer';
+import { createFujiWorkspace, type EntryId } from './fuji.workspace';
 
 export function openFujiBrowser({
 	signedIn,
@@ -44,7 +37,6 @@ export function openFujiBrowser({
 	deviceId: DeviceId;
 }) {
 	const workspace = createFujiWorkspace({ keyring: signedIn.keyring });
-	const actions = createFujiActions(workspace);
 
 	const idb = attachLocalStorage(workspace.ydoc, {
 		server: signedIn.server,
@@ -61,25 +53,21 @@ export function openFujiBrowser({
 		openWebSocket: signedIn.openWebSocket,
 		onReconnectSignal: signedIn.onReconnectSignal,
 		waitFor: idb.whenLoaded,
-		actions,
+		actions: workspace.actions,
 	});
 
 	const entryContentDocs = createDisposableCache((entryId: EntryId) => {
-		const childYdoc = new Y.Doc({
-			guid: entryContentDocGuid(entryId),
-			gc: true,
-		});
-		const body = attachRichText(childYdoc);
-		const childIdb = attachLocalStorage(childYdoc, {
+		const contentDoc = workspace.entryContentDocs.open(entryId);
+		const childIdb = attachLocalStorage(contentDoc.ydoc, {
 			server: signedIn.server,
 			ownerId: signedIn.ownerId,
 			keyring: signedIn.keyring,
 		});
-		const childSync = openCollaboration(childYdoc, {
+		const childSync = openCollaboration(contentDoc.ydoc, {
 			url: roomWsUrl({
 				baseURL: signedIn.baseURL,
 				ownerId: signedIn.ownerId,
-				guid: childYdoc.guid,
+				guid: contentDoc.ydoc.guid,
 				deviceId,
 			}),
 			openWebSocket: signedIn.openWebSocket,
@@ -88,15 +76,8 @@ export function openFujiBrowser({
 			actions: {},
 		});
 
-		onLocalUpdate(childYdoc, () => {
-			workspace.tables.entries.update(entryId, {
-				updatedAt: DateTimeString.now(),
-			});
-		});
-
 		return {
-			ydoc: childYdoc,
-			body,
+			...contentDoc,
 			idb: childIdb,
 			sync: childSync,
 			/**
@@ -105,14 +86,21 @@ export function openFujiBrowser({
 			 * storage deletion.
 			 */
 			[Symbol.dispose]() {
-				childYdoc.destroy();
+				contentDoc[Symbol.dispose]();
 			},
 		};
 	});
 
-	return {
+	const markdown = createFujiMarkdownActions({
+		tables: workspace.tables,
+		idb,
+		entryContentDocs,
+	});
+
+	return defineWorkspace({
 		...workspace,
-		actions,
+		actions: workspace.actions,
+		markdown,
 		idb,
 		entryContentDocs,
 		collaboration,
@@ -129,7 +117,7 @@ export function openFujiBrowser({
 			entryContentDocs[Symbol.dispose]();
 			workspace[Symbol.dispose]();
 		},
-	};
+	});
 }
 
 export type FujiBrowser = ReturnType<typeof openFujiBrowser>;

@@ -1,0 +1,45 @@
+{
+	"build": {
+		"beforeDevCommand": "bun run dev:local",
+		"beforeBuildCommand": "bun run build",
+		"devUrl": "http://localhost:5174",
+		"frontendDist": "../build"
+	},
+	"productName": "Fuji",
+	"version": "0.0.1",
+	"identifier": "so.epicenter.fuji",
+	"bundle": {
+		"active": true,
+		"category": "Productivity",
+		"publisher": "Epicenter",
+		"copyright": "Copyright © 2026 Epicenter",
+		"homepage": "https://fuji.epicenter.so",
+		"targets": "all",
+		"icon": ["icons/icon.png"],
+		"shortDescription": "Local-first personal CMS"
+	},
+	"plugins": {
+		"deep-link": {
+			"desktop": {
+				"schemes": ["epicenter-fuji"]
+			}
+		}
+	},
+	"app": {
+		"windows": [
+			{
+				"label": "main",
+				"title": "Fuji",
+				"width": 1200,
+				"height": 800,
+				"minWidth": 720,
+				"minHeight": 480,
+				"resizable": true
+			}
+		],
+		"security": {
+			"csp": null,
+			"capabilities": ["default"]
+		}
+	}
+}

@@ -1,7 +1,7 @@
 import { createSession } from '@epicenter/svelte';
 import { createDeviceId } from '@epicenter/workspace';
 import { auth } from '$lib/auth';
-import { openFujiBrowser } from './browser';
+import { openFujiBrowser } from '../../fuji.browser';
 import { createEntriesState } from './entries-state.svelte';
 
 export const session = createSession({

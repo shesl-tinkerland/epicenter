@@ -3,7 +3,7 @@
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import { page } from '$app/state';
 	import { requireFuji } from '$lib/session';
-	import { asEntryId } from '$lib/workspace';
+	import { asEntryId } from '../../../../../fuji.workspace';
 	import EntryEditor from '../../components/EntryEditor.svelte';
 
 	const fuji = requireFuji();

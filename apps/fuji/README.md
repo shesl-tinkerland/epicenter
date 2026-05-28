@@ -14,14 +14,31 @@ SvelteKit app (static adapter, SSR disabled) with three panels: a sidebar for fi
 
 ### Data model
 
-Workspace ID: `FUJI_ID` (`epicenter.fuji`). Rich-text content and entry metadata are separate CRDTs. The entries table stays lean: just IDs, titles, tags, timestamps. Each entry's body lives in its own Y.Doc opened by a `createDisposableCache` keyed on the entry id; the child document builder owns the storage guid. Loading a list of 500 entries doesn't mean loading 500 rich-text trees; the editor and the list never contend for the same document.
+Workspace ID: `FUJI_ID` (`epicenter.fuji`). Rich-text content and entry metadata are separate CRDTs. The entries table stays lean: metadata rows live in the root Y.Doc, and each entry's body lives in its own child Y.Doc opened by a `createDisposableCache` keyed on the entry id. Loading a list of 500 entries doesn't mean loading 500 rich-text trees; the editor and the list never contend for the same document.
 
-- `entries` table: `id` (EntryId), `title`, `subtitle`, `type` (string[]), `tags` (string[]), `createdAt`, `updatedAt`, `_v`. Each entry's body is opened on demand from a disposable cache and bound to ProseMirror via `y-prosemirror`.
-- KV keys: `selectedEntryId`, `viewMode` (`'table' | 'timeline'`), `sidebarCollapsed`.
+- `entries` table: `id` (EntryId), `title`, `subtitle`, `type` (string[]), `tags` (string[]), `pinned`, `deletedAt`, `date`, `dateZone`, `createdAt`, `updatedAt`, and `rating`.
+- `entryContentDocs`: shared child-doc cache. `createFujiWorkspace()` defines the child Y.Doc identity and rich-text model; runtime openers attach storage and sync around those docs.
 
 ### Client wiring
 
-Fuji's root workspace is built once per signed-in session by `createSession`. `openFujiBrowser()` calls `createFujiWorkspace({ keyring })` for the root bundle, composes every other Tier 1 primitive inline, and returns the bundle directly. The session module receives a `SignedIn` from `createSession` and passes it into the browser factory. `SignedIn` carries `{ server, ownerId, keyring, auth }`; `createFujiWorkspace` (which wraps `createWorkspace`) reads the keyring once at construction, `attachLocalStorage` reads server + ownerId (for the IDB database name) plus the keyring callback, and `openCollaboration` takes `auth.openWebSocket` and `auth.onStateChange` directly so it can open sockets and reconnect without per-app glue.
+Fuji follows the repo-wide composition naming:
+
+```txt
+createWorkspace()
+  low-level package primitive
+
+createFujiWorkspace()
+  Fuji's shared isomorphic model: id, tables, actions, child docs
+
+openFujiBrowser()
+fuji()
+  runtime-specific wiring (browser opener, project mount factory)
+
+defineWorkspace()
+  preserves the inferred bundle shape after composition
+```
+
+Fuji's browser workspace is built once per signed-in session by `createSession`. `openFujiBrowser()` calls `createFujiWorkspace({ keyring })`, attaches browser storage and sync, then wraps the shared child docs with child-doc storage and sync. The session module receives a `SignedIn` from `createSession` and passes it into the browser factory. `SignedIn` carries the stable owner, keyring reader, server URL, and auth transport functions.
 
 ```ts
 import { openFujiBrowser } from '$lib/browser';
@@ -50,7 +67,6 @@ export function openFujiBrowser({
   deviceId: DeviceId;
 }) {
   const workspace = createFujiWorkspace({ keyring: signedIn.keyring });
-  const actions = createFujiActions(workspace);
 
   const idb = attachLocalStorage(workspace.ydoc, {
     server: signedIn.server,
@@ -67,18 +83,18 @@ export function openFujiBrowser({
     openWebSocket: signedIn.openWebSocket,
     onReconnectSignal: signedIn.onReconnectSignal,
     waitFor: idb.whenLoaded,
-    actions,
+    actions: workspace.actions,
   });
   // ... per-entry child docs, wipe(), dispose
-  return { ...workspace, actions, idb, collaboration, /* ... */ };
+  return { ...workspace, idb, collaboration, /* ... */ };
 }
 ```
 
-`createFujiWorkspace({ keyring })` is the per-app helper that wraps `createWorkspace({ id: FUJI_ID, keyring, tables: fujiTables, kv })`, returning the standard `{ ydoc, tables, kv, [Symbol.dispose] }` bundle.
+`createFujiWorkspace({ keyring })` is the per-app helper that wraps `createWorkspace({ id: FUJI_ID, keyring, tables: fujiTables, kv })`, adds `workspace.actions`, adds `entryContentDocs`, and returns the standard `{ ydoc, tables, kv, actions, entryContentDocs, [Symbol.dispose] }` bundle through `defineWorkspace()`.
 
 The browser bundle exposes concrete resources like `idb`, `collaboration`, and child document collections. Auth state flows through `session.current`; when present, it carries the Fuji bundle, and pages reach it via the module-level `requireFuji()` exported from `$lib/session` (throws if called without an authenticated session). Local cleanup runs through `bundle.wipe()`, which destroys the live Y.Docs and then calls `wipeLocalStorage({ server: signedIn.server, ownerId: signedIn.ownerId })` to drop every encrypted IDB database for that owner. It is a separate explicit action, not part of sign-out.
 
-For a sibling example of the same pattern (plus a Tauri-side materializer), see `apps/whispering/src/lib/whispering/client.ts`.
+For a sibling example of the same pattern with Tauri runtime wiring, see `apps/whispering/src/lib/whispering/tauri.ts`.
 
 ### Editor
 
@@ -105,24 +121,17 @@ bun dev
 
 This starts the app dev server on port 5174. Auth and sync expect the local API on `localhost:8787`; start it from the repo root with `bun run dev:api`.
 
-Fuji's daemon route is registered from the project root. It is not discovered from `.epicenter/` or the `workspaces/` folder. A project that wants the Fuji route needs an `epicenter.config.ts` like this:
+Fuji's mount is registered from the project root. It is not discovered from `.epicenter/` or any source folder. A project that wants the Fuji mount needs an `epicenter.config.ts` like this:
 
 ```ts
-import { defineConfig } from '@epicenter/workspace';
-import fuji from './workspaces/fuji/daemon.ts';
+import { fuji } from '@epicenter/fuji/project';
 
-export default defineConfig({
-	daemon: {
-		routes: {
-			fuji,
-		},
-	},
-});
+export default fuji();
 ```
 
-The `fuji` key is the route identity. The imported daemon module defines Fuji's runtime and can live anywhere; `workspaces/fuji/daemon.ts` is just the layout used in this example.
+`fuji()` is a factory that returns a `Mount` carrying its own canonical name (`fuji`). Pass options to override defaults (`fuji({ markdownDir: '.', sqliteFile: '.epicenter/sqlite.db' })`).
 
-`epicenter daemon up -C <project>` starts every route in `daemon.routes` inside one daemon process. It creates `.epicenter/` for generated project data when it is missing, but sockets and daemon logs live in platform user paths instead of inside the project.
+`epicenter daemon up -C <project>` starts every mount declared in `epicenter.config.ts` inside one daemon process. It creates `.epicenter/` for generated project data when it is missing, but sockets and daemon logs live in platform user paths instead of inside the project.
 
 ---
 
