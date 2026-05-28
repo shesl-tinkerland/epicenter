@@ -7,8 +7,8 @@
  * changes never produce overlapping writes.
  */
 
-import type { Table } from '@epicenter/workspace';
 import yaml from 'js-yaml';
+import type { Table } from '@epicenter/workspace';
 import { defineErrors } from 'wellcrafted/error';
 import { createLogger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
@@ -77,7 +77,8 @@ export function attachRecordingMarkdownFiles(
 				}
 
 				if (toWrite.length) {
-					const { error } = await commands.writeRecordingMarkdownFiles(toWrite);
+					const { error } =
+						await commands.writeRecordingMarkdownFiles(toWrite);
 					if (error !== null) throw error;
 				}
 				if (toDelete.length) {
