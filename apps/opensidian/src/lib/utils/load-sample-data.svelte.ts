@@ -1,6 +1,6 @@
 import { toast } from '@epicenter/ui/sonner';
-import { extractErrorMessage } from 'wellcrafted/error';
 import type { OpensidianBrowser } from 'opensidian/browser';
+import { extractErrorMessage } from 'wellcrafted/error';
 
 export function createSampleDataLoader(workspace: OpensidianBrowser) {
 	let seeding = $state(false);

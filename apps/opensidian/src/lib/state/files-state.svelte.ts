@@ -1,9 +1,9 @@
 import { asFileId, type FileId, type FileRow } from '@epicenter/filesystem';
 import { fromTable } from '@epicenter/svelte';
 import { toast } from '@epicenter/ui/sonner';
+import type { OpensidianBrowser } from 'opensidian/browser';
 import { SvelteSet } from 'svelte/reactivity';
 import { extractErrorMessage } from 'wellcrafted/error';
-import type { OpensidianBrowser } from 'opensidian/browser';
 import { searchParams } from '$lib/search-params.svelte';
 
 /**
@@ -38,7 +38,11 @@ type InteractionMode =
  * </script>
  * ```
  */
-export function createFilesState({ workspace }: { workspace: OpensidianBrowser }) {
+export function createFilesState({
+	workspace,
+}: {
+	workspace: OpensidianBrowser;
+}) {
 	// ── Reactive source ──────────────────────────────────────────────
 	const filesMap = fromTable(workspace.tables.files);
 

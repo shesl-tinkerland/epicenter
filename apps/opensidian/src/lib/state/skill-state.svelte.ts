@@ -11,9 +11,9 @@ import {
 	createDisposableCache,
 	onLocalUpdate,
 } from '@epicenter/workspace';
+import type { OpensidianBrowser } from 'opensidian/browser';
 import { Ok, tryAsync } from 'wellcrafted/result';
 import * as Y from 'yjs';
-import type { OpensidianBrowser } from 'opensidian/browser';
 
 /** A global skill loaded from the @epicenter/skills workspace. */
 type GlobalSkill = { name: string; instructions: string };
@@ -55,7 +55,11 @@ type VaultSkill = { name: string; content: string };
  * const vaultLayer = skills.vaultSkills;
  * ```
  */
-export function createSkillState({ workspace }: { workspace: OpensidianBrowser }) {
+export function createSkillState({
+	workspace,
+}: {
+	workspace: OpensidianBrowser;
+}) {
 	const globalSkillsWorkspace = openGlobalSkillsWorkspace();
 	let globalSkills = $state<GlobalSkill[]>([]);
 	let vaultSkills = $state<VaultSkill[]>([]);

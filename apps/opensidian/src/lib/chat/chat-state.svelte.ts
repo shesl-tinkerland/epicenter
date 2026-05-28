@@ -12,6 +12,7 @@ import {
 	generateChatMessageId,
 	generateConversationId,
 } from 'opensidian';
+import type { OpensidianBrowser } from 'opensidian/browser';
 import type { JsonValue } from 'wellcrafted/json';
 import {
 	DEFAULT_MODEL,
@@ -25,7 +26,6 @@ import {
 	OPENSIDIAN_SYSTEM_PROMPT,
 } from '$lib/chat/system-prompt';
 import { toUiMessage } from '$lib/chat/ui-message';
-import type { OpensidianBrowser } from 'opensidian/browser';
 import { searchParams } from '$lib/search-params.svelte';
 import type { SkillState } from '$lib/state/skill-state.svelte';
 
