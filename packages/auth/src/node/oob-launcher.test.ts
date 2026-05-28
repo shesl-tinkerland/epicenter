@@ -1,5 +1,8 @@
 /**
  * OOB OAuth launcher tests.
+ * This is the CLI transport version of the launcher contract: it owns browser
+ * opening and pasted-code collection, but still returns only an OAuth grant.
+ * Machine auth fills in persisted identity after `/api/session`.
  *
  * Covers:
  * - happy path: token response -> 3-field OAuthTokenGrant
@@ -13,8 +16,10 @@
 
 import { expect, test } from 'bun:test';
 import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth';
+import type { Result } from 'wellcrafted/result';
 import { expectErr, expectOk } from 'wellcrafted/testing';
 import type { AuthFetch } from '../create-oauth-app-auth.js';
+import type { OAuthLaunchResult } from '../oauth-launchers/contract.js';
 import { createOobOAuthLauncher } from './oob-launcher.js';
 
 const NOW = 1_700_000_000_000;
@@ -89,17 +94,27 @@ function setup({
 	return { launcher, printed, tokenRequests };
 }
 
+function expectCompletedGrant(result: Result<OAuthLaunchResult, unknown>) {
+	const data = expectOk(result);
+	expect(data.status).toBe('completed');
+	if (data.status !== 'completed') {
+		throw new Error('Expected completed OAuth launch result.');
+	}
+	return data.grant;
+}
+
 test('happy path returns a 3-field OAuthTokenGrant', async () => {
 	const { launcher, printed, tokenRequests } = setup();
-	const data = expectOk(await launcher.startSignIn());
-	if (!data) throw new Error('Expected non-null token grant');
-	expect(data).toEqual({
+	const grant = expectCompletedGrant(await launcher.startSignIn());
+	expect(grant).toEqual({
 		accessToken: 'a',
 		refreshToken: 'r',
 		accessTokenExpiresAt: NOW + 3_600_000,
 	});
 	expect(tokenRequests).toHaveLength(1);
-	const { url, body } = tokenRequests[0]!;
+	const request = tokenRequests[0];
+	if (!request) throw new Error('Expected token request.');
+	const { url, body } = request;
 	expect(url).toBe('http://localhost:8787/auth/oauth2/token');
 	expect(body.get('grant_type')).toBe('authorization_code');
 	expect(body.get('code')).toBe('CODE123');
@@ -140,7 +155,8 @@ test('PKCE verifier and challenge are linked', async () => {
 	expect(receivedVerifier).toBeTruthy();
 	const urlLine = printed[0];
 	expect(urlLine).toBeDefined();
-	const url = new URL(urlLine!);
+	if (!urlLine) throw new Error('Expected authorize URL line.');
+	const url = new URL(urlLine);
 	expect(url.searchParams.get('state')).toBeNull();
 	const challenge = url.searchParams.get('code_challenge');
 	const method = url.searchParams.get('code_challenge_method');
@@ -201,9 +217,8 @@ test('openBrowser failure does not abort the flow', async () => {
 			throw new Error('no browser available');
 		},
 	});
-	const data = expectOk(await launcher.startSignIn());
-	if (!data) throw new Error('Expected non-null token grant');
-	expect(data.accessToken).toBe('a');
+	const grant = expectCompletedGrant(await launcher.startSignIn());
+	expect(grant.accessToken).toBe('a');
 });
 
 test('case-insensitive token_type check', async () => {
@@ -216,7 +231,6 @@ test('case-insensitive token_type check', async () => {
 				token_type: 'Bearer',
 			}),
 	});
-	const data = expectOk(await launcher.startSignIn());
-	if (!data) throw new Error('Expected non-null token grant');
-	expect(data.accessToken).toBe('a');
+	const grant = expectCompletedGrant(await launcher.startSignIn());
+	expect(grant.accessToken).toBe('a');
 });

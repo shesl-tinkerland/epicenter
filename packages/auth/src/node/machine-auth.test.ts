@@ -483,6 +483,32 @@ test('createMachineAuthClient returns NoSavedSession when no file', async () => 
 	expect(error.message).toContain(BASE_URL);
 });
 
+test('createMachineAuthClient startSignIn reports interactive login as unavailable', async () => {
+	const filePath = tmpAuthPath();
+	await preWriteCell(filePath, 'user-1');
+
+	const result = await createMachineAuthClient({
+		baseURL: BASE_URL,
+		clientId: CLIENT_ID,
+		filePath,
+		now: () => NOW,
+	});
+	const auth = expectOk(result);
+
+	const error = expectErr(await auth.startSignIn()) as {
+		name?: string;
+		cause?: unknown;
+	};
+
+	expect(error.name).toBe('StartSignInFailed');
+	expect(error.cause).toBeInstanceOf(Error);
+	if (!(error.cause instanceof Error)) {
+		throw new Error('Expected startSignIn failure cause.');
+	}
+	expect(error.cause.message).toContain('epicenter auth login');
+	auth[Symbol.dispose]();
+});
+
 test('createMachineAuthClient loads file and attaches Bearer after gate', async () => {
 	const filePath = tmpAuthPath();
 	await preWriteCell(filePath, 'user-1');
