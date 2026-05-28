@@ -195,7 +195,9 @@ describe('executeRun mount-prefixed routing', () => {
 		if (error.name !== 'UsageError') {
 			throw new Error('expected UsageError');
 		}
-		expect(error.message).toBe('No mount "missing". Available: demo, tasks');
+		expect(error.message).toBe(
+			'No mount "missing". Available: demo, tasks',
+		);
 		expect(error.suggestions).toEqual(['  demo', '  tasks']);
 	});
 });

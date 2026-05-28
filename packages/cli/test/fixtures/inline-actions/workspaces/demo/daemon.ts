@@ -7,7 +7,10 @@
  * CLI paths are `demo.counter_{get,increment,set}`.
  */
 
-import { defineMutation, defineQuery } from '@epicenter/workspace';
+import {
+	defineMutation,
+	defineQuery,
+} from '@epicenter/workspace';
 import { defineMount } from '@epicenter/workspace/daemon';
 import Type from 'typebox';
 import * as Y from 'yjs';

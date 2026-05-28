@@ -1,4 +1,7 @@
-import { createPersistedMap, defineEntry } from '@epicenter/svelte';
+import {
+	createPersistedMap,
+	defineEntry,
+} from '@epicenter/svelte';
 import { type } from 'arktype';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { BITRATES_KBPS, DEFAULT_BITRATE_KBPS } from '$lib/constants/audio';
