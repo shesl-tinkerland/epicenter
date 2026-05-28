@@ -19,13 +19,14 @@ this example changes with it.
 examples/fuji/
 ├── package.json           dependencies (this file)
 ├── tsconfig.json          extends the repo base
-├── epicenter.config.ts    REQUIRED. Marker + workspace definition.
+├── epicenter.config.ts    REQUIRED. Marker + mount factory call.
 ├── .gitignore             Epicenter-managed (.epicenter/)
 ├── entries/               table data as markdown (committed)
 │   ├── welcome.md
 │   └── hello-fuji.md
 └── .epicenter/            created on first daemon run; gitignored
-    ├── yjs.db
+    ├── yjs/
+    │   └── epicenter.fuji.db
     └── sqlite.db
 ```
 
@@ -36,10 +37,11 @@ bun install
 bun x epicenter daemon up -C examples/fuji
 ```
 
-On first run the daemon creates `.epicenter/` and writes `yjs.db` and
-`sqlite.db`. The markdown files in `entries/` are the source of truth; the
-daemon reads them to populate the Yjs document (once markdown → Y.Doc
-hydration lands; see §7.2 of the spec).
+On first run the daemon creates `.epicenter/` and writes `sqlite.db` plus the
+Yjs persistence file used by `attachProjectInfrastructure`. The current mount
+materializes the live Y.Doc out to markdown and SQLite. The project-layout
+spec's next step is markdown-to-Y.Doc hydration, where files in `entries/`
+become the human-editable source that can rebuild the runtime cache.
 
 ## Inspect the SQL mirror
 
@@ -55,9 +57,10 @@ daemon will rebuild it on next run.
 
 ## Edit a note
 
-Open `entries/welcome.md` in your editor and change the body. The daemon's
-reverse watcher (see spec §7.2) picks up the change and applies it to the
-Y.Doc, which propagates to the SQL mirror and to any connected peers.
+Today, edit through mount actions or a connected Fuji runtime and watch the
+markdown and SQLite projections update. The reverse direction, editing
+`entries/*.md` and having the daemon ingest it back into the Y.Doc, is the
+planned markdown hydration work described in the project-layout spec.
 
 You can also drive changes through the daemon's RPC actions. Use the CLI:
 
@@ -70,19 +73,19 @@ example's `epicenter.config.ts`.
 
 ## Add a new entry
 
-Two equivalent ways:
+Current path:
 
-1. **Write a markdown file.** Create `entries/my-new-entry.md` with the same
-   front-matter shape as the existing examples. The daemon ingests it.
-2. **Call a mutation.** Use the CLI's `run` subcommand to invoke the
-   workspace's add action.
+1. **Call a mutation.** Use the CLI's `run` subcommand to invoke the
+   workspace's create action.
 
-Both paths produce the same row in the `entries` table.
+Planned path: create `entries/my-new-entry.md` with the same frontmatter shape
+as the existing examples, then let markdown hydration ingest it into the
+workspace.
 
 ## What this example deliberately omits
 
 - Auth and sync. The example is local-only; no `epicenter auth login` step.
-- Browser or Tauri frontend. The example is daemon-only.
+- Browser or Tauri frontend. The example is daemon-hosted only.
 - Custom path overrides. Materializer paths use the spec's default
   (`.epicenter/sqlite.db` and `./entries/`).
 - Multi-workspace orchestration. One workspace per project is the canonical
