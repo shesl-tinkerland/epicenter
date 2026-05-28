@@ -165,6 +165,62 @@ function createSatisfiedWorkspace() {
 
 Second, explicit return types still have a place at package boundaries. If declaration output needs to expose a named type, or if you intentionally want to hide the concrete return shape from consumers, an annotation can be the right move.
 
+One more caveat: do not turn every `satisfies` check into a `defineX()` helper. A constrained identity helper earns its keep when it saves the caller from spelling generics that TypeScript already knows.
+
+Helper earns it:
+
+```typescript
+return defineWorkspace({
+  ...workspace,
+  ...runtime,
+});
+```
+
+Here the helper hides the generic proof:
+
+```typescript
+TWorkspace extends Workspace<TTables, TKv, TActions>
+```
+
+Writing that at every call site would make the implementation harder to read. The helper exists to keep the object literal readable while preserving the exact inferred return type.
+
+A concrete Epicenter example is a project mount. A mount is the small object a project config gives to the daemon:
+
+```typescript
+type Mount<TRuntime extends DaemonRuntime = DaemonRuntime> = {
+  name: string;
+  open(ctx: MountContext): MaybePromise<TRuntime>;
+};
+```
+
+Notice the generic has a default. That changes the call-site tradeoff. The type is generic internally, but a caller can still write `Mount` directly without spelling `Mount<SomeRuntime>`.
+
+Helper does not earn it:
+
+```typescript
+return defineMount({
+  name: 'fuji',
+  open(ctx) {
+    return openFujiRuntime(ctx);
+  },
+});
+```
+
+If the contract is simple, let the object say it directly:
+
+```typescript
+return {
+  name: 'fuji',
+  open(ctx) {
+    return openFujiRuntime(ctx);
+  },
+} satisfies Mount;
+```
+
+`satisfies Mount` gives the `open(ctx)` parameter its contextual type, checks the daemon contract, and keeps the returned object as the source of truth. The identity helper would only add another symbol to navigate through.
+
+The rule is not "avoid helpers when a type has generics." The rule is sharper: avoid helpers when the generics are already hidden by useful defaults, or when the contract is simple enough to read inline. Reach for the helper when the caller would otherwise have to write the type machinery by hand.
+
 But inside the source tree, especially on factories, this is a real ergonomic win. `satisfies` gives you the contract check without cutting the editor's path back to the object that was actually returned.
 
 For the factory-return version of this pattern, see [Let Factory Return Types Point Back to the Factory](./factory-return-types-should-point-back-to-the-factory.md). For the broader rule, see [Types Should Be Computed, Not Declared](./types-should-be-computed-not-declared.md).

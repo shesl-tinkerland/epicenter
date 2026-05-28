@@ -61,6 +61,25 @@ After each commit, at least one must be true:
 
 If none is true, the change was cosmetic. Revert and find a deeper smell.
 
+## Implementation Gate
+
+When a collapse pass follows a fresh implementation, do not limit the review to
+symbols that existed before the change. New code is often the easiest place to
+remove indirection. Check every new helper, component, wrapper, prop callback,
+options object, and file split before declaring the implementation done.
+
+Use this quick table before staging:
+
+```txt
+boundary             callers  earns itself by
+WidgetHost           1        owns resource and widget lifetime
+WidgetView           1        no, only passes a stable handle
+```
+
+One-caller boundaries can stay when they isolate a lifecycle, unsafe boundary,
+public contract, or long imperative phase. They should collapse when they only
+pass through stable handles, callbacks, or values that the caller already owns.
+
 ## Pause and surface to the user
 
 Stop and ask before:

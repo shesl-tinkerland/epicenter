@@ -4,26 +4,25 @@ Detailed Svelte guidance for TanStack Query mutation placement, inline template 
 
 # Mutation Patterns
 
-## In Svelte Files (.svelte)
+## Core Rule
 
-Always prefer `createMutation` from TanStack Query for mutations. This provides:
+In `.svelte` files, use `createMutation` for user-triggered async operations when the template observes operation lifecycle state: disabled controls, loading text, spinners, success handling, or error handling.
 
-- Loading states (`isPending`)
-- Error states (`isError`)
-- Success states (`isSuccess`)
-- Better UX with automatic state management
+`createMutation` is the component operation lifecycle primitive. It is not reserved for cache invalidation, retry policy, or shared mutation keys.
 
-### The Preferred Pattern
+Use `defineMutation` in `$lib/rpc` when the operation has shared query-layer identity: multiple consumers, cache invalidation, optimistic updates, `useIsMutating`, or a reusable RPC boundary. For a one-off component action, keep the operation as a plain function in `$lib/operations`, `$lib/services`, or a focused module, then wrap it locally with `createMutation(() => ({ mutationFn }))`.
 
-Pass `onSuccess` and `onError` as the second argument to `.mutate()` to get maximum context:
+Use direct `await` or `.execute()` when no template lifecycle state is observed, when the code runs outside component context, or when a sequential workflow would become harder to read as mutation callbacks.
+
+## Async Button Pattern
+
+Pass `onSuccess` and `onError` as the second argument to `.mutate()` so the callback stays next to the UI action that needs it:
 
 ```svelte
 <script lang="ts">
 	import { createMutation } from '@tanstack/svelte-query';
 	import * as rpc from '$lib/query';
 
-	// Wrap .options in accessor function, no parentheses on .options
-	// Name it after what it does, NOT with a "Mutation" suffix (redundant)
 	const deleteSession = createMutation(
 		() => rpc.sessions.deleteSession.options,
 	);
@@ -34,7 +33,6 @@ Pass `onSuccess` and `onError` as the second argument to `.mutate()` to get maxi
 
 <Button
 	onclick={() => {
-		// Pass callbacks as second argument to .mutate()
 		deleteSession.mutate(
 			{ sessionId },
 			{
@@ -60,15 +58,52 @@ Pass `onSuccess` and `onError` as the second argument to `.mutate()` to get maxi
 </Button>
 ```
 
-### Why This Pattern?
+Name the mutation after the user action, not with a `Mutation` suffix. The suffix repeats the type and makes templates noisier.
 
-- **More context**: Access to local variables and state at the call site
-- **Better organization**: Success/error handling is co-located with the action
-- **Flexibility**: Different calls can have different success/error behaviors
+For component-local operation lifecycle, wrap the function locally:
 
-## In TypeScript Files (.ts)
+```svelte
+<script lang="ts">
+	import { createMutation } from '@tanstack/svelte-query';
+	import { exportRecordingsMarkdown } from '$lib/recording-markdown-export';
+	import { report } from '$lib/report';
 
-Always use `.execute()` since createMutation requires component context:
+	const exportMarkdown = createMutation(() => ({
+		mutationFn: exportRecordingsMarkdown,
+	}));
+</script>
+
+<Button
+	onclick={() => {
+		exportMarkdown.mutate(undefined, {
+			onSuccess: ({ data, error }) => {
+				if (error !== null) {
+					report.error({
+						title: 'Recording markdown export failed',
+						cause: error,
+					});
+					return;
+				}
+				if (data.status === 'cancelled') return;
+
+				report.success({
+					title: 'Recording markdown exported',
+					description: `Wrote ${data.written} ${data.written === 1 ? 'file' : 'files'} to ${data.dir}.`,
+				});
+			},
+		});
+	}}
+	disabled={exportMarkdown.isPending}
+>
+	{exportMarkdown.isPending ? 'Exporting...' : 'Export markdown...'}
+</Button>
+```
+
+Do not create an RPC adapter only to get `isPending` for one component. Local `createMutation` gives the component a standard pending/error/success surface without pretending the operation is shared query-layer state.
+
+## Direct Await Pattern
+
+In `.ts` files, use `.execute()` or direct `await` because `createMutation` requires component context:
 
 ```typescript
 // In a .ts file (e.g., load function, utility)
@@ -84,13 +119,19 @@ if (error) {
 }
 ```
 
-## Exception: When to Use .execute() in Svelte Files
+In `.svelte` files, direct `await` is still appropriate when the template does not read pending, success, or error state:
 
-Only use `.execute()` in Svelte files when:
+```svelte
+<Button
+	onclick={async () => {
+		await navigator.clipboard.writeText(value);
+	}}
+>
+	Copy
+</Button>
+```
 
-1. You don't need loading states
-2. You're performing a one-off operation
-3. You need fine-grained control over async flow
+If the next edit adds `disabled={isCopying}`, a spinner, loading text, or toast lifecycle, promote the action to `createMutation` instead of adding a one-off `$state` pending flag.
 
 ## Single-Use Functions: Inline or Document
 

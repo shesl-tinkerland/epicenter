@@ -116,6 +116,35 @@ Svelte's deep proxy can break handles whose methods rely on `this` being the ori
 
 In this codebase, the rule applies to any component calling `*Docs.open()` (Yjs doc handles from `createDisposableCache`). Search: `$state<ReturnType<typeof .*\.open>`. Every hit is a candidate for the rule above.
 
+## Imperative Widgets: Own The Whole Runtime Boundary
+
+For imperative widgets such as ProseMirror, CodeMirror, maps, charts, or
+canvas-based tools, prefer one component that owns the whole runtime boundary:
+
+```txt
+keyed id prop
+  -> open disposable resource
+  -> wait for readiness in markup
+  -> construct imperative widget once
+  -> destroy widget and resource on component teardown
+```
+
+Avoid splitting this into a resource component plus a one-call generic widget
+component that only receives a stable handle such as `Y.XmlFragment`,
+`HTMLElement`, `EditorState`, `Map`, or `Chart` config. That split usually
+creates a reactive prop boundary around a value that is not application state.
+
+Use `untrack` in a widget setup effect only for values that are intentionally
+not part of widget identity, such as a stable notification callback. If you need
+`untrack` for the main setup object, first ask whether the component owns the
+wrong boundary. Moving ownership to the keyed child often removes the need for
+`untrack` and makes the lifecycle visible in the tree.
+
+Keep a generic widget component only when there are several real callers, a
+public component API, or a non-obvious widget invariant that deserves its own
+file. Otherwise, collapse the wrapper into the component that owns the resource
+and mount lifetime.
+
 ## Related
 
 - The `sync-construction-async-property-ui-render-gate-pattern` skill covers the service-layer equivalent for clients with async-ready properties.

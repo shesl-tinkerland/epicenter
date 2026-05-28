@@ -237,15 +237,10 @@ Detailed examples for the baseline TypeScript rules used across Epicenter.
   }
   ```
 
-- **Factory return types derive from the factory**: If a public type is exactly the return object from a `create*` function, export the type as `ReturnType<typeof createThing>` and let the function return its concrete object. If the public type is a nested slice of a factory result, use a focused inference helper like `InferSignedIn<typeof session>`. Put needed annotations on the returned methods and properties instead of on the factory itself. This keeps one source of truth and makes Go to Definition land on the returned object shape.
+- **Factory return types derive from the factory**: If a public type is exactly the return object from a `create*`, `attach*`, `open*`, or similar factory, export the type as `ReturnType<typeof createThing>` directly after the factory and let the function return its concrete object. If the public type is a nested slice of a factory result, use a focused inference helper like `InferSignedIn<typeof session>`. Put needed annotations and JSDoc on the returned methods and properties instead of on the factory itself. This keeps one source of truth and makes Go to Definition land on the returned object shape.
 
   ```typescript
   // Good: the factory owns the shape
-  export type BrowserDocCache<
-    TId extends string,
-    TDocument extends BrowserDocInstance,
-  > = ReturnType<typeof createBrowserDocCache<TId, TDocument>>;
-
   export function createBrowserDocCache<
     TId extends string,
     TDocument extends BrowserDocInstance,
@@ -256,6 +251,11 @@ Detailed examples for the baseline TypeScript rules used across Epicenter.
       },
     };
   }
+
+  export type BrowserDocCache<
+    TId extends string,
+    TDocument extends BrowserDocInstance,
+  > = ReturnType<typeof createBrowserDocCache<TId, TDocument>>;
 
   // Bad: the type and return object now describe the same shape twice
   export type BrowserDocCache<TId extends string, TDocument> = {
@@ -272,5 +272,7 @@ Detailed examples for the baseline TypeScript rules used across Epicenter.
     };
   }
   ```
+
+  Use `ReturnType<ReturnType<typeof createThing>>` for curried factories. If the concrete object stores writable internals but the public API should be readonly, expose getters or narrowed methods in the returned object before deriving the type.
 
   Keep explicit contract types when several implementations share the same surface, when the type is protocol vocabulary, or when you intentionally want to hide the concrete return shape. Use `satisfies` when the implementation should be checked against an external contract but the returned value should keep its own inferred shape.

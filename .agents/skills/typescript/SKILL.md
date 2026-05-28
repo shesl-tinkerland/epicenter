@@ -33,7 +33,10 @@ Use this skill when you need to:
 - Use descriptive generic names with a `T` prefix, such as `TSchema`, `TDefs`, and `TKey`.
 - Destructure options in the function signature when the object is a configuration bag. Keep a named value only when it is the domain object being transformed or forwarded.
 - Let TypeScript infer private and inner return types. Annotate exported APIs only when useful for clarity or to break circular inference.
-- If an exported type is exactly the object returned by a `create*` factory, derive it with `ReturnType<typeof createThing>`. Put useful annotations on returned members instead of duplicating the object shape.
+- If an exported type is exactly the object returned by a `create*`, `attach*`, `open*`, or similar factory, derive it from the implementation with `ReturnType<typeof createThing>`. Put the exported output alias immediately after the factory. Keep input, config, data, protocol, and multi-implementation contract types above the factory.
+- Move consumer-facing JSDoc onto the returned object members. Add concrete member annotations inside the returned object when they preserve IntelliSense, narrow an implementation detail, or keep a public method/property surface stable.
+- For curried factories, derive from the inner return, such as `ReturnType<ReturnType<typeof createThing>>`. For generic factories, instantiate `typeof` when needed, such as `ReturnType<typeof openThing<TActions>>`.
+- Preserve intentional readonly public surfaces with getters when deriving from an object literal. Do not expose writable internal state just because the concrete implementation happens to store it that way.
 - Use a `Symbol` brand when identity means a specific factory output, not a coincidental shape probe.
 - Avoid `as any`. Use `unknown`, validation, brands, or narrower helpers instead.
 - Prefer optional chaining over `in` checks or truthiness when checking optional properties.
@@ -53,7 +56,9 @@ Concrete regressions to watch for:
 - **`typeof Real` annotation over `satisfies`**: `export const fn: typeof Real = unreachable` hides the underlying value's identity from navigation. `export const fn = unreachable satisfies typeof Real` keeps the value as the source of truth.
 - **Re-export chains in non-barrel files**: `export { X } from './alias'` outside `index.ts` costs an extra hop with nothing to show for it. Reserve `export { ... } from ...` for barrels; export at the declaration everywhere else.
 - **Adapter / proxy / wrapper with no behavior change**: a `fromX` translator or thin passthrough makes Go-to-Def land on the wrapper. Widen the underlying factory's return shape instead (see `factory-function-composition` "collapsed adapter" rule).
-- **Manual return type annotation duplicating zone 4**: annotating a factory with a hand-written interface diverts Go-to-Def to the alias. Use `ReturnType<typeof createThing>` so navigation lands on the actual returned member (this is the same choice that drives JSDoc preservation, see `method-shorthand-jsdoc`).
+- **Manual return type annotation duplicating zone 4**: annotating a factory with a hand-written interface diverts Go-to-Def to the alias. Let the factory return its concrete object, then put the exported alias directly after it as `export type Thing = ReturnType<typeof createThing>`. This keeps navigation on the returned members and lets their JSDoc own the public documentation. See `method-shorthand-jsdoc`.
+- **Noisy `satisfies` generic lists**: if a return object should prove it extends a generic contract but `satisfies Contract<A, B, C> & Extras` forces callers to restate inferred table, action, or runtime types, prefer a constrained identity helper owned by the contract module. Example: `return defineWorkspace({ ...workspace, ...runtime })` where the helper accepts `TWorkspace extends Workspace<...>` and returns `TWorkspace`. This keeps the call site readable, preserves the exact inferred return type, and leaves Go-to-Def on the real object members.
+- **When not to add `defineX`**: do not wrap a simple `satisfies` check just to give it a helper name. If the contract has no required type arguments, or its generics have defaults that make `satisfies Contract` readable, prefer `satisfies`. The helper only earns the extra name when it removes generic noise the reader would otherwise have to carry.
 
 For broader public-shape decisions that affect navigation across packages, see `cohesive-clean-breaks`.
 

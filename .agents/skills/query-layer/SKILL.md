@@ -98,9 +98,11 @@ Rules:
 
 ## Adapter Boundary: RPC vs Operations
 
-Use `$lib/rpc` as the shared TanStack observation surface. It may wrap a direct service/state call, or a `$lib/operations` entry point when shared UI needs `isPending`, `isMutating`, invalidation, or a named mutation key over that operation.
+Use `$lib/rpc` as the shared TanStack observation surface. It may wrap a direct service/state call, or a `$lib/operations` entry point when UI needs shared mutation identity: multiple consumers, cache invalidation, optimistic updates, `useIsMutating`, or a named mutation key over that operation.
 
 Keep orchestration in `$lib/operations`: delivery, reporting, sounds, analytics, clipboard writes, and multi-step workflows. A one-off component can observe an operation locally with `createMutation(() => ({ mutationFn }))` instead of promoting it into `$lib/rpc`.
+
+Lack of cache invalidation is not a reason to avoid `createMutation` in a Svelte component. If the template observes operation lifecycle state such as `isPending`, disabled controls, loading text, success handling, or error handling, local `createMutation` is the preferred wrapper.
 
 ## Dependency Direction
 
@@ -124,26 +126,29 @@ Only define an RPC-local error when the adapter itself discovers a failure that 
 
 ## Dual Interface Pattern
 
-Every query/mutation provides two ways to use it:
+Query-layer adapters provide two ways to use shared operations. Component-local operations can use the same reactive shape with inline `createMutation(() => ({ mutationFn }))`.
 
-### Reactive Interface: `.options`
+### Reactive Interface: `.options` Or Local `mutationFn`
 
-Use in Svelte components for automatic state management. Pass `.options` (a static object) inside an accessor function:
+Use in Svelte components when the template reads lifecycle state. Pass `.options` (a static object) inside an accessor function for shared RPC operations. For one-off component operations, pass a local `mutationFn`:
 
 ```svelte
 <script lang="ts">
 	import { createQuery, createMutation } from '@tanstack/svelte-query';
 	import { rpc } from '$lib/rpc';
+	import { exportRecordingsMarkdown } from '$lib/recording-markdown-export';
 
-	// Reactive query - wrap in accessor function, access .options (no parentheses)
 	const playbackUrl = createQuery(() =>
 		rpc.audio.getPlaybackUrl(() => recordingId).options,
 	);
 
-	// Reactive mutation - same pattern
 	const transformRecording = createMutation(
 		() => rpc.transformer.transformRecording.options,
 	);
+
+	const exportMarkdown = createMutation(() => ({
+		mutationFn: exportRecordingsMarkdown,
+	}));
 </script>
 
 {#if playbackUrl.isPending}
@@ -155,9 +160,9 @@ Use in Svelte components for automatic state management. Pass `.options` (a stat
 {/if}
 ```
 
-### Imperative Interface: `.execute()` / `.fetch()`
+### Imperative Interface: `.execute()` / `.fetch()` / Direct Await
 
-Use in event handlers and workflows without reactive overhead:
+Use outside component context, or inside Svelte workflows that do not expose pending, success, or error state to the template:
 
 ```typescript
 // In an event handler or workflow
@@ -189,13 +194,12 @@ async function stopAndTranscribe(toastId: string) {
 
 ### When to Use Each
 
-| Use `.options` with createQuery/createMutation | Use `.execute()`/`.fetch()` |
-| ---------------------------------------------- | --------------------------- |
-| Component data display                         | Event handlers              |
-| Loading spinners needed                        | Sequential workflows        |
-| Auto-refetch wanted                            | One-time operations         |
-| Reactive state needed                          | Outside component context   |
-| Cache synchronization                          | Performance-critical paths  |
+| Situation | Pattern |
+| --------- | ------- |
+| Component reads server or async data | `createQuery(() => rpc.thing.options)` |
+| Shared mutation identity, invalidation, optimistic update, or multiple consumers | `defineMutation` in `$lib/rpc`, consumed with `createMutation(() => rpc.thing.options)` |
+| One-off Svelte button/action with observed pending, success, or error state | Local `createMutation(() => ({ mutationFn }))` |
+| `.ts` file, command workflow, service orchestration, or Svelte action with no observed lifecycle state | `.execute()`, `.fetch()`, or direct `await` |
 
 ## Key Rules
 
