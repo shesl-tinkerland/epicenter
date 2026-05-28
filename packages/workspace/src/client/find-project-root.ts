@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { PROJECT_CONFIG_FILENAME } from '../config/define-config.js';
+import { PROJECT_CONFIG_FILENAME } from '../config/project-config-source.js';
 import type { ProjectDir } from '../shared/types.js';
 
 export function findProjectRoot(start: string = process.cwd()): ProjectDir {

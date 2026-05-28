@@ -15,12 +15,12 @@
  * import type { createFujiActions } from '@epicenter/fuji';
  *
  * const fuji = await connectDaemonActions<ReturnType<typeof createFujiActions>>({
- *   route: 'fuji',
+ *   mount: 'fuji',
  * });
  * await fuji.entries_update({ id, tags: ['untagged'] });
  * ```
  *
- * Daemon-scope calls (peers, list across routes) live on `DaemonClient`
+ * Daemon-scope calls (peers, list across mounts) live on `DaemonClient`
  * directly: construct one with `daemonClient(socketPathFor(projectDir))` and
  * call `.peers()` / `.list()` against the same socket. They are not
  * reachable through this workspace handle.
@@ -35,10 +35,9 @@ import { findProjectRoot } from './find-project-root.js';
 /**
  * Connect to a workspace's public actions hosted by a running daemon.
  *
- * `route` is the name declared by a daemon module in `epicenter.config.ts`.
- * The daemon prefixes each
- * snake_case action key with `${route}.`, then dispatches the remaining key
- * against that workspace.
+ * `mount` is the `Mount.name` value from `epicenter.config.ts`. The daemon
+ * prefixes each snake_case action key with `${mount}.`, then dispatches the
+ * remaining key against that workspace.
  *
  * `projectDir` defaults to walking up from `process.cwd()` for an
  * `epicenter.config.ts` file.
@@ -49,10 +48,10 @@ import { findProjectRoot } from './find-project-root.js';
  * lifecycle is the contract.
  */
 export async function connectDaemonActions<TActions extends ActionRegistry>({
-	route,
+	mount,
 	projectDir = findProjectRoot(),
 }: {
-	route: string;
+	mount: string;
 	/**
 	 * Project root. Defaults to the nearest ancestor of `process.cwd()`
 	 * containing `epicenter.config.ts`. Throws via `findProjectRoot` if no such
@@ -62,5 +61,5 @@ export async function connectDaemonActions<TActions extends ActionRegistry>({
 }): Promise<DaemonActions<TActions>> {
 	const { data: client, error } = await getDaemon(projectDir);
 	if (error) throw error;
-	return buildDaemonActions<TActions>(client, route);
+	return buildDaemonActions<TActions>(client, mount);
 }

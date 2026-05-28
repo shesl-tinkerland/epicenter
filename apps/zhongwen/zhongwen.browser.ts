@@ -18,11 +18,12 @@ import type { SignedIn } from '@epicenter/svelte';
 import {
 	attachLocalStorage,
 	type DeviceId,
+	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import { createZhongwenWorkspace } from '@epicenter/zhongwen';
+import { createZhongwenWorkspace } from './zhongwen';
 
 export function openZhongwenBrowser({
 	signedIn,
@@ -48,10 +49,10 @@ export function openZhongwenBrowser({
 		openWebSocket: signedIn.openWebSocket,
 		onReconnectSignal: signedIn.onReconnectSignal,
 		waitFor: idb.whenLoaded,
-		actions: {},
+		actions: workspace.actions,
 	});
 
-	return {
+	return defineWorkspace({
 		...workspace,
 		idb,
 		collaboration,
@@ -63,7 +64,7 @@ export function openZhongwenBrowser({
 				ownerId: signedIn.ownerId,
 			});
 		},
-	};
+	});
 }
 
 export type ZhongwenBrowser = ReturnType<typeof openZhongwenBrowser>;

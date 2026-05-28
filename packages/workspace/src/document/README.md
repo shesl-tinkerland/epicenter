@@ -6,16 +6,17 @@ A typed interface over Y.js for apps that need to evolve their data schema over 
 
 This is a wrapper around Y.js that handles schema versioning. Local-first apps can't run migration scripts, so data has to evolve gracefully. Old data coexists with new. The Workspace API bakes that into the design: define your schemas once with versions, write a migration function, and everything else is typed.
 
-The pattern: `createWorkspace({ id, tables, kv, keyring? })` constructs the workspace's `Y.Doc` with tables and KV mounted; your `openX()` function composes additional `attach*` / `open*` primitives around it and returns whatever shape your app needs. Apps split factory code into `index.ts` (iso doc factory) and `<binding>.ts` (env-specific factory adding persistence/sync). Runtime lifecycle then lives in `session.svelte.ts` for SvelteKit signed-in apps or `client.ts` for singleton clients; see `.claude/skills/workspace-app-layout/SKILL.md`.
+The pattern: `createWorkspace({ id, tables, kv, keyring? })` constructs the low-level workspace `Y.Doc` with tables and KV mounted. Apps wrap that in `create<App>Workspace()` to define the shared isomorphic model: id, tables, actions, deterministic child docs, and disposal. Runtime openers such as `open<App>Browser()`, `open<App>Daemon()`, and `open<App>Tauri()` compose additional `attach*` / `open*` primitives around that model and return the exact shape the runtime needs. Use `defineWorkspace()` when returning a composed bundle so TypeScript preserves the inferred shape after spreads.
 
 ```
 +----------------------------------------------------------------+
 | Your App                                                       |
 +----------------------------------------------------------------+
-| function openBlog(): { ydoc, tables, kv, ...; dispose }        |
+| create<App>Workspace(): shared model                              |
+| open<App>Browser/Daemon/Tauri(): runtime attachments              |
 +----------------------------------------------------------------+
 | createWorkspace({ id, tables, kv, keyring? })                  |
-|   -> { ydoc, tables, kv, [Symbol.dispose] }                    |
+|   -> { ydoc, tables, kv, actions, [Symbol.dispose] }           |
 | attachIndexedDb / attachYjsLog / attachBroadcastChannel        |
 | attachLocalStorage(ydoc, { server, ownerId, keyring })  // encrypted IDB + scoped BC |
 | wipeLocalStorage({ server, ownerId })           // delete local data for owner |
@@ -26,13 +27,14 @@ The pattern: `createWorkspace({ id, tables, kv, keyring? })` constructs the work
 +----------------------------------------------------------------+
 ```
 
-## The Pattern: define vs attach vs create
+## The Pattern: define vs create vs open vs attach
 
 Three prefixes, each with a consistent meaning:
 
-- **`define*`** is pure: no Y.Doc, no side effects. Schemas, KV definitions, action factories.
+- **`define*`** is pure: no Y.Doc, no side effects. Schemas, KV definitions, action factories, or type-preserving wrappers such as `defineWorkspace`.
+- **`create*`** constructs a model, registry, or cache. `createWorkspace` creates the low-level Y.Doc bundle; `create<App>Workspace` creates an app's shared isomorphic model.
+- **`open*`** constructs or receives a model and attaches runtime lifecycle: browser storage, daemon sync, SQLite readers, or Tauri services.
 - **`attach*`** binds a capability to an existing `Y.Doc` (or, in one documented cross-package case, to a sibling attachment). Side-effectful: registers observers or destroy listeners at call time. Returns a typed handle.
-- **`create*`** is pure construction: no listeners, no subscriptions at call time. Primitives like `createDisposableCache` return handles that attach later.
 
 See `.agents/skills/attach-primitive/SKILL.md` for the full contract (shape, invariants, barrier naming).
 
@@ -83,7 +85,7 @@ function openBlog({ keyring }: { keyring: () => Keyring }) {
 ### Persistence + collaboration
 
 Auth belongs to the app. The workspace factory receives the signed-in identity
-(`ownerId` + `keyring` + `auth`) and a WebSocket opener, then passes them to
+(`ownerId` + `keyring` + transport functions) and a WebSocket opener, then passes them to
 `attachLocalStorage` and `openCollaboration`. `openCollaboration` wraps the
 sync supervisor, mirrors the relay's server-owned presence channel as
 `devices`, and runs inbound dispatch frames against the local action registry.
@@ -121,13 +123,13 @@ function openBlog({
 
   const collaboration = openCollaboration(workspace.ydoc, {
     url: roomWsUrl({
-      baseURL: signedIn.auth.baseURL,
+      baseURL: signedIn.baseURL,
       ownerId: signedIn.ownerId,
       guid: workspace.ydoc.guid,
       deviceId,
     }),
-    openWebSocket: signedIn.auth.openWebSocket,
-    onReconnectSignal: signedIn.auth.onStateChange,
+    openWebSocket: signedIn.openWebSocket,
+    onReconnectSignal: signedIn.onReconnectSignal,
     waitFor: idb.whenLoaded,
     actions: {},
   });
@@ -179,7 +181,7 @@ Tests live in `*.test.ts` next to the implementation. Use `createWorkspace({ id:
 
 ## Canonical references
 
-- `apps/whispering/src/lib/whispering/client.ts`: encryption + IndexedDB + BroadcastChannel + per-row materialization
+- `apps/whispering/src/lib/whispering/client.tauri.ts`: IndexedDB + BroadcastChannel + recording markdown export
 - `apps/fuji/src/lib/browser.ts`: encryption + IndexedDB + sync + server-owned presence
 - `packages/workspace/README.md`: quick start
 - `packages/workspace/SYNC_ARCHITECTURE.md`: multi-device sync design

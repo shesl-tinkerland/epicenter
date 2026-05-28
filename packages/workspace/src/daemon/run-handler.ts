@@ -7,11 +7,11 @@
  *   request.peerTarget === undefined  ->  invokeAction(...)
  *   request.peerTarget === <deviceId>  ->  collab.dispatch({ to, action, input, signal })
  *
- * The dispatch endpoint is HTTP-backed and addresses devices by
- * `deviceId` directly; the relay routes to the most-recently-connected
- * socket for that device. If the relay has no live socket for the target,
- * the dispatch resolves with `RecipientOffline`, which the `/run` route
- * surfaces as `PeerNotFound`; any other dispatch error is forwarded under
+ * The dispatch endpoint is HTTP-backed and addresses devices by `deviceId`
+ * directly; the relay routes to the most-recently-connected socket for that
+ * device. If the relay has no live socket for the target, the dispatch
+ * resolves with `RecipientOffline`, which the `/run` route surfaces as
+ * `PeerNotFound`; any other dispatch error is forwarded under
  * `RemoteCallFailed`.
  *
  * Power-user automation (loops, fan-out across peers, conditional dispatch)
@@ -33,27 +33,25 @@ import {
 	type RunResponse,
 	type RunSyncStatus,
 } from './run-errors.js';
-import type { DaemonServedRoute } from './types.js';
+import type { DaemonServedMount } from './types.js';
 
 export async function executeRun(
-	routes: readonly DaemonServedRoute[],
+	mounts: readonly DaemonServedMount[],
 	{ actionPath, input: actionInput, peerTarget, waitMs }: RunRequest,
 ): Promise<RunResponse> {
-	const { routeName, localPath } = parseDaemonActionPath(actionPath);
-	const routeRuntime = routes.find(
-		(candidate) => candidate.route === routeName,
-	);
-	if (!routeRuntime) {
-		const available = routes.map((candidate) => candidate.route);
+	const { mount, localPath } = parseDaemonActionPath(actionPath);
+	const mountRuntime = mounts.find((candidate) => candidate.mount === mount);
+	if (!mountRuntime) {
+		const available = mounts.map((candidate) => candidate.mount);
 		return RunError.UsageError({
-			message: `No daemon route "${routeName}". Available: ${available.join(', ')}`,
+			message: `No mount "${mount}". Available: ${available.join(', ')}`,
 			suggestions: available.map((name) => `  ${name}`),
 		});
 	}
 
-	const action = routeRuntime.runtime.collaboration.actions[localPath];
+	const action = mountRuntime.runtime.collaboration.actions[localPath];
 	if (!action) {
-		const descendants = daemonActionSuggestionLines(routeRuntime, localPath);
+		const descendants = daemonActionSuggestionLines(mountRuntime, localPath);
 		if (descendants.length > 0) {
 			return RunError.UsageError({
 				message: `"${actionPath}" is not a runnable action.`,
@@ -62,7 +60,7 @@ export async function executeRun(
 		}
 		return RunError.UsageError({
 			message: `"${actionPath}" is not defined.`,
-			suggestions: daemonActionNearestSiblingLines(routeRuntime, localPath),
+			suggestions: daemonActionNearestSiblingLines(mountRuntime, localPath),
 		});
 	}
 
@@ -71,7 +69,7 @@ export async function executeRun(
 			actionInput,
 			localPath,
 			peerTarget,
-			routeRuntime,
+			mountRuntime,
 			waitMs,
 		});
 	}
@@ -87,16 +85,16 @@ async function invokeRemote({
 	actionInput,
 	localPath,
 	peerTarget,
-	routeRuntime,
+	mountRuntime,
 	waitMs,
 }: {
 	actionInput: unknown;
 	localPath: string;
 	peerTarget: string;
-	routeRuntime: DaemonServedRoute;
+	mountRuntime: DaemonServedMount;
 	waitMs: number;
 }): Promise<RunResponse> {
-	const { runtime } = routeRuntime;
+	const { runtime } = mountRuntime;
 
 	const result = await runtime.collaboration.dispatch({
 		to: peerTarget,
@@ -158,26 +156,26 @@ function toRunSyncStatus(status: SyncStatus): RunSyncStatus {
 }
 
 function daemonActionSuggestionLines(
-	routeRuntime: DaemonServedRoute,
+	mountRuntime: DaemonServedMount,
 	prefix: string,
 ): string[] {
-	return Object.entries(routeRuntime.runtime.collaboration.actions)
+	return Object.entries(mountRuntime.runtime.collaboration.actions)
 		.filter(([path]) => !prefix || path.startsWith(prefix))
 		.map(
 			([path, action]) =>
-				`  ${joinDaemonActionPath(routeRuntime.route, path)}  (${action.type})`,
+				`  ${joinDaemonActionPath(mountRuntime.mount, path)}  (${action.type})`,
 		);
 }
 
 function daemonActionNearestSiblingLines(
-	routeRuntime: DaemonServedRoute,
+	mountRuntime: DaemonServedMount,
 	missedPath: string,
 ): string[] {
 	const parts = missedPath.split('_');
 	while (parts.length > 0) {
 		parts.pop();
 		const prefix = parts.join('_');
-		const alts = daemonActionSuggestionLines(routeRuntime, prefix);
+		const alts = daemonActionSuggestionLines(mountRuntime, prefix);
 		if (alts.length > 0) return alts;
 	}
 	return [];

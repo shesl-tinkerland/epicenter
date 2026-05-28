@@ -1,6 +1,6 @@
 import type { InferKvValue } from '@epicenter/workspace';
 import { SvelteMap } from 'svelte/reactivity';
-import { whispering } from '$lib/whispering/client';
+import { whispering } from '$lib/whispering/whispering';
 import { whisperingKv } from '$lib/workspace';
 
 const KV_DEFINITIONS = whisperingKv;

@@ -6,7 +6,7 @@
  *
  *  1. workspace root doc (encrypted tables + KV via createOpensidianWorkspace)
  *  2. local storage + cloud sync for root (attachLocalStorage + openCollaboration)
- *  3. per-file child content docs (plaintext timeline + encrypted IDB storage)
+ *  3. runtime storage + sync around the shared per-file child docs
  *  4. file system, sqlite index, bash, and action registry
  *  5. wipe / dispose teardown
  *
@@ -26,21 +26,16 @@ import {
 import type { SignedIn } from '@epicenter/svelte';
 import {
 	attachLocalStorage,
-	attachTimeline,
 	createDisposableCache,
 	type DeviceId,
-	onLocalUpdate,
+	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
 import { Bash } from 'just-bash';
-import {
-	createOpensidianWorkspace,
-	opensidianFileContentDocGuid,
-} from 'opensidian';
-import * as Y from 'yjs';
-import { createOpensidianActions } from './actions';
+import { createOpensidianWorkspace } from './opensidian';
+import { createOpensidianActions } from './opensidian.browser.actions';
 
 export function openOpensidianBrowser({
 	signedIn,
@@ -59,25 +54,19 @@ export function openOpensidianBrowser({
 	});
 
 	const fileContentDocs = createDisposableCache((fileId: FileId) => {
-		const childYdoc = new Y.Doc({
-			guid: opensidianFileContentDocGuid(fileId),
-			gc: true,
-		});
-		onLocalUpdate(childYdoc, () =>
-			tables.files.update(fileId, { updatedAt: Date.now() }),
-		);
-		const childIdb = attachLocalStorage(childYdoc, {
+		const contentDoc = workspace.fileContentDocs.open(fileId);
+		const childIdb = attachLocalStorage(contentDoc.ydoc, {
 			server: signedIn.server,
 			ownerId: signedIn.ownerId,
 			keyring: signedIn.keyring,
 		});
 		// File bodies sync through Cloud so device loss doesn't drop the largest
 		// data class.
-		const childSync = openCollaboration(childYdoc, {
+		const childSync = openCollaboration(contentDoc.ydoc, {
 			url: roomWsUrl({
 				baseURL: signedIn.baseURL,
 				ownerId: signedIn.ownerId,
-				guid: childYdoc.guid,
+				guid: contentDoc.ydoc.guid,
 				deviceId,
 			}),
 			openWebSocket: signedIn.openWebSocket,
@@ -86,8 +75,7 @@ export function openOpensidianBrowser({
 			actions: {},
 		});
 		return {
-			ydoc: childYdoc,
-			content: attachTimeline(childYdoc),
+			...contentDoc,
 			idb: childIdb,
 			sync: childSync,
 			/**
@@ -96,7 +84,7 @@ export function openOpensidianBrowser({
 			 * storage deletion.
 			 */
 			[Symbol.dispose]() {
-				childYdoc.destroy();
+				contentDoc[Symbol.dispose]();
 			},
 		};
 	});
@@ -126,11 +114,14 @@ export function openOpensidianBrowser({
 	const sqliteIndexExports = sqliteIndex.exports;
 	const fs = attachYjsFileSystem(ydoc, tables.files, fileContent);
 	const bash = new Bash({ fs, cwd: '/' });
-	const actions = createOpensidianActions({
-		fs,
-		sqliteIndex: sqliteIndexExports,
-		bash,
-	});
+	const actions = {
+		...workspace.actions,
+		...createOpensidianActions({
+			fs,
+			sqliteIndex: sqliteIndexExports,
+			bash,
+		}),
+	};
 
 	const collaboration = openCollaboration(ydoc, {
 		url: roomWsUrl({
@@ -155,7 +146,7 @@ export function openOpensidianBrowser({
 		workspace[Symbol.dispose]();
 	}
 
-	return {
+	return defineWorkspace({
 		...workspace,
 		idb,
 		fileContentDocs,
@@ -175,7 +166,7 @@ export function openOpensidianBrowser({
 		[Symbol.dispose]() {
 			teardownDocs();
 		},
-	};
+	});
 }
 
 export type OpensidianBrowser = ReturnType<typeof openOpensidianBrowser>;

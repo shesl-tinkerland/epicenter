@@ -1,6 +1,6 @@
 import { Ok, tryAsync } from 'wellcrafted/result';
 import { report } from '$lib/report';
-import { whispering } from '$lib/whispering/client';
+import { whispering } from '$lib/whispering/whispering';
 import {
 	type DbMigrationState,
 	getDatabaseMigrationState,

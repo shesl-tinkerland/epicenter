@@ -1,13 +1,13 @@
 /**
  * Daemon-side runtime types.
  *
- * `DaemonRuntime` is the contract every opened daemon extension returns:
- * async dispose plus the hosted `Collaboration<TActions>` that owns identity,
- * actions, sync, and the live-device surface.
+ * `DaemonRuntime` is the contract every opened mount returns: async dispose
+ * plus the hosted `Collaboration<TActions>` that owns identity, actions, sync,
+ * and the live-device surface.
  *
- * `DaemonServedRoute` is the narrowed route handler contract for the socket
- * app. `StartedDaemonRoute` is the lifecycle-owning route shape opened from a
- * configured daemon extension.
+ * `DaemonServedMount` is the narrowed mount-handler contract for the socket
+ * app. `StartedMount` is the lifecycle-owning mount shape opened from a
+ * configured mount factory.
  */
 
 import type { Result } from 'wellcrafted/result';
@@ -34,15 +34,15 @@ type DaemonServedCollaboration<
 };
 
 /**
- * One routed runtime as served by the daemon socket app.
+ * One mounted runtime as served by the daemon socket app.
  *
- * Full started routes can pass through structurally, but route handlers do not
- * depend on lifecycle fields such as async disposal.
+ * Full started mounts can pass through structurally, but mount handlers do
+ * not depend on lifecycle fields such as async disposal.
  */
-export type DaemonServedRoute<
+export type DaemonServedMount<
 	TActions extends ActionRegistry = ActionRegistry,
 > = {
-	route: string;
+	mount: string;
 	runtime: {
 		collaboration: DaemonServedCollaboration<TActions>;
 	};
@@ -57,13 +57,13 @@ export type DaemonRuntime<TActions extends ActionRegistry = ActionRegistry> = {
 
 	/**
 	 * The hosted collaboration. Identity, action registry, sync status, and
-	 * the live-device surface for cross-route dispatch all live here.
+	 * the live-device surface for cross-mount dispatch all live here.
 	 */
 	readonly collaboration: Collaboration<TActions>;
 };
 
-/** One configured daemon runtime hosted by the daemon. */
-export type StartedDaemonRoute = {
-	route: string;
+/** One configured mount runtime hosted by the daemon. */
+export type StartedMount = {
+	mount: string;
 	runtime: DaemonRuntime;
 };

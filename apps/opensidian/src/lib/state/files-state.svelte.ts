@@ -3,7 +3,7 @@ import { fromTable } from '@epicenter/svelte';
 import { toast } from '@epicenter/ui/sonner';
 import { SvelteSet } from 'svelte/reactivity';
 import { extractErrorMessage } from 'wellcrafted/error';
-import type { OpensidianBrowser } from '$lib/opensidian/browser';
+import type { OpensidianBrowser } from 'opensidian/browser';
 import { searchParams } from '$lib/search-params.svelte';
 
 /**
@@ -38,9 +38,9 @@ type InteractionMode =
  * </script>
  * ```
  */
-export function createFilesState({ binding }: { binding: OpensidianBrowser }) {
+export function createFilesState({ workspace }: { workspace: OpensidianBrowser }) {
 	// ── Reactive source ──────────────────────────────────────────────
-	const filesMap = fromTable(binding.tables.files);
+	const filesMap = fromTable(workspace.tables.files);
 
 	// ── Reactive state ───────────────────────────────────────────────
 	const openFileIds = new SvelteSet<FileId>();
@@ -374,7 +374,7 @@ export function createFilesState({ binding }: { binding: OpensidianBrowser }) {
 			await withErrorToast(async () => {
 				const parentPath = parentId ? (state.getPath(parentId) ?? '/') : '/';
 				const path = parentPath === '/' ? `/${name}` : `${parentPath}/${name}`;
-				await binding.fs.writeFile(path, '');
+				await workspace.fs.writeFile(path, '');
 				toast.success(`Created ${path}`);
 			}, 'Failed to create file');
 		},
@@ -383,7 +383,7 @@ export function createFilesState({ binding }: { binding: OpensidianBrowser }) {
 			await withErrorToast(async () => {
 				const parentPath = parentId ? (state.getPath(parentId) ?? '/') : '/';
 				const path = parentPath === '/' ? `/${name}` : `${parentPath}/${name}`;
-				await binding.fs.mkdir(path);
+				await workspace.fs.mkdir(path);
 				if (parentId) expandedIds.add(parentId);
 				toast.success(`Created ${path}/`);
 			}, 'Failed to create folder');
@@ -393,7 +393,7 @@ export function createFilesState({ binding }: { binding: OpensidianBrowser }) {
 			await withErrorToast(async () => {
 				const path = state.getPath(id);
 				if (!path) return;
-				await binding.fs.rm(path, { recursive: true });
+				await workspace.fs.rm(path, { recursive: true });
 				if (searchParams.file === id) searchParams.update({ file: null });
 				openFileIds.delete(id);
 				toast.success(`Deleted ${path}`);
@@ -408,7 +408,7 @@ export function createFilesState({ binding }: { binding: OpensidianBrowser }) {
 					oldPath.substring(0, oldPath.lastIndexOf('/')) || '/';
 				const newPath =
 					parentPath === '/' ? `/${newName}` : `${parentPath}/${newName}`;
-				await binding.fs.mv(oldPath, newPath);
+				await workspace.fs.mv(oldPath, newPath);
 				toast.success(`Renamed to ${newName}`);
 			}, 'Failed to rename');
 		},

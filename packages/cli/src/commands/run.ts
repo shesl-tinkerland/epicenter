@@ -1,18 +1,18 @@
 /**
- * `epicenter run <route.action_key> [input]`: invoke a `defineQuery` or
- * `defineMutation` by route-qualified snake_case action key through the local
+ * `epicenter run <mount.action_key> [input]`: invoke a `defineQuery` or
+ * `defineMutation` by mount-prefixed action path through the local
  * `epicenter daemon up` daemon.
  *
  * `input` is JSON: inline positional, `@file.json` (curl convention), or stdin.
  * With `--peer <target>`, the invocation is dispatched over the selected
- * route's RPC channel to a remote peer instead of running locally.
+ * mount's RPC channel to a remote peer instead of running locally.
  *
  * `epicenter run` requires a running daemon for the discovered project.
  * Without `daemon up`, the handler errors with a hint pointing at
  * `epicenter daemon up`.
  *
  * Exit codes:
- *   1: usage error (unknown route, unknown action, invalid input for
+ *   1: usage error (unknown mount, unknown action, invalid input for
  *      `--peer`), or no daemon (`Required`, transport error)
  *   2: runtime error (local action returned Err, or remote RPC failed)
  *   3: peer not found (`--peer <target>` did not resolve within `--wait`)
@@ -49,7 +49,7 @@ export const runCommand = cmd({
 			.positional('action', {
 				type: 'string',
 				demandOption: true,
-				describe: 'Route-qualified action key, e.g. notes.notes_add',
+				describe: 'Mount-prefixed action path, e.g. notes.notes_add',
 			})
 			.positional('input', {
 				type: 'string',

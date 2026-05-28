@@ -122,7 +122,7 @@
 		"cf:apply": "infisical run --env=prod --path=/ops -- bun run scripts/cf/apply.ts",
 		"cli": "bun packages/cli/src/bin.ts",
 		"cli:local": "EPICENTER_API_URL=http://localhost:8787 bun packages/cli/src/bin.ts",
-		"epicenter": "EPICENTER_SERVER=http://localhost:8787 bun run --bun epicenter",
+		"epicenter": "EPICENTER_API_URL=http://localhost:8787 bun run --bun epicenter",
 		"jsrepo:build": "jsrepo build"
 	},
 	"devDependencies": {

@@ -19,27 +19,27 @@ import type { ActionRegistry } from '../shared/actions.js';
 import { defineMutation, defineQuery } from '../shared/actions.js';
 import type { RunSyncStatus } from './run-errors.js';
 import { executeRun } from './run-handler.js';
-import type { DaemonServedRoute } from './types.js';
+import type { DaemonServedMount } from './types.js';
 
 type FakeDispatch = <TOutput = unknown>(
 	req: DispatchRequest,
 ) => Promise<Result<TOutput, DispatchError>>;
 
 function fakeEntry({
-	route = 'demo',
+	mount = 'demo',
 	actions = {
 		tabs_list: defineQuery({ handler: () => [] }),
 	},
 	syncStatus = { phase: 'connected' },
 	dispatch = (async () => ({ data: null, error: null })) as FakeDispatch,
 }: {
-	route?: string;
+	mount?: string;
 	actions?: ActionRegistry;
 	syncStatus?: SyncStatus;
 	dispatch?: FakeDispatch;
-} = {}): DaemonServedRoute {
+} = {}): DaemonServedMount {
 	return {
-		route,
+		mount,
 		runtime: {
 			collaboration: {
 				actions,
@@ -135,10 +135,10 @@ describe('executeRun peer dispatch', () => {
 	});
 });
 
-describe('executeRun route-prefixed routing', () => {
-	test('invokes action under the selected daemon route', async () => {
+describe('executeRun mount-prefixed routing', () => {
+	test('invokes action under the selected mount', async () => {
 		const entry = fakeEntry({
-			route: 'notes',
+			mount: 'notes',
 			actions: {
 				notes_add: defineMutation({
 					handler: () => ({ body: 'hello' }),
@@ -158,7 +158,7 @@ describe('executeRun route-prefixed routing', () => {
 
 	test('missing prefix suggests action-root-relative sibling', async () => {
 		const entry = fakeEntry({
-			route: 'notes',
+			mount: 'notes',
 			actions: {
 				notes_add: defineMutation({
 					handler: () => ({ body: 'hello' }),
@@ -180,9 +180,9 @@ describe('executeRun route-prefixed routing', () => {
 		expect(error.suggestions).toEqual(['  notes.notes_add  (mutation)']);
 	});
 
-	test('unknown route returns available route suggestions', async () => {
+	test('unknown mount returns available mount suggestions', async () => {
 		const result = await executeRun(
-			[fakeEntry({}), fakeEntry({ route: 'tasks', actions: {} })],
+			[fakeEntry({}), fakeEntry({ mount: 'tasks', actions: {} })],
 			{
 				actionPath: 'missing.actions_add',
 				input: undefined,
@@ -196,7 +196,7 @@ describe('executeRun route-prefixed routing', () => {
 			throw new Error('expected UsageError');
 		}
 		expect(error.message).toBe(
-			'No daemon route "missing". Available: demo, tasks',
+			'No mount "missing". Available: demo, tasks',
 		);
 		expect(error.suggestions).toEqual(['  demo', '  tasks']);
 	});

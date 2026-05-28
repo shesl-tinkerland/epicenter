@@ -1,6 +1,6 @@
 /**
  * Opensidian workspace playground: markdown and SQLite materializers around
- * the daemon extension contract.
+ * the mount contract.
  *
  * Run with:
  *
@@ -15,11 +15,10 @@ import {
 	createDisposableCache,
 	defineActions,
 	defineMutation,
-	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 } from '@epicenter/workspace';
-import type { DaemonWorkspaceContext } from '@epicenter/workspace/daemon';
+import { defineMount, type MountContext } from '@epicenter/workspace/daemon';
 import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import { toSlugFilename } from '@epicenter/workspace/markdown';
@@ -37,7 +36,7 @@ import Type from 'typebox';
 import * as Y from 'yjs';
 import { prepareMarkdownFiles } from '../../prepare-markdown-files';
 
-const SERVER_URL = process.env.EPICENTER_SERVER ?? 'https://api.epicenter.so';
+const SERVER_URL = process.env.EPICENTER_API_URL ?? 'https://api.epicenter.so';
 
 async function openOpensidianPlayground({
 	projectDir,
@@ -47,7 +46,7 @@ async function openOpensidianPlayground({
 	keyring,
 	openWebSocket,
 	onReconnectSignal,
-}: DaemonWorkspaceContext) {
+}: MountContext) {
 	const workspace = createOpensidianWorkspace({ keyring });
 	workspace.ydoc.clientID = yDocClientId;
 	const { ydoc, tables, kv } = workspace;
@@ -175,6 +174,7 @@ export type OpensidianPlaygroundRuntime = Awaited<
 	ReturnType<typeof openOpensidianPlayground>
 >;
 
-export default defineWorkspace({
+export default defineMount({
+	name: 'opensidian',
 	open: openOpensidianPlayground,
 });

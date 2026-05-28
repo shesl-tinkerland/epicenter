@@ -3,7 +3,7 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import type { DaemonRouteNameIssue } from './route-validation.js';
+import type { MountNameIssue } from './mount-validation.js';
 
 /**
  * Tagged-error variants for daemon startup.
@@ -11,7 +11,7 @@ import type { DaemonRouteNameIssue } from './route-validation.js';
  * - `AlreadyRunning`: another daemon owns this project lease or answers ping.
  * - `LeaseFailed`: the SQLite lease could not be opened or locked.
  * - `BindFailed`: `Bun.serve` raised on an unrecoverable bind error.
- * - `RouteNameRejected`: embedded callers passed invalid route names.
+ * - `MountNameRejected`: embedded callers passed invalid mount names.
  * - `MetadataWriteFailed`: startup could not publish its metadata sidecar.
  *
  * Auth-construction failures are surfaced as `MachineAuthStorageError`
@@ -31,12 +31,12 @@ export const StartupError = defineErrors({
 		message: `bind failed: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
-	RouteNameRejected: ({ route, reason }: DaemonRouteNameIssue) => ({
+	MountNameRejected: ({ mount, reason }: MountNameIssue) => ({
 		message:
 			reason === 'duplicate'
-				? `duplicate daemon route '${route}'`
-				: `invalid daemon route '${route}'`,
-		route,
+				? `duplicate mount '${mount}'`
+				: `invalid mount name '${mount}'`,
+		mount,
 		reason,
 	}),
 	MetadataWriteFailed: ({ cause }: { cause: unknown }) => ({

@@ -57,17 +57,17 @@ function emit(rows: PeerSnapshot[], format: OutputFormat | undefined): void {
 		return;
 	}
 
-	const byRoute = new Map<string, PeerSnapshot[]>();
+	const byMount = new Map<string, PeerSnapshot[]>();
 	for (const row of rows) {
-		const list = byRoute.get(row.route);
+		const list = byMount.get(row.mount);
 		if (list) list.push(row);
-		else byRoute.set(row.route, [row]);
+		else byMount.set(row.mount, [row]);
 	}
 
 	let i = 0;
-	for (const [route, group] of byRoute) {
+	for (const [mount, group] of byMount) {
 		if (i > 0) console.log('');
-		console.log(route);
+		console.log(mount);
 		console.table(
 			group
 				.map((snap) => ({ deviceId: snap.deviceId }))

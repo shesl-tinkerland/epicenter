@@ -7,7 +7,7 @@
  * § "Acceptance criteria". Each line below cites the criterion and the test
  * that exercises it (or the infra gap that blocks coverage).
  *
- *   [ok] `daemon up` prints "online (routes=[...])" on stderr,
+ *   [ok] `daemon up` prints "online (mounts=[...])" on stderr,
  *        followed by the initial peers snapshot.
  *        Covered by `daemon up lifecycle: online banner + peers snapshot + clean exit`.
  *   [ok] Ctrl-C / SIGTERM exits cleanly with no orphan socket / metadata.
@@ -38,7 +38,7 @@
  *        peer attachments.
  *   [gap] DeviceId in the banner reflects the real peer.
  *        Infra gap: `up.ts § pickDeviceId` returns `'<unknown>'` because
- *        `DaemonWorkspace.sync` doesn't expose self awareness post-connect.
+ *        the mount's collaboration doesn't expose self awareness post-connect.
  *        Reported in Wave 5; out of scope here.
  */
 

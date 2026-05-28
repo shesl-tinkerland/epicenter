@@ -1,12 +1,12 @@
 /**
- * Startup tests for `startDaemonWorkspaceApps`.
+ * Startup tests for `startProjectMounts`.
  *
  * Pin three contracts:
- * - happy path opens every configured daemon route in parallel and returns the
- *   started routes
+ * - happy path opens every configured mount in parallel and returns the
+ *   started mounts
  * - if any sibling `open(ctx)` rejects, all successfully opened runtimes are
  *   asyncDispose'd before the structured error propagates
- * - invalid route names fail before any route opens
+ * - invalid mount names fail before any mount opens
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -16,14 +16,11 @@ import { join } from 'node:path';
 
 import { asOwnerId } from '@epicenter/constants/identity';
 import { expectErr, expectOk } from 'wellcrafted/testing';
-import type {
-	DaemonWorkspaceContext,
-	DaemonWorkspaceDefinition,
-} from '../daemon/define-workspace.js';
+import type { Mount, MountContext } from '../daemon/define-mount.js';
 import type { DaemonRuntime } from '../daemon/types.js';
 
 import type { WorkspaceAuthClient } from './auth-client.js';
-import { startDaemonWorkspaceApps } from './start-daemon-workspace-apps.js';
+import { startProjectMounts } from './start-project-mounts.js';
 
 let projectDir: string;
 
@@ -35,8 +32,8 @@ afterEach(() => {
 	rmSync(projectDir, { recursive: true, force: true });
 });
 
-function disposeMarkerPath(route: string): string {
-	return join(projectDir, `${route}.disposed`);
+function disposeMarkerPath(mount: string): string {
+	return join(projectDir, `${mount}.disposed`);
 }
 
 function stubAuthClient(): WorkspaceAuthClient {
@@ -62,113 +59,117 @@ function testRuntime(
 	};
 }
 
-describe('startDaemonWorkspaceApps', () => {
-	test('opens every configured daemon route and returns the started routes', async () => {
-		const routes = {
-			alpha: {
-				async open(ctx: DaemonWorkspaceContext) {
-					expect(ctx.route).toBe('alpha');
+describe('startProjectMounts', () => {
+	test('opens every configured mount and returns the started mounts', async () => {
+		const mounts: Mount[] = [
+			{
+				name: 'alpha',
+				async open(ctx: MountContext) {
+					expect(ctx.mount).toBe('alpha');
 					return testRuntime();
 				},
 			},
-			beta: {
-				async open(ctx: DaemonWorkspaceContext) {
-					expect(ctx.route).toBe('beta');
+			{
+				name: 'beta',
+				async open(ctx: MountContext) {
+					expect(ctx.mount).toBe('beta');
 					return testRuntime();
 				},
 			},
-		} satisfies Record<string, DaemonWorkspaceDefinition>;
+		];
 
-		const result = await startDaemonWorkspaceApps({
+		const result = await startProjectMounts({
 			projectDir,
 			auth: stubAuthClient(),
-			routes,
+			mounts,
 		});
 		const data = expectOk(result);
-		const routeNames = data
-			.map((entry) => entry.route)
+		const names = data
+			.map((entry) => entry.mount)
 			.slice()
 			.sort();
-		expect(routeNames).toEqual(['alpha', 'beta']);
+		expect(names).toEqual(['alpha', 'beta']);
 	});
 
 	test('disposes successfully opened runtimes when a sibling open fails', async () => {
 		const goodMarker = disposeMarkerPath('good');
-		const routes = {
-			good: {
+		const mounts: Mount[] = [
+			{
+				name: 'good',
 				async open() {
 					return testRuntime(() => writeFileSync(goodMarker, 'disposed'));
 				},
 			},
-			bad: {
+			{
+				name: 'bad',
 				async open() {
 					throw new Error('boom');
 				},
 			},
-		} satisfies Record<string, DaemonWorkspaceDefinition>;
+		];
 
-		const result = await startDaemonWorkspaceApps({
+		const result = await startProjectMounts({
 			projectDir,
 			auth: stubAuthClient(),
-			routes,
+			mounts,
 		});
 		const error = expectErr(result);
-		expect(error.name).toBe('WorkspaceOpenFailed');
-		expect(error).toMatchObject({ route: 'bad' });
+		expect(error.name).toBe('MountOpenFailed');
+		expect(error).toMatchObject({ mount: 'bad' });
 
 		expect(await Bun.file(goodMarker).exists()).toBe(true);
 	});
 
-	test('rejects invalid route names before opening routes', async () => {
+	test('rejects invalid mount names before opening mounts', async () => {
 		const marker = disposeMarkerPath('invalid');
-		const routes = Object.create(null) as Record<
-			string,
-			DaemonWorkspaceDefinition
-		>;
-		routes.__proto__ = {
-			async open() {
-				writeFileSync(marker, 'opened');
-				return testRuntime();
+		const mounts: Mount[] = [
+			{
+				name: '__proto__',
+				async open() {
+					writeFileSync(marker, 'opened');
+					return testRuntime();
+				},
 			},
-		};
+		];
 
-		const result = await startDaemonWorkspaceApps({
+		const result = await startProjectMounts({
 			projectDir,
 			auth: stubAuthClient(),
-			routes,
+			mounts,
 		});
 		const error = expectErr(result);
 		expect(error).toMatchObject({
-			name: 'WorkspaceRouteRejected',
-			route: '__proto__',
+			name: 'MountRejected',
+			mount: '__proto__',
 			reason: 'invalid',
 		});
 		expect(await Bun.file(marker).exists()).toBe(false);
 	});
 
-	test('returns an empty result when the config declares no routes', async () => {
-		const result = await startDaemonWorkspaceApps({
+	test('returns an empty result when no mounts are configured', async () => {
+		const result = await startProjectMounts({
 			projectDir,
 			auth: stubAuthClient(),
-			routes: {},
+			mounts: [],
 		});
 		const data = expectOk(result);
 		expect(data).toEqual([]);
 	});
 
-	test('refuses to open routes when machine auth is signed out', async () => {
-		const routes = {
-			alpha: {
+	test('refuses to open mounts when machine auth is signed out', async () => {
+		const mounts: Mount[] = [
+			{
+				name: 'alpha',
 				async open() {
 					throw new Error('must not open');
 				},
 			},
-		} satisfies Record<string, DaemonWorkspaceDefinition>;
+		];
 
-		const result = await startDaemonWorkspaceApps({
+		const result = await startProjectMounts({
 			projectDir,
 			auth: { state: { status: 'signed-out' } } as WorkspaceAuthClient,
-			routes,
+			mounts,
 		});
 		const error = expectErr(result);
 		expect(error.name).toBe('WorkspaceAuthSignedOut');

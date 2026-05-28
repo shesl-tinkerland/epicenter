@@ -26,7 +26,7 @@ export type WorkspaceAuthState =
 /**
  * Workspace's structural view of an auth client. Any object whose shape
  * matches (notably `@epicenter/auth`'s `AuthClient`) can be passed to
- * `startDaemonWorkspaceApps`.
+ * `startProjectMounts`.
  *
  * Workspace reads three surfaces: the discriminated `state` (to gate startup
  * on signed-in and to derive the lazy keyring reader), `openWebSocket` (for

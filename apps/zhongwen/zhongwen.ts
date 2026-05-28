@@ -1,24 +1,28 @@
 /**
- * Zhongwen workspace schema: id, branded types, tables, kv, and actions.
- * Pure data. No Y.Doc, no encryption, no openers.
+ * Zhongwen workspace contract: id, branded types, tables, kv, actions, and
+ * the workspace factory. Isomorphic: no IndexedDB, WebSockets, Svelte state,
+ * browser APIs, or daemon process lifecycle.
  *
- * Distribution: this file is the `@epicenter/zhongwen` package root export.
- * Browser and daemon entrypoints import the schema from here and compose
- * runtime-specific attachments around it. The table and KV shapes here are
- * the wire contract for sync; forking a column shape breaks sync
- * compatibility with peers running the canonical schema.
+ * Distribution: this file is the `@epicenter/zhongwen` package root file
+ * (the target of the package's `"."` export). Browser and daemon entrypoints
+ * import the schema from here and compose runtime-specific attachments
+ * around it. The table and KV shapes here are the wire contract for sync;
+ * forking a column shape breaks sync compatibility with peers running the
+ * canonical schema.
  *
  * Composition lives elsewhere:
- *  - `apps/zhongwen/src/routes/(signed-in)/zhongwen/browser.ts`
+ *  - `apps/zhongwen/zhongwen.browser.ts`
  *      → `openZhongwenBrowser({ signedIn, deviceId })`
- *  - `apps/zhongwen/daemon.ts` → `openZhongwenDaemon(ctx)`
+ *  - `apps/zhongwen/project.ts` → `zhongwen()` mount factory
  */
 
 import {
 	column,
 	createWorkspace,
+	defineActions,
 	defineKv,
 	defineTable,
+	defineWorkspace,
 	generateId,
 	type Id,
 	type InferTableRow,
@@ -36,7 +40,7 @@ export const ZHONGWEN_ID = 'epicenter.zhongwen';
 
 export type ConversationId = Id & Brand<'ConversationId'>;
 export const generateConversationId = (): ConversationId =>
-	generateId() as ConversationId;
+	generateId<ConversationId>();
 /**
  * Syntactic sugar for `value as ConversationId`. The constrained `string` parameter
  * is what earns it over a raw `as` cast (callers can't widen to `unknown`).
@@ -47,7 +51,7 @@ export const asConversationId = (value: string): ConversationId =>
 
 export type ChatMessageId = Id & Brand<'ChatMessageId'>;
 export const generateChatMessageId = (): ChatMessageId =>
-	generateId() as ChatMessageId;
+	generateId<ChatMessageId>();
 /**
  * Syntactic sugar for `value as ChatMessageId`. The constrained `string` parameter
  * is what earns it over a raw `as` cast (callers can't widen to `unknown`).
@@ -79,20 +83,33 @@ const chatMessagesTable = defineTable({
 });
 export type ChatMessage = InferTableRow<typeof chatMessagesTable>;
 
+const zhongwenTables = {
+	conversations: conversationsTable,
+	chatMessages: chatMessagesTable,
+};
+
+const zhongwenKv = {
+	showPinyin: defineKv(Type.Boolean(), () => true),
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Workspace Factory
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function createZhongwenWorkspace(opts: { keyring: () => Keyring }) {
-	return createWorkspace({
+	const workspace = createWorkspace({
 		id: ZHONGWEN_ID,
 		keyring: opts.keyring,
-		tables: {
-			conversations: conversationsTable,
-			chatMessages: chatMessagesTable,
-		},
-		kv: {
-			showPinyin: defineKv(Type.Boolean(), () => true),
+		tables: zhongwenTables,
+		kv: zhongwenKv,
+	});
+	const actions = defineActions({});
+
+	return defineWorkspace({
+		...workspace,
+		actions,
+		[Symbol.dispose]() {
+			workspace[Symbol.dispose]();
 		},
 	});
 }

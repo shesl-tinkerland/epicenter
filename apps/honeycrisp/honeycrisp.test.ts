@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { asNoteId, noteBodyDocGuid } from './workspace.js';
+import { asNoteId, noteBodyDocGuid } from './honeycrisp.js';
 
 describe('Honeycrisp schema helpers', () => {
 	test('noteBodyDocGuid is deterministic per note id', () => {

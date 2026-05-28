@@ -1,6 +1,6 @@
 # @epicenter/cli
 
-> Introspect and invoke `defineQuery` / `defineMutation` actions exposed by configured daemon routes, locally or on a peer that's online right now.
+> Introspect and invoke `defineQuery` / `defineMutation` actions exposed by configured project mounts, locally or on a peer that's online right now.
 
 Each verb is a one-line shell shortcut for one workspace primitive:
 
@@ -35,7 +35,7 @@ The same env var and scripts apply to every command that talks to the API, inclu
 
 ## Commands
 
-`epicenter daemon up` opens every route listed in the project's `epicenter.config.ts`. `list`, `run`, and `peers` dispatch to that local daemon over its Unix socket.
+`epicenter daemon up` opens every mount listed in the project's `epicenter.config.ts`. `list`, `run`, and `peers` dispatch to that local daemon over its Unix socket.
 
 ```bash
 epicenter auth login
@@ -54,53 +54,51 @@ epicenter run fuji.entries_update '{"id":"entry_1","tags":["triaged"]}' --peer u
 epicenter peers -C ~/vault
 ```
 
-`-C` is a start directory for project discovery. Discovery walks upward until it finds `epicenter.config.ts`, then the daemon starts every route in that config.
+`-C` is a start directory for project discovery. Discovery walks upward until it finds `epicenter.config.ts`, then the daemon starts every mount in that config.
 
-## Daemon Extensions
+## Project Mounts
 
-`epicenter.config.ts` owns route identity. The daemon module path is only an import chosen by the project, and one daemon process can host every route in the map.
+`epicenter.config.ts` owns project discovery. The default export is a `Mount` (single mount) or a `Mount[]` (multi-mount). App packages ship a mount factory that returns a `Mount` carrying its own canonical name.
+
+```ts
+import { fuji } from '@epicenter/fuji/project';
+
+export default fuji();
+```
+
+The factory carries the canonical mount name (`fuji`), so the CLI addresses actions as `fuji.<action_key>` regardless of the project folder name.
+
+For projects that host more than one app workspace, export an array:
+
+```ts
+import { fuji } from '@epicenter/fuji/project';
+import { honeycrisp } from '@epicenter/honeycrisp/project';
+
+export default [fuji(), honeycrisp()];
+```
 
 ```
-my-vault/
+my-project/
 ├── epicenter.config.ts
-├── workspaces/
-│   └── fuji/
-│       ├── daemon.ts
-│       └── workspace.ts
 └── .epicenter/
 ```
 
-```ts
-import { defineConfig } from '@epicenter/workspace';
-import fuji from './workspaces/fuji/daemon.ts';
-
-export default defineConfig({
-	daemon: {
-		routes: {
-			fuji,
-		},
-	},
-});
-```
-
-The imported module exports a route-agnostic daemon workspace definition. The route name comes from the `daemon.routes` object key (for multi-route configs) or from the project directory's basename (for single-workspace configs).
+Writing a custom mount inline uses `defineMount` from `@epicenter/workspace/daemon`:
 
 ```ts
-import { defineWorkspace } from '@epicenter/workspace';
+import { defineMount } from '@epicenter/workspace/daemon';
 
-export default defineWorkspace({
-	async open({ keyring, openWebSocket, projectDir, route, owner, deviceId, yDocClientId }) {
+export default defineMount({
+	name: 'notes',
+	async open({ keyring, openWebSocket, projectDir, mount, ownerId, deviceId, yDocClientId }) {
 		// Open the long-lived local runtime.
-		// `route` was supplied by epicenter.config.ts (or derived from the
-		// project directory's basename in single-workspace projects).
+		// `mount` is the canonical mount name carried on the Mount object.
 		// Return { collaboration, [Symbol.asyncDispose] }.
 	},
 });
 ```
 
-The route key is the CLI route prefix. The same daemon module can be mounted under a different key, and the CLI follows that key. In the example above, Fuji actions are exposed as `fuji.<action_key>` because the project config includes the module under `fuji`.
-
-`workspaces/` is an organization convention for source files. It is not scanned, and it does not enable routes by itself. A small project can import daemon modules from any path as long as `epicenter.config.ts` registers them.
+`Mount.name` is the CLI prefix. Two mounts in one project must have distinct names; duplicates fail before any mount opens.
 
 `.epicenter/` holds generated project data such as SQLite materializers, Yjs update logs, markdown materializers, and its generated `.gitignore`. It is not a registry. Runtime files live outside the project: sockets and daemon metadata use the OS runtime directory, while daemon logs use the platform log directory from `env-paths`.
 
@@ -113,7 +111,7 @@ import { connectDaemonActions } from '@epicenter/workspace/node';
 import type { createFujiActions } from '@epicenter/fuji';
 
 const fuji = await connectDaemonActions<ReturnType<typeof createFujiActions>>({
-	route: 'fuji',
+	mount: 'fuji',
 });
 
 await fuji.entries_update({ id, tags: ['triaged'] });

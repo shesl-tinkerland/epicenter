@@ -4,6 +4,13 @@ Status: draft
 Owner: braden
 Date: 2026-05-22
 
+Current code note (2026-05-27): the default direction in this spec still
+matches current code: a project can default-export `defineWorkspace({ open })`
+from `epicenter.config.ts`. The strong "no more daemon.routes" language below
+is too absolute. `defineConfig({ daemon: { routes: { ... } } })` remains the
+multi-route escape hatch, and `workspaces/` remains a source-layout convention
+only.
+
 ## 1. Goal
 
 Pin down the on-disk layout for any Epicenter-using project so that:

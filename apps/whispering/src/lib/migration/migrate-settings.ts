@@ -12,7 +12,7 @@ import { Err, Ok, tryAsync, trySync } from 'wellcrafted/result';
 import { defineErrors } from 'wellcrafted/error';
 import { createLogger } from 'wellcrafted/logger';
 import { deviceConfig } from '$lib/state/device-config.svelte';
-import { whispering } from '$lib/whispering/client';
+import { whispering } from '$lib/whispering/whispering';
 import { whisperingKv } from '$lib/workspace';
 
 // ── Migration state ──────────────────────────────────────────────────────────

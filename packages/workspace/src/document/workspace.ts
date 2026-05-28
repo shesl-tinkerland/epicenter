@@ -49,6 +49,7 @@
 
 import type { Keyring } from '@epicenter/encryption';
 import * as Y from 'yjs';
+import { type ActionRegistry, defineActions } from '../shared/actions.js';
 import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
 import { deriveWorkspaceKeyring } from './derive-workspace-keyring.js';
 import { KV_KEY, TableKey } from './keys.js';
@@ -63,12 +64,31 @@ import {
 export type Workspace<
 	TTables extends TableDefinitions,
 	TKv extends KvDefinitions,
+	TActions extends ActionRegistry = ActionRegistry,
 > = {
 	readonly ydoc: Y.Doc;
 	readonly tables: Tables<TTables>;
 	readonly kv: Kv<TKv>;
+	readonly actions: TActions;
 	[Symbol.dispose](): void;
 };
+
+/**
+ * Type-check a live workspace bundle while preserving its exact inferred type.
+ *
+ * Use this when a runtime opener returns `{ ...workspace, ...runtimeExtras }`
+ * and direct `satisfies Workspace<...>` would force the caller to restate table,
+ * KV, action, or runtime generics that TypeScript can infer from the object.
+ * Runtime behavior is identity: the same object is returned unchanged.
+ */
+export function defineWorkspace<
+	TTables extends TableDefinitions,
+	TKv extends KvDefinitions,
+	TActions extends ActionRegistry,
+	TWorkspace extends Workspace<TTables, TKv, TActions>,
+>(workspace: TWorkspace): TWorkspace {
+	return workspace;
+}
 
 export type CreateWorkspaceOptions<
 	TTables extends TableDefinitions,
@@ -99,7 +119,8 @@ export type CreateWorkspaceOptions<
 };
 
 /**
- * Build a fully wired workspace bundle: `{ ydoc, tables, kv, [Symbol.dispose] }`.
+ * Build a fully wired workspace bundle:
+ * `{ ydoc, tables, kv, actions, [Symbol.dispose] }`.
  *
  * The encrypted branch is the production path. It runs the same
  * construct, activate, hook-destroy sequence the deleted `attachEncryption`
@@ -125,7 +146,7 @@ export type CreateWorkspaceOptions<
 export function createWorkspace<
 	TTables extends TableDefinitions,
 	TKv extends KvDefinitions,
->(options: CreateWorkspaceOptions<TTables, TKv>): Workspace<TTables, TKv> {
+>(options: CreateWorkspaceOptions<TTables, TKv>): Workspace<TTables, TKv, {}> {
 	const ydoc = new Y.Doc({
 		guid: options.id,
 		gc: true,
@@ -177,12 +198,13 @@ export function createWorkspace<
 
 	const kv = createKv(attachStore(KV_KEY), options.kv);
 
-	return {
+	return defineWorkspace({
 		ydoc,
 		tables,
 		kv,
+		actions: defineActions({}),
 		[Symbol.dispose]() {
 			ydoc.destroy();
 		},
-	};
+	});
 }

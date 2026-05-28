@@ -1,10 +1,10 @@
 /**
  * Shared workspace shape for the two-peer cross-peer sync repro.
  *
- * Each peer's `daemon.ts` calls `openNotes(ctx-derived-args)` so both peers
+ * Each peer's mount module calls `openNotes(ctx-derived-args)` so both peers
  * agree on the workspace id, the table schema, and the action set; the only
- * thing that differs between peers is the `deviceId` (the daemon ctx
- * default is `${route}-daemon`, but cross-peer sync requires distinct
+ * thing that differs between peers is the `deviceId` (the mount ctx
+ * default is `${mount}-daemon`, but cross-peer sync requires distinct
  * deviceIds for the same workspace, so each peer hard-codes its own).
  */
 

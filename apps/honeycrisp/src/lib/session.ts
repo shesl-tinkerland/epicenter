@@ -1,7 +1,7 @@
 import { createSession } from '@epicenter/svelte';
 import { createDeviceId } from '@epicenter/workspace';
 import { auth } from '$platform/auth';
-import { openHoneycrispBrowser } from '../../browser';
+import { openHoneycrispBrowser } from '../../honeycrisp.browser';
 import { createHoneycrispState } from '../routes/(signed-in)/state';
 
 export const session = createSession({

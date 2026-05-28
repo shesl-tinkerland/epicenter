@@ -1,9 +1,15 @@
 # Folder-Routed Daemon Extensions
 
 **Date**: 2026-05-16
-**Status**: Active
+**Status**: Superseded
 **Author**: Braden + AI-assisted
 **Supersedes**: `20260516T130000-hosted-apps-with-optional-daemon-extensions.md`
+**Superseded by**: current config-owned route loading via `defineWorkspace` and `defineConfig({ daemon: { routes } })`
+
+> Historical note: `workspaces/` is no longer scanned by the daemon loader.
+> Current projects are discovered by `epicenter.config.ts`. The default shape
+> is a single `defineWorkspace({ open })` export; multi-route projects use
+> `defineConfig({ daemon: { routes: { ... } } })`.
 
 ## One Sentence
 

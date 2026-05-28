@@ -1,13 +1,13 @@
 /**
  * Daemon Server Tests
  *
- * Verifies that `startDaemonServer` validates route names, binds exactly one
+ * Verifies that `startDaemonServer` validates mount names, binds exactly one
  * socket for an already-claimed daemon lease, and exposes an idempotent close
  * operation.
  *
  * Key behaviors:
- * - valid routes are served over the daemon client
- * - invalid route declarations fail before binding a socket
+ * - valid mounts are served over the daemon client
+ * - invalid mount declarations fail before binding a socket
  * - close stops the listener, removes the socket file, and can run twice
  * - /run dispatches a real action handler over the Unix socket
  */
@@ -19,7 +19,7 @@ import { type ActionRegistry, defineQuery } from '../shared/actions.js';
 import { daemonClient } from './client.js';
 import { claimDaemonLease, type DaemonLease } from './lease.js';
 import { startDaemonServer } from './server.js';
-import type { DaemonServedRoute } from './types.js';
+import type { DaemonServedMount } from './types.js';
 
 let originalRuntimeDir: string | undefined;
 let runtimeRoot: string;
@@ -27,7 +27,7 @@ let workDir: string;
 
 function makeRuntime(
 	actions: ActionRegistry = {},
-): DaemonServedRoute['runtime'] {
+): DaemonServedMount['runtime'] {
 	return {
 		collaboration: {
 			actions,
@@ -64,11 +64,11 @@ afterEach(() => {
 });
 
 describe('startDaemonServer', () => {
-	test('starts the configured daemon routes', async () => {
+	test('starts the configured mounts', async () => {
 		const lease = claimTestLease();
 		const serverResult = await startDaemonServer({
 			lease,
-			routes: [{ route: 'demo', runtime: makeRuntime() }],
+			mounts: [{ mount: 'demo', runtime: makeRuntime() }],
 		});
 
 		try {
@@ -82,21 +82,21 @@ describe('startDaemonServer', () => {
 		}
 	});
 
-	test('returns RouteNameRejected before binding duplicate routes', async () => {
+	test('returns MountNameRejected before binding duplicate mounts', async () => {
 		const lease = claimTestLease();
 		try {
 			const error = expectErr(
 				await startDaemonServer({
 					lease,
-					routes: [
-						{ route: 'demo', runtime: makeRuntime() },
-						{ route: 'demo', runtime: makeRuntime() },
+					mounts: [
+						{ mount: 'demo', runtime: makeRuntime() },
+						{ mount: 'demo', runtime: makeRuntime() },
 					],
 				}),
 			);
 			expect(error).toMatchObject({
-				name: 'RouteNameRejected',
-				route: 'demo',
+				name: 'MountNameRejected',
+				mount: 'demo',
 				reason: 'duplicate',
 			});
 			expect(existsSync(lease.socketPath)).toBe(false);
@@ -105,18 +105,18 @@ describe('startDaemonServer', () => {
 		}
 	});
 
-	test('returns RouteNameRejected before binding invalid routes', async () => {
+	test('returns MountNameRejected before binding invalid mounts', async () => {
 		const lease = claimTestLease();
 		try {
 			const error = expectErr(
 				await startDaemonServer({
 					lease,
-					routes: [{ route: 'bad.route', runtime: makeRuntime() }],
+					mounts: [{ mount: 'bad.mount', runtime: makeRuntime() }],
 				}),
 			);
 			expect(error).toMatchObject({
-				name: 'RouteNameRejected',
-				route: 'bad.route',
+				name: 'MountNameRejected',
+				mount: 'bad.mount',
 				reason: 'invalid',
 			});
 			expect(existsSync(lease.socketPath)).toBe(false);
@@ -129,7 +129,7 @@ describe('startDaemonServer', () => {
 		const lease = claimTestLease();
 		const serverResult = await startDaemonServer({
 			lease,
-			routes: [{ route: 'demo', runtime: makeRuntime() }],
+			mounts: [{ mount: 'demo', runtime: makeRuntime() }],
 		});
 
 		try {
@@ -152,7 +152,7 @@ describe('startDaemonServer', () => {
 		});
 		const serverResult = await startDaemonServer({
 			lease,
-			routes: [{ route: 'demo', runtime }],
+			mounts: [{ mount: 'demo', runtime }],
 		});
 
 		try {

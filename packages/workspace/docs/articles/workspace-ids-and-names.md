@@ -1,5 +1,11 @@
 # How Epicenter uses Workspace IDs and Names
 
+> Historical note: this article describes an older `defineWorkspace({ id, name })`
+> dependency model. Current apps use `createWorkspace({ id })` inside
+> `create<App>Workspace()`, then expose runtime-specific openers such as
+> `open<App>Browser()` and `open<App>Daemon()`. Keep reading for the naming
+> rationale, not the current API shape.
+
 I borrowed a page from Visual Studio Code's extension architecture. VS Code has Extension IDs and Command IDs. Epicenter workspaces have IDs and names. Same idea, different scale.
 
 ## The Problem

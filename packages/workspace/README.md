@@ -4,8 +4,26 @@ The hard problem with local-first apps is synchronization. If each device has it
 
 `@epicenter/workspace` solves that by making Yjs the source of truth. Tables, KV entries, and document content all live in a `Y.Doc`; persistence, sync, and materializers hang off that core as attachment primitives. Write to the workspace, and everything else reacts.
 
-The public path is `createWorkspace(...)` for the root bundle plus a small set
-of `attach*` / `open*` primitives that you compose inline around
+The current center is small:
+
+```txt
+createWorkspace()
+  low-level package primitive
+
+create<App>Workspace()
+  app's shared isomorphic model: id, tables, kv, actions, child docs
+
+open<App>Browser()
+open<App>Daemon()
+open<App>Tauri()
+  runtime-specific wiring: storage, sync, materializers, platform services
+
+defineWorkspace()
+  preserves the exact inferred bundle shape after composition
+```
+
+The public path is `createWorkspace(...)` for the root bundle plus `attach*`
+and `open*` primitives that app openers compose inline around
 `workspace.ydoc`. Browser apps with many child Y.Docs use
 `createDisposableCache(...)` to share live child documents. Browser storage
 cleanup stays in app-owned helper functions that already know the parent table
@@ -104,8 +122,8 @@ Every exported function in this package falls into one of three verbs. The prefi
 
 | Verb | Side effect | Input | Output | Examples |
 |---|---|---|---|---|
-| `define*` | **None**: pure data | Schemas, defaults | Plain config object | `defineTable`, `defineKv`, `defineMutation`, `defineQuery` |
-| `create*` | **Constructs**: bundles or pure definitions | Definitions, options | Disposable bundle or pure value | `createWorkspace` (root bundle: ydoc + tables + kv + dispose), `createDisposableCache` (refcounted per-row cache) |
+| `define*` | **None**: pure data or type contract | Schemas, defaults, typed bundle values | Plain config object or same value back | `defineTable`, `defineKv`, `defineMutation`, `defineQuery`, `defineWorkspace` |
+| `create*` | **Constructs**: bundles, models, registries, or pure definitions | Definitions, options | Disposable bundle or pure value | `createWorkspace` (root bundle: ydoc + tables + kv + empty actions + dispose), `createFujiWorkspace` (app model), `createDisposableCache` (refcounted per-row cache) |
 | `attach*` | **Mutates a Y.Doc**: binds a slot, registers `ydoc.on('destroy')` | An existing `Y.Doc` + config (the three materializers take the bundle from `createWorkspace`) | Typed handle, non-idempotent, hold the reference | `attachRichText`, `attachPlainText`, `attachTimeline`, `attachIndexedDb`, `attachLocalStorage`, `attachYjsLog`, `attachBroadcastChannel`, `attachMarkdownMaterializer`, `attachBunSqliteMaterializer`, `attachTursoMaterializer` |
 | `open*` | **Opens a runtime over a Y.Doc or a local resource**: returns a typed handle with its own teardown. The Y.Doc-bound case (`openCollaboration`) registers `ydoc.on('destroy')` like `attach*` does; the resource case (`openSqliteReader`) takes no Y.Doc and returns a `[Symbol.dispose]()` handle. | Y.Doc + config, or resource config | Typed runtime handle | `openCollaboration`, `openSqliteReader`, `openWriterSqlite` |
 
@@ -121,16 +139,24 @@ data that never leaves the device, encrypted for data the server stores.
 
 One factory, both modes. `createWorkspace({ id, tables, kv, keyring? })` constructs the root Y.Doc, materializes the table and KV stores onto it, and registers cascade disposal. Pass a `keyring: () => Keyring` callback to encrypt every store under the owner keyring narrowed to `id` (one HKDF derivation, shared across stores); omit it for plaintext. Same-owner key rotation requires a fresh `createWorkspace` call (and therefore a fresh Y.Doc) to take effect.
 
-Apps usually wrap `createWorkspace` in a per-app factory next to their schema so the table set and id constant live in one place:
+Apps usually wrap `createWorkspace` in a per-app factory next to their schema so the table set, id constant, actions, and shared child-doc model live in one place:
 
 ```ts
 // apps/my-app/workspace.ts
+import { createWorkspace, defineWorkspace } from '@epicenter/workspace';
+
 export function createMyAppWorkspace(opts: { keyring: () => Keyring }) {
-	return createWorkspace({
+	const workspace = createWorkspace({
 		id: 'epicenter.my-app',
 		keyring: opts.keyring,
 		tables: myAppTables,
 		kv: {},
+	});
+	const actions = createMyAppActions(workspace);
+
+	return defineWorkspace({
+		...workspace,
+		actions,
 	});
 }
 ```
@@ -141,6 +167,7 @@ Minimal encrypted browser workspace: encryption + owner-scoped IndexedDB + cross
 import {
 	attachLocalStorage,
 	createDeviceId,
+	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
@@ -167,18 +194,18 @@ export function openApp({
 
 	const collaboration = openCollaboration(workspace.ydoc, {
 		url: roomWsUrl({
-			baseURL: signedIn.auth.baseURL,
+			baseURL: signedIn.baseURL,
 			ownerId: signedIn.ownerId,
 			guid: workspace.ydoc.guid,
 			deviceId,
 		}),
 		waitFor: idb.whenLoaded,
-		openWebSocket: signedIn.auth.openWebSocket,
-		onReconnectSignal: signedIn.auth.onStateChange,
-		actions: {},
+		openWebSocket: signedIn.openWebSocket,
+		onReconnectSignal: signedIn.onReconnectSignal,
+		actions: workspace.actions,
 	});
 
-	return {
+	return defineWorkspace({
 		...workspace,
 		idb,
 		collaboration,
@@ -190,12 +217,12 @@ export function openApp({
 				ownerId: signedIn.ownerId,
 			});
 		},
-	};
+	});
 }
 
 export const session = createSession({
 	auth,
-	build: ({ signedIn }) =>
+	build: (signedIn) =>
 		openApp({
 			signedIn,
 			deviceId: createDeviceId({ storage: localStorage }),

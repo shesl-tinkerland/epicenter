@@ -1,8 +1,8 @@
 /**
- * Minimal fixture: one daemon route with inline `defineQuery` /
- * `defineMutation` nodes grouped under `actions:`. No sqlite or encryption,
- * no real WebSocket: a hand-stubbed `collaboration` matches the daemon's
- * structural contract so config-routed daemon startup accepts it.
+ * Minimal fixture: one mount with inline `defineQuery` / `defineMutation`
+ * nodes grouped under `actions:`. No sqlite or encryption, no real WebSocket:
+ * a hand-stubbed `collaboration` matches the daemon's structural contract so
+ * mount startup accepts it.
  *
  * CLI paths are `demo.counter_{get,increment,set}`.
  */
@@ -10,8 +10,8 @@
 import {
 	defineMutation,
 	defineQuery,
-	defineWorkspace,
 } from '@epicenter/workspace';
+import { defineMount } from '@epicenter/workspace/daemon';
 import Type from 'typebox';
 import * as Y from 'yjs';
 
@@ -62,7 +62,7 @@ const collaboration = {
 	},
 };
 
-export const demo = {
+export const demoRuntime = {
 	workspaceId: ydoc.guid,
 	collaboration,
 	async [Symbol.asyncDispose]() {
@@ -71,6 +71,7 @@ export const demo = {
 	ydoc,
 };
 
-export default defineWorkspace({
-	open: () => demo,
+export default defineMount({
+	name: 'demo',
+	open: () => demoRuntime,
 });

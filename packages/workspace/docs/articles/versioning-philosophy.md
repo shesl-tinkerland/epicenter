@@ -1,5 +1,10 @@
 # Why Epicenter Uses Numbers Instead of Semantic Versioning
 
+> Historical note: this article talks about workspace-level `version` fields
+> from an older API. Current schema evolution is table-local:
+> `defineTable(v1, v2, ...).migrate(...)`, and `createWorkspace({ id, tables,
+> kv })` has no workspace version option.
+
 In Epicenter, workspace versions are just numbers: 1, 2, 3, 4.
 
 Not semantic versions like "1.0.0" or "2.1.3". Just plain old integers.

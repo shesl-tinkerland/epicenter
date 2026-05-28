@@ -12,17 +12,17 @@ export type {
 } from './client/daemon-actions.js';
 export { buildDaemonActions } from './client/daemon-actions.js';
 export { findProjectRoot } from './client/find-project-root.js';
-export { DEFAULT_PROJECT_CONFIG_SOURCE } from './config/define-config.js';
 export {
 	loadProjectConfig,
 	ProjectConfigError,
 } from './config/load-project-config.js';
+export { DEFAULT_PROJECT_CONFIG_SOURCE } from './config/project-config-source.js';
 export { PeerSnapshot, RunRequest } from './daemon/app.js';
 export {
-	type AttachDaemonInfrastructureOptions,
-	attachDaemonInfrastructure,
-	type DaemonInfrastructure,
-} from './daemon/attach-daemon-infrastructure.js';
+	type AttachProjectInfrastructureOptions,
+	attachProjectInfrastructure,
+	type ProjectInfrastructure,
+} from './daemon/attach-project-infrastructure.js';
 export {
 	type DaemonClient,
 	DaemonError,
@@ -30,6 +30,11 @@ export {
 	getDaemon,
 	pingDaemon,
 } from './daemon/client.js';
+export {
+	defineMount,
+	type Mount,
+	type MountContext,
+} from './daemon/define-mount.js';
 export {
 	claimDaemonLease,
 	type DaemonLease,
@@ -63,7 +68,7 @@ export {
 export { StartupError } from './daemon/startup-errors.js';
 export type {
 	DaemonRuntime,
-	StartedDaemonRoute,
+	StartedMount,
 } from './daemon/types.js';
 export {
 	attachYjsLog,
@@ -91,6 +96,6 @@ export type {
 } from './workspace-apps/auth-client.js';
 export { WorkspaceAppError } from './workspace-apps/errors.js';
 export {
-	type StartDaemonWorkspaceAppsOptions,
-	startDaemonWorkspaceApps,
-} from './workspace-apps/start-daemon-workspace-apps.js';
+	type StartProjectMountsOptions,
+	startProjectMounts,
+} from './workspace-apps/start-project-mounts.js';

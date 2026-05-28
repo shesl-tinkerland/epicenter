@@ -5,7 +5,7 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import * as Y from 'yjs';
-	import { whispering } from '$lib/whispering/client';
+	import { whispering } from '$lib/whispering/whispering';
 
 	// ── Metrics ────────────────────────────────────────────────────────────────
 

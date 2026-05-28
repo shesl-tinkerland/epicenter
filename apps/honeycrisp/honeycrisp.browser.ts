@@ -6,7 +6,7 @@
  *
  *  1. workspace root doc (encrypted tables + KV via createHoneycrispWorkspace)
  *  2. local storage + cloud sync for root (attachLocalStorage + openCollaboration)
- *  3. per-note rich-text body sub-docs (plaintext Y.XmlFragment + encrypted IDB)
+ *  3. runtime storage + sync around the shared per-note child docs
  *
  * `openCollaboration` owns reconnect-on-auth-change internally, so this file
  * has no per-app onStateChange listener.
@@ -19,22 +19,14 @@
 import type { SignedIn } from '@epicenter/svelte';
 import {
 	attachLocalStorage,
-	attachRichText,
 	createDisposableCache,
-	DateTimeString,
 	type DeviceId,
-	onLocalUpdate,
+	defineWorkspace,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import * as Y from 'yjs';
-import {
-	createHoneycrispActions,
-	createHoneycrispWorkspace,
-	type NoteId,
-	noteBodyDocGuid,
-} from './workspace';
+import { createHoneycrispWorkspace, type NoteId } from './honeycrisp';
 
 export function openHoneycrispBrowser({
 	signedIn,
@@ -44,7 +36,6 @@ export function openHoneycrispBrowser({
 	deviceId: DeviceId;
 }) {
 	const workspace = createHoneycrispWorkspace({ keyring: signedIn.keyring });
-	const actions = createHoneycrispActions(workspace);
 
 	const idb = attachLocalStorage(workspace.ydoc, {
 		server: signedIn.server,
@@ -61,25 +52,21 @@ export function openHoneycrispBrowser({
 		openWebSocket: signedIn.openWebSocket,
 		onReconnectSignal: signedIn.onReconnectSignal,
 		waitFor: idb.whenLoaded,
-		actions,
+		actions: workspace.actions,
 	});
 
 	const noteBodyDocs = createDisposableCache((noteId: NoteId) => {
-		const childYdoc = new Y.Doc({
-			guid: noteBodyDocGuid(noteId),
-			gc: true,
-		});
-		const body = attachRichText(childYdoc);
-		const childIdb = attachLocalStorage(childYdoc, {
+		const bodyDoc = workspace.noteBodyDocs.open(noteId);
+		const childIdb = attachLocalStorage(bodyDoc.ydoc, {
 			server: signedIn.server,
 			ownerId: signedIn.ownerId,
 			keyring: signedIn.keyring,
 		});
-		const childSync = openCollaboration(childYdoc, {
+		const childSync = openCollaboration(bodyDoc.ydoc, {
 			url: roomWsUrl({
 				baseURL: signedIn.baseURL,
 				ownerId: signedIn.ownerId,
-				guid: childYdoc.guid,
+				guid: bodyDoc.ydoc.guid,
 				deviceId,
 			}),
 			openWebSocket: signedIn.openWebSocket,
@@ -88,15 +75,8 @@ export function openHoneycrispBrowser({
 			actions: {},
 		});
 
-		onLocalUpdate(childYdoc, () => {
-			workspace.tables.notes.update(noteId, {
-				updatedAt: DateTimeString.now(),
-			});
-		});
-
 		return {
-			ydoc: childYdoc,
-			body,
+			...bodyDoc,
 			idb: childIdb,
 			sync: childSync,
 			/**
@@ -105,14 +85,14 @@ export function openHoneycrispBrowser({
 			 * storage deletion.
 			 */
 			[Symbol.dispose]() {
-				childYdoc.destroy();
+				bodyDoc[Symbol.dispose]();
 			},
 		};
 	});
 
-	return {
+	return defineWorkspace({
 		...workspace,
-		actions,
+		actions: workspace.actions,
 		idb,
 		noteBodyDocs,
 		collaboration,
@@ -129,7 +109,7 @@ export function openHoneycrispBrowser({
 			noteBodyDocs[Symbol.dispose]();
 			workspace[Symbol.dispose]();
 		},
-	};
+	});
 }
 
 export type HoneycrispBrowser = ReturnType<typeof openHoneycrispBrowser>;

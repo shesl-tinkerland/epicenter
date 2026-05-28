@@ -54,6 +54,7 @@ Concrete regressions to watch for:
 - **Re-export chains in non-barrel files**: `export { X } from './alias'` outside `index.ts` costs an extra hop with nothing to show for it. Reserve `export { ... } from ...` for barrels; export at the declaration everywhere else.
 - **Adapter / proxy / wrapper with no behavior change**: a `fromX` translator or thin passthrough makes Go-to-Def land on the wrapper. Widen the underlying factory's return shape instead (see `factory-function-composition` "collapsed adapter" rule).
 - **Manual return type annotation duplicating zone 4**: annotating a factory with a hand-written interface diverts Go-to-Def to the alias. Use `ReturnType<typeof createThing>` so navigation lands on the actual returned member (this is the same choice that drives JSDoc preservation, see `method-shorthand-jsdoc`).
+- **Noisy `satisfies` generic lists**: if a return object should prove it extends a generic contract but `satisfies Contract<A, B, C> & Extras` forces callers to restate inferred table, action, or runtime types, prefer a constrained identity helper owned by the contract module. Example: `return defineWorkspaceBundle({ ...workspace, ...runtime })` where the helper accepts `TWorkspace extends Workspace<...>` and returns `TWorkspace`. This keeps the call site readable, preserves the exact inferred return type, and leaves Go-to-Def on the real object members.
 
 For broader public-shape decisions that affect navigation across packages, see `cohesive-clean-breaks`.
 

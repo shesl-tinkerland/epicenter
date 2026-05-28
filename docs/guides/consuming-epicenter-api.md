@@ -4,9 +4,9 @@
 > `createWorkspace(definition).withEncryption().withExtension(...)` builder
 > chain, and later an owner factory that wrapped the encryption, local
 > storage, and per-owner wipe paths behind a single object. Both shapes
-> are gone. There is one pattern today: a per-app browser opener that calls
-> every `attach*` primitive inline against a `Y.Doc`, plus
-> `openCollaboration` for sync, server-owned presence, and HTTP dispatch.
+> are gone. There is one pattern today: `createWorkspace()` builds the low-level
+> bundle, `create<App>Workspace()` defines the app's shared isomorphic model,
+> and `open<App>Browser()` attaches browser storage and sync inline.
 >
 > Rather than maintain two versions of the same narrative, this guide also
 > points at the canonical sources:
@@ -19,91 +19,104 @@
 
 The hosted hub at `https://api.epicenter.so` handles auth, real-time sync, AI inference, and encryption key derivation. It runs on Cloudflare Workers with Durable Objects. Cloud sync enters through `/api/owners/:ownerId/rooms/:roomId` (the same path in both personal and team mode): a cloud doc is owned by the authenticated `ownerId` and addressed by its `ydoc.guid`, and the server resolves the room from the auth token. Browser apps and the workspace daemon both use this route.
 
-On the client, `@epicenter/workspace` exposes the primitives directly: define your schema with `defineTable` / `defineKv`, call `createWorkspace({ id, keyring, tables, kv })` to get a bundle with `ydoc`, `tables`, and `kv`, then attach `attachLocalStorage` and `openCollaboration` inline. Authenticate with `@epicenter/auth` and gate the workspace lifecycle on signed-in identity with `createSession` from `@epicenter/svelte`.
+On the client, `@epicenter/workspace` exposes the primitives directly: define your schema with `defineTable` / `defineKv`, call `createWorkspace({ id, keyring, tables, kv })` inside a per-app `create<App>Workspace()` helper, then attach `attachLocalStorage` and `openCollaboration` inside `open<App>Browser()`. Authenticate with `@epicenter/auth` and gate the workspace lifecycle on signed-in identity with `createSession` from `@epicenter/svelte`.
 
 ## Minimal cloud workspace shape
 
-This snippet shows a signed-in cloud workspace. The client builds the sync URL with `roomWsUrl({ baseURL, ownerId, guid, installationId })`; the server resolves the room from the auth token, so the client never names a workspaceId.
+This snippet shows a signed-in cloud workspace. The client builds the sync URL with `roomWsUrl({ baseURL, ownerId, guid, deviceId })`; the server resolves the room from the auth token, so the client never names a workspaceId.
 
 The per-app browser opener is the single source of truth for "how this app mounts in a browser." `createWorkspace` builds the typed bundle in one call; every other `attach*` step is visible top-to-bottom against `workspace.ydoc`.
 
 ```typescript
 import {
 	attachLocalStorage,
-	createInstallationId,
+	createDeviceId,
 	createWorkspace,
+	defineActions,
+	defineMutation,
+	defineWorkspace,
+	column,
 	defineTable,
 	openCollaboration,
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
 import { createSession, type InferSignedIn, type SignedIn } from '@epicenter/svelte';
-import { type } from 'arktype';
+import Type from 'typebox';
 import { auth } from './auth';
 
 const MY_APP_ID = 'epicenter.my-app';
 
 const myAppTables = {
-	notes: defineTable(
-		type({
-			id: 'string',
-			title: 'string',
-			_v: '1',
-		}),
-	),
+	notes: defineTable({
+		id: column.string(),
+		title: column.string(),
+	}),
 };
 
-export function openMyAppBrowser({
-	signedIn,
-	installationId,
-}: {
-	signedIn: SignedIn;
-	installationId: string;
-}) {
+function createMyAppWorkspace(opts: { keyring: SignedIn['keyring'] }) {
 	const workspace = createWorkspace({
 		id: MY_APP_ID,
-		keyring: signedIn.keyring,
+		keyring: opts.keyring,
 		tables: myAppTables,
 		kv: {},
 	});
-	const actions = {
-		notes_create: async ({ id, title }: { id: string; title: string }) => {
-			workspace.tables.notes.create({ id, title, _v: 1 });
-		},
-	};
+	const actions = defineActions({
+		notes_create: defineMutation({
+			description: 'Create a note',
+			input: Type.Object({ id: Type.String(), title: Type.String() }),
+			handler: ({ id, title }) => {
+				workspace.tables.notes.set({ id, title });
+			},
+		}),
+	});
+
+	return defineWorkspace({
+		...workspace,
+		actions,
+	});
+}
+
+export function openMyAppBrowser({
+	signedIn,
+	deviceId,
+}: {
+	signedIn: SignedIn;
+	deviceId: string;
+}) {
+	const workspace = createMyAppWorkspace({ keyring: signedIn.keyring });
 
 	const idb = attachLocalStorage(workspace.ydoc, {
-		server: signedIn.auth.baseURL,
+		server: signedIn.server,
 		ownerId: signedIn.ownerId,
 		keyring: signedIn.keyring,
 	});
 	const collab = openCollaboration(workspace.ydoc, {
 		url: roomWsUrl({
-			baseURL: signedIn.auth.baseURL,
+			baseURL: signedIn.baseURL,
 			ownerId: signedIn.ownerId,
 			guid: workspace.ydoc.guid,
-			installationId,
+			deviceId,
 		}),
-		openWebSocket: signedIn.auth.openWebSocket,
-		onReconnectSignal: signedIn.auth.onStateChange,
+		openWebSocket: signedIn.openWebSocket,
+		onReconnectSignal: signedIn.onReconnectSignal,
 		waitFor: idb.whenLoaded,
-		actions,
+		actions: workspace.actions,
 	});
 
-	return {
+	return defineWorkspace({
 		...workspace,
-		actions,
 		idb,
 		collab,
 		async wipe() {
 			workspace[Symbol.dispose]();
 			await Promise.all([idb.whenDisposed, collab.whenDisposed]);
 			await wipeLocalStorage({
-				server: signedIn.auth.baseURL,
+				server: signedIn.server,
 				ownerId: signedIn.ownerId,
 			});
 		},
-	};
+	});
 }
 
 export const session = createSession({
@@ -111,7 +124,7 @@ export const session = createSession({
 	build: (signedIn) => {
 		const workspace = openMyAppBrowser({
 			signedIn,
-			installationId: createInstallationId({ storage: localStorage }),
+			deviceId: createDeviceId({ storage: localStorage }),
 		});
 		return {
 			...workspace,
@@ -127,6 +140,6 @@ export type MyAppSignedIn = InferSignedIn<typeof session>;
 
 The `ydoc.guid` is both the local IndexedDB key and the cloud room id. Namespace it to your app, for example `epicenter.my-app`, to avoid collisions when multiple apps share the same IndexedDB origin. The cloud sync route is `/api/owners/:ownerId/rooms/:roomId` in both modes, taking the room id straight from `ydoc.guid`; the server resolves the DO name `owners/${ownerId}/rooms/${room}` from the auth token, with no workspace lookup. In personal mode `ownerId === user.id`; in team mode `ownerId === 'team'`.
 
-`createSession({ auth, build })` reconciles `auth.state` against the live workspace and hands `build` a `SignedIn` value shaped `{ server, ownerId, mode, keyring, auth }`. `createWorkspace` reads `keyring` to derive per-table keys; `attachLocalStorage` reads `server` and `ownerId` to namespace the IndexedDB database under the owner prefix; `openCollaboration` uses `auth.openWebSocket` to attach the bearer token at connection time and `auth.onStateChange` to react to auth changes. Sign-out disposes the workspace, and a same-owner identity refresh keeps the workspace mounted. A different owner from `/api/session` is rejected by auth before the workspace is reused.
+`createSession({ auth, build })` reconciles `auth.state` against the live workspace and hands `build` a `SignedIn` value shaped `{ server, baseURL, ownerId, keyring, openWebSocket, onReconnectSignal }`. `createWorkspace` reads `keyring` to derive per-table keys; `attachLocalStorage` reads `server` and `ownerId` to namespace the IndexedDB database under the owner prefix; `openCollaboration` uses `openWebSocket` to attach the bearer token at connection time and `onReconnectSignal` to react to auth changes. Sign-out disposes the workspace, and a same-owner identity refresh keeps the workspace mounted. A different owner from `/api/session` is rejected by auth before the workspace is reused.
 
 `wipeLocalStorage({ server, ownerId })` is a free function that enumerates `indexedDB.databases()` and deletes every database under the owner's prefix. There is no per-app wipe helper to register; the prefix scan catches every encrypted IDB database the owner created on this profile, including per-row child docs.

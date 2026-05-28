@@ -21,7 +21,7 @@
  * ```
  */
 import { fromTable } from '@epicenter/svelte';
-import { whispering } from '$lib/whispering/client';
+import { whispering } from '$lib/whispering/whispering';
 import type { Recording } from '$lib/workspace';
 
 /** Re-exported from the workspace definition for consumer convenience. */

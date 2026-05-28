@@ -1,6 +1,7 @@
 /**
- * Honeycrisp workspace schema: id, branded types, tables, actions, and per-row
- * derived guids. Pure data. No Y.Doc, no encryption, no openers.
+ * Honeycrisp workspace contract: id, branded types, tables, actions, and
+ * per-row child document models. Isomorphic: no IndexedDB, WebSockets, SQLite
+ * files, Svelte state, or daemon process lifecycle.
  *
  * Distribution: `apps/honeycrisp/package.json` exports this file as the
  * `@epicenter/honeycrisp` package root. Browser code, daemon code, and tests
@@ -9,23 +10,30 @@
  * canonical schema.
  *
  * Composition lives elsewhere:
- *  - `apps/honeycrisp/browser.ts`  -> `openHoneycrispBrowser({ signedIn, deviceId })`
- *  - `apps/honeycrisp/daemon.ts`   -> `openHoneycrispDaemon(ctx)`
+ *  - `apps/honeycrisp/honeycrisp.browser.ts`  -> `openHoneycrispBrowser({ signedIn, deviceId })`
+ *  - `apps/honeycrisp/project.ts`  -> `honeycrisp(opts?)` mount factory
  */
 
 import {
+	attachRichText,
 	column,
+	createDisposableCache,
 	createWorkspace,
+	DateTimeString,
 	defineActions,
 	defineMutation,
 	defineTable,
+	defineWorkspace,
 	docGuid,
 	generateId,
 	type InferTableRow,
 	type Keyring,
+	onLocalUpdate,
+	type Tables,
 } from '@epicenter/workspace';
 import Type from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
+import * as Y from 'yjs';
 
 export const HONEYCRISP_ID = 'epicenter.honeycrisp';
 
@@ -94,7 +102,8 @@ export type Folder = InferTableRow<typeof foldersTable>;
  * (computed on each editor update, `null` for legacy notes).
  *
  * The Y.XmlFragment document (`body`) lives in a separate Y.Doc per note.
- * The browser opener constructs it and bumps `updatedAt` via `onLocalUpdate`.
+ * The workspace factory constructs the plain child-doc model and each runtime
+ * opener attaches its own persistence and sync.
  */
 const notesTable = defineTable(
 	{
@@ -129,12 +138,55 @@ export type Note = InferTableRow<typeof notesTable>;
 
 // ─── Workspace factory ────────────────────────────────────────────────────────
 
+const honeycrispTables = { folders: foldersTable, notes: notesTable };
+type HoneycrispTables = typeof honeycrispTables;
+type HoneycrispActionHost = { tables: Tables<HoneycrispTables> };
+
+/**
+ * Build a Honeycrisp workspace bundle:
+ * `{ ydoc, tables, kv, actions, noteBodyDocs }`.
+ *
+ * Encrypted under the supplied keyring. Runtime openers attach persistence,
+ * sync, materializers, and UI state around this shared model.
+ */
 export function createHoneycrispWorkspace(opts: { keyring: () => Keyring }) {
-	return createWorkspace({
+	const workspace = createWorkspace({
 		id: HONEYCRISP_ID,
 		keyring: opts.keyring,
-		tables: { folders: foldersTable, notes: notesTable },
+		tables: honeycrispTables,
 		kv: {},
+	});
+	const actions = createHoneycrispActions(workspace);
+	const noteBodyDocs = createDisposableCache((noteId: NoteId) => {
+		const childYdoc = new Y.Doc({
+			guid: noteBodyDocGuid(noteId),
+			gc: true,
+		});
+		const body = attachRichText(childYdoc);
+
+		onLocalUpdate(childYdoc, () => {
+			workspace.tables.notes.update(noteId, {
+				updatedAt: DateTimeString.now(),
+			});
+		});
+
+		return {
+			ydoc: childYdoc,
+			body,
+			[Symbol.dispose]() {
+				childYdoc.destroy();
+			},
+		};
+	});
+
+	return defineWorkspace({
+		...workspace,
+		actions,
+		noteBodyDocs,
+		[Symbol.dispose]() {
+			noteBodyDocs[Symbol.dispose]();
+			workspace[Symbol.dispose]();
+		},
 	});
 }
 export type HoneycrispWorkspace = ReturnType<typeof createHoneycrispWorkspace>;
@@ -163,7 +215,7 @@ export function noteBodyDocGuid(noteId: NoteId): string {
  * (e.g. folder deletion with note re-parenting). Simple single-table CRUD
  * stays in the Svelte state files.
  */
-export function createHoneycrispActions(workspace: HoneycrispWorkspace) {
+export function createHoneycrispActions(workspace: HoneycrispActionHost) {
 	const { tables } = workspace;
 	return defineActions({
 		/**

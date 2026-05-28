@@ -1,9 +1,15 @@
 # Daemon Startup Boundary And Route Definition Cleanup
 
 **Date**: 2026-05-01
-**Status**: Implemented
+**Status**: Superseded
 **Author**: AI-assisted
 **Branch**: codex/explicit-daemon-host-config
+**Superseded by**: `20260520T120000-code-composed-daemon-route-map.md`
+
+> Historical note: this spec's array route shape is not current. Current code
+> rejects route arrays and accepts `defineConfig({ daemon: { routes: { ... } } })`
+> for multi-route projects. The usual single-project shape is
+> `defineWorkspace({ open })`.
 
 ## One-Sentence Test
 

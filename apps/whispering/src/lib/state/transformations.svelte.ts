@@ -21,7 +21,7 @@
 
 import { fromTable } from '@epicenter/svelte';
 import { nanoid } from 'nanoid/non-secure';
-import { whispering } from '$lib/whispering/client';
+import { whispering } from '$lib/whispering/whispering';
 import type { Transformation, TransformationStep } from '$lib/workspace';
 import { transformationSteps } from './transformation-steps.svelte';
 

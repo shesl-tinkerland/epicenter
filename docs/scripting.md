@@ -2,7 +2,7 @@
 
 A script is a Bun file that reads the local SQLite materializer and writes through `connectDaemonActions`. There is no `script.ts` recipe to copy. The daemon is the single writer; the script is a short-lived reader plus an IPC client.
 
-Route names come from `epicenter.config.ts`, not from daemon modules or folders. A daemon module defines a route-agnostic runtime; the config decides which route key exposes it. One daemon process can serve many configured routes, and the script chooses one with `connectDaemonActions({ route })`.
+Mount names come from the `Mount.name` values default-exported by `epicenter.config.ts`, not from project folders or local module filenames. One daemon process can serve many mounts, and the script chooses one with `connectDaemonActions({ mount })`.
 
 ## The whole shape
 
@@ -22,7 +22,7 @@ const urgent = db.query('SELECT * FROM entries WHERE tag = ?').all('urgent');
 
 // writes: typed proxy over unix socket to the daemon
 const fuji = await connectDaemonActions<FujiActions>({
-	route: 'fuji',
+	mount: 'fuji',
 	projectDir,
 });
 for (const note of urgent) {
@@ -44,9 +44,9 @@ For ranked search with snippets, use `openSqliteReader({ filePath: sqlitePath(..
 
 ## Writes: typed actions through the daemon
 
-`connectDaemonActions<TActions>({ route, projectDir })` returns a typed proxy. `route` is the daemon route name (`'fuji'` for the Fuji example); the proxy translates `fuji.entries_update({ ... })` into a `POST /run` over the daemon's Unix socket in the OS runtime directory. The daemon invokes the action in-process against the live Y.Doc and returns a JSON `Result<T>`.
+`connectDaemonActions<TActions>({ mount, projectDir })` returns a typed proxy. `mount` is the mount name (`'fuji'` for the Fuji example); the proxy translates `fuji.entries_update({ ... })` into a `POST /run` over the daemon's Unix socket in the OS runtime directory. The daemon invokes the action in-process against the live Y.Doc and returns a JSON `Result<T>`.
 
-The route name is the key under `daemon.routes` in `epicenter.config.ts`. Daemon modules do not declare their own route, and `workspaces/` is only a folder convention for keeping source files tidy.
+The mount name comes from the `Mount.name` field on the value `epicenter.config.ts` default-exports. App-package factories like `fuji()` carry their canonical name internally.
 
 Two consequences fall out:
 
@@ -59,6 +59,6 @@ Two consequences fall out:
 
 Reads succeed: SQLite is just a file on disk, opening it does not require any running process.
 
-Writes fail with `DaemonError.Required` because `connectDaemonActions` first does a health check against the socket and surfaces a clear error when no daemon is listening. There is no auto-spawn from the script process; explicit lifecycle is the contract. Start one with `epicenter daemon up`, or wrap the invocation in a CLI affordance like `epicenter run-with-daemon ./script.ts`.
+Writes fail with `DaemonError.Required` because `connectDaemonActions` first does a health check against the socket and surfaces a clear error when no daemon is listening. There is no auto-spawn from the script process; explicit lifecycle is the contract. Start one with `epicenter daemon up` before running the script.
 
 A script that only reads should not call `connectDaemonActions` at all. A script that only writes still needs the daemon up, but does not need to open SQLite. Compose the two when both are needed.

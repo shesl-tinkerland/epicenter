@@ -25,7 +25,7 @@ import {
 	OPENSIDIAN_SYSTEM_PROMPT,
 } from '$lib/chat/system-prompt';
 import { toUiMessage } from '$lib/chat/ui-message';
-import type { OpensidianBrowser } from '$lib/opensidian/browser';
+import type { OpensidianBrowser } from 'opensidian/browser';
 import { searchParams } from '$lib/search-params.svelte';
 import type { SkillState } from '$lib/state/skill-state.svelte';
 
@@ -50,15 +50,15 @@ export type SessionTools = SessionAiTools['tools'];
 
 export function createAiChatState({
 	auth,
-	binding,
+	workspace,
 	skills,
 }: {
 	auth: AuthClient;
-	binding: OpensidianBrowser;
+	workspace: OpensidianBrowser;
 	skills: SkillState;
 }) {
-	const sessionAiTools = actionsToAiTools(binding.collaboration.actions);
-	const conversationsMap = fromTable(binding.tables.conversations);
+	const sessionAiTools = actionsToAiTools(workspace.collaboration.actions);
+	const conversationsMap = fromTable(workspace.tables.conversations);
 	const conversations = $derived(
 		[...conversationsMap.values()].sort(
 			(a, b) => getNumberValue(b.updatedAt) - getNumberValue(a.updatedAt),
@@ -71,7 +71,7 @@ export function createAiChatState({
 		const id = generateConversationId();
 		const now = Date.now();
 
-		binding.tables.conversations.set({
+		workspace.tables.conversations.set({
 			id,
 			title: 'New Chat',
 			parentId: null,
@@ -90,14 +90,14 @@ export function createAiChatState({
 		conversationId: ConversationId,
 		patch: Partial<Omit<Conversation, 'id'>>,
 	) {
-		binding.tables.conversations.update(conversationId, {
+		workspace.tables.conversations.update(conversationId, {
 			...patch,
 			updatedAt: Date.now(),
 		});
 	}
 
 	function loadMessages(conversationId: ConversationId) {
-		return binding.tables.chatMessages
+		return workspace.tables.chatMessages
 			.filter((message) => message.conversationId === conversationId)
 			.sort((a, b) => a.createdAt - b.createdAt)
 			.map(toUiMessage);
@@ -144,7 +144,7 @@ export function createAiChatState({
 				}),
 			),
 			onFinish: (message) => {
-				binding.tables.chatMessages.set({
+				workspace.tables.chatMessages.set({
 					id: asChatMessageId(message.id),
 					conversationId,
 					role: 'assistant',
@@ -243,7 +243,7 @@ export function createAiChatState({
 					id: userMessageId,
 				});
 
-				binding.tables.chatMessages.set({
+				workspace.tables.chatMessages.set({
 					id: userMessageId,
 					conversationId,
 					role: 'user',
@@ -264,7 +264,7 @@ export function createAiChatState({
 			reload() {
 				const lastMessage = chat.messages.at(-1);
 				if (lastMessage?.role === 'assistant') {
-					binding.tables.chatMessages.delete(asChatMessageId(lastMessage.id));
+					workspace.tables.chatMessages.delete(asChatMessageId(lastMessage.id));
 				}
 
 				void chat.reload();
@@ -321,14 +321,14 @@ export function createAiChatState({
 		asConversationId(searchParams.chat ?? ''),
 	);
 
-	const _unobserveConversations = binding.tables.conversations.observe(() => {
+	const _unobserveConversations = workspace.tables.conversations.observe(() => {
 		reconcileHandles();
 	});
-	const _unobserveChatMessages = binding.tables.chatMessages.observe(() => {
+	const _unobserveChatMessages = workspace.tables.chatMessages.observe(() => {
 		handles.get(activeConversationId)?.refreshMessages();
 	});
 
-	void binding.idb.whenLoaded.then(() => {
+	void workspace.idb.whenLoaded.then(() => {
 		void skills.loadAllSkills();
 		reconcileHandles();
 
@@ -354,7 +354,7 @@ export function createAiChatState({
 		const now = Date.now();
 		const active = handles.get(activeConversationId);
 
-		binding.tables.conversations.set({
+		workspace.tables.conversations.set({
 			id,
 			title: 'New Chat',
 			parentId: null,

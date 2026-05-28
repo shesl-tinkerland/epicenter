@@ -5,7 +5,7 @@
  * over the unix socket via `client.run`.
  *
  * The proxy is one level: property access returns a function, calling that
- * function fires `client.run` with `${route}.${path}`. `then` is masked at
+ * function fires `client.run` with `${mount}.${path}`. `then` is masked at
  * the root so accidental `await workspace` does not turn it thenable.
  */
 
@@ -59,7 +59,7 @@ export type DaemonActions<TActions> = Simplify<{
  */
 export function buildDaemonActions<TActions extends ActionRegistry>(
 	client: DaemonClient,
-	route: string,
+	mount: string,
 ): DaemonActions<TActions> {
 	return new Proxy({} as Record<string, unknown>, {
 		get(_target, prop) {
@@ -67,7 +67,7 @@ export function buildDaemonActions<TActions extends ActionRegistry>(
 			if (prop === 'then') return undefined;
 			return (input?: unknown, options?: DaemonActionOptions) =>
 				client.run({
-					actionPath: joinDaemonActionPath(route, prop),
+					actionPath: joinDaemonActionPath(mount, prop),
 					input,
 					waitMs: options?.waitMs ?? DEFAULT_RUN_WAIT_MS,
 				});

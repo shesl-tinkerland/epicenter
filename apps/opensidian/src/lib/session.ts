@@ -2,7 +2,7 @@ import { createSession } from '@epicenter/svelte';
 import { createDeviceId } from '@epicenter/workspace';
 import { auth } from '$platform/auth';
 import { createAiChatState } from './chat/chat-state.svelte';
-import { openOpensidianBrowser } from './opensidian/browser';
+import { openOpensidianBrowser } from 'opensidian/browser';
 import { createEditorState } from './state/editor-state.svelte';
 import { createFilesState } from './state/files-state.svelte';
 import { createPaletteSearchState } from './state/palette-search-state.svelte';
@@ -19,17 +19,17 @@ export const session = createSession({
 			deviceId: createDeviceId({ storage: localStorage }),
 		});
 		const editor = createEditorState();
-		const files = createFilesState({ binding: opensidian });
+		const files = createFilesState({ workspace: opensidian });
 		const paletteSearch = createPaletteSearchState({
 			files,
-			binding: opensidian,
+			workspace: opensidian,
 		});
-		const sidebarSearch = createSidebarSearchState({ binding: opensidian });
-		const terminal = createTerminalState({ files, binding: opensidian });
-		const skills = createSkillState({ binding: opensidian });
+		const sidebarSearch = createSidebarSearchState({ workspace: opensidian });
+		const terminal = createTerminalState({ files, workspace: opensidian });
+		const skills = createSkillState({ workspace: opensidian });
 		const chat = createAiChatState({
 			auth,
-			binding: opensidian,
+			workspace: opensidian,
 			skills,
 		});
 		const sampleData = createSampleDataLoader(opensidian);

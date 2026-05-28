@@ -1,11 +1,11 @@
 /**
- * `epicenter list [route.action_key]`: render actions exposed by this project.
+ * `epicenter list [mount.action_key]`: render actions exposed by this project.
  *
- * The daemon returns route-qualified snake_case action keys for every opened
- * workspace extension. The CLI only filters and renders that manifest.
+ * The daemon returns mount-prefixed action paths for every opened
+ * mount. The CLI only filters and renders that manifest.
  *
  * Per-peer schema introspection is a script concern. The CLI lists the local
- * daemon's route-qualified action surface only.
+ * daemon's mount-prefixed action surface only.
  *
  * `epicenter list` requires a running daemon for the discovered project.
  * Without `daemon up`, the handler errors with a hint pointing at
@@ -32,7 +32,7 @@ export const listCommand = cmd({
 		yargs
 			.positional('path', {
 				type: 'string',
-				describe: 'Optional route-qualified key to narrow the view',
+				describe: 'Optional mount-prefixed path to narrow the view',
 			})
 			.option('C', projectOption)
 			.options(formatOptions),

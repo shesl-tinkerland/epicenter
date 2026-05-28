@@ -61,21 +61,22 @@ Cold-boot offline keeps the cached `{ ownerId, keyring, mode }` so the workspace
 The workspace does not hold an independently mutable copy of the keys. `createWorkspace` takes a `keyring` callback and calls it once at construction; `attachLocalStorage` takes the same callback and calls it on every persisted update. Each encrypted store keeps the keyring derived at its `createWorkspace` boundary. Browser app session modules receive a flat `SignedIn` payload from `createSession`; that payload carries the lazy keyring reader and the stable owner:
 ```ts
 import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createDeviceId } from '@epicenter/workspace';
 
 export const session = createSession({
 	auth,
 	build: (signedIn: SignedIn) =>
 		openMyApp({
 			signedIn,
-			installationId: createInstallationId({ storage: localStorage }),
+			deviceId: createDeviceId({ storage: localStorage }),
 		}),
 });
 ```
-`SignedIn` is `{ server: string; ownerId: OwnerId; mode: OwnershipMode; keyring: () => Keyring; auth: AuthClient }`. `ownerId` and `mode` are derived from the auth signed-in state and stay stable for the lifetime of a single `SignedIn` payload. `keyring` is a callback that reads the current `keyring` from `auth.state`, so same-owner rotations (e.g. `reauth-required` -> identity-bearing) are picked up on the next call without rebuilding the payload. `auth` is the live `AuthClient`; `openCollaboration({ openWebSocket, onReconnectSignal })` uses `auth.openWebSocket` to open the relay socket and subscribes to `auth.onStateChange` to drive reconnect, so per-app openers do not write reconnect glue. A different-owner sign-in publishes a `signed-out` gap first, which disposes the payload and rebuilds with the new owner.
+`SignedIn` is `{ server, baseURL, ownerId, keyring, openWebSocket, onReconnectSignal }`. `ownerId` is derived from the auth signed-in state and stays stable for the lifetime of a single `SignedIn` payload. `keyring` is a callback that reads the current keyring from `auth.state`, so same-owner rotations are picked up on the next call without rebuilding the payload. `openCollaboration({ openWebSocket, onReconnectSignal })` uses the auth-owned WebSocket opener and reconnect signal, so per-app openers do not write reconnect glue. A different-owner sign-in publishes a `signed-out` gap first, which disposes the payload and rebuilds with the new owner.
 
 Same-owner identity updates do not remount the workspace. Auth callbacks read `auth.state` at the boundary that asks for them: sync can see refreshed bearer tokens on connection attempts, and `attachLocalStorage`'s IDB writes pick up rotated keys on the next persisted update. Already-attached encrypted tables and KVs keep the keyring they derived when `createWorkspace` was called; a fresh `createWorkspace` call (and therefore a fresh Y.Doc) is required for them to pick up rotated keys.
 
-Daemon-side openers receive the same shape via `DaemonWorkspaceContext`: `{ projectDir, route, yDocClientId, installationId, ownerId, keyring: () => Keyring, openWebSocket, onReconnectSignal }`. The host's `keyring` closure throws when auth is signed-out, so a late sign-out becomes a thrown error at the next encrypted-write or registration site rather than silent ciphertext loss. The `openWebSocket` and `onReconnectSignal` refs flow through to `attachDaemonInfrastructure({ openWebSocket, onReconnectSignal })` for cloud sync.
+Daemon-side project mounts receive the same auth-derived capabilities through `MountContext`: `{ projectDir, mount, yDocClientId, deviceId, ownerId, keyring: () => Keyring, openWebSocket, onReconnectSignal }`. The host's `keyring` closure throws when auth is signed-out, so a late sign-out becomes a thrown error at the next encrypted write or registration site rather than silent ciphertext loss. The `openWebSocket` and `onReconnectSignal` refs flow through to `attachProjectInfrastructure({ openWebSocket, onReconnectSignal })` for cloud sync.
 
 ## Browser local persistence
 Authenticated browser workspaces open local IndexedDB only after auth has settled into an identity-bearing state. The session module guarantees that boundary: it builds the workspace lazily once auth produces a `SignedIn` payload and disposes it on sign-out.
@@ -94,7 +95,6 @@ export function openFujiBrowser({
 	deviceId: DeviceId;
 }) {
 	const workspace = createFujiWorkspace({ keyring: signedIn.keyring });
-	const actions = createFujiActions(workspace);
 
 	const idb = attachLocalStorage(workspace.ydoc, {
 		server: signedIn.server,
@@ -111,13 +111,13 @@ export function openFujiBrowser({
 		openWebSocket: signedIn.openWebSocket,
 		onReconnectSignal: signedIn.onReconnectSignal,
 		waitFor: idb.whenLoaded,
-		actions,
+		actions: workspace.actions,
 	});
 	// ...
 }
 ```
 
-`createFujiWorkspace({ keyring })` is the per-app helper that wraps `createWorkspace` with Fuji's typed `tables` and `kv` schemas, returning the same `{ ydoc, tables, kv, [Symbol.dispose] }` bundle shape.
+`createFujiWorkspace({ keyring })` is the per-app helper that wraps `createWorkspace` with Fuji's typed `tables` and `kv` schemas, adds Fuji actions and shared child-doc models, and returns the same `{ ydoc, tables, kv, actions, [Symbol.dispose] }` bundle shape through `defineWorkspace`.
 
 `attachLocalStorage` reads exactly `{ server, ownerId, keyring }` from the explicit options object. The call site destructures `signedIn` so the dependency is visible in the code, not implied by structural typing.
 
@@ -143,13 +143,14 @@ The closest Bitwarden analogy is lock, not logout: Bitwarden documents unlock as
 The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-owner updates are a no-op at the session boundary. A different owner publishes a `signed-out` gap first, which disposes the current payload before the new owner mounts:
 ```ts
 import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createDeviceId } from '@epicenter/workspace';
 
 export const session = createSession({
 	auth,
 	build: (signedIn: SignedIn) =>
 		openFujiBrowser({
 			signedIn,
-			installationId: createInstallationId({ storage: localStorage }),
+			deviceId: createDeviceId({ storage: localStorage }),
 		}),
 });
 ```

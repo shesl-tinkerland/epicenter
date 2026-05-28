@@ -1,19 +1,16 @@
 /**
  * `epicenter daemon up`: start the long-lived foreground daemon for one project.
  *
- * Loads every daemon route declared in `epicenter.config.ts`, opens each
- * one in parallel, and exposes a Unix-socket IPC channel for that project.
- * `peers`, `list`, and `run` dispatch to this daemon over IPC; without
- * `daemon up` they error with a hint pointing back here.
+ * Loads every mount declared in `epicenter.config.ts`, opens each one in
+ * parallel, and exposes a Unix-socket IPC channel for that project. `peers`,
+ * `list`, and `run` dispatch to this daemon over IPC; without `daemon up`
+ * they error with a hint pointing back here.
  *
- * One daemon per project; that daemon serves every configured route.
- * Resource isolation between routes is expressed by splitting them into
+ * One daemon per project; that daemon serves every configured mount.
+ * Resource isolation between mounts is expressed by splitting them into
  * different projects, not by a flag.
  *
- * Foreground by design; backgrounding is the user's job (see Invariant 5
- * in the design spec).
- *
- * See `specs/20260520T120000-code-composed-daemon-route-map.md`.
+ * Foreground by design; backgrounding is the user's job.
  */
 
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
@@ -23,7 +20,7 @@ import {
 	createMachineAuthClient,
 	type MachineAuthStorageError,
 } from '@epicenter/auth/node';
-import type { StartedDaemonRoute } from '@epicenter/workspace/daemon';
+import type { StartedMount } from '@epicenter/workspace/daemon';
 import {
 	claimDaemonLease,
 	type DaemonMetadata,
@@ -32,7 +29,7 @@ import {
 	loadProjectConfig,
 	StartupError,
 	startDaemonServer,
-	startDaemonWorkspaceApps,
+	startProjectMounts,
 	unlinkMetadata,
 	type WorkspaceAppError,
 	writeMetadata,
@@ -81,28 +78,27 @@ type UpOptions = {
  * startup, exercise the IPC handler in-process, and call `teardown()` to
  * release resources without spawning a child.
  *
- * - `runtimes` is every daemon route runtime the project declares; the
- *   daemon serves them all and routes IPC requests by route.
+ * - `mounts` is every started mount runtime the project declares; the daemon
+ *   serves them all and routes IPC requests by mount name.
  * - `metadata` is what was written to disk.
  * - `teardown()` closes the server, asyncDisposes the runtimes, releases the
  *   lease, and unlinks metadata + socket. Idempotent.
  */
 type UpHandle = {
-	runtimes: StartedDaemonRoute[];
+	mounts: StartedMount[];
 	metadata: DaemonMetadata;
 	teardown: () => Promise<void>;
 };
 
 /**
- * Daemon body. Idempotently sets up disk state, opens every configured daemon
- * route, binds the IPC socket, and returns a handle. The yargs `handler`
- * calls this, prints the operator-facing banner, installs SIGINT/SIGTERM,
- * and parks the process; tests call it directly and assert on the returned
- * handle.
+ * Daemon body. Idempotently sets up disk state, opens every configured mount,
+ * binds the IPC socket, and returns a handle. The yargs `handler` calls this,
+ * prints the operator-facing banner, installs SIGINT/SIGTERM, and parks the
+ * process; tests call it directly and assert on the returned handle.
  *
- * A SQLite daemon lease claims ownership before any route opens. After
- * that, `loadProjectConfig` imports the config, `startDaemonWorkspaceApps`
- * opens every configured route, and `startDaemonServer` binds the socket.
+ * A SQLite daemon lease claims ownership before any mount opens. After that,
+ * `loadProjectConfig` imports the config, `startProjectMounts` opens every
+ * configured mount, and `startDaemonServer` binds the socket.
  */
 export async function runUp(
 	options: UpOptions,
@@ -138,26 +134,26 @@ export async function runUp(
 	const auth = authResult.data;
 	stack.defer(() => auth[Symbol.dispose]());
 
-	const { data: config, error: configError } =
+	const { data: configMounts, error: configError } =
 		await loadProjectConfig(projectDir);
 	if (configError !== null) throw new Error(configError.message);
 
-	const startResult = await startDaemonWorkspaceApps({
+	const startResult = await startProjectMounts({
 		projectDir,
 		auth,
-		routes: config.daemon?.routes ?? {},
+		mounts: configMounts,
 	});
 	if (startResult.error) return startResult;
-	const runtimes = startResult.data;
+	const mounts = startResult.data;
 	stack.defer(() =>
 		Promise.allSettled(
-			runtimes.map((entry) =>
+			mounts.map((entry) =>
 				Promise.resolve(entry.runtime[Symbol.asyncDispose]()),
 			),
 		).then(() => undefined),
 	);
 
-	const serverResult = await startDaemonServer({ lease, routes: runtimes });
+	const serverResult = await startDaemonServer({ lease, mounts });
 	if (serverResult.error) return serverResult;
 	const daemonServer = serverResult.data;
 	stack.defer(() => daemonServer.close());
@@ -171,7 +167,7 @@ export async function runUp(
 
 	const teardownStack = stack.move();
 	return Ok({
-		runtimes,
+		mounts,
 		metadata,
 		teardown: () => teardownStack.disposeAsync(),
 	});
@@ -180,13 +176,13 @@ export async function runUp(
 /**
  * Yargs `daemon up` command. Thin glue: parses argv, calls {@link runUp}, prints
  * the operator-facing banner + initial peers snapshot, wires SIGINT/SIGTERM,
- * subscribes to presence/status across every loaded route, and parks
+ * subscribes to presence/status across every loaded mount, and parks
  * until a signal triggers teardown.
  */
 export const upCommand = cmd({
 	command: 'up',
 	describe:
-		'Open every daemon route in epicenter.config.ts and serve them on the daemon socket (foreground).',
+		'Open every mount in epicenter.config.ts and serve them on the daemon socket (foreground).',
 	builder: {
 		C: upProjectOption,
 		quiet: {
@@ -208,10 +204,10 @@ export const upCommand = cmd({
 			process.exit(1);
 		}
 
-		const routes = handle.runtimes.map((entry) => entry.route).join(', ');
-		logSyncStatus(`online (routes=[${routes}])`);
+		const mountNames = handle.mounts.map((entry) => entry.mount).join(', ');
+		logSyncStatus(`online (mounts=[${mountNames}])`);
 
-		for (const entry of handle.runtimes) {
+		for (const entry of handle.mounts) {
 			printPeersSnapshot(entry);
 			subscribePeers(entry, options.quiet);
 			subscribeSyncStatus(entry);
@@ -268,18 +264,18 @@ function provisionProject(projectDir: string): void {
 	}
 }
 
-function printPeersSnapshot(entry: StartedDaemonRoute): void {
+function printPeersSnapshot(entry: StartedMount): void {
 	const devices = entry.runtime.collaboration.devices.list();
 	if (devices.length === 0) {
-		process.stderr.write(`${entry.route}: no peers connected\n`);
+		process.stderr.write(`${entry.mount}: no peers connected\n`);
 		return;
 	}
 	for (const device of devices) {
-		process.stderr.write(`${entry.route}: peer ${device.deviceId}\n`);
+		process.stderr.write(`${entry.mount}: peer ${device.deviceId}\n`);
 	}
 }
 
-function subscribePeers(entry: StartedDaemonRoute, quiet: boolean): void {
+function subscribePeers(entry: StartedMount, quiet: boolean): void {
 	const snapshot = () =>
 		new Set(
 			entry.runtime.collaboration.devices
@@ -292,14 +288,14 @@ function subscribePeers(entry: StartedDaemonRoute, quiet: boolean): void {
 		for (const deviceId of next) {
 			if (!prev.has(deviceId)) {
 				if (!quiet) {
-					process.stderr.write(`${entry.route}: ${deviceId} joined\n`);
+					process.stderr.write(`${entry.mount}: ${deviceId} joined\n`);
 				}
 			}
 		}
 		for (const deviceId of prev) {
 			if (!next.has(deviceId)) {
 				if (!quiet) {
-					process.stderr.write(`${entry.route}: ${deviceId} left\n`);
+					process.stderr.write(`${entry.mount}: ${deviceId} left\n`);
 				}
 			}
 		}
@@ -307,14 +303,14 @@ function subscribePeers(entry: StartedDaemonRoute, quiet: boolean): void {
 	});
 }
 
-function subscribeSyncStatus(entry: StartedDaemonRoute): void {
+function subscribeSyncStatus(entry: StartedMount): void {
 	entry.runtime.collaboration.onStatusChange((status) => {
 		if (status.phase === 'connecting') {
-			logSyncStatus(`${entry.route}: connecting (retry ${status.retries})`);
+			logSyncStatus(`${entry.mount}: connecting (retry ${status.retries})`);
 		} else if (status.phase === 'connected') {
-			logSyncStatus(`${entry.route}: connected`);
+			logSyncStatus(`${entry.mount}: connected`);
 		} else if (status.phase === 'offline') {
-			logSyncStatus(`${entry.route}: offline`);
+			logSyncStatus(`${entry.mount}: offline`);
 		}
 	});
 }

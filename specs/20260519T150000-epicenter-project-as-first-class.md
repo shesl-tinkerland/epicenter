@@ -2,6 +2,12 @@
 
 **Status**: Worth committing
 
+> Historical note: this spec predates the current single-workspace default.
+> Current project loading is: `epicenter.config.ts` default-exports
+> `defineWorkspace({ open })` for the usual one-route project, or
+> `defineConfig({ daemon: { routes } })` for the multi-route escape hatch.
+> `workspaces/` is only a source-layout convention.
+
 **Path policy (2026-05-22)**: Aligned with `specs/20260522T203209-top-level-epicenter-path-cleanup.md`. The `~/.epicenter/` references in this spec argue for *deleting* that directory; user-global state lives under `env-paths('epicenter')` and daemon runtime files use the OS runtime dir. No new top-level `~/.epicenter/` writes are introduced.
 
 Supersedes `specs/20260519T113632-epicenter-project-root-single-marker.md`. That

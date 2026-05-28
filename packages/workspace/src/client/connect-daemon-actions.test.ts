@@ -29,7 +29,7 @@ describe('connectDaemonActions', () => {
 		let caught: unknown;
 		try {
 			await connectDaemonActions({
-				route: 'demo',
+				mount: 'demo',
 				projectDir: root as ProjectDir,
 			});
 		} catch (err) {

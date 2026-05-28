@@ -1,11 +1,11 @@
 export {
-	type AttachDaemonInfrastructureOptions,
-	attachDaemonInfrastructure,
-	type DaemonInfrastructure,
-} from './attach-daemon-infrastructure.js';
+	type AttachProjectInfrastructureOptions,
+	attachProjectInfrastructure,
+	type ProjectInfrastructure,
+} from './attach-project-infrastructure.js';
 export {
-	type DaemonWorkspaceContext,
-	type DaemonWorkspaceDefinition,
-	defineWorkspace,
-} from './define-workspace.js';
-export type { DaemonRuntime, StartedDaemonRoute } from './types.js';
+	defineMount,
+	type Mount,
+	type MountContext,
+} from './define-mount.js';
+export type { DaemonRuntime, StartedMount } from './types.js';

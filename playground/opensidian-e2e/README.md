@@ -18,6 +18,10 @@ This stores your credentials at `<dataDir>/auth/<host>.json`, where `dataDir` is
 
 ## Usage
 
+This playground uses a project-local mount module rather than a packaged app
+mount factory. `epicenter.config.ts` default-exports that mount explicitly;
+`workspaces/` is not scanned automatically.
+
 Run the workspace:
 
 ```bash
@@ -25,11 +29,14 @@ Run the workspace:
 epicenter daemon up -C playground/opensidian-e2e
 
 # Local dev (syncs from localhost:8787)
-EPICENTER_SERVER=http://localhost:8787 \
+EPICENTER_API_URL=http://localhost:8787 \
   epicenter daemon up -C playground/opensidian-e2e
 ```
 
-Daemon startup imports `workspaces/opensidian/daemon.ts`, which kicks off persistence, sync, markdown materialization, and the SQLite mirror. The process stays alive until Ctrl+C or `epicenter daemon down`.
+Daemon startup imports the mounts declared by `epicenter.config.ts`. When that
+config points at `workspaces/opensidian/daemon.ts`, the daemon kicks off
+persistence, sync, markdown materialization, and the SQLite mirror. The process
+stays alive until Ctrl+C or `epicenter daemon down`.
 
 Invoke a defined action:
 
@@ -39,7 +46,7 @@ epicenter run opensidian.markdown_prepare '{"directory":"./some/dir"}' \
   -C playground/opensidian-e2e
 ```
 
-Inspect workspace data from a script by importing the app workspace package or a script-specific helper. Do not import `workspaces/opensidian/daemon.ts` as a reusable client module; it is the long-lived daemon entrypoint. If this playground needs table-level scripts, first extract the composition into a `script.ts` helper and let both the script and daemon call that helper.
+Inspect workspace data from a script by importing the app workspace package or a script-specific helper. Do not import `workspaces/opensidian/daemon.ts` as a reusable client module; it is the long-lived mount entrypoint. If this playground needs table-level scripts, first extract the composition into a `script.ts` helper and let both the script and mount call that helper.
 
 ```ts
 // scripts/list-files.ts
@@ -65,9 +72,10 @@ bun run scripts/list-files.ts
 
 ```
 playground/opensidian-e2e/
+├── epicenter.config.ts              # Required by the current daemon loader
 ├── workspaces/
 │   └── opensidian/
-│       └── daemon.ts                  # Folder-routed daemon extension
+│       └── daemon.ts                  # Project-local mount module
 └── .epicenter/
     ├── yjs/
     │   ├── opensidian.db              # Yjs CRDT update log (source of truth)
@@ -103,7 +111,7 @@ The actual document content from the editor.
 
 ## How it works
 
-The daemon chains four extensions onto the Opensidian workspace:
+The project mount chains four extensions onto the Opensidian workspace:
 
 1. **Persistence**: workspace-only SQLite. Persists the files table so it survives daemon restarts without re-downloading everything from the server.
 

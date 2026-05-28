@@ -103,7 +103,7 @@
 // ACTION SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
 
-export type { ActionManifest } from './shared/actions';
+export type { ActionManifest, ActionRegistry } from './shared/actions';
 export {
 	defineActions,
 	defineMutation,
@@ -131,11 +131,8 @@ export {
 // keeping them out of this root barrel stops browser bundles (fuji,
 // whispering, etc.) from traversing `node:*` modules. Daemon runtime and
 // log paths live in `@epicenter/workspace/daemon/paths.ts`.
-export {
-	DEFAULT_PROJECT_CONFIG_SOURCE,
-	defineConfig,
-} from './config/define-config.js';
-export { defineWorkspace } from './daemon/define-workspace.js';
+export { DEFAULT_PROJECT_CONFIG_SOURCE } from './config/project-config-source.js';
+export { defineMount } from './daemon/define-mount.js';
 export type { ProjectDir } from './shared/types';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -220,5 +217,6 @@ export { wipeLocalStorage } from './document/wipe-local-storage.js';
 export {
 	type CreateWorkspaceOptions,
 	createWorkspace,
+	defineWorkspace,
 	type Workspace,
 } from './document/workspace.js';

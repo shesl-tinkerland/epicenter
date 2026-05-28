@@ -1,9 +1,9 @@
 /**
  * Unit-level tests for `epicenter daemon up`.
  *
- * These tests run `runUp` in-process against tiny config-routed daemon
- * fixtures. They never spawn a child or call `process.exit`; each test owns a
- * temp project and temp runtime root.
+ * These tests run `runUp` in-process against tiny project-mount fixtures.
+ * They never spawn a child or call `process.exit`; each test owns a temp
+ * project and temp runtime root.
  *
  * Auth is injected: every test passes a `createAuthClient` factory to
  * `runUp`. Happy paths return `STUB_AUTH`; the AuthFailed test returns a
@@ -15,7 +15,7 @@
  * - happy path loads epicenter.config.ts, writes metadata, binds the
  *   socket, and replies to ping
  * - startup failures release the daemon lease
- * - held SQLite leases short-circuit before daemon module import
+ * - held SQLite leases short-circuit before mount module import
  * - orphan socket files are swept and replaced by a fresh daemon
  */
 
@@ -32,9 +32,9 @@ import { join } from 'node:path';
 import type { AuthClient } from '@epicenter/auth';
 import { MachineAuthStorageError } from '@epicenter/auth/node';
 import { asOwnerId } from '@epicenter/constants/identity';
-import { DEFAULT_PROJECT_CONFIG_SOURCE } from '@epicenter/workspace';
 import {
 	claimDaemonLease,
+	DEFAULT_PROJECT_CONFIG_SOURCE,
 	metadataPathFor,
 	pingDaemon,
 	socketPathFor,
@@ -98,7 +98,7 @@ function markerPath(name: string): string {
 	return join(workDir, `${name}.marker`);
 }
 
-function writeDemoDaemon(source: string): string {
+function writeDemoMount(source: string): string {
 	const dir = join(workDir, 'workspaces', 'demo');
 	mkdirSync(dir, { recursive: true });
 	const path = join(dir, 'daemon.ts');
@@ -112,7 +112,7 @@ function writeDemoConfig(): void {
 		[
 			"import demo from './workspaces/demo/daemon.ts';",
 			'',
-			'export default { daemon: { routes: { demo } } };',
+			'export default demo;',
 			'',
 		].join('\n'),
 	);
@@ -122,14 +122,14 @@ function writeConfig(source: string): void {
 	writeFileSync(join(workDir, 'epicenter.config.ts'), source);
 }
 
-function writeRuntimeDaemon({
+function writeRuntimeMount({
 	onImportMarker,
 	onDisposeMarker,
 }: {
 	onImportMarker?: string;
 	onDisposeMarker?: string;
 } = {}) {
-	writeDemoDaemon(`
+	writeDemoMount(`
 		import { writeFileSync } from 'node:fs';
 		${onImportMarker ? `writeFileSync(${JSON.stringify(onImportMarker)}, 'imported');` : ''}
 
@@ -149,6 +149,7 @@ function writeRuntimeDaemon({
 		};
 
 		export default {
+			name: 'demo',
 			async open() {
 				return {
 					collaboration,
@@ -164,7 +165,7 @@ function writeRuntimeDaemon({
 
 describe('runUp: happy path', () => {
 	test('writes metadata, binds socket, replies to ping', async () => {
-		writeRuntimeDaemon();
+		writeRuntimeMount();
 
 		const handle = expectOk(
 			await runUp({
@@ -177,11 +178,11 @@ describe('runUp: happy path', () => {
 			expect(existsSync(metadataPathFor(workDir))).toBe(true);
 			expect(handle.metadata.pid).toBe(process.pid);
 			expect(handle.metadata.discoveredAt).toEqual(expect.any(String));
-			expect(handle.runtimes).toHaveLength(1);
-			expect(handle.runtimes[0]?.route).toBe('demo');
+			expect(handle.mounts).toHaveLength(1);
+			expect(handle.mounts[0]?.mount).toBe('demo');
 			expect(
 				readFileSync(join(workDir, 'epicenter.config.ts'), 'utf8'),
-			).toContain('routes: { demo }');
+			).toContain('export default demo');
 
 			const sockPath = socketPathFor(workDir);
 			expect(existsSync(sockPath)).toBe(true);
@@ -217,7 +218,7 @@ describe('runUp: failure cleanup', () => {
 		lease.release();
 	});
 
-	test('writes the default config and starts with no routes when config is missing', async () => {
+	test('writes the default config and starts with no mounts when config is missing', async () => {
 		mkdirSync(join(workDir, 'workspaces', 'demo'), { recursive: true });
 
 		const handle = expectOk(
@@ -229,7 +230,7 @@ describe('runUp: failure cleanup', () => {
 		);
 
 		try {
-			expect(handle.runtimes).toEqual([]);
+			expect(handle.mounts).toEqual([]);
 			expect(readFileSync(join(workDir, 'epicenter.config.ts'), 'utf8')).toBe(
 				DEFAULT_PROJECT_CONFIG_SOURCE,
 			);
@@ -242,7 +243,7 @@ describe('runUp: failure cleanup', () => {
 	});
 
 	test('does not overwrite an existing config when provisioning project data', async () => {
-		const original = ['export default {};', '', '// keep me', ''].join('\n');
+		const original = ['export default [];', '', '// keep me', ''].join('\n');
 		writeFileSync(join(workDir, 'epicenter.config.ts'), original);
 		const gitignore = 'custom-rule\n';
 		mkdirSync(join(workDir, '.epicenter'), { recursive: true });
@@ -283,11 +284,12 @@ describe('runUp: failure cleanup', () => {
 		lease.release();
 	});
 
-	test('releases the daemon lease when workspace startup fails', async () => {
-		writeDemoDaemon(`
+	test('releases the daemon lease when mount startup fails', async () => {
+		writeDemoMount(`
 			export default {
+				name: 'demo',
 				async open() {
-					throw new Error('route failed');
+					throw new Error('mount failed');
 				},
 			};
 		`);
@@ -301,12 +303,12 @@ describe('runUp: failure cleanup', () => {
 			}),
 		);
 
-		expect(error.name).toBe('WorkspaceOpenFailed');
+		expect(error.name).toBe('MountOpenFailed');
 		const lease = expectOk(claimDaemonLease(workDir));
 		lease.release();
 	});
 
-	test('disposes opened sibling routes and leaves no socket or metadata when one route fails', async () => {
+	test('disposes opened sibling mounts and leaves no socket or metadata when one mount fails', async () => {
 		const goodDir = join(workDir, 'workspaces', 'good');
 		const badDir = join(workDir, 'workspaces', 'bad');
 		mkdirSync(goodDir, { recursive: true });
@@ -332,6 +334,7 @@ describe('runUp: failure cleanup', () => {
 				};
 
 				export default {
+					name: 'good',
 					async open() {
 						return {
 							collaboration,
@@ -347,8 +350,9 @@ describe('runUp: failure cleanup', () => {
 			join(badDir, 'daemon.ts'),
 			`
 				export default {
+					name: 'bad',
 					async open() {
-						throw new Error('bad route failed');
+						throw new Error('bad mount failed');
 					},
 				};
 			`,
@@ -358,7 +362,7 @@ describe('runUp: failure cleanup', () => {
 				"import good from './workspaces/good/daemon.ts';",
 				"import bad from './workspaces/bad/daemon.ts';",
 				'',
-				'export default { daemon: { routes: { good, bad } } };',
+				'export default [good, bad];',
 				'',
 			].join('\n'),
 		);
@@ -372,8 +376,8 @@ describe('runUp: failure cleanup', () => {
 		);
 
 		expect(error).toMatchObject({
-			name: 'WorkspaceOpenFailed',
-			route: 'bad',
+			name: 'MountOpenFailed',
+			mount: 'bad',
 		});
 		expect(readFileSync(disposeMarker, 'utf8')).toBe('disposed');
 		expect(existsSync(metadataPathFor(workDir))).toBe(false);
@@ -383,7 +387,7 @@ describe('runUp: failure cleanup', () => {
 	});
 
 	test('returns MetadataWriteFailed and tears down when metadata path is blocked', async () => {
-		writeRuntimeDaemon();
+		writeRuntimeMount();
 		mkdirSync(metadataPathFor(workDir));
 
 		const error = expectErr(
@@ -402,10 +406,10 @@ describe('runUp: failure cleanup', () => {
 });
 
 describe('runUp: already running', () => {
-	test('does not import workspace daemons when the daemon lease is held', async () => {
+	test('does not import mounts when the daemon lease is held', async () => {
 		const lease = expectOk(claimDaemonLease(workDir));
 		const importMarker = markerPath('import');
-		writeRuntimeDaemon({ onImportMarker: importMarker });
+		writeRuntimeMount({ onImportMarker: importMarker });
 
 		try {
 			const error = expectErr(
@@ -437,7 +441,7 @@ describe('runUp: orphan path', () => {
 			cliVersion: '0.0.0',
 			discoveredAt: new Date().toISOString(),
 		});
-		writeRuntimeDaemon();
+		writeRuntimeMount();
 
 		const handle = expectOk(
 			await runUp({

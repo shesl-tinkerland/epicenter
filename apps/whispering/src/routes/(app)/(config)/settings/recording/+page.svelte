@@ -17,6 +17,8 @@
 	import { tauri } from '$lib/tauri';
 	import { deviceConfig } from '$lib/state/device-config.svelte';
 	import { settings } from '$lib/state/settings.svelte';
+	import { whispering } from '$lib/whispering/whispering';
+	import DesktopOutputFolder from './DesktopOutputFolder.svelte';
 	import ManualSelectRecordingDevice from './ManualSelectRecordingDevice.svelte';
 	import VadSelectRecordingDevice from './VadSelectRecordingDevice.svelte';
 

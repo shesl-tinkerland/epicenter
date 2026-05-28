@@ -1,8 +1,24 @@
+/**
+ * Load a project's `epicenter.config.ts` and return its mounts.
+ *
+ * The config default-exports one of:
+ *
+ *   - a single `Mount` (the common case):
+ *       `export default fuji();`
+ *
+ *   - a `Mount[]` for multi-mount projects:
+ *       `export default [fuji(), notes()];`
+ *
+ * Mount detection is duck-typed: a value is a Mount iff it has a string `name`
+ * and a function `open`. There is no wrapper helper (no `defineProject`); the
+ * mount factory IS the config. The loader returns a normalized `Mount[]` so
+ * callers don't branch on shape.
+ */
+
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { type } from 'arktype';
 import {
 	defineErrors,
 	extractErrorMessage,
@@ -10,23 +26,12 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 
-import type { DaemonWorkspaceDefinition } from '../daemon/define-workspace.js';
+import type { Mount } from '../daemon/define-mount.js';
 import type { ProjectDir } from '../shared/types.js';
 import {
 	DEFAULT_PROJECT_CONFIG_SOURCE,
-	type EpicenterConfig,
 	PROJECT_CONFIG_FILENAME,
-} from './define-config.js';
-
-const EpicenterConfigSchema = type({
-	'+': 'reject',
-	'daemon?': {
-		'+': 'reject',
-		'routes?': {
-			'[string]': { '+': 'reject', open: 'Function' },
-		},
-	},
-});
+} from './project-config-source.js';
 
 export const ProjectConfigError = defineErrors({
 	ProjectConfigNotFound: ({
@@ -42,7 +47,7 @@ export type ProjectConfigError = InferErrors<typeof ProjectConfigError>;
 
 export async function loadProjectConfig(
 	projectDir: ProjectDir | string,
-): Promise<Result<EpicenterConfig, ProjectConfigError>> {
+): Promise<Result<Mount[], ProjectConfigError>> {
 	const projectConfigPath = join(resolve(projectDir), PROJECT_CONFIG_FILENAME);
 	if (!existsSync(projectConfigPath)) {
 		return ProjectConfigError.ProjectConfigNotFound({ projectConfigPath });
@@ -51,48 +56,35 @@ export async function loadProjectConfig(
 	const module = await importProjectConfig(projectConfigPath);
 	if (!('default' in module)) {
 		throw new Error(
-			`loadProjectConfig: ${projectConfigPath} must default-export defineConfig(...) or defineWorkspace(...).`,
+			`loadProjectConfig: ${projectConfigPath} must default-export a Mount or Mount[].`,
 		);
 	}
 
-	// `defineWorkspace` shape: the default export IS the daemon workspace
-	// definition. Wrap it into the EpicenterConfig shape, deriving the route
-	// name from the project directory's basename so route-addressable code
-	// (CLI, materializer logs) sees the same identifier the developer typed.
-	if (isWorkspaceDefinition(module.default)) {
-		const routeName = basename(resolve(projectDir));
-		return Ok({
-			daemon: { routes: { [routeName]: module.default } },
-		});
-	}
+	const fail = (reason: string): never => {
+		throw new Error(`loadProjectConfig: ${projectConfigPath} ${reason}`);
+	};
 
-	const loaded = EpicenterConfigSchema(module.default);
-	if (loaded instanceof type.errors) {
-		throw new Error(
-			`loadProjectConfig: ${projectConfigPath} is invalid: ${loaded.toString()}`,
-		);
+	const value = module.default;
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			if (!isMount(entry)) {
+				fail('default-exports an array containing a non-Mount value.');
+			}
+		}
+		return Ok(value as Mount[]);
 	}
-	if (Array.isArray(loaded.daemon?.routes)) {
-		throw new Error(
-			`loadProjectConfig: ${projectConfigPath} is invalid: daemon.routes must be an object keyed by route name.`,
-		);
+	if (isMount(value)) {
+		return Ok([value]);
 	}
-
-	return Ok(loaded as EpicenterConfig);
+	return fail('must default-export a Mount or Mount[].');
 }
 
-/**
- * Narrow a default-exported value to a `DaemonWorkspaceDefinition`. The
- * structural test is "has an `open` function"; the route-map shape doesn't
- * match (it has `daemon.routes`, not `open`), so the two cases are mutually
- * exclusive.
- */
-function isWorkspaceDefinition(
-	value: unknown,
-): value is DaemonWorkspaceDefinition {
+function isMount(value: unknown): value is Mount {
 	return (
 		typeof value === 'object' &&
 		value !== null &&
+		'name' in value &&
+		typeof (value as { name: unknown }).name === 'string' &&
 		'open' in value &&
 		typeof (value as { open: unknown }).open === 'function'
 	);
@@ -107,7 +99,7 @@ async function importProjectConfig(
 		};
 	} catch (cause) {
 		if (isDefaultConfigSelfImportMiss(projectConfigPath, cause)) {
-			return { default: {} };
+			return { default: [] };
 		}
 		throw new Error(
 			`loadProjectConfig: failed to load ${projectConfigPath}: ${extractErrorMessage(cause)}`,

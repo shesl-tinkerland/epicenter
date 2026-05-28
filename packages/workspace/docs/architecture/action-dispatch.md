@@ -8,11 +8,11 @@ How to invoke actions across runtimes using YJS as the transport layer.
 
 In an Epicenter workspace, actions run locally. But some actions are runtime-specific:
 
-- **Browser extension**: `closeTab`, `openTab` — requires `browser.tabs.*` API
-- **Desktop app (Tauri)**: `readLocalFile`, `showNotification` — requires OS access
+- **Browser extension**: `closeTab`, `openTab`: requires `browser.tabs.*` API
+- **Desktop app (Tauri)**: `readLocalFile`, `showNotification`: requires OS access
 - **CLI**: Can connect to the Y.Doc but has no browser APIs
 
-This is not just cross-device — it's cross-runtime. A CLI tool and a browser extension on the same machine need to communicate. The challenge: the browser extension can't accept incoming connections. It can only connect outward to sync servers.
+This is not just cross-device: it's cross-runtime. A CLI tool and a browser extension on the same machine need to communicate. The challenge: the browser extension can't accept incoming connections. It can only connect outward to sync servers.
 
 ## The Solution: Requests Table
 
@@ -67,9 +67,9 @@ No action schemas, no capabilities. Just identity and device type.
 
 **Why not put action schemas in awareness?**
 
-- Awareness uses `JSON.stringify(fullState)` per update — no delta encoding
+- Awareness uses `JSON.stringify(fullState)` per update: no delta encoding
 - Every heartbeat (15s) re-sends the full payload
-- Action schemas are static — they don't change at runtime
+- Action schemas are static: they don't change at runtime
 - Workspace definitions already provide this information
 
 ### Action Discovery: Static Definitions
@@ -215,7 +215,7 @@ Sender                          Target Device
    │                                    │
 ```
 
-Since requests are explicitly targeted and we check awareness first, there's no race condition — only one device will ever process each request.
+Since requests are explicitly targeted and we check awareness first, there's no race condition: only one device will ever process each request.
 
 ## Cleanup
 
@@ -244,6 +244,12 @@ Run on a timer or piggyback on an existing periodic task.
 
 Not every workspace needs dispatch. A notes workspace has no runtime-specific actions. Adding a `requests` table is an explicit choice:
 
+> Historical note: the example below uses an older workspace definition shape.
+> Current apps put actions in the bundle returned by `create<App>Workspace()`
+> and pass that registry to `openCollaboration()` or
+> `attachProjectInfrastructure()`. Treat the request-table idea as architectural
+> background, not current setup code.
+
 ```typescript
 const tabManagerWorkspace = defineWorkspace({
 	id: 'tab-manager',
@@ -258,7 +264,7 @@ const tabManagerWorkspace = defineWorkspace({
 });
 ```
 
-The request schema is the same across workspaces. What varies is the `action` names and `input` shapes — those come from the workspace's action definitions.
+The request schema is the same across workspaces. What varies is the `action` names and `input` shapes: those come from the workspace's action definitions.
 
 ## Integration with Existing Architecture
 

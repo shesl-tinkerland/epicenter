@@ -14,9 +14,36 @@ Whispering uses a clean three-layer architecture that achieves **extensive code 
          Reactive Updates
 ```
 
+## Workspace Composition
+
+Whispering uses the same workspace composition vocabulary as the rest of the repo, with a Tauri runtime today:
+
+```txt
+createWorkspace()
+  -> createWhisperingWorkspace()
+    -> openWhispering()
+```
+
+`createWhisperingWorkspace()` in `src/lib/whispering/index.ts` is the shared model. It defines the workspace id, tables, and KV schema with no platform APIs.
+
+`openWhispering()` in `src/lib/whispering/tauri.ts` is the Tauri runtime opener. It creates the shared model, attaches IndexedDB persistence, attaches BroadcastChannel, and attaches the recording markdown export when a folder is configured. The name predates the newer `open<App>Tauri()` convention; conceptually it is Whispering's Tauri opener.
+
+The rule is the same as Fuji and Honeycrisp:
+
+```txt
+create<App>Workspace()
+  shared isomorphic model
+
+open<App>Browser/open<App>Daemon/open<App>Tauri()
+  runtime resources around that model
+
+attach*
+  one side-effectful layer
+```
+
 ## Service Layer - Pure Business Logic + Platform Abstraction
 
-The service layer contains all business logic as **pure functions** with zero UI dependencies. Services don't know about reactive Svelte variables, user settings, or UI state—they only accept explicit parameters and return `Result<T, E>` types for consistent error handling.
+The service layer contains all business logic as **pure functions** with zero UI dependencies. Services don't know about reactive Svelte variables, user settings, or UI state. They only accept explicit parameters and return `Result<T, E>` types for consistent error handling.
 
 The key innovation is **build-time platform resolution**. Each platform-bound service lives in a folder with both implementations as sibling files; Vite resolves to the matching one based on the build target:
 
@@ -73,7 +100,7 @@ async function transcribeBlob(blob: Blob) {
 }
 ```
 
-**Workspace State** - After migrating to Yjs CRDTs, domain data (recordings, transformations, transformation runs) lives in reactive workspace state modules (`$lib/state/*.svelte.ts`). These use SvelteMap backed by Yjs documents for instant reactivity—no cache invalidation or optimistic updates needed.
+**Workspace State** - After migrating to Yjs CRDTs, domain data (recordings, transformations, transformation runs) lives in reactive workspace state modules (`$lib/state/*.svelte.ts`). These use SvelteMap backed by Yjs documents for instant reactivity. No cache invalidation or optimistic updates needed.
 
 The rpc layer's role has narrowed to things that don't fit in CRDTs:
 
@@ -86,10 +113,10 @@ The rpc layer's role has narrowed to things that don't fit in CRDTs:
   import { rpc } from '$lib/rpc';
   import { recordings } from '$lib/state/recordings.svelte';
 
-  // Domain data — workspace state (reactive, no queries needed)
+  // Domain data: workspace state (reactive, no queries needed)
   const latestRecording = $derived(recordings.sorted[0]);
 
-  // Audio blob — still needs TanStack Query (too large for CRDTs)
+  // Audio blob: still needs TanStack Query (too large for CRDTs)
   const audioUrl = createQuery(() => ({
     ...rpc.audio.getPlaybackUrl(() => latestRecording?.id ?? '').options,
     enabled: !!latestRecording?.id,
@@ -128,7 +155,7 @@ if (error) {
 
 ## Error Handling with WellCrafted
 
-Whispering uses [WellCrafted](https://github.com/wellcrafted-dev/wellcrafted), a lightweight TypeScript library I created to bring Rust-inspired error handling to JavaScript. I built WellCrafted after using the [effect-ts library](https://github.com/Effect-TS/effect) when it first came out in 2023—I was very excited about the concepts but found it too verbose. WellCrafted distills my takeaways from effect-ts and makes them better by leaning into more native JavaScript syntax, making it perfect for this use case. Unlike traditional try-catch blocks that hide errors, WellCrafted makes all potential failures explicit in function signatures using the `Result<T, E>` pattern.
+Whispering uses [WellCrafted](https://github.com/wellcrafted-dev/wellcrafted), a lightweight TypeScript library I created to bring Rust-inspired error handling to JavaScript. I built WellCrafted after using the [effect-ts library](https://github.com/Effect-TS/effect) when it first came out in 2023. I was very excited about the concepts but found it too verbose. WellCrafted distills my takeaways from effect-ts and makes them better by leaning into more native JavaScript syntax, making it perfect for this use case. Unlike traditional try-catch blocks that hide errors, WellCrafted makes all potential failures explicit in function signatures using the `Result<T, E>` pattern.
 
 `wellcrafted` ensures robust error handling across the entire codebase, from service layer functions to UI components, while maintaining excellent developer experience with TypeScript's control flow analysis.
 

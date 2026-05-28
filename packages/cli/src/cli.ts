@@ -11,13 +11,13 @@ const REMOVED_DAEMON_COMMANDS = new Set(['up', 'down', 'ps', 'logs']);
  * Create the Epicenter CLI instance.
  *
  * Introspect and invoke `defineQuery` / `defineMutation` actions exposed by
- * config-routed daemon extensions, either locally or on a peer that's online
- * right now.
+ * configured project mounts, either locally or on a peer that's online right
+ * now.
  *
  *   - `auth`:  manage the local machine auth session (pre-workspace)
  *   - `daemon`: operate daemon lifecycle commands
  *   - `list`:  tree view of runnable actions (local schema is authoritative)
- *   - `run`:   invoke one by route-qualified action key; `--peer` dispatches over RPC
+ *   - `run`:   invoke one by mount-prefixed action path; `--peer` dispatches over RPC
  *   - `peers`: enumerate other clients currently online via the workspace presence row
  *
  * Specs: `specs/20260421T155436-cli-scripting-first-redesign.md` (base
