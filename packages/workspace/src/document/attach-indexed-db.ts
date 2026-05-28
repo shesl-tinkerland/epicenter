@@ -3,24 +3,7 @@
 import { clearDocument, IndexeddbPersistence } from 'y-indexeddb';
 import type * as Y from 'yjs';
 
-export type IndexedDbAttachment = {
-	/**
-	 * Resolves when local IndexedDB state has loaded into the Y.Doc: "your
-	 * draft is in memory, edits are safe." Not CRDT convergence despite
-	 * `y-indexeddb`'s upstream `whenSynced` name. Pair with `sync.whenConnected`
-	 * when you also need remote state.
-	 */
-	whenLoaded: Promise<unknown>;
-	clearLocal: () => Promise<void>;
-	/**
-	 * Resolves after `ydoc.destroy()` fires the cascade and the IndexedDB
-	 * connection has actually closed. Bundle wipe methods await this before
-	 * deleting persisted data.
-	 */
-	whenDisposed: Promise<unknown>;
-};
-
-export function attachIndexedDb(ydoc: Y.Doc): IndexedDbAttachment {
+export function attachIndexedDb(ydoc: Y.Doc) {
 	const databaseName = ydoc.guid;
 	const idb = new IndexeddbPersistence(databaseName, ydoc);
 	// `IndexeddbPersistence`'s constructor binds `doc.on('destroy', this.destroy)`
@@ -32,6 +15,8 @@ export function attachIndexedDb(ydoc: Y.Doc): IndexedDbAttachment {
 	ydoc.off('destroy', idb.destroy);
 	const { promise: whenDisposed, resolve: resolveDisposed } =
 		Promise.withResolvers<void>();
+	const whenLoaded: Promise<unknown> = idb.whenSynced;
+	const clearLocal = (): Promise<void> => clearDocument(databaseName);
 	ydoc.once('destroy', async () => {
 		try {
 			await idb.destroy();
@@ -40,8 +25,22 @@ export function attachIndexedDb(ydoc: Y.Doc): IndexedDbAttachment {
 		}
 	});
 	return {
-		whenLoaded: idb.whenSynced,
-		clearLocal: () => clearDocument(databaseName),
+		/**
+		 * Resolves when local IndexedDB state has loaded into the Y.Doc: "your
+		 * draft is in memory, edits are safe." Not CRDT convergence despite
+		 * `y-indexeddb`'s upstream `whenSynced` name. Pair with `sync.whenConnected`
+		 * when you also need remote state.
+		 */
+		whenLoaded,
+		/** Delete the local IndexedDB document without destroying the Y.Doc. */
+		clearLocal,
+		/**
+		 * Resolves after `ydoc.destroy()` fires the cascade and the IndexedDB
+		 * connection has actually closed. Bundle wipe methods await this before
+		 * deleting persisted data.
+		 */
 		whenDisposed,
 	};
 }
+
+export type IndexedDbAttachment = ReturnType<typeof attachIndexedDb>;

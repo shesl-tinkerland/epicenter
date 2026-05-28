@@ -24,15 +24,6 @@ import { Database } from 'bun:sqlite';
 import { existsSync } from 'node:fs';
 import * as Y from 'yjs';
 
-export type YjsLogReaderAttachment = {
-	/**
-	 * `true` if the file existed at open time and rows were replayed;
-	 * `false` if the daemon has not written here yet. Snapshot value,
-	 * taken once at construction; the file is not re-checked later.
-	 */
-	fileExisted: boolean;
-};
-
 /**
  * Open the writer's file `{ readonly: true }` and replay every row into
  * the Y.Doc. Returns the open db handle so the caller can close it on
@@ -59,7 +50,7 @@ function openAndReplay(filePath: string, ydoc: Y.Doc): Database {
 export function attachYjsLogReader(
 	ydoc: Y.Doc,
 	{ filePath }: { filePath: string },
-): YjsLogReaderAttachment {
+) {
 	const fileExisted = existsSync(filePath);
 	const db = fileExisted ? openAndReplay(filePath, ydoc) : undefined;
 
@@ -68,6 +59,13 @@ export function attachYjsLogReader(
 	});
 
 	return {
+		/**
+		 * `true` if the file existed at open time and rows were replayed;
+		 * `false` if the daemon has not written here yet. Snapshot value,
+		 * taken once at construction; the file is not re-checked later.
+		 */
 		fileExisted,
 	};
 }
+
+export type YjsLogReaderAttachment = ReturnType<typeof attachYjsLogReader>;

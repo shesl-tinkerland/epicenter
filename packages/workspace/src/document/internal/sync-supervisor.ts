@@ -105,21 +105,6 @@ export type SyncSupervisorConfig = {
 	onTextFrame?: (text: string) => void;
 };
 
-export type SyncSupervisor = {
-	whenConnected: Promise<void>;
-	readonly status: SyncStatus;
-	onStatusChange: (listener: (status: SyncStatus) => void) => () => void;
-	reconnect(): void;
-	whenDisposed: Promise<void>;
-	/**
-	 * Send a frame on the active connection. Silently drops if the
-	 * socket is not currently OPEN; this matches the awareness model
-	 * where local-only state updates may fire while offline and should
-	 * not throw.
-	 */
-	send(frame: Uint8Array | string): void;
-};
-
 // ════════════════════════════════════════════════════════════════════════════
 // Constants
 // ════════════════════════════════════════════════════════════════════════════
@@ -485,16 +470,27 @@ export function createSyncSupervisor(
 	});
 
 	return {
+		/** Resolves after the first successful sync handshake. */
 		whenConnected: connected.promise,
+		/** Current sync lifecycle status. */
 		get status() {
 			return status.get();
 		},
+		/** Subscribe to sync status changes. Returns an unsubscribe function. */
 		onStatusChange: status.subscribe,
+		/** Restart the current connection cycle unless the document is disposed. */
 		reconnect,
+		/** Resolves after document destroy tears down the supervisor. */
 		whenDisposed,
+		/**
+		 * Send a frame on the active connection. Silently drops if the socket is
+		 * not currently OPEN, matching awareness updates that may fire offline.
+		 */
 		send,
-	} satisfies SyncSupervisor;
+	};
 }
+
+export type SyncSupervisor = ReturnType<typeof createSyncSupervisor>;
 
 // ════════════════════════════════════════════════════════════════════════════
 // Helpers

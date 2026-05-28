@@ -21,32 +21,23 @@
  */
 import * as Y from 'yjs';
 
-export type RichTextAttachment = {
-	/** `Y.XmlFragment`: pass this to a ProseMirror/Tiptap Yjs binding. */
-	binding: Y.XmlFragment;
-	/** Flatten the fragment to plain text (block-aware newlines). */
-	read: () => string;
-	/** Replace the fragment with a single paragraph containing `text`. */
-	write: (text: string) => void;
-};
-
 /**
  * Attach a rich-text handle to `ydoc` at `key` (default `'content'`).
  *
  * @param ydoc - Y.Doc to attach to
  * @param key  - Name of the `Y.XmlFragment` slot on the doc
  */
-export function attachRichText(
-	ydoc: Y.Doc,
-	key = 'content',
-): RichTextAttachment {
+export function attachRichText(ydoc: Y.Doc, key = 'content') {
 	const fragment = ydoc.getXmlFragment(key);
 	return {
+		/** `Y.XmlFragment`: pass this to a ProseMirror/Tiptap Yjs binding. */
 		binding: fragment,
+		/** Flatten the fragment to plain text with block-aware newlines. */
 		read() {
 			return xmlFragmentToPlaintext(fragment);
 		},
-		write(text) {
+		/** Replace the fragment with a single paragraph containing `text`. */
+		write(text: string) {
 			ydoc.transact(() => {
 				while (fragment.length > 0) {
 					fragment.delete(0, 1);
@@ -58,6 +49,8 @@ export function attachRichText(
 		},
 	};
 }
+
+export type RichTextAttachment = ReturnType<typeof attachRichText>;
 
 /**
  * Block-level element names that produce line breaks in plaintext extraction.

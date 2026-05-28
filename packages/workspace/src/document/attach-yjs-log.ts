@@ -53,20 +53,13 @@ const COMPACTION_BYTE_THRESHOLD = 2 * 1024 * 1024;
  */
 const COMPACTION_DEBOUNCE_MS = 5_000;
 
-export type YjsLogAttachment = {
-	/** `DELETE FROM updates`. Drops the durable log without destroying the Y.Doc. */
-	clearLocal: () => void;
-	/** Resolves after final compaction runs and the SQLite handle closes. */
-	whenDisposed: Promise<unknown>;
-};
-
 export function attachYjsLog(
 	ydoc: Y.Doc,
 	{
 		filePath,
 		log = createLogger('workspace/attach-yjs-log'),
 	}: { filePath: string; log?: Logger },
-): YjsLogAttachment {
+) {
 	const db = openWriterSqlite({ filePath, log });
 
 	db.run(
@@ -168,9 +161,13 @@ export function attachYjsLog(
 	});
 
 	return {
+		/** `DELETE FROM updates`. Drops the durable log without destroying the Y.Doc. */
 		clearLocal: () => {
 			deleteUpdates.run();
 		},
+		/** Resolves after final compaction runs and the SQLite handle closes. */
 		whenDisposed,
 	};
 }
+
+export type YjsLogAttachment = ReturnType<typeof attachYjsLog>;

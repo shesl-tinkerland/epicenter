@@ -29,16 +29,35 @@ export type DaemonServerOptions = {
 	routes: readonly DaemonServedRoute[];
 };
 
-export type DaemonServer = {
-	/** Filesystem path of the unix socket this server binds. */
-	readonly socketPath: string;
-	/**
-	 * Stop the bound listener. `Bun.serve.stop()` unlinks the socket file
-	 * itself; this method also sweeps any leftover socket file as a guard
-	 * for hard-error paths. Idempotent.
-	 */
-	close(): Promise<void>;
-};
+function createDaemonServer({
+	server,
+	socketPath,
+}: {
+	server: ReturnType<typeof bindUnixSocket>;
+	socketPath: string;
+}) {
+	let isClosed = false;
+	return {
+		/** Filesystem path of the unix socket this server binds. */
+		socketPath,
+		/**
+		 * Stop the bound listener. `Bun.serve.stop()` unlinks the socket file
+		 * itself; this method also sweeps any leftover socket file as a guard
+		 * for hard-error paths. Idempotent.
+		 */
+		async close() {
+			if (isClosed) return;
+			isClosed = true;
+			await tryAsync({
+				try: () => server.stop(true),
+				catch: () => Ok(undefined),
+			});
+			unlinkSocketFile(socketPath);
+		},
+	};
+}
+
+export type DaemonServer = ReturnType<typeof createDaemonServer>;
 
 /**
  * Start a daemon server for already-started routes. The caller must claim the
@@ -69,18 +88,5 @@ export async function startDaemonServer({
 	if (bindResult.error !== null) return bindResult;
 
 	const server = bindResult.data;
-	let isClosed = false;
-
-	return Ok({
-		socketPath,
-		async close() {
-			if (isClosed) return;
-			isClosed = true;
-			await tryAsync({
-				try: () => server.stop(true),
-				catch: () => Ok(undefined),
-			});
-			unlinkSocketFile(socketPath);
-		},
-	});
+	return Ok(createDaemonServer({ server, socketPath }));
 }

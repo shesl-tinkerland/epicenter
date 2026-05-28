@@ -16,6 +16,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./account-popover": "./src/account-popover/index.ts",
+		"./query": "./src/query.ts",
 		"./workspace-gate": "./src/workspace-gate/index.ts"
 	},
 	"dependencies": {

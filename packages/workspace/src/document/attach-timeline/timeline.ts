@@ -38,138 +38,7 @@ export type TimelineEntry = TextEntry | RichTextEntry | SheetEntry;
 /** Content types supported by timeline entries. */
 export type ContentType = TimelineEntry['type'];
 
-export type Timeline = {
-	/** Number of entries in the timeline. */
-	readonly length: number;
-	/**
-	 * The current (last) entry, validated and typed. Returns `null` if no entries exist.
-	 *
-	 * Recomputed on every access—each call parses the underlying Y.Map and
-	 * returns a fresh object. Do not rely on reference equality between calls.
-	 */
-	readonly currentEntry: TimelineEntry | null;
-	/** Content type of the current entry, or undefined if empty. */
-	readonly currentType: ContentType | undefined;
-
-	/**
-	 * Read the current entry as a plain string. Returns `''` if empty.
-	 *
-	 * Conversion is type-dependent: text returns as-is, richtext strips all
-	 * formatting (lossy), and sheet serializes to CSV.
-	 */
-	read(): string;
-	/**
-	 * Write string content to the current mode, wrapped in a single transaction.
-	 *
-	 * Mode-aware: text replaces Y.Text in-place, sheet parses CSV and replaces
-	 * columns/rows in-place, richtext clears the fragment and repopulates from
-	 * plaintext. When the current type matches, no new timeline entry is created
-	 * and `observe()` does **not** fire. On empty timelines, pushes a new text entry.
-	 *
-	 * To switch modes before writing, call `asText()`, `asSheet()`, or
-	 * `asRichText()` first.
-	 */
-	write(text: string): void;
-
-	/**
-	 * Append text to the current entry's content, wrapped in a single transaction.
-	 *
-	 * If the current entry is text, inserts at the end of the existing Y.Text
-	 * without creating a new timeline entry. If the timeline is empty, creates
-	 * a new text entry with the content.
-	 *
-	 * **WARNING: Lossy on non-text entries.** If the current entry is richtext or
-	 * sheet, this method reads the content as a plain string (stripping all
-	 * formatting, structure, column metadata, etc.), concatenates the new text,
-	 * and pushes a **new text entry** — permanently converting the document to
-	 * plain text. All prior richtext formatting or sheet data is lost.
-	 *
-	 * If you need to append to a richtext document without losing formatting,
-	 * use `asRichText()` and manipulate the Y.XmlFragment directly.
-	 */
-	appendText(text: string): void;
-
-	/**
-	 * Get current content as Y.Text for editor binding.
-	 *
-	 * If already text type, returns the existing Y.Text. If the timeline is
-	 * empty, creates a new text entry. If the current entry is a different type,
-	 * converts the content and pushes a new text entry.
-	 *
-	 * All conversions always succeed. Richtext→text is lossy (strips formatting).
-	 */
-	asText(): Y.Text;
-
-	/**
-	 * Get current content as Y.XmlFragment for richtext editor binding.
-	 *
-	 * If already richtext type, returns the existing Y.XmlFragment. If empty,
-	 * creates a new richtext entry. If different type, converts and pushes.
-	 */
-	asRichText(): Y.XmlFragment;
-
-	/**
-	 * Get current content as sheet columns/rows for spreadsheet binding.
-	 *
-	 * If already sheet type, returns existing columns and rows. If empty,
-	 * creates a new sheet entry. If different type, converts (parsed as CSV).
-	 */
-	asSheet(): SheetBinding;
-
-	/** Batch mutations into a single Yjs transaction. */
-	batch(fn: () => void): void;
-
-	/**
-	 * Restore this document's content to match a past snapshot.
-	 *
-	 * Creates a temporary Y.Doc from the snapshot binary, reads its timeline
-	 * entry, and writes matching content. Type-aware: text snapshots replace
-	 * in-place (if already text) or push a new entry; sheet and richtext
-	 * always push new entries.
-	 *
-	 * Richtext formatting (bold, italic, headings, links) is fully preserved
-	 * via deep clone.
-	 *
-	 * The caller is responsible for saving a safety snapshot before calling this.
-	 *
-	 * @param snapshotBinary - Full snapshot state from `Y.encodeStateAsUpdateV2`
-	 *
-	 * @example
-	 * ```typescript
-	 * await api.saveSnapshot(docId, 'Before restore');
-	 * const binary = await api.getSnapshot(docId, snapshotId);
-	 * handle.restoreFromSnapshot(binary);
-	 * ```
-	 */
-	restoreFromSnapshot(snapshotBinary: Uint8Array): void;
-
-	/**
-	 * Watch for structural timeline changes—entries added or removed.
-	 *
-	 * Fires when the entry list changes (e.g., a new entry is pushed via
-	 * `write()`, `asText()`, `asRichText()`, `asSheet()`, or `restoreFromSnapshot()`).
-	 * Does **not** fire when `write()` replaces content in-place (same type).
-	 * Does NOT fire when content within an existing entry changes—edits to
-	 * Y.Text, Y.XmlFragment, or Y.Map are handled by those shared types directly.
-	 * Editors already bind to the CRDT handle and receive updates natively.
-	 *
-	 * Re-read `currentEntry` in the callback to get the new state.
-	 *
-	 * @returns Unsubscribe function
-	 *
-	 * @example
-	 * ```typescript
-	 * const unsub = timeline.observe(() => {
-	 *   const entry = timeline.currentEntry;
-	 *   if (entry?.type === 'richtext') rebindEditor(entry.content);
-	 * });
-	 * // later: unsub();
-	 * ```
-	 */
-	observe(callback: () => void): () => void;
-};
-
-export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
+export function attachTimeline(ydoc: Y.Doc, key = 'timeline') {
 	const timeline = ydoc.getArray<TimelineYMap>(key);
 
 	// ── State ─────────────────────────────────────────────────────────────
@@ -251,18 +120,29 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 	// ── Public API ────────────────────────────────────────────────────────
 
 	return {
+		/** Number of entries in the timeline. */
 		get length() {
 			return timeline.length;
 		},
+		/**
+		 * The current entry, validated and typed. Returns `null` if no entries
+		 * exist. Recomputed on every access, so do not rely on reference equality
+		 * between calls.
+		 */
 		get currentEntry(): TimelineEntry | null {
 			const last =
 				timeline.length > 0 ? timeline.get(timeline.length - 1) : undefined;
 			return readEntry(last);
 		},
+		/** Content type of the current entry, or undefined if empty. */
 		get currentType() {
 			return this.currentEntry?.type;
 		},
 
+		/**
+		 * Read the current entry as a plain string. Text returns as-is, rich text
+		 * strips formatting, and sheet content serializes to CSV.
+		 */
 		read(): string {
 			const entry = this.currentEntry;
 			if (!entry) return '';
@@ -279,6 +159,11 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			}
 		},
 
+		/**
+		 * Write string content to the current mode in a single transaction. To
+		 * switch modes before writing, call `asText()`, `asSheet()`, or
+		 * `asRichText()` first.
+		 */
 		write(text: string) {
 			ydoc.transact(() => {
 				const entry = this.currentEntry;
@@ -313,6 +198,10 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			});
 		},
 
+		/**
+		 * Append text to the current entry. Lossy on rich text and sheet entries:
+		 * those modes are flattened to plain text and pushed as a new text entry.
+		 */
 		appendText(text: string) {
 			ydoc.transact(() => {
 				const entry = this.currentEntry;
@@ -330,6 +219,10 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			});
 		},
 
+		/**
+		 * Get current content as Y.Text for editor binding, converting the current
+		 * entry to text when needed.
+		 */
 		asText(): Y.Text {
 			const entry = this.currentEntry;
 			if (!entry) return ydoc.transact(() => pushText('')).content;
@@ -338,6 +231,10 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			return ydoc.transact(() => pushText(this.read())).content;
 		},
 
+		/**
+		 * Get current content as Y.XmlFragment for rich text editor binding,
+		 * converting the current entry to rich text when needed.
+		 */
 		asRichText(): Y.XmlFragment {
 			const entry = this.currentEntry;
 			if (!entry) return ydoc.transact(() => pushRichtext()).content;
@@ -351,6 +248,10 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			}).content;
 		},
 
+		/**
+		 * Get current content as sheet columns and rows for spreadsheet binding,
+		 * converting the current entry from CSV text when needed.
+		 */
 		asSheet(): SheetBinding {
 			const entry = this.currentEntry;
 			if (!entry) return ydoc.transact(() => pushSheet());
@@ -365,10 +266,18 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			});
 		},
 
+		/** Batch mutations into a single Yjs transaction. */
 		batch(fn: () => void) {
 			ydoc.transact(fn);
 		},
 
+		/**
+		 * Restore this document's content to match a past snapshot. Text snapshots
+		 * replace in place when possible; sheet and rich text snapshots push new
+		 * entries. The caller is responsible for saving a safety snapshot first.
+		 *
+		 * @param snapshotBinary Full snapshot state from `Y.encodeStateAsUpdateV2`.
+		 */
 		restoreFromSnapshot(snapshotBinary: Uint8Array): void {
 			// ── Step 1: Hydrate ──────────────────────────────────────────────
 			// Create a temporary Y.Doc and apply the snapshot binary to reconstruct
@@ -449,6 +358,12 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 			}
 		},
 
+		/**
+		 * Watch for structural timeline changes, such as entries added or removed.
+		 * Re-read `currentEntry` in the callback to get the new state.
+		 *
+		 * @returns Unsubscribe function.
+		 */
 		observe(callback: () => void): () => void {
 			const handler = () => callback();
 			timeline.observe(handler);
@@ -456,3 +371,5 @@ export function attachTimeline(ydoc: Y.Doc, key = 'timeline'): Timeline {
 		},
 	};
 }
+
+export type Timeline = ReturnType<typeof attachTimeline>;

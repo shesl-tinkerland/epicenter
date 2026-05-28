@@ -28,7 +28,7 @@
 
 import type { Logger } from 'wellcrafted/logger';
 import type { Result } from 'wellcrafted/result';
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 import {
 	ACTION_KEY_PATTERN,
 	type ActionManifest,
@@ -45,10 +45,7 @@ import {
 	checkDispatchResultFrame,
 	type DispatchRequestFrame,
 } from './dispatch-protocol.js';
-import {
-	createSyncSupervisor,
-	type SyncStatus,
-} from './internal/sync-supervisor.js';
+import { createSyncSupervisor } from './internal/sync-supervisor.js';
 import {
 	checkPresenceFrame,
 	type PresenceDevice,
@@ -111,46 +108,6 @@ export type OpenCollaborationConfig<TActions extends ActionRegistry> = {
 	actions: TActions;
 };
 
-export type Collaboration<TActions extends ActionRegistry = ActionRegistry> = {
-	readonly actions: TActions;
-
-	readonly status: SyncStatus;
-	readonly whenConnected: Promise<void>;
-	readonly whenDisposed: Promise<void>;
-	onStatusChange(listener: (status: SyncStatus) => void): () => void;
-	reconnect(): void;
-
-	/**
-	 * Online installs in this workspace, derived from the server-owned
-	 * presence channel: the relay pushes the full install list as a
-	 * `presence` text frame on every connection change. Deduplicated and
-	 * self-excluded by the relay; the client stores the latest list
-	 * verbatim.
-	 */
-	readonly devices: {
-		list(): PresenceDevice[];
-		subscribe(fn: (devices: PresenceDevice[]) => void): () => void;
-	};
-
-	/**
-	 * Fire a dispatch over the collaboration WebSocket. The relay pushes
-	 * `dispatch_inbound` to the recipient's socket and returns the outcome
-	 * as `dispatch_result`. The caller's `signal`, connection lifecycle,
-	 * or ceiling timer settles the promise if no result arrives.
-	 *
-	 * Always returns `Result<unknown, DispatchError>`. For type-narrowed
-	 * success payloads, lift through `typedDispatch<TActions>(collab.dispatch)`.
-	 */
-	dispatch(req: DispatchRequest): Promise<Result<unknown, DispatchError>>;
-
-	/**
-	 * Sugar for `ydoc.destroy()`. Both cascade to all attached primitives
-	 * via the standard ydoc destroy listener. If the app owns the ydoc
-	 * directly, destroying it produces the same teardown.
-	 */
-	[Symbol.dispose](): void;
-};
-
 // ════════════════════════════════════════════════════════════════════════════
 // IMPLEMENTATION
 // ════════════════════════════════════════════════════════════════════════════
@@ -158,7 +115,7 @@ export type Collaboration<TActions extends ActionRegistry = ActionRegistry> = {
 export function openCollaboration<TActions extends ActionRegistry>(
 	ydoc: Y.Doc,
 	config: OpenCollaborationConfig<TActions>,
-): Collaboration<TActions> {
+) {
 	const userActions = config.actions;
 
 	for (const key of Object.keys(userActions)) {
@@ -291,15 +248,33 @@ export function openCollaboration<TActions extends ActionRegistry>(
 	};
 
 	return {
-		actions: userActions,
+		/** Local action registry published through this collaboration handle. */
+		get actions() {
+			return userActions;
+		},
+		/** Current sync lifecycle status. */
 		get status() {
 			return supervisor.status;
 		},
+		/** Resolves after the first successful sync handshake. */
 		whenConnected: supervisor.whenConnected,
+		/** Resolves after document destroy tears down collaboration. */
 		whenDisposed: supervisor.whenDisposed,
+		/** Subscribe to sync status changes. Returns an unsubscribe function. */
 		onStatusChange: supervisor.onStatusChange,
+		/** Restart the current connection cycle. */
 		reconnect: supervisor.reconnect,
-		devices,
+		/**
+		 * Online installs in this workspace, derived from the server-owned
+		 * presence channel.
+		 */
+		get devices() {
+			return devices;
+		},
+		/**
+		 * Fire a dispatch over the collaboration WebSocket. Always returns
+		 * `Result<unknown, DispatchError>`.
+		 */
 		dispatch(req: DispatchRequest) {
 			if (req.signal?.aborted) {
 				return Promise.resolve(
@@ -353,8 +328,12 @@ export function openCollaboration<TActions extends ActionRegistry>(
 				}
 			});
 		},
+		/** Destroy the Y.Doc, cascading teardown to attached primitives. */
 		[Symbol.dispose]() {
 			ydoc.destroy();
 		},
 	};
 }
+
+export type Collaboration<TActions extends ActionRegistry = ActionRegistry> =
+	ReturnType<typeof openCollaboration<TActions>>;

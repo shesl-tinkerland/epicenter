@@ -1,25 +1,16 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
+	import { createResultMutation } from '@epicenter/svelte/query';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import UserMenu from '$lib/components/UserMenu.svelte';
 	import { auth } from '$platform/auth';
 
 	let { children } = $props();
 
-	let signingIn = $state(false);
-	let signInError = $state<string | null>(null);
-
-	async function startSignIn() {
-		signInError = null;
-		signingIn = true;
-		try {
-			const { error } = await auth.startSignIn();
-			if (error) signInError = error.message;
-		} finally {
-			signingIn = false;
-		}
-	}
+	const startSignIn = createResultMutation(() => ({
+		mutationFn: () => auth.startSignIn(),
+	}));
 </script>
 
 {#if auth.state.status === 'signed-in'}
@@ -40,11 +31,15 @@
 						Sign in to view billing and usage.
 					</p>
 				</div>
-				{#if signInError}
-					<p class="text-xs text-destructive">{signInError}</p>
+				{#if startSignIn.error}
+					<p class="text-xs text-destructive">{startSignIn.error.message}</p>
 				{/if}
-				<Button class="w-full" onclick={startSignIn} disabled={signingIn}>
-					{#if signingIn}
+				<Button
+					class="w-full"
+					onclick={() => startSignIn.mutate()}
+					disabled={startSignIn.isPending}
+				>
+					{#if startSignIn.isPending}
 						<LoaderCircle class="size-4 animate-spin" />
 						Signing in…
 					{:else if auth.state.status === 'reauth-required'}

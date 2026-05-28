@@ -21,16 +21,36 @@ import { readMetadata } from './metadata.js';
 import { leasePathFor, socketPathFor } from './paths.js';
 import { StartupError } from './startup-errors.js';
 
-export type DaemonLease = {
-	/** Filesystem-resolved absolute path that scopes this daemon. */
-	readonly projectDir: string;
-	/** SQLite file whose open write transaction owns the daemon lease. */
-	readonly leasePath: string;
-	/** Filesystem path of the unix socket this daemon binds. */
-	readonly socketPath: string;
-	/** Release the daemon lease. Idempotent. */
-	release(): void;
-};
+function createDaemonLease({
+	db,
+	projectDir,
+	leasePath,
+}: {
+	db: Database;
+	projectDir: string;
+	leasePath: string;
+}) {
+	let released = false;
+	return {
+		/** Filesystem-resolved absolute path that scopes this daemon. */
+		projectDir,
+		/** SQLite file whose open write transaction owns the daemon lease. */
+		leasePath,
+		/** Filesystem path of the unix socket this daemon binds. */
+		socketPath: socketPathFor(projectDir),
+		/** Release the daemon lease. Idempotent. */
+		release(): void {
+			if (released) return;
+			released = true;
+			bestEffortSync(() => {
+				if (db?.inTransaction) db.run('ROLLBACK');
+			});
+			bestEffortSync(() => db?.close());
+		},
+	};
+}
+
+export type DaemonLease = ReturnType<typeof createDaemonLease>;
 
 export function claimDaemonLease(
 	projectDir: string,
@@ -53,22 +73,7 @@ export function claimDaemonLease(
 		return StartupError.LeaseFailed({ cause });
 	}
 
-	let released = false;
-	const release = () => {
-		if (released) return;
-		released = true;
-		bestEffortSync(() => {
-			if (db?.inTransaction) db.run('ROLLBACK');
-		});
-		bestEffortSync(() => db?.close());
-	};
-
-	return Ok({
-		projectDir,
-		leasePath,
-		socketPath: socketPathFor(projectDir),
-		release,
-	});
+	return Ok(createDaemonLease({ db, projectDir, leasePath }));
 }
 
 function isSqliteBusy(cause: unknown): boolean {

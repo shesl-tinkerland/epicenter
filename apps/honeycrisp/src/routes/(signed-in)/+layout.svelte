@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { createResultMutation } from '@epicenter/svelte/query';
 	import { Button } from '@epicenter/ui/button';
 	import * as Tooltip from '@epicenter/ui/tooltip';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -8,19 +9,9 @@
 
 	let { children } = $props();
 
-	let signingIn = $state(false);
-	let signInError = $state<string | null>(null);
-
-	async function startSignIn() {
-		signInError = null;
-		signingIn = true;
-		try {
-			const { error } = await auth.startSignIn();
-			if (error) signInError = error.message;
-		} finally {
-			signingIn = false;
-		}
-	}
+	const startSignIn = createResultMutation(() => ({
+		mutationFn: () => auth.startSignIn(),
+	}));
 </script>
 
 {#if session.current}
@@ -41,11 +32,15 @@
 				Sync your notes across devices.
 			</p>
 		</div>
-		{#if signInError}
-			<p class="text-xs text-destructive">{signInError}</p>
+		{#if startSignIn.error}
+			<p class="text-xs text-destructive">{startSignIn.error.message}</p>
 		{/if}
-		<Button class="w-full max-w-xs" onclick={startSignIn} disabled={signingIn}>
-			{#if signingIn}
+		<Button
+			class="w-full max-w-xs"
+			onclick={() => startSignIn.mutate()}
+			disabled={startSignIn.isPending}
+		>
+			{#if startSignIn.isPending}
 				<LoaderCircle class="size-4 animate-spin" />
 				Signing in…
 			{:else}

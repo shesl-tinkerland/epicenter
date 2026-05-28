@@ -28,13 +28,9 @@ import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import type { OwnerId } from '@epicenter/constants/identity';
 import type * as Y from 'yjs';
 
-import {
-	attachYjsLog,
-	type YjsLogAttachment,
-} from '../document/attach-yjs-log.js';
+import { attachYjsLog } from '../document/attach-yjs-log.js';
 import type { DeviceId } from '../document/device-id.js';
 import {
-	type Collaboration,
 	type OnReconnectSignal,
 	type OpenWebSocketFn,
 	openCollaboration,
@@ -56,12 +52,6 @@ export type AttachDaemonInfrastructureOptions<TActions extends ActionRegistry> =
 		baseURL?: string;
 	};
 
-export type DaemonInfrastructure<TActions extends ActionRegistry> = {
-	yjsLog: YjsLogAttachment;
-	collaboration: Collaboration<TActions>;
-	[Symbol.asyncDispose](): Promise<void>;
-};
-
 export function attachDaemonInfrastructure<TActions extends ActionRegistry>(
 	ydoc: Y.Doc,
 	{
@@ -73,7 +63,7 @@ export function attachDaemonInfrastructure<TActions extends ActionRegistry>(
 		actions,
 		baseURL = EPICENTER_API_URL,
 	}: AttachDaemonInfrastructureOptions<TActions>,
-): DaemonInfrastructure<TActions> {
+) {
 	const yjsLog = attachYjsLog(ydoc, {
 		filePath: yjsPath(projectDir, ydoc.guid),
 	});
@@ -91,11 +81,18 @@ export function attachDaemonInfrastructure<TActions extends ActionRegistry>(
 	});
 
 	return {
+		/** Durable Y.Doc update log handle. */
 		yjsLog,
+		/** Cloud sync, presence, and dispatch handle for this daemon route. */
 		collaboration,
+		/** Destroy the Y.Doc, then await collaboration and log teardown. */
 		async [Symbol.asyncDispose]() {
 			ydoc.destroy();
 			await Promise.all([collaboration.whenDisposed, yjsLog.whenDisposed]);
 		},
 	};
 }
+
+export type DaemonInfrastructure<TActions extends ActionRegistry> = ReturnType<
+	typeof attachDaemonInfrastructure<TActions>
+>;

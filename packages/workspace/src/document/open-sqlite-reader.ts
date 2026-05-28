@@ -48,26 +48,6 @@ export type OpenSqliteReaderOptions = {
  * `using reader = openSqliteReader(...)` and the underlying database
  * handle closes on scope exit.
  */
-export type SqliteReader = {
-	/**
-	 * The opened SQLite database handle. Read-only; `query_only` PRAGMA is
-	 * set so accidental writes fail at the driver layer.
-	 */
-	readonly db: Database;
-	/**
-	 * Run an FTS5 search against the materialized `<table>_fts` virtual
-	 * table. Returns ranked results with snippets. Returns an empty array
-	 * if the FTS table is missing or the query is empty.
-	 */
-	search(
-		tableName: string,
-		query: string,
-		options?: SearchOptions,
-	): SearchResult[];
-	/** Close the database handle. Idempotent. */
-	[Symbol.dispose](): void;
-};
-
 /**
  * Open the daemon's SQLite mirror file read-only.
  *
@@ -85,9 +65,7 @@ export type SqliteReader = {
  * const drizzleDb = drizzle(reader.db, { schema });
  * ```
  */
-export function openSqliteReader({
-	filePath,
-}: OpenSqliteReaderOptions): SqliteReader {
+export function openSqliteReader({ filePath }: OpenSqliteReaderOptions) {
 	const db = new Database(filePath, { readonly: true });
 	db.run('PRAGMA query_only = ON');
 	// Wait up to 5s on SQLITE_BUSY when a reader opens during a checkpoint
@@ -159,8 +137,22 @@ export function openSqliteReader({
 	}
 
 	return {
-		db,
+		/**
+		 * The opened SQLite database handle. Read-only; `query_only` PRAGMA is
+		 * set so accidental writes fail at the driver layer.
+		 */
+		get db() {
+			return db;
+		},
+		/**
+		 * Run an FTS5 search against the materialized `<table>_fts` virtual
+		 * table. Returns ranked results with snippets. Returns an empty array
+		 * if the FTS table is missing or the query is empty.
+		 */
 		search,
+		/** Close the database handle. Idempotent. */
 		[Symbol.dispose]: dispose,
 	};
 }
+
+export type SqliteReader = ReturnType<typeof openSqliteReader>;

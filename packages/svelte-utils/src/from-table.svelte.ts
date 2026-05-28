@@ -1,9 +1,6 @@
 import type { BaseRow, Table } from '@epicenter/workspace';
 import { SvelteMap } from 'svelte/reactivity';
 
-export type ReactiveTableMap<TRow extends BaseRow> = SvelteMap<string, TRow> &
-	Disposable;
-
 /**
  * Create a reactive SvelteMap binding to a workspace table.
  *
@@ -38,10 +35,9 @@ export type ReactiveTableMap<TRow extends BaseRow> = SvelteMap<string, TRow> &
  * entries[Symbol.dispose]();
  * ```
  */
-export function fromTable<TRow extends BaseRow>(
-	table: Table<TRow>,
-): ReactiveTableMap<TRow> {
-	const map = new SvelteMap<string, TRow>();
+export function fromTable<TRow extends BaseRow>(table: Table<TRow>) {
+	const map = new SvelteMap<string, TRow>() as SvelteMap<string, TRow> &
+		Disposable;
 
 	// Seed with current valid rows
 	for (const row of table.getAllValid()) {
@@ -73,5 +69,9 @@ export function fromTable<TRow extends BaseRow>(
 		enumerable: false,
 	});
 
-	return map as ReactiveTableMap<TRow>;
+	return map;
 }
+
+export type ReactiveTableMap<TRow extends BaseRow> = ReturnType<
+	typeof fromTable<TRow>
+>;

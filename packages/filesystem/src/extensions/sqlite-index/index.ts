@@ -31,7 +31,7 @@
 
 import { debounce } from '@epicenter/util';
 import type { Table } from '@epicenter/workspace';
-import type { Client, InStatement } from '@libsql/client-wasm';
+import type { InStatement } from '@libsql/client-wasm';
 import { createClient } from '@libsql/client-wasm';
 
 import type { FileId } from '../../ids.js';
@@ -88,27 +88,6 @@ export type SearchResult = {
 	snippet: string;
 };
 
-/** Public exports surfaced on the document bundle's `sqliteIndex.exports`. */
-export type SqliteIndexExports = {
-	/** Raw libSQL client for arbitrary SQL queries. */
-	readonly client: Client;
-	/** Full-text search across file names and content. */
-	search: (query: string) => Promise<SearchResult[]>;
-	/** Manually rebuild the entire index from Yjs. */
-	rebuild: () => Promise<void>;
-	/** Resolves after the initial rebuild completes. */
-	whenReady: Promise<void>;
-};
-
-/** The raw extension factory return: exports plus lifecycle metadata. */
-export type SqliteIndex = {
-	exports: SqliteIndexExports;
-	/** Readiness signal (same promise as `exports.whenReady`). */
-	init: Promise<void>;
-	/** Dispose observers and close the SQLite database. */
-	[Symbol.dispose]: () => void;
-};
-
 // ════════════════════════════════════════════════════════════════════════════
 // EXTENSION CONTEXT
 // ════════════════════════════════════════════════════════════════════════════
@@ -154,7 +133,7 @@ export function createSqliteIndex(
 	},
 	{ debounceMs = 100 }: SqliteIndexOptions = {},
 ) {
-	return (context: SqliteIndexContext): SqliteIndex => {
+	return (context: SqliteIndexContext) => {
 		const filesTable = context.tables.files;
 
 		const client = createClient({ url: ':memory:' });
@@ -441,13 +420,22 @@ export function createSqliteIndex(
 
 		// ── Extension exports ─────────────────────────────────────────
 		return {
+			/** Public exports surfaced on the document bundle's `sqliteIndex.exports`. */
 			exports: {
-				client,
+				/** Raw libSQL client for arbitrary SQL queries. */
+				get client() {
+					return client;
+				},
+				/** Full-text search across file names and content. */
 				search,
+				/** Manually rebuild the entire index from Yjs. */
 				rebuild,
+				/** Resolves after the initial rebuild completes. */
 				whenReady,
 			},
+			/** Readiness signal. Same promise as `exports.whenReady`. */
 			init: whenReady,
+			/** Dispose observers and close the SQLite database. */
 			[Symbol.dispose]() {
 				syncAfterDebounce.cancel();
 				unobserve?.();
@@ -456,6 +444,12 @@ export function createSqliteIndex(
 		};
 	};
 }
+
+/** The raw extension factory return: exports plus lifecycle metadata. */
+export type SqliteIndex = ReturnType<ReturnType<typeof createSqliteIndex>>;
+
+/** Public exports surfaced on the document bundle's `sqliteIndex.exports`. */
+export type SqliteIndexExports = SqliteIndex['exports'];
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATH COMPUTATION

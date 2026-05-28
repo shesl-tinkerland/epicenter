@@ -14,6 +14,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import { createQuery, QueryClient } from '@tanstack/svelte-query';
 	import { extractErrorMessage } from 'wellcrafted/error';
+	import { createResultMutation } from '../query.js';
 
 	const accountProfileQueryClient = new QueryClient({
 		defaultOptions: {
@@ -70,9 +71,6 @@
 
 	let syncStatus = $state<SyncStatus>();
 	let popoverOpen = $state(false);
-	let signingOut = $state(false);
-	let signingIn = $state(false);
-	let signInError = $state<string | null>(null);
 	let forgettingDevice = $state(false);
 	const isSignedIn = $derived(auth.state.status === 'signed-in');
 	const accountCacheKey = $derived(
@@ -95,6 +93,24 @@
 	);
 	const accountLabel = $derived(
 		profile.data?.user.email ?? (profile.error ? 'Offline' : 'Loading...'),
+	);
+	const signOut = createResultMutation(
+		() => ({
+			mutationFn: () => auth.signOut(),
+			onMutate: () => {
+				popoverOpen = false;
+			},
+			onError: (error) => {
+				toastOnError(error, 'Failed to sign out');
+			},
+		}),
+		() => accountProfileQueryClient,
+	);
+	const startSignIn = createResultMutation(
+		() => ({
+			mutationFn: () => auth.startSignIn(),
+		}),
+		() => accountProfileQueryClient,
 	);
 
 	$effect(() => {
@@ -133,28 +149,6 @@
 
 	const tooltip = $derived(getSyncTooltip(syncStatus, isSignedIn));
 
-	async function signOut() {
-		popoverOpen = false;
-		signingOut = true;
-		try {
-			const result = await auth.signOut();
-			if (result.error) toastOnError(result, 'Failed to sign out');
-		} finally {
-			signingOut = false;
-		}
-	}
-
-	async function startSignIn() {
-		signInError = null;
-		signingIn = true;
-		try {
-			const { error } = await auth.startSignIn();
-			if (error) signInError = error.message;
-		} finally {
-			signingIn = false;
-		}
-	}
-
 	function forgetDevice() {
 		if (!onForgetDevice) return;
 		popoverOpen = false;
@@ -184,7 +178,7 @@
 		{#snippet child({ props })}
 			<Button {...props} variant="ghost" size="icon-sm" {tooltip}>
 				<div class="relative">
-					{#if signingOut}
+					{#if signOut.isPending}
 						<LoaderCircle class="size-4 animate-spin" />
 					{:else if !isSignedIn}
 						<CloudOff class="size-4 text-muted-foreground" />
@@ -237,7 +231,12 @@
 							Reconnect
 						</Button>
 					{/if}
-					<Button variant="ghost" size="sm" class="flex-1" onclick={signOut}>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="flex-1"
+						onclick={() => signOut.mutate()}
+					>
 						<LogOut class="size-3.5" />
 						Sign out
 					</Button>
@@ -269,11 +268,15 @@
 						Sign in to sync your {syncNoun} across devices.
 					</p>
 				</div>
-				{#if signInError}
-					<p class="text-xs text-destructive">{signInError}</p>
+				{#if startSignIn.error}
+					<p class="text-xs text-destructive">{startSignIn.error.message}</p>
 				{/if}
-				<Button class="w-full" onclick={startSignIn} disabled={signingIn}>
-					{#if signingIn}
+				<Button
+					class="w-full"
+					onclick={() => startSignIn.mutate()}
+					disabled={startSignIn.isPending}
+				>
+					{#if startSignIn.isPending}
 						<LoaderCircle class="size-4 animate-spin" />
 						Signing in…
 					{:else if auth.state.status === 'reauth-required'}

@@ -19,32 +19,23 @@
  */
 import type * as Y from 'yjs';
 
-export type PlainTextAttachment = {
-	/** `Y.Text`: pass this to a CodeMirror/Monaco Yjs binding. */
-	binding: Y.Text;
-	/** Read the current text as a string. */
-	read: () => string;
-	/** Replace the entire Y.Text with `text` in a single transaction. */
-	write: (text: string) => void;
-};
-
 /**
  * Attach a plain-text handle to `ydoc` at `key` (default `'content'`).
  *
  * @param ydoc - Y.Doc to attach to
  * @param key  - Name of the `Y.Text` slot on the doc
  */
-export function attachPlainText(
-	ydoc: Y.Doc,
-	key = 'content',
-): PlainTextAttachment {
+export function attachPlainText(ydoc: Y.Doc, key = 'content') {
 	const ytext = ydoc.getText(key);
 	return {
+		/** `Y.Text`: pass this to a CodeMirror/Monaco Yjs binding. */
 		binding: ytext,
+		/** Read the current text as a string. */
 		read() {
 			return ytext.toString();
 		},
-		write(text) {
+		/** Replace the entire Y.Text with `text` in a single transaction. */
+		write(text: string) {
 			ydoc.transact(() => {
 				ytext.delete(0, ytext.length);
 				ytext.insert(0, text);
@@ -52,3 +43,5 @@ export function attachPlainText(
 		},
 	};
 }
+
+export type PlainTextAttachment = ReturnType<typeof attachPlainText>;
