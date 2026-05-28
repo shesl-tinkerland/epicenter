@@ -8,6 +8,7 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { goto } from '$app/navigation';
 	import { tauri } from '$lib/tauri';
+	import { commands } from '$lib/tauri/commands';
 	import type { PageData } from './$types';
 
 	let { data } = $props();

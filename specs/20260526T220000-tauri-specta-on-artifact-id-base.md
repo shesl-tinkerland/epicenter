@@ -253,7 +253,7 @@ Durable Rust-owned `RecordingArtifact`, id-addressed commands, `Float32Array | B
 
 ### Wave 3 (Build): Pilot migration
 
-- [ ] **3.1** Migrate `tauri.tauri.ts:command.execute` and `command.spawn` to `commands.executeCommand` / `commands.spawnCommand`. Two call sites, one obvious smoke test.
+- [x] **3.1** Migrate `tauri.tauri.ts:command.execute` to `commands.executeCommand`. One call site, one obvious smoke test.
 - [ ] **3.2** Hit the path in-app (ffmpeg version check or equivalent).
 - [ ] **3.3** If the migration looks wrong (positional args feel awkward, error mapping clunky), pause and revisit the adapter before bulk migration.
 
@@ -268,7 +268,7 @@ Durable Rust-owned `RecordingArtifact`, id-addressed commands, `Float32Array | B
 
 ### Wave 5 (Build): Migrate the hand-rolled command
 
-- [ ] **5.1** Delete `tauri.audioEncoder.encodeRecordingForUpload` and inline at its sole call site in `src/lib/operations/transcribe.ts:loadForCloudUpload`, which now imports `commands.encodeRecordingForUpload` directly. Drop the entire `audioEncoder` namespace from `tauri.tauri.ts` (one method, one consumer, no other API surface).
+- [x] **5.1** Delete the upload-encoding namespace and inline at its sole call site in `src/lib/operations/transcribe.ts:loadForCloudUpload`, which imports `commands.encodeRecordingForUpload` directly.
 
 ### Wave 6 (Prove): Verification
 
@@ -323,7 +323,7 @@ With `ErrorHandlingMode::Result`, Rust `Err(...)` returns through the data chann
    - Recommendation: `commands.ts`. Pairs naturally with `bindings.gen.ts`. Importers write `import { commands } from '$lib/tauri/commands'`. Matches v1.
 
 2. **What happens to `src/lib/tauri.tauri.ts`?**
-   - It still owns Tauri-only capability namespaces (fs, permissions, tray, globalShortcuts, autostart) that are *not* `#[tauri::command]` functions. Those stay. The `audioEncoder` namespace is deleted in Wave 5 since its one method has exactly one caller and the inlining is cleaner than keeping a one-method namespace alive.
+   - It still owns Tauri-only capability namespaces (fs, permissions, window, tray, globalShortcuts, autostart) that are not `#[tauri::command]` functions. Those stay. The `audioEncoder` namespace is gone; upload encoding uses `commands.encodeRecordingForUpload`.
 
 3. **Upstream `ErrorHandlingMode::DataError`** (request drafted at `specs/tauri-specta-data-error-mode-request.md`).
    - Independent of this spec. If it lands upstream, the adapter file shrinks to just the hand-rolled `encodeRecordingForUpload`. Worth tracking; not a blocker.

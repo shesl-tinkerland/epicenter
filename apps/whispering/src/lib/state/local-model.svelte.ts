@@ -36,10 +36,12 @@ function createLocalModel() {
 			return state;
 		},
 
-		/** True while the model is loading or running inference. */
+		/** True while the model manager cannot start another local operation. */
 		get isBusy(): boolean {
 			return (
-				state.status.kind === 'loading' || state.status.kind === 'inferring'
+				state.status.kind === 'switching' ||
+				state.status.kind === 'loading' ||
+				state.status.kind === 'inferring'
 			);
 		},
 

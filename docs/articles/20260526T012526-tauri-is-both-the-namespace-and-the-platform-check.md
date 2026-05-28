@@ -8,7 +8,7 @@ That two-state shape is the whole point. The variable doubles as a boolean: if `
 import { tauri } from '$lib/tauri';
 
 if (tauri) {
-  await tauri.fs.pathToBlob(path);
+  await tauri.fs.pathsToFiles(paths);
 }
 ```
 
@@ -40,7 +40,7 @@ The namespace fixes both halves at once. The capability is `null` on web, so the
 ```ts
 import { tauri } from '$lib/tauri';
 
-await tauri.fs.pathToBlob(path);
+await tauri.fs.pathsToFiles(paths);
 //    ^ 'tauri' is possibly 'null'.
 ```
 
@@ -51,8 +51,7 @@ The narrowing then gives you both: you're on Tauri AND `tauri` is the namespace.
 ```ts
 if (tauri) {
   // here, `tauri` is the full namespace, not `null`
-  await tauri.fs.pathToBlob(path);
-  await tauri.permissions.accessibility.openSettings();
+  await tauri.fs.pathsToFiles(paths);
   await tauri.autostart.enable();
 }
 ```
@@ -65,13 +64,9 @@ Vite swaps the file at build time. `tauri.tauri.ts` is the real namespace. `taur
 
 ```ts
 export const tauri = null;
-
-export function requireTauri(): never {
-  throw new Error('requireTauri() called outside Tauri runtime');
-}
 ```
 
-The `tauri` export is the platform check. The `requireTauri` export is the loud-fail companion for `.tauri.ts` files (covered below).
+The `tauri` export is the platform check. The non-null `tauriOnly` export exists only in `tauri.tauri.ts`, so `.tauri.ts` files can import it directly and browser-bundled misuse fails at build time.
 
 `vite.config.ts` has:
 
@@ -191,17 +186,17 @@ export function syncIconWithRecorderState(tauri: Tauri) {
 
 The function signature is the documentation: "I need Tauri." TypeScript enforces it. Callers without a narrowed `tauri` in scope get a compile error, which is exactly the feedback you want.
 
-### Why the prop-drill instead of `requireTauri()`?
+### Why the prop-drill instead of `tauriOnly`?
 
-The narrowing is already in your hand at the call site. You have the value. Passing the value you already have is more honest than asking a helper to look up a module-level variable and assert it. The signature ends up self-documenting: `(tauri: Tauri)` literally says "this function needs Tauri" in the place a reader looks first.
+The narrowing is already in your hand at the call site. You have the value. Passing the value you already have is more honest than asking a helper to import a Tauri-only module export. The signature ends up self-documenting: `(tauri: Tauri)` literally says "this function needs Tauri" in the place a reader looks first.
 
-Use `requireTauri()` (covered below) only when prop-drilling doesn't make sense, typically because the caller boundary is the build system itself rather than another piece of your code.
+Use `tauriOnly` only when prop-drilling doesn't make sense, typically because the caller boundary is the build system itself rather than another piece of your code.
 
 ### Where this composes
 
 Any helper or component that needs Tauri capabilities declares it in its signature. Parents either have a narrowed `tauri` to pass, or they themselves need to gate before rendering, or they take a `Tauri` prop from their own parent. The invariant climbs the tree until it hits the one place that did `if (tauri)`. That one check is the boundary; everything below it is unconditionally Tauri-shaped.
 
-## `requireTauri()` for files the build system already gated
+## `tauriOnly` for files the build system already gated
 
 There's one case where the prop-drill doesn't fit cleanly: code that lives in a `*.tauri.ts` file. The Vite suffix routing already guarantees the module is only loaded on Tauri builds, so there isn't a caller boundary you can prop-drill from. Yet inside the file, `import { tauri } from '$lib/tauri'` still gives you `Tauri | null`, because TypeScript reads the same nullable shape for both builds.
 
@@ -221,21 +216,21 @@ The replacement is a named export from the same `$lib/tauri` module:
 
 ```ts
 // file-system.tauri.ts (new)
-import { requireTauri } from '$lib/tauri';
+import { tauriOnly } from '$lib/tauri';
 
-const { data: blob } = await requireTauri().fs.pathToBlob(audioPath);
+const { data: files } = await tauriOnly.fs.pathsToFiles(paths);
 ```
 
-`requireTauri()` returns `Tauri` (non-null) on Tauri builds and throws on web. The browser shim exports a stub that throws with a clear message. If anyone misuses this from a shared file, you get `requireTauri() called outside Tauri runtime` instead of a downstream null deref.
+`tauriOnly` is a `Tauri` (non-null) namespace on Tauri builds. The browser shim does not export it. If anyone imports it from shared code that reaches the web bundle, the browser build fails instead of shipping a runtime assertion.
 
-The naming carries the constraint. Reviewers see `requireTauri()` and know two things at a glance: this file is asserting it's on Tauri, and the runtime will yell if that assertion is wrong.
+The naming carries the constraint. Reviewers see `tauriOnly` and know this code must live behind a Tauri-only build boundary.
 
 ### When to use which
 
 A short rule:
 
 - **Crossing a function or component boundary inside shared code?** Prop-drill `tauri: Tauri`. The narrow has happened in the caller; pass the value.
-- **Top of a `.tauri.ts` file that needs the namespace?** `requireTauri()`. The build system is your guarantee; the function call is your assertion.
+- **Top of a `.tauri.ts` file that needs the namespace?** `tauriOnly`. The build system is your guarantee; the import names that fact directly.
 - **Plain shared code that may or may not be on Tauri?** Narrow at the call site (`if (tauri)` or `tauri?.`). The runtime ambiguity is real and the narrow is doing real work.
 
 ## When this doesn't fit: dual-implementation services
@@ -271,7 +266,7 @@ Most apps want both patterns. They solve different problems.
 
 ## What lives in `tauri`
 
-Today: file system, macOS permission flows, window control, system tray, global shortcuts, autostart. Each leaf picks one canonical call form. Autostart uses TanStack because the settings UI observes and invalidates it; tray, shortcuts, fs, window, and permission helpers are plain Result-returning functions. There is no `tauri.rpc` sub-namespace any more.
+Today: file import helpers, macOS permission flows, window control, system tray, global shortcuts, autostart. Each leaf picks one canonical call form. Autostart uses TanStack because the settings UI observes and invalidates it; tray, shortcuts, fs, and window are plain Result-returning functions. App-owned Rust commands, including accessibility settings and upload encoding, live in `$lib/tauri/commands`. There is no `tauri.rpc` sub-namespace any more.
 
 Adding a new Tauri-only capability is one section in one file:
 
@@ -284,7 +279,7 @@ const newCap = {
 };
 
 const _tauri = {
-  fs, command, /* ... */, newCap,
+  fs, permissions, /* ... */, newCap,
 };
 ```
 
@@ -299,7 +294,7 @@ The TypeScript narrowing gives us the rest for free. You can't call into the nam
 ## If you want to see the code
 
 - `apps/whispering/src/lib/tauri.tauri.ts` is the namespace.
-- `apps/whispering/src/lib/tauri.browser.ts` is the web stub (`tauri = null` plus a throwing `requireTauri`).
+- `apps/whispering/src/lib/tauri.browser.ts` is the web stub (`tauri = null`; no `tauriOnly` export).
 - `apps/whispering/vite.config.ts` for the build-time switch.
 - `apps/whispering/tsconfig.json` for `moduleSuffixes`.
 - Any consumer file under `apps/whispering/src/routes/` for a real call site.

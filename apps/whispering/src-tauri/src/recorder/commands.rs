@@ -1,5 +1,5 @@
 use crate::recorder::artifact::{
-    delete_artifact, write_artifact, RecordingArtifact,
+    clear_artifacts, delete_artifacts, write_artifact, RecordingArtifact,
 };
 use crate::recorder::recorder::{Recorder, Result};
 use log::{debug, info, warn};
@@ -85,7 +85,7 @@ pub async fn start_recording(
 ///
 /// JS never sees raw PCM samples on the wire: later operations look the
 /// file up by id (`transcribe_recording`, `encode_recording_for_upload`,
-/// `delete_recording`).
+/// and `delete_recording_artifacts`).
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_recording(
@@ -159,14 +159,34 @@ pub async fn get_current_recording_id(
     Ok(recorder.get_current_recording_id())
 }
 
-/// Delete an artifact by id. Idempotent: a missing file is not an error
-/// so the JS side can call this without first checking existence.
+/// Delete recording artifacts by id.
+///
+/// This is intentionally id-based instead of path-based. The recorder
+/// artifact module owns which files under the recordings directory are blobs,
+/// so TypeScript callers cannot accidentally delete markdown sidecars or
+/// arbitrary files. Missing artifacts are ignored to keep cleanup retryable.
 #[tauri::command]
 #[specta::specta]
-pub async fn delete_recording(
-    recording_id: String,
+pub async fn delete_recording_artifacts(
+    recording_ids: Vec<String>,
     app_handle: AppHandle,
-) -> Result<()> {
-    info!("Deleting recording artifact: {recording_id}");
-    delete_artifact(&app_handle, &recording_id)
+) -> Result<u32> {
+    info!("Deleting {} recording artifacts", recording_ids.len());
+    tokio::task::spawn_blocking(move || delete_artifacts(&app_handle, &recording_ids))
+        .await
+        .map_err(|e| format!("Task join error: {e}"))?
+}
+
+/// Delete every recording artifact while preserving markdown sidecars.
+///
+/// Used by the blob store's `clear()` path. The Rust layer owns the directory
+/// scan because it has the same artifact matching rule used by targeted
+/// deletion and transcription lookup.
+#[tauri::command]
+#[specta::specta]
+pub async fn clear_recording_artifacts(app_handle: AppHandle) -> Result<u32> {
+    info!("Clearing recording artifacts");
+    tokio::task::spawn_blocking(move || clear_artifacts(&app_handle))
+        .await
+        .map_err(|e| format!("Task join error: {e}"))?
 }

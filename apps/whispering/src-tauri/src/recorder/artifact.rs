@@ -12,10 +12,10 @@
 //! `validate_recording_id` rejects separators or traversal sequences
 //! before they reach the filesystem.
 //!
-//! Reader-friendly callers should prefer the high-level functions
-//! (`write_artifact`, `read_artifact_samples`, `delete_artifact`) over
-//! reaching for raw paths.
+//! Reader-friendly callers should prefer the high-level functions in this
+//! module over reaching for raw paths.
 
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -35,10 +35,6 @@ const ARTIFACT_CHANNELS: u16 = 1;
 /// extensions; `find_recording_path` resolves by id-prefix regardless.
 const ARTIFACT_EXT: &str = "wav";
 const ARTIFACT_MIME: &str = "audio/wav";
-
-fn artifact_mime() -> String {
-    ARTIFACT_MIME.to_string()
-}
 
 /// Subdirectory under the app data dir. Mirrors `PATHS.DB.RECORDINGS()` on
 /// the JS side so the blob store keeps finding files by id prefix.
@@ -127,14 +123,66 @@ fn find_recording_path(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     let entries = std::fs::read_dir(&dir)
         .map_err(|e| format!("read recordings dir {}: {e}", dir.display()))?;
     let prefix = format!("{id}.");
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read recordings dir {}: {e}", dir.display()))?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.starts_with(&prefix) && !name.ends_with(".md") {
+        if name.starts_with(&prefix) && is_recording_artifact_name(&name) {
             return Ok(entry.path());
         }
     }
     Err(format!("no recording artifact found for id '{id}'"))
+}
+
+fn is_recording_artifact_name(name: &str) -> bool {
+    !name.ends_with(".md")
+}
+
+fn recording_id_from_artifact_filename(name: &str) -> Option<&str> {
+    if !is_recording_artifact_name(name) {
+        return None;
+    }
+    Some(name.split_once('.').map_or(name, |(id, _)| id))
+}
+
+fn remove_file_if_present(path: &Path) -> Result<bool, String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(format!("delete artifact {}: {e}", path.display())),
+    }
+}
+
+fn delete_recording_artifacts_matching(
+    app: &AppHandle,
+    mut matches: impl FnMut(&str) -> bool,
+) -> Result<u32, String> {
+    let dir = recordings_dir(app)?;
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(format!("read recordings dir {}: {e}", dir.display())),
+    };
+
+    let mut deleted = 0;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read recordings dir {}: {e}", dir.display()))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !matches(&name) {
+            continue;
+        }
+
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("stat artifact {}: {e}", path.display()))?;
+        if file_type.is_file() && remove_file_if_present(&path)? {
+            deleted += 1;
+        }
+    }
+
+    Ok(deleted)
 }
 
 /// Synthesize and write a mono 16 kHz IEEE-float WAV from in-memory PCM
@@ -164,7 +212,7 @@ pub fn write_artifact(
         id: id.to_string(),
         duration_ms,
         byte_length,
-        mime_type: artifact_mime(),
+        mime_type: ARTIFACT_MIME.to_string(),
     })
 }
 
@@ -179,19 +227,34 @@ pub fn read_artifact_samples(app: &AppHandle, id: &str) -> Result<Vec<f32>, Stri
     decode_to_pcm16k_mono(&bytes).map_err(|e| format!("decode artifact {}: {e}", path.display()))
 }
 
-/// Delete a recording's audio file. Idempotent: a missing file is not an
-/// error so callers can retry safely. Does not touch any `{id}.md`
-/// sidecar; that's owned by the JS recordings store.
-pub fn delete_artifact(app: &AppHandle, id: &str) -> Result<(), String> {
-    let path = match find_recording_path(app, id) {
-        Ok(p) => p,
-        Err(_) => return Ok(()),
-    };
-    match std::fs::remove_file(&path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(format!("delete artifact {}: {e}", path.display())),
+/// Delete recording artifacts by recording id.
+///
+/// Artifact matching lives here instead of in TypeScript so the front end
+/// never gets a generic "delete files in this directory" primitive. Missing
+/// files are not an error, which lets callers retry after partial cleanup.
+pub(super) fn delete_artifacts(app: &AppHandle, ids: &[String]) -> Result<u32, String> {
+    let mut target_ids = HashSet::with_capacity(ids.len());
+    for id in ids {
+        validate_recording_id(id)?;
+        target_ids.insert(id.as_str());
     }
+
+    if target_ids.is_empty() {
+        return Ok(0);
+    }
+
+    delete_recording_artifacts_matching(app, |name| {
+        recording_id_from_artifact_filename(name).is_some_and(|id| target_ids.contains(id))
+    })
+}
+
+/// Delete every recording artifact while leaving exported markdown sidecars.
+///
+/// The recordings directory may contain `{id}.md` files owned by the markdown
+/// exporter. Those are metadata sidecars, not blobs, so bulk audio cleanup
+/// must leave them alone.
+pub(super) fn clear_artifacts(app: &AppHandle) -> Result<u32, String> {
+    delete_recording_artifacts_matching(app, is_recording_artifact_name)
 }
 
 /// Write a mono 16 kHz IEEE-float WAV directly. The header is small and
@@ -280,5 +343,12 @@ mod tests {
         assert!(validate_recording_id("abc123").is_ok());
         assert!(validate_recording_id("V1StGXR8_Z5jdHi6B-myT").is_ok());
         assert!(validate_recording_id("rec_2026-05-26T12-34-56").is_ok());
+    }
+
+    #[test]
+    fn artifact_filename_matching_ignores_markdown_sidecars() {
+        assert_eq!(recording_id_from_artifact_filename("abc.wav"), Some("abc"));
+        assert_eq!(recording_id_from_artifact_filename("abc.webm"), Some("abc"));
+        assert_eq!(recording_id_from_artifact_filename("abc.md"), None);
     }
 }

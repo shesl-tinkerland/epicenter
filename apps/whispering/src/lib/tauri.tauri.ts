@@ -1,7 +1,7 @@
 /**
  * Tauri-only capability namespace. Everything that requires the Tauri
- * runtime lives in this file: fs, permissions, tray, globalShortcuts,
- * autostart. The subset that needs TanStack caching,
+ * runtime lives in this file: fs, permissions, window, tray,
+ * globalShortcuts, autostart. The subset that needs TanStack caching,
  * error transformation, or invalidation is exposed in the same shape
  * (no sub-namespace), with each leaf picking one canonical call form.
  *
@@ -15,16 +15,16 @@
  * builds via `moduleSuffixes` in `tsconfig.json`, so consumers always
  * see the full `Tauri | null` shape.
  *
- * Two exports, one for each use case:
+ * Two patterns, one for each use case:
  *
  *     import { tauri } from '$lib/tauri';
- *     if (tauri) await tauri.fs.pathToBlob(path);
+ *     if (tauri) await tauri.fs.pathsToFiles(paths);
  *     // or
- *     await tauri?.fs.pathToBlob(path);
+ *     await tauri?.fs.pathsToFiles(paths);
  *
  *     // Inside *.tauri.ts files only (build guarantees Tauri runtime):
- *     import { requireTauri } from '$lib/tauri';
- *     await requireTauri().fs.pathToBlob(path);
+ *     import { tauriOnly } from '$lib/tauri';
+ *     await tauriOnly.fs.pathsToFiles(paths);
  *
  * `tauri` doubles as the platform check: truthy means we're on Tauri
  * and the whole namespace is available. There is no separate
@@ -76,11 +76,6 @@ import {
 
 // fs ----------------------------------------------------------------
 const FsError = defineErrors({
-	ReadBlobFailed: ({ path, cause }: { path: string; cause: unknown }) => ({
-		message: `Failed to read file as Blob: ${path}: ${extractErrorMessage(cause)}`,
-		path,
-		cause,
-	}),
 	ReadFilesFailed: ({ paths, cause }: { paths: string[]; cause: unknown }) => ({
 		message: `Failed to read files: ${paths.join(', ')}: ${extractErrorMessage(cause)}`,
 		paths,
@@ -99,15 +94,6 @@ async function readFileWithMimeType(path: string): Promise<{
 }
 
 const fs = {
-	pathToBlob: (path: string) =>
-		tryAsync({
-			try: async () => {
-				const { bytes, mimeType } = await readFileWithMimeType(path);
-				return new Blob([bytes], { type: mimeType });
-			},
-			catch: (error) => FsError.ReadBlobFailed({ path, cause: error }),
-		}),
-
 	pathsToFiles: (paths: string[]) =>
 		tryAsync({
 			try: () =>
@@ -472,10 +458,9 @@ const globalShortcuts = {
 };
 
 // barrel ------------------------------------------------------------
-// Local `tauriImpl` holds the non-null namespace on Tauri builds. The
-// `tauri` export widens it to `Tauri | null` so consumers narrow;
-// `requireTauri()` returns the asserted form for `.tauri.ts` callers.
-const tauriImpl = {
+// `tauriOnly` is the non-null namespace for `.tauri.ts` files. The
+// `tauri` export widens it to `Tauri | null` so shared consumers narrow.
+export const tauriOnly = {
 	fs,
 	permissions,
 	window,
@@ -485,24 +470,10 @@ const tauriImpl = {
 };
 
 /** Shape of the Tauri capability namespace (non-null). */
-export type Tauri = typeof tauriImpl;
+export type Tauri = typeof tauriOnly;
 
 /**
  * The Tauri capability namespace, or `null` on web builds.
  * Doubles as the platform check: truthy means Tauri.
  */
-export const tauri: Tauri | null = tauriImpl;
-
-/**
- * Returns the Tauri namespace, asserting we're on Tauri.
- *
- * Use ONLY inside `*.tauri.ts` files where the build system guarantees
- * this module loads only on Tauri. Throws on web, which should be
- * unreachable given the suffix routing.
- */
-export function requireTauri(): Tauri {
-	if (!tauri) {
-		throw new Error('requireTauri() called outside Tauri runtime');
-	}
-	return tauri;
-}
+export const tauri: Tauri | null = tauriOnly;

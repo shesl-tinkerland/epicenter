@@ -1,14 +1,13 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import {
-	exists,
 	mkdir,
 	readDir,
+	readFile,
 	writeFile as tauriWriteFile,
 } from '@tauri-apps/plugin-fs';
 import mime from 'mime';
 import { tryAsync } from 'wellcrafted/result';
 import { PATHS } from '$lib/constants/paths';
-import { requireTauri } from '$lib/tauri';
 import { commands } from '$lib/tauri/commands';
 import { BlobError, type BlobStore } from './types';
 
@@ -19,7 +18,6 @@ import { BlobError, type BlobStore } from './types';
  * Directory structure:
  * - recordings/
  *   - {id}.{ext} (audio file: .wav, .opus, .mp3, etc.)
- *   - {id}.md (metadata materialized by workspace, NOT written by this service)
  */
 export function createFileSystemBlobStore() {
 	return {
@@ -42,16 +40,7 @@ export function createFileSystemBlobStore() {
 			const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
 			return tryAsync({
 				try: async () => {
-					const recordingsPath = await PATHS.DB.RECORDINGS();
-					const idsToDelete = new Set(ids);
-					const allFiles = await readDir(recordingsPath);
-					const filenames = allFiles
-						.filter((file) => {
-							const id = file.name.split('.')[0] ?? '';
-							return idsToDelete.has(id);
-						})
-						.map((file) => file.name);
-					const { error } = await commands.deleteRecordingFiles(filenames);
+					const { error } = await commands.deleteRecordingArtifacts(ids);
 					if (error !== null) throw error;
 				},
 				catch: (error) => BlobError.WriteFailed({ cause: error }),
@@ -70,12 +59,7 @@ export function createFileSystemBlobStore() {
 
 					const audioPath = await PATHS.DB.RECORDING_FILE(audioFilename);
 
-					// Use existing fsService.pathToBlob utility
-					const { data: blob, error } =
-						await requireTauri().fs.pathToBlob(audioPath);
-					if (error) throw error;
-
-					return blob;
+					return await readFileAsBlob(audioPath);
 				},
 				catch: (error) => BlobError.ReadFailed({ cause: error }),
 			});
@@ -109,19 +93,17 @@ export function createFileSystemBlobStore() {
 		async clear() {
 			return tryAsync({
 				try: async () => {
-					const recordingsPath = await PATHS.DB.RECORDINGS();
-					const dirExists = await exists(recordingsPath);
-					if (!dirExists) return undefined;
-
-					const allFiles = await readDir(recordingsPath);
-					const filenames = allFiles.map((file) => file.name);
-					const { error } = await commands.deleteRecordingFiles(filenames);
+					const { error } = await commands.clearRecordingArtifacts();
 					if (error !== null) throw error;
 				},
 				catch: (error) => BlobError.WriteFailed({ cause: error }),
 			});
 		},
 	} satisfies BlobStore;
+}
+
+function isAudioFilename(filename: string) {
+	return !filename.endsWith('.md');
 }
 
 /**
@@ -132,7 +114,14 @@ export function createFileSystemBlobStore() {
 async function findAudioFile(dir: string, id: string): Promise<string | null> {
 	const files = await readDir(dir);
 	const audioFile = files.find(
-		(f) => f.name.startsWith(`${id}.`) && !f.name.endsWith('.md'),
+		(f) => f.name.startsWith(`${id}.`) && isAudioFilename(f.name),
 	);
 	return audioFile?.name ?? null;
+}
+
+async function readFileAsBlob(path: string): Promise<Blob> {
+	// Cast is safe: Tauri's readFile always returns ArrayBuffer-backed Uint8Array.
+	const bytes = (await readFile(path)) as Uint8Array<ArrayBuffer>;
+	const mimeType = mime.getType(path) ?? 'application/octet-stream';
+	return new Blob([bytes], { type: mimeType });
 }

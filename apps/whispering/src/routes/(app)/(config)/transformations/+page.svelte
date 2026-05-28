@@ -31,8 +31,6 @@
 	} from '@tanstack/table-core';
 	import { type } from 'arktype';
 	import { createRawSnippet } from 'svelte';
-	import OpenFolderButton from '$lib/components/OpenFolderButton.svelte';
-	import { PATHS } from '$lib/constants/paths';
 	import { report } from '$lib/report';
 	import { transformations } from '$lib/state/transformations.svelte';
 	import { viewTransition } from '$lib/utils/viewTransitions';
@@ -237,11 +235,6 @@
 				<TrashIcon class="size-4" />
 			</Button>
 		{/if}
-
-		<OpenFolderButton
-			getFolderPath={PATHS.DB.TRANSFORMATIONS}
-			tooltipText="Open transformations folder"
-		/>
 
 		<CreateTransformationButton />
 	</div>

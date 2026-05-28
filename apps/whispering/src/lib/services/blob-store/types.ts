@@ -24,7 +24,7 @@ export type BlobStore = {
 
 	/**
 	 * Get blob by key. Fetches on-demand.
-	 * - Desktop: Reads file from predictable path using services.fs.pathToBlob()
+	 * - Desktop: Reads file from predictable path in the recordings directory
 	 * - Web: Fetches from IndexedDB by ID, converts serialized data to Blob
 	 */
 	getBlob(key: string): Promise<Result<Blob, BlobError>>;

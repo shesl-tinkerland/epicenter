@@ -1,22 +1,26 @@
 import { toast as sonner } from '@epicenter/ui/sonner';
 import { nanoid } from 'nanoid/non-secure';
-import {
-	type LogEvent,
-	consoleSink as wellcraftedConsoleSink,
-} from 'wellcrafted/logger';
+import type { AnyTaggedError } from 'wellcrafted/error';
+import { type LogEvent, consoleSink } from 'wellcrafted/logger';
 import { moreDetailsDialog } from '$lib/components/MoreDetailsDialog.svelte';
-import { resolveDisplay } from './display';
-import { osNotifySink } from './os-notify';
-import type {
-	Level,
-	LoadingHandle,
-	Notice,
-	NoticeAction,
-	Problem,
-	ReportEvent,
-} from './types';
+import { humanize } from './humanize';
+import { osNotify } from './os-notify';
 
-export type { LoadingHandle, Notice, NoticeAction, Problem } from './types';
+export type NoticeAction = {
+	label: string;
+	onClick: () => void | Promise<void>;
+};
+
+export type Notice = {
+	title?: string;
+	description?: string;
+	action?: NoticeAction;
+	cause?: AnyTaggedError;
+};
+
+export type Problem = Notice & { cause: AnyTaggedError };
+
+type Level = 'error' | 'success' | 'info' | 'loading';
 
 const SOURCE = 'whispering/report';
 
@@ -39,13 +43,16 @@ export const report = {
 	info(notice: Notice): void {
 		emit('info', notice);
 	},
-	loading(notice: Notice): LoadingHandle {
+	loading(notice: Notice) {
 		const id = nanoid();
 		emit('loading', notice, id);
 		return {
-			resolve: (r) => emit('success', r, id),
-			reject: (r) => emit('error', r, id),
-			update: (r) => emit('loading', r, id),
+			/** Resolve the loading notice as a success notice. */
+			resolve: (r: Notice) => emit('success', r, id),
+			/** Resolve the loading notice as an error notice. */
+			reject: (r: Problem) => emit('error', r, id),
+			/** Replace the displayed loading notice content. */
+			update: (r: Notice) => emit('loading', r, id),
 		};
 	},
 };
@@ -57,7 +64,7 @@ export const report = {
  */
 export const log = {
 	info(message: string, data?: unknown): void {
-		wellcraftedConsoleSink({
+		consoleSink({
 			ts: Date.now(),
 			level: 'info',
 			source: SOURCE,
@@ -69,56 +76,53 @@ export const log = {
 
 // ── Internals ─────────────────────────────────────────────────────────────
 
+/**
+ * Fan a notice out to the console, toast, and OS-notification surfaces.
+ *
+ * `id` is the sonner toast correlation id: pass it from the loading family so
+ * resolve/reject/update can target the same toast. Omit it for one-shot
+ * error/success/info reports.
+ */
 function emit(level: Level, notice: Notice, id?: string): void {
-	const event = {
-		ts: Date.now(),
-		level,
-		source: SOURCE,
-		data: id !== undefined ? { ...notice, id } : notice,
-	} satisfies ReportEvent;
-	consoleSink(event);
-	toastSink(event);
-	osNotifySink(event);
-}
+	const title =
+		(notice.title ?? humanize(notice.cause?.name ?? '')) || 'Notice';
+	const description = notice.description ?? notice.cause?.message;
 
-function consoleSink(event: ReportEvent): void {
-	if (event.level === 'loading') return;
-	const { data } = event;
-	wellcraftedConsoleSink({
-		ts: event.ts,
-		level: event.level === 'error' ? 'error' : 'info',
-		source: event.source,
-		message: data.title ?? data.cause?.message ?? '',
-		data,
-	} satisfies LogEvent);
-}
+	if (level !== 'loading') {
+		consoleSink({
+			ts: Date.now(),
+			level: level === 'error' ? 'error' : 'info',
+			source: SOURCE,
+			message: notice.title ?? notice.cause?.message ?? '',
+			data: id !== undefined ? { ...notice, id } : notice,
+		} satisfies LogEvent);
+	}
 
-function toastSink(event: ReportEvent): void {
-	const { data } = event;
-	const { title, description } = resolveDisplay(data);
-
-	sonner[event.level](title, {
-		id: data.id,
+	sonner[level](title, {
+		id,
 		description,
 		descriptionClass: 'line-clamp-6',
-		duration: TOAST_DURATION[event.level],
-		action: resolveAction(data, event.level),
+		duration: TOAST_DURATION[level],
+		action: notice.action ?? defaultMoreDetailsAction(level, notice.cause),
 	});
+
+	if (level === 'error' && !document.hasFocus()) {
+		void osNotify(title, description);
+	}
 }
 
-function resolveAction(
-	data: Notice & { id?: string },
+function defaultMoreDetailsAction(
 	level: Level,
+	cause: AnyTaggedError | undefined,
 ): NoticeAction | undefined {
-	if (data.action) return data.action;
-	if (level !== 'error' || !data.cause) return undefined;
+	if (level !== 'error' || !cause) return undefined;
 	return {
 		label: 'More details',
 		onClick: () =>
 			moreDetailsDialog.open({
 				title: 'More details',
 				description: 'The following is the raw error message.',
-				content: data.cause,
+				content: cause,
 			}),
 	};
 }
