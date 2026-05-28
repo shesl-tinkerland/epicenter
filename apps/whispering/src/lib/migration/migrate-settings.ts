@@ -8,9 +8,9 @@
  * @see specs/20260313T163000-settings-data-migration.md
  */
 
-import { Err, Ok, tryAsync, trySync } from 'wellcrafted/result';
 import { defineErrors } from 'wellcrafted/error';
 import { createLogger } from 'wellcrafted/logger';
+import { Err, Ok, tryAsync, trySync } from 'wellcrafted/result';
 import { deviceConfig } from '$lib/state/device-config.svelte';
 import { whispering } from '$lib/whispering/whispering';
 import { whisperingKv } from '$lib/workspace';
@@ -34,13 +34,7 @@ const SettingsMigrationError = defineErrors({
 		oldKey,
 		cause,
 	}),
-	DeviceKeyFailed: ({
-		oldKey,
-		cause,
-	}: {
-		oldKey: string;
-		cause: unknown;
-	}) => ({
+	DeviceKeyFailed: ({ oldKey, cause }: { oldKey: string; cause: unknown }) => ({
 		message: `Failed to migrate device setting "${oldKey}"`,
 		oldKey,
 		cause,

@@ -26,13 +26,7 @@ export const WorkspaceAppError = defineErrors({
 		message:
 			'Cannot open mounts while machine auth is signed out. Run `epicenter auth login` first.',
 	}),
-	MountOpenFailed: ({
-		mount,
-		cause,
-	}: {
-		mount: string;
-		cause: unknown;
-	}) => ({
+	MountOpenFailed: ({ mount, cause }: { mount: string; cause: unknown }) => ({
 		message: `Mount "${mount}" failed to open: ${extractErrorMessage(cause)}`,
 		mount,
 		cause,

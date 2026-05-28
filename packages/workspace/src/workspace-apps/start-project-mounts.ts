@@ -19,8 +19,8 @@ import type { Keyring } from '@epicenter/encryption';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 
 import type { Mount, MountContext } from '../daemon/define-mount.js';
-import type { StartedMount } from '../daemon/types.js';
 import { validateMountNames } from '../daemon/mount-validation.js';
+import type { StartedMount } from '../daemon/types.js';
 import { asDeviceId } from '../document/device-id.js';
 import { hashYDocClientId } from '../shared/client-id.js';
 import type { ProjectDir } from '../shared/types.js';
@@ -60,9 +60,7 @@ export async function startProjectMounts(
 	const ownerId = auth.state.ownerId;
 
 	const settled = await Promise.allSettled(
-		mounts.map((mount) =>
-			openOneMount({ mount, projectDir, auth, ownerId }),
-		),
+		mounts.map((mount) => openOneMount({ mount, projectDir, auth, ownerId })),
 	);
 
 	const opened: StartedMount[] = [];

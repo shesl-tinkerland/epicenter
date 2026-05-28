@@ -1,8 +1,8 @@
 import { createPersistedState } from '@epicenter/svelte';
 import { type } from 'arktype';
 import { defineCommand } from 'just-bash';
-import { Ok, tryAsync } from 'wellcrafted/result';
 import type { OpensidianBrowser } from 'opensidian/browser';
+import { Ok, tryAsync } from 'wellcrafted/result';
 import type { FilesState } from '$lib/state/files-state.svelte';
 
 /**

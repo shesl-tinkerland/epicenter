@@ -1,8 +1,8 @@
 import { createSession } from '@epicenter/svelte';
 import { createDeviceId } from '@epicenter/workspace';
+import { openOpensidianBrowser } from 'opensidian/browser';
 import { auth } from '$platform/auth';
 import { createAiChatState } from './chat/chat-state.svelte';
-import { openOpensidianBrowser } from 'opensidian/browser';
 import { createEditorState } from './state/editor-state.svelte';
 import { createFilesState } from './state/files-state.svelte';
 import { createPaletteSearchState } from './state/palette-search-state.svelte';
