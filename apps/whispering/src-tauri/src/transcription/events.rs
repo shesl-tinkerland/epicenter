@@ -1,11 +1,8 @@
 use super::config::Engine;
 use serde::{Deserialize, Serialize};
-use tauri_specta::Event;
 
-/// Channel name for every model lifecycle event. The same constant is bound
-/// to the `tauri_specta(event_name = "...")` attribute on `ModelStateEvent`
-/// below so the Rust emitter, the specta-emitted TS binding, and the FE
-/// `listen<ModelStateEvent>(...)` call all key off one symbol.
+/// Channel name for every model lifecycle event. The Rust emitter and the FE
+/// `listen<ModelStateEvent>(...)` call both key off this symbol.
 pub const EVENT_CHANNEL: &str = "transcription://model-state";
 
 /// Snapshot of everything observable about the resident model. Every event
@@ -30,6 +27,9 @@ pub enum ModelStatus {
     /// No model resident and none loading. Initial state, and reached after
     /// `Unloaded`.
     Idle,
+    /// A different model is selected, but the manager is still draining the
+    /// previous resident model before the new model can start loading.
+    Switching,
     /// `with_engine` is currently inside the `load(&model_path)` call.
     Loading,
     /// A model is resident and not currently in use.
@@ -37,7 +37,8 @@ pub enum ModelStatus {
     /// `with_engine` is currently inside the user closure (transcribe call).
     /// The cache lock is held; `snapshot()` reports this without contending.
     Inferring,
-    /// The last attempt to load or transcribe failed. The cache is empty.
+    /// The last attempt to load or transcribe failed. Inference failures may
+    /// leave the engine resident so a later transcription can reuse it.
     Error { message: String },
 }
 
@@ -45,7 +46,11 @@ pub enum ModelStatus {
 /// (`ModelStateEvent::Unloaded`) rather than fanned out into per-reason
 /// variants so the FE has one branch to handle.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum UnloadReason {
     /// Synchronous eviction after a transcription completed under the
     /// `Immediately` unload policy.
@@ -65,14 +70,14 @@ pub enum UnloadReason {
 /// `tag = "kind"` matches `ModelStatus` and `UnloadReason` so the FE pattern
 /// is uniform: `switch (event.kind)`.
 ///
-/// `tauri_specta::Event` + `event_name = "..."` keys the TS export at the
-/// custom channel name. Without the explicit name, the derive kebab-cases
-/// the type ident (`model-state-event`) which would break the existing FE
-/// listener. `collect_events![ModelStateEvent]` in `lib.rs` registers the
-/// type so the regen surface picks it up.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
-#[tauri_specta(event_name = "transcription://model-state")]
-#[serde(tag = "kind", rename_all = "snake_case")]
+/// `lib.rs` exports this payload type directly because the FE listens on
+/// `EVENT_CHANNEL` manually.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum ModelStateEvent {
     LoadingStarted {
         state: LocalModelState,
@@ -86,6 +91,18 @@ pub enum ModelStateEvent {
         state: LocalModelState,
         error: String,
     },
+    InferenceStarted {
+        state: LocalModelState,
+    },
+    InferenceCompleted {
+        state: LocalModelState,
+        #[specta(type = u32)]
+        elapsed_ms: u64,
+    },
+    InferenceFailed {
+        state: LocalModelState,
+        error: String,
+    },
     Unloaded {
         state: LocalModelState,
         reason: UnloadReason,
@@ -93,4 +110,54 @@ pub enum ModelStateEvent {
     SelectionChanged {
         state: LocalModelState,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn event_wire_shape_uses_snake_case_kinds_and_camel_case_fields() {
+        let event = ModelStateEvent::InferenceCompleted {
+            state: LocalModelState {
+                engine: Some(Engine::Whispercpp),
+                model_path: Some("/models/whisper".to_string()),
+                status: ModelStatus::Ready,
+            },
+            elapsed_ms: 123,
+        };
+
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({
+                "kind": "inference_completed",
+                "state": {
+                    "engine": "whispercpp",
+                    "modelPath": "/models/whisper",
+                    "status": { "kind": "ready" }
+                },
+                "elapsedMs": 123
+            })
+        );
+    }
+
+    #[test]
+    fn unload_reason_wire_shape_keeps_reason_fields_camel_case() {
+        assert_eq!(
+            serde_json::to_value(UnloadReason::Idle { idle_secs: 30 }).unwrap(),
+            json!({
+                "kind": "idle",
+                "idleSecs": 30
+            })
+        );
+    }
+
+    #[test]
+    fn switching_status_has_a_stable_wire_tag() {
+        assert_eq!(
+            serde_json::to_value(ModelStatus::Switching).unwrap(),
+            json!({ "kind": "switching" })
+        );
+    }
 }

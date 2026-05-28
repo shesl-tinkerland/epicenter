@@ -455,9 +455,7 @@ stop: async ({ sendStatus }) => {
 
     sendStatus({ title: '📁 Reading Recording', /* ... */ });
 
-    const { data: blob, error: readRecordingFileError } =
-        await requireTauri().fs.pathToBlob(filePath);
-    if (readRecordingFileError) { /* ... */ }
+    const blob = await readFileAsBlob(filePath);
 
     /* close session, teardown */
     return Ok({ blob, recordingId, durationMs });
@@ -490,40 +488,20 @@ stop: async ({ sendStatus }) => {
 
 ```ts
 export async function transcribeBlob(blob: Blob): Promise<Result<string, WhisperingError>> {
-    // ... cloud-only: if blob is WAV, encodeWavToOpusOgg ...
+    // ... cloud-only: old path could round-trip bytes before upload ...
     let audioToTranscribe = blob;
-    if (tauri && isUploadTranscriptionService(selectedService) && blobLooksLikeWav(blob)) {
-        const { data: oggBlob, error: encodeError } =
-            await tauri.audioEncoder.encodeWavToOpusOgg(blob);
-        if (!encodeError) audioToTranscribe = oggBlob;
-    }
     // dispatch on selectedService → services.transcriptions.X.transcribe(audioToTranscribe, ...)
 }
 ```
 
 **After**:
 
-```ts
-export async function transcribeArtifact(artifact: AudioArtifact): Promise<Result<string, WhisperingError>> {
-    const selectedService = settings.get('transcription.service');
-    const audioToTranscribe = await prepareForService(artifact, selectedService);
-    // dispatch on selectedService as before, but the input is `Blob` shaped exactly the way each engine expects
-}
-
-// internal: artifact → Blob (or skip Blob entirely for local engines that can accept f32)
-async function prepareForService(artifact: AudioArtifact, service: string): Promise<Blob> {
-    if (artifact.kind === 'pcm' && isUploadTranscriptionService(service) && tauri) {
-        const { data: oggBytes } = await tauri.audioEncoder.encodePcmToOpusOgg(artifact);
-        return new Blob([oggBytes], { type: 'audio/ogg; codecs=opus' });
-    }
-    if (artifact.kind === 'pcm') {
-        // local engines: wrap as WAV for the existing Blob-based service interface
-        return pcmToWavBlob(artifact);
-    }
-    if (artifact.kind === 'file') return await requireTauri().fs.pathToBlob(artifact.path);
-    return new Blob([artifact.bytes], { type: artifact.mime });
-}
-```
+The current transcription boundary is id-based: callers save an artifact, then
+call `transcribeAudio(recordingId)`. Cloud upload bytes are materialized by
+`loadForCloudUpload(recordingId)`, which calls
+`commands.encodeRecordingForUpload(recordingId)` on Tauri and falls back to the
+blob store on web. This keeps upload encoding out of the Tauri namespace instead
+of reintroducing an `audioEncoder` leaf.
 
 **Semantic shift to flag**: `transcribeBlob` becomes a thin wrapper for legacy callers (file upload UI, etc.); the recorder path goes through `transcribeArtifact`. Local engines still see a `Blob` (no service-interface change in this spec); the wasted hops they took before are still gone because `pcmToWavBlob` is a few-microsecond shim, not a Symphonia round trip.
 
@@ -546,7 +524,7 @@ async function prepareForService(artifact: AudioArtifact, service: string): Prom
 - [ ] **1.11** Update navigator path: `Recording.stop` returns `{ artifact: { kind: 'blob', bytes, mime, durationSeconds }, recordingId, durationMs }`.
 - [ ] **1.12** Update `manual-recorder.svelte.ts` to plumb a `mode` from settings (default `'dictation'`) into `buildStartParams`. The setting key already exists for cpal-related options; add `recording.mode` to `deviceConfig`.
 - [ ] **1.13** Add `transcribeArtifact(AudioArtifact)` in `transcribe.ts`. Keep `transcribeBlob` working as a wrapper that builds a `kind: 'blob'` artifact.
-- [ ] **1.14** Add Rust command `encode_pcm_to_opus_ogg(samples, rate, channels) -> Vec<u8>` reusing the existing libopus encoder; wire to a TS `tauri.audioEncoder.encodePcmToOpusOgg(artifact)`.
+- [ ] **1.14** Reuse the Rust upload encoder through `commands.encodeRecordingForUpload(recordingId)` instead of adding an `audioEncoder` namespace.
 
 ### Wave 2: Switch consumers to the new path
 
@@ -569,7 +547,7 @@ async function prepareForService(artifact: AudioArtifact, service: string): Prom
 
 - [ ] **4.1** Delete `AudioRecording` struct (`recorder.rs:17-23`) and `audio_data: Vec<f32>`.
 - [ ] **4.2** Delete `pad_short_recording` from `wav_writer.rs` (it now lives in the consumer; `WavWriter` becomes a pure WAV-writing primitive).
-- [ ] **4.3** Audit `requireTauri().fs.pathToBlob` call sites; if cpal stop was the only caller, mark and remove if dead.
+- [ ] **4.3** Audit file-to-Blob call sites; if cpal stop was the only caller, mark and remove if dead.
 - [ ] **4.4** Audit `encodeWavToOpusOgg` JS callers; if dictation path no longer calls it, keep the Rust function (longform may use it) but document.
 
 ### Wave 5 (deferred, not in this spec)
@@ -701,7 +679,7 @@ async function prepareForService(artifact: AudioArtifact, service: string): Prom
 - `src/lib/services/recorder/cpal.tauri.ts` rewritten: `Recording.stop` returns the artifact; `samples: number[]` from IPC is hydrated to `Float32Array`; cancel goes through new `cancel_recording` command without the explicit `stop_recording`/file-delete dance.
 - `src/lib/services/recorder/navigator.ts`: stops emit `{ artifact: { kind: 'blob', blob }, recordingId, durationMs }`.
 - `src/lib/state/manual-recorder.svelte.ts`: passes `mode: 'dictation'` in cpal start params.
-- `src/lib/tauri.tauri.ts`: added `audioEncoder.encodePcmToOpusOgg({ samples, rate, channels })`.
+- `src/lib/tauri/commands.ts`: upload encoding goes through `commands.encodeRecordingForUpload(recordingId)`.
 - `src/lib/operations/transcribe.ts`: new `transcribeArtifact(artifact)`. Pcm + cloud upload skips the WAV round-trip and goes straight through `encodePcmToOpusOgg`. `transcribeBlob` is now a thin wrapper for the history re-transcribe path.
 - `src/lib/operations/pipeline.ts`: takes `artifact` instead of `blob`. History save uses `artifactToBlob`; transcription uses `transcribeArtifact`.
 - `src/lib/operations/recording.ts`: manual + VAD callers wrap their output as `AudioArtifact`. Analytics size derives from artifact kind.

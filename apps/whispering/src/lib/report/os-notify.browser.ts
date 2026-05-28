@@ -1,12 +1,6 @@
 import { Err, tryAsync } from 'wellcrafted/result';
-import { resolveDisplay } from './display';
-import type { OsNotifySink } from './types';
 
-export const osNotifySink: OsNotifySink = (event) => {
-	if (event.level !== 'error' || document.hasFocus()) return;
-
-	const { title, description: body } = resolveDisplay(event.data);
-
+export const osNotify = (title: string, body: string | undefined) => {
 	void tryAsync({
 		try: async () => {
 			if (!('Notification' in window)) return;

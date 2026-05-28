@@ -24,14 +24,12 @@ fn fixture_bytes(name: &str) -> Vec<u8> {
         .join("tests")
         .join("fixtures")
         .join(name);
-    std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("read fixture {}: {e}", path.display()))
+    std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {}: {e}", path.display()))
 }
 
 fn assert_decodes_to_expected(name: &str) {
     let bytes = fixture_bytes(name);
-    let samples = decode_to_pcm16k_mono(&bytes)
-        .unwrap_or_else(|e| panic!("decode {name}: {e}"));
+    let samples = decode_to_pcm16k_mono(&bytes).unwrap_or_else(|e| panic!("decode {name}: {e}"));
     let diff = samples.len().abs_diff(EXPECTED_SAMPLES);
     assert!(
         diff <= SAMPLE_COUNT_SLACK,
@@ -41,7 +39,10 @@ fn assert_decodes_to_expected(name: &str) {
     // Sanity: the file is a 0.5-amplitude sine, so the samples should
     // actually contain audio rather than silence.
     let peak = samples.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()));
-    assert!(peak > 0.1, "fixture {name} decoded to near-silence (peak {peak})");
+    assert!(
+        peak > 0.1,
+        "fixture {name} decoded to near-silence (peak {peak})"
+    );
 }
 
 #[test]

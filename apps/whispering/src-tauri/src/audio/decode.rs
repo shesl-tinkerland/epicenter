@@ -7,11 +7,14 @@
 
 use std::io::Cursor;
 
-use audiopus::{Channels as OpusChannels, SampleRate as OpusSampleRate, coder::Decoder as OpusDecoder, packet::Packet as OpusPacket};
+use audiopus::{
+    coder::Decoder as OpusDecoder, packet::Packet as OpusPacket, Channels as OpusChannels,
+    SampleRate as OpusSampleRate,
+};
 use log::{debug, warn};
 use symphonia::core::{
     audio::SampleBuffer,
-    codecs::{CODEC_TYPE_NULL, CODEC_TYPE_OPUS, DecoderOptions},
+    codecs::{DecoderOptions, CODEC_TYPE_NULL, CODEC_TYPE_OPUS},
     errors::Error as SymphoniaError,
     formats::FormatOptions,
     io::MediaSourceStream,
@@ -123,9 +126,7 @@ fn decode_via_symphonia(
             Ok(p) => p,
             // EOF is the normal exit condition; Symphonia signals it as an
             // unexpected EOF on the underlying IO.
-            Err(SymphoniaError::IoError(e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 break;
             }
             Err(SymphoniaError::ResetRequired) => break,
@@ -162,9 +163,8 @@ fn decode_via_symphonia(
         }
     }
 
-    let (sample_rate, channel_count) = discovered.ok_or_else(|| {
-        AudioError::decode("no audio packets decoded from container".to_string())
-    })?;
+    let (sample_rate, channel_count) = discovered
+        .ok_or_else(|| AudioError::decode("no audio packets decoded from container".to_string()))?;
     Ok((interleaved, sample_rate, channel_count))
 }
 
@@ -218,9 +218,7 @@ fn decode_via_libopus(
     loop {
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(SymphoniaError::IoError(e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 break;
             }
             Err(SymphoniaError::ResetRequired) => break,
@@ -258,7 +256,6 @@ fn decode_via_libopus(
     Ok((interleaved, OPUS_RATE, channel_count))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +265,12 @@ mod tests {
     /// Write a `samples_per_channel`-long, `channels`-channel WAV at
     /// `sample_rate` to memory. Sample values are i16 PCM derived from
     /// the provided f32 input (clamped + scaled).
-    fn make_wav(samples_per_channel: usize, channels: u16, sample_rate: u32, f: impl Fn(usize, u16) -> f32) -> Vec<u8> {
+    fn make_wav(
+        samples_per_channel: usize,
+        channels: u16,
+        sample_rate: u32,
+        f: impl Fn(usize, u16) -> f32,
+    ) -> Vec<u8> {
         let spec = WavSpec {
             channels,
             sample_rate,
@@ -298,7 +300,9 @@ mod tests {
     fn decodes_16k_mono_wav_with_correct_length() {
         let secs = 1;
         let rate = 16_000;
-        let bytes = make_wav(secs * rate as usize, 1, rate, |i, _| sine_at(i, 440.0, rate));
+        let bytes = make_wav(secs * rate as usize, 1, rate, |i, _| {
+            sine_at(i, 440.0, rate)
+        });
 
         let samples = decode_to_pcm16k_mono(&bytes).expect("decode");
 
@@ -312,7 +316,11 @@ mod tests {
         let in_rate = 48_000;
         let bytes = make_wav(secs * in_rate as usize, 2, in_rate, |i, c| {
             // Different content per channel exercises the downmix.
-            if c == 0 { sine_at(i, 440.0, in_rate) } else { sine_at(i, 880.0, in_rate) }
+            if c == 0 {
+                sine_at(i, 440.0, in_rate)
+            } else {
+                sine_at(i, 880.0, in_rate)
+            }
         });
 
         let samples = decode_to_pcm16k_mono(&bytes).expect("decode");

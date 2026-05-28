@@ -57,14 +57,14 @@ export default defineConfig({
 });
 ```
 
-Tauri-only capabilities don't live in `services/`. They live in a single file at `$lib/tauri.tauri.ts` with a `$lib/tauri.browser.ts` companion that exports a `null` namespace plus a throwing `requireTauri` stub. Consumers pick one of three call shapes depending on where they sit:
+Tauri-only capabilities don't live in `services/`. They live in a single file at `$lib/tauri.tauri.ts` with a `$lib/tauri.browser.ts` companion that exports only a `null` namespace. Consumers pick one of three call shapes depending on where they sit:
 
 ```ts
 import { tauri, type Tauri } from '$lib/tauri';
 
 // 1. Shared code (runs on web and Tauri): narrow once.
 if (tauri) {
-  await tauri.fs.pathToBlob(path);
+  await tauri.fs.pathsToFiles(paths);
   await tauri.window.setAlwaysOnTop(true);
 }
 
@@ -74,9 +74,9 @@ async function useTrayIcon(tauri: Tauri) {
   await tauri.tray.setIcon({ icon: 'IDLE' });
 }
 
-// 3. Inside *.tauri.ts files (build system already gated): requireTauri.
-import { requireTauri } from '$lib/tauri';
-await requireTauri().fs.pathToBlob(audioPath);
+// 3. Inside *.tauri.ts files (build system already gated): tauriOnly.
+import { tauriOnly } from '$lib/tauri';
+await tauriOnly.globalShortcuts.unregisterAll();
 ```
 
 See `docs/articles/20260526T012526-tauri-is-both-the-namespace-and-the-platform-check.md` for the full pattern walkthrough, and `specs/20260526T000140-collapse-tauri-only-services-into-namespace.md` for the original rationale.
@@ -84,7 +84,7 @@ See `docs/articles/20260526T012526-tauri-is-both-the-namespace-and-the-platform-
 > **💡 Three kinds of dependency injection**
 >
 > - **Build-time platform DI** (suffix files): for services that have a real implementation on both platforms. `text`, `os`, `sound`, `download`, `analytics`, `http`, `blob-store`, `recorder`. Each has `index.tauri.ts` + `index.browser.ts` + `types.ts`. Vite picks one at build time.
-> - **Tauri-only namespace** (`$lib/tauri`): for capabilities that exist only on Tauri (fs, permissions, window, tray, globalShortcuts, autostart). One file holds the current namespace capabilities. Consumers either narrow with `if (tauri)`, prop-drill the narrowed value into helpers, or call `requireTauri()` from inside a `.tauri.ts` file.
+> - **Tauri-only namespace** (`$lib/tauri`): for capabilities that exist only on Tauri (fs, permissions, window, tray, globalShortcuts, autostart). One file holds the current namespace capabilities. Consumers either narrow with `if (tauri)`, prop-drill the narrowed value into helpers, or import `tauriOnly` from inside a `.tauri.ts` file.
 > - **Runtime DI** (switch on `settings` and `deviceConfig`): for user-pick providers like `transcription` and `completion`.
 >
 > See `docs/articles/20260526T012650-two-switches-build-time-and-runtime.md` for the platform-vs-settings walkthrough.
@@ -412,16 +412,16 @@ User-facing reporting (toast + OS notification) is owned by `$lib/report`, not t
 
 ### Tauri-only capabilities (`$lib/tauri`)
 
-Tauri-only namespace capabilities live inline in one file at `$lib/tauri.tauri.ts`. The companion `$lib/tauri.browser.ts` exports `tauri = null` plus a throwing `requireTauri` stub. Consumers access via `if (tauri) { tauri.<cap>.method() }`, by prop-drilling the narrowed value, or by calling `requireTauri()` from inside a `.tauri.ts` file.
+Tauri-only namespace capabilities live inline in one file at `$lib/tauri.tauri.ts`. The companion `$lib/tauri.browser.ts` exports only `tauri = null`, so `tauriOnly` misuse fails in browser builds. Consumers access via `if (tauri) { tauri.<cap>.method() }`, by prop-drilling the narrowed value, or by importing `tauriOnly` from inside a `.tauri.ts` file.
 
-- `tauri.fs` - Filesystem operations (pathToBlob, pathsToFiles)
+- `tauri.fs` - Filesystem operations (pathsToFiles)
 - `tauri.permissions` - macOS accessibility/microphone permission flows
 - `tauri.window` - Window operations (setAlwaysOnTop)
 - `tauri.tray` - System tray icon (setIcon)
 - `tauri.globalShortcuts` - OS-level shortcut registration (registerCommand, unregisterCommand, unregisterAll)
 - `tauri.autostart` - Launch-at-login toggle (isEnabled, enable, disable)
 
-App-owned Rust commands that are not general reusable capabilities live in `$lib/tauri/commands`. Upload encoding is one of those commands: `commands.encodeRecordingForUpload` is called by the transcription operation before cloud upload.
+App-owned Rust commands that are not general reusable capabilities live in `$lib/tauri/commands`. Accessibility settings and upload encoding are examples: `commands.openAccessibilitySettings` opens System Settings, and `commands.encodeRecordingForUpload` is called by the transcription operation before cloud upload.
 
 Each leaf picks one canonical call form: TanStack-backed (via `defineQuery`/`defineMutation`) where caching, reactivity, or post-mutation invalidation matter; plain Result functions where they don't. There is no separate `tauri.rpc` sub-namespace.
 

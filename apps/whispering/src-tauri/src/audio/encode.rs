@@ -11,8 +11,8 @@
 use std::io::Cursor;
 
 use audiopus::{
-    Application as OpusApplication, Bitrate as OpusBitrate, Channels as OpusChannels,
-    SampleRate as OpusSampleRate, Signal as OpusSignal, coder::Encoder as OpusEncoder,
+    coder::Encoder as OpusEncoder, Application as OpusApplication, Bitrate as OpusBitrate,
+    Channels as OpusChannels, SampleRate as OpusSampleRate, Signal as OpusSignal,
 };
 use log::debug;
 use ogg::{PacketWriteEndInfo, PacketWriter};
@@ -51,10 +51,7 @@ const OGG_SERIAL: u32 = 0x57_48_53_50; // "WHSP"
 /// 16 kHz f32, so we resample to 48 kHz (libopus's internal rate) and
 /// encode straight into the OGG container. No WAV synthesis, no
 /// Symphonia round-trip, no detour.
-pub fn encode_pcm_to_opus_ogg(
-    samples: Vec<f32>,
-    source_rate: u32,
-) -> Result<Vec<u8>, AudioError> {
+pub fn encode_pcm_to_opus_ogg(samples: Vec<f32>, source_rate: u32) -> Result<Vec<u8>, AudioError> {
     debug!(
         "[Audio Encode] encoding {} mono PCM samples @ {} Hz",
         samples.len(),
@@ -133,9 +130,7 @@ fn write_opus_head<W: std::io::Write>(
 
 /// Write the OpusTags comment packet (page 1, RFC 7845 §5.2). The minimum
 /// valid payload is the magic + vendor string + zero user-comment entries.
-fn write_opus_tags<W: std::io::Write>(
-    writer: &mut PacketWriter<'_, W>,
-) -> Result<(), AudioError> {
+fn write_opus_tags<W: std::io::Write>(writer: &mut PacketWriter<'_, W>) -> Result<(), AudioError> {
     let vendor = b"whispering";
     let mut tags = Vec::with_capacity(8 + 4 + vendor.len() + 4);
     tags.extend_from_slice(b"OpusTags");
@@ -244,10 +239,7 @@ mod tests {
         let secs = 0.5f32;
         let rate = 16_000u32;
         let samples: Vec<f32> = (0..(secs * rate as f32) as usize)
-            .map(|i| {
-                (2.0 * std::f32::consts::PI * 440.0 * i as f32 / rate as f32).sin()
-                    * 0.5
-            })
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / rate as f32).sin() * 0.5)
             .collect();
         let ogg_bytes = encode_pcm_to_opus_ogg(samples, rate).expect("encode");
 

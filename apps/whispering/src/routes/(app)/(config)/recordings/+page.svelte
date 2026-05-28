@@ -20,6 +20,7 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import LoadingTranscriptionIcon from '@lucide/svelte/icons/ellipsis';
 	import MicIcon from '@lucide/svelte/icons/mic';
 	import StartTranscriptionIcon from '@lucide/svelte/icons/play';
@@ -47,7 +48,6 @@
 	import { format } from 'date-fns';
 	import { createRawSnippet } from 'svelte';
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
-	import OpenFolderButton from '$lib/components/OpenFolderButton.svelte';
 	import { PATHS } from '$lib/constants/paths';
 	import { report } from '$lib/report';
 	import { rpc } from '$lib/rpc';
@@ -350,6 +350,23 @@
 			);
 		return transcriptions.join(delimiter);
 	});
+
+	async function openRecordingsFolder() {
+		if (!tauri) return;
+
+		try {
+			const { openPath } = await import('@tauri-apps/plugin-opener');
+			await openPath(await PATHS.DB.RECORDINGS());
+		} catch (error) {
+			report.error({
+				title: 'Failed to open folder',
+				cause: {
+					name: 'OpenFolderFailed',
+					message: error instanceof Error ? error.message : 'Unknown error',
+				},
+			});
+		}
+	}
 </script>
 
 <svelte:head> <title>All Recordings</title> </svelte:head>
@@ -523,10 +540,16 @@
 					</Button>
 				{/if}
 
-				<OpenFolderButton
-					getFolderPath={PATHS.DB.RECORDINGS}
-					tooltipText="Open recordings folder"
-				/>
+				{#if tauri}
+					<Button
+						tooltip="Open recordings folder"
+						variant="outline"
+						size="icon"
+						onclick={openRecordingsFolder}
+					>
+						<ExternalLinkIcon class="size-4" />
+					</Button>
+				{/if}
 
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger

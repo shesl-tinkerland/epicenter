@@ -138,12 +138,8 @@ fn bench_recorder_shapes() {
     let mut rows: Vec<Row> = Vec::new();
 
     println!("\n=== recorder shapes benchmark ===");
-    println!(
-        "clip  metric                       shape          median     mean       payload"
-    );
-    println!(
-        "----- ---------------------------- -------------- ---------- ---------- ----------"
-    );
+    println!("clip  metric                       shape          median     mean       payload");
+    println!("----- ---------------------------- -------------- ---------- ---------- ----------");
 
     for (clip, seconds) in CLIPS {
         let samples = make_sine_pcm(*seconds);

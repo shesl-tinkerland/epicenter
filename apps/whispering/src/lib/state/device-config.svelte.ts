@@ -1,7 +1,6 @@
 import {
 	createPersistedMap,
 	defineEntry,
-	type PersistedMap,
 } from '@epicenter/svelte';
 import { type } from 'arktype';
 import { extractErrorMessage } from 'wellcrafted/error';
@@ -43,6 +42,7 @@ const DEVICE_DEFINITIONS = {
 		type.enumerated(...BITRATES_KBPS),
 		DEFAULT_BITRATE_KBPS,
 	),
+	'recording.cpal.outputFolder': defineEntry(type('string | null'), null),
 	'recording.cpal.sampleRate': defineEntry(
 		type("'16000' | '44100' | '48000'"),
 		'16000',
@@ -115,20 +115,19 @@ export type DeviceConfigKey = keyof DeviceConfigDefs & string;
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
-export const deviceConfig: PersistedMap<typeof DEVICE_DEFINITIONS> =
-	createPersistedMap({
-		prefix: 'whispering.device.',
-		definitions: DEVICE_DEFINITIONS,
-		onError: (key) => {
-			log.info(`Invalid device config for "${key}", using default`);
-		},
-		onUpdateError: (_key, error) => {
-			report.error({
-				title: 'Error updating device config',
-				cause: {
-					name: 'DeviceConfigUpdateFailed',
-					message: extractErrorMessage(error),
-				},
-			});
-		},
-	});
+export const deviceConfig = createPersistedMap({
+	prefix: 'whispering.device.',
+	definitions: DEVICE_DEFINITIONS,
+	onError: (key) => {
+		log.info(`Invalid device config for "${key}", using default`);
+	},
+	onUpdateError: (_key, error) => {
+		report.error({
+			title: 'Error updating device config',
+			cause: {
+				name: 'DeviceConfigUpdateFailed',
+				message: extractErrorMessage(error),
+			},
+		});
+	},
+});

@@ -564,7 +564,9 @@ mod tests {
 
     #[test]
     fn detects_no_default_input_device() {
-        assert!(is_no_input_device_error("No default input device available"));
+        assert!(is_no_input_device_error(
+            "No default input device available"
+        ));
     }
 
     #[test]
@@ -593,5 +595,4 @@ mod tests {
         let mono = downmix_f32(&input, 1);
         assert_eq!(mono, input);
     }
-
 }

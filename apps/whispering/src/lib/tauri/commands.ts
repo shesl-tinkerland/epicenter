@@ -107,12 +107,9 @@ export const commands = {
 export type {
 	Engine,
 	LocalModelState,
-	MarkdownFile,
 	ModelStateEvent,
 	ModelStatus,
 	RecordingArtifact,
 	TranscriptionConfig,
 	TranscriptionError,
-	UnloadPolicy,
-	UnloadReason,
 } from './bindings.gen';

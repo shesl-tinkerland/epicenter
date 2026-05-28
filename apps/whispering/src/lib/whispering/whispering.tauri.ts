@@ -25,6 +25,26 @@ import { commands } from '$lib/tauri/commands';
 import type { Recording } from '$lib/workspace';
 import { createWhisperingWorkspace } from './index';
 
+const RecordingMarkdownExportError = defineErrors({
+	WriteFailed: ({ cause }: { cause: unknown }) => ({
+		message: `Failed to write recording markdown files: ${extractErrorMessage(cause)}`,
+		cause,
+	}),
+});
+type RecordingMarkdownExportError = InferErrors<
+	typeof RecordingMarkdownExportError
+>;
+
+type RecordingMarkdownExportResult =
+	| {
+			status: 'cancelled';
+	  }
+	| {
+			status: 'exported';
+			dir: string;
+			written: number;
+	  };
+
 export function openWhispering() {
 	const workspace = createWhisperingWorkspace();
 
@@ -57,12 +77,34 @@ export function openWhispering() {
 							});
 							if (typeof selected !== 'string') return { status: 'cancelled' };
 
-	return {
-		...workspace,
-		idb,
-		recordingsFs,
-		whenReady: Promise.all([idb.whenLoaded, recordingsFs.whenFlushed]),
-	};
+							const files = workspace.tables.recordings
+								.getAllValid()
+								.map((row: Recording) => {
+									const { transcript, ...frontmatter } = row;
+									const yamlStr = yaml.dump(frontmatter, { lineWidth: -1 });
+									return {
+										filename: `${row.id}.md`,
+										content: `---\n${yamlStr}---\n${transcript || ''}\n`,
+									};
+								});
+							const { error } = await commands.writeMarkdownFiles(
+								selected,
+								files,
+							);
+							if (error !== null) throw error;
+							return {
+								status: 'exported',
+								dir: selected,
+								written: files.length,
+							};
+						},
+						catch: (error) =>
+							RecordingMarkdownExportError.WriteFailed({ cause: error }),
+					}),
+			}),
+		}),
+		whenReady: idb.whenLoaded,
+	});
 }
 
 export const whispering = openWhispering();

@@ -8,8 +8,9 @@ pub mod audio;
 use audio::encode_recording_for_upload;
 pub mod recorder;
 use recorder::commands::{
-    cancel_recording, close_recording_session, delete_recording, enumerate_recording_devices,
-    get_current_recording_id, init_recording_session, start_recording, stop_recording,
+    cancel_recording, clear_recording_artifacts, close_recording_session,
+    delete_recording_artifacts, enumerate_recording_devices, get_current_recording_id,
+    init_recording_session, start_recording, stop_recording,
 };
 use recorder::recorder::Recorder;
 
@@ -23,7 +24,7 @@ pub mod command;
 use command::open_accessibility_settings;
 
 pub mod markdown;
-use markdown::{delete_recording_files, write_recording_markdown_files};
+use markdown::write_markdown_files;
 
 /// Specta-known commands: every app command except the one that returns a
 /// raw `tauri::ipc::Response` (which is not `specta::Type`). The builder
@@ -41,19 +42,17 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             start_recording,
             stop_recording,
             cancel_recording,
-            delete_recording,
+            delete_recording_artifacts,
+            clear_recording_artifacts,
             transcribe_recording,
             open_accessibility_settings,
-            delete_recording_files,
-            write_recording_markdown_files,
+            write_markdown_files,
             set_transcription_config,
             get_transcription_state,
         ])
-        // Register every event type the FE listens to. Without this, specta
-        // drops the event payload from `bindings.gen.ts` because no command
-        // references it. The `event_name = "..."` attribute on each event
-        // keeps the channel name stable across the rename.
-        .events(tauri_specta::collect_events![ModelStateEvent])
+        // The FE listens on this channel manually; only the payload type
+        // needs to be exported for `listen<ModelStateEvent>(...)`.
+        .typ::<ModelStateEvent>()
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }
 

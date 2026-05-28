@@ -23,18 +23,26 @@ pub enum AudioError {
 
 impl AudioError {
     pub(crate) fn decode(msg: impl Into<String>) -> Self {
-        AudioError::DecodeFailed { message: msg.into() }
+        AudioError::DecodeFailed {
+            message: msg.into(),
+        }
     }
 
     pub(crate) fn unsupported(msg: impl Into<String>) -> Self {
-        AudioError::UnsupportedFormat { message: msg.into() }
+        AudioError::UnsupportedFormat {
+            message: msg.into(),
+        }
     }
 
     pub(crate) fn resample(msg: impl Into<String>) -> Self {
-        AudioError::ResampleFailed { message: msg.into() }
+        AudioError::ResampleFailed {
+            message: msg.into(),
+        }
     }
 
     pub(crate) fn encode(msg: impl Into<String>) -> Self {
-        AudioError::EncodeFailed { message: msg.into() }
+        AudioError::EncodeFailed {
+            message: msg.into(),
+        }
     }
 }

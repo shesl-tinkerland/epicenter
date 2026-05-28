@@ -53,10 +53,7 @@ impl UnloadPolicy {
 /// True when the new config asks for a different resident model than the old
 /// one. Identity is `(engine, model_path)` only: language/prompt/policy
 /// changes never trigger a reload because they take effect on next inference.
-pub fn should_preload(
-    old: Option<&TranscriptionConfig>,
-    new: &TranscriptionConfig,
-) -> bool {
+pub fn should_preload(old: Option<&TranscriptionConfig>, new: &TranscriptionConfig) -> bool {
     match old {
         None => true,
         Some(prev) => prev.engine != new.engine || prev.model_path != new.model_path,
