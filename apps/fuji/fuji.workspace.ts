@@ -1,32 +1,191 @@
 /**
- * Fuji actions: typed query/mutation registry layered on the workspace tables.
+ * Fuji workspace contract: id, branded types, table definitions, actions, the
+ * workspace factory, and per-row child document models. Isomorphic: no
+ * IndexedDB, WebSockets, SQLite files, Svelte state, Tauri APIs, or daemon
+ * process lifecycle.
  *
- * Split from `./workspace.ts` for navigation: workspace.ts owns schema + the
- * `createFujiWorkspace` factory; this file owns the action surface that the
- * browser and daemon expose over `openCollaboration` / `attachDaemonInfrastructure`.
+ * Distribution: `apps/fuji/package.json` exports this file as the
+ * `@epicenter/fuji` package root. Browser code, daemon code, and tests all
+ * import from here. The table shapes here are the wire contract for sync;
+ * forking a column shape breaks sync compatibility with peers running the
+ * canonical schema.
  *
- * The `@epicenter/fuji` package re-exports `createFujiActions` and `FujiActions`
- * from `./workspace.ts` so external consumers keep importing from one place.
+ * Composition lives elsewhere:
+ *  - `apps/fuji/fuji.browser.ts`    → `openFujiBrowser({ signedIn, deviceId })`
+ *  - `apps/fuji/project.ts`          → `fuji(opts?)` mount factory
+ *  - `examples/fuji/epicenter.config.ts` → canonical project layout composition
+ *
+ * The workspace factory returns actions under `workspace.actions`; runtime
+ * openers pass that registry to collaboration and can layer runtime-specific
+ * commands beside it.
  */
 
 import {
+	attachRichText,
 	column,
+	createDisposableCache,
+	createWorkspace,
 	DateTimeString,
 	defineActions,
 	defineMutation,
 	defineQuery,
+	defineTable,
+	defineWorkspace,
+	docGuid,
 	generateId,
 	type IanaTimeZone,
+	type InferTableRow,
+	type Keyring,
+	onLocalUpdate,
+	type Tables,
 } from '@epicenter/workspace';
 import { Type } from 'typebox';
-import { asEntryId, type EntryId, type FujiWorkspace } from './workspace';
+import type { Brand } from 'wellcrafted/brand';
+import * as Y from 'yjs';
 
-export function createFujiActions(workspace: FujiWorkspace) {
+export const FUJI_ID = 'epicenter.fuji';
+
+export type EntryId = string & Brand<'EntryId'>;
+
+/**
+ * Syntactic sugar for `value as EntryId`. The constrained `string` parameter
+ * is what earns it over a raw `as` cast (callers can't widen to `unknown`).
+ * The only place in the codebase where `as EntryId` should appear.
+ */
+export const asEntryId = (value: string): EntryId => value as EntryId;
+
+const entriesTable = defineTable(
+	// v1
+	{
+		id: column.string<EntryId>(),
+		title: column.string(),
+		subtitle: column.string(),
+		type: column.json(Type.Array(Type.String())),
+		tags: column.json(Type.Array(Type.String())),
+		pinned: column.boolean(),
+		deletedAt: column.nullable(column.dateTime()),
+		date: column.dateTime(),
+		createdAt: column.dateTime(),
+		updatedAt: column.dateTime(),
+	},
+	// v2: added rating
+	{
+		id: column.string<EntryId>(),
+		title: column.string(),
+		subtitle: column.string(),
+		type: column.json(Type.Array(Type.String())),
+		tags: column.json(Type.Array(Type.String())),
+		pinned: column.boolean(),
+		deletedAt: column.nullable(column.dateTime()),
+		date: column.dateTime(),
+		createdAt: column.dateTime(),
+		updatedAt: column.dateTime(),
+		rating: column.number(),
+	},
+	// v3: split user-meaningful `date` into UTC `date` + IANA `dateZone`.
+	// `date` is the canonical UTC instant; `dateZone` carries the originating
+	// IANA zone so display code can render the user's local wall-clock time.
+	// Per the workspace `<field>` + `<field>Zone` convention.
+	{
+		id: column.string<EntryId>(),
+		title: column.string(),
+		subtitle: column.string(),
+		type: column.json(Type.Array(Type.String())),
+		tags: column.json(Type.Array(Type.String())),
+		pinned: column.boolean(),
+		deletedAt: column.nullable(column.dateTime()),
+		date: column.dateTime(),
+		dateZone: column.ianaTimeZone(),
+		createdAt: column.dateTime(),
+		updatedAt: column.dateTime(),
+		rating: column.number(),
+	},
+).migrate(({ value, version }) => {
+	switch (version) {
+		case 1:
+			return { ...value, rating: 0, dateZone: 'UTC' as IanaTimeZone };
+		case 2:
+			return { ...value, dateZone: 'UTC' as IanaTimeZone };
+		case 3:
+			return value;
+	}
+});
+
+export type Entry = InferTableRow<typeof entriesTable>;
+
+const fujiTables = { entries: entriesTable };
+export type FujiTables = typeof fujiTables;
+export type FujiActionHost = { tables: Tables<FujiTables> };
+
+/**
+ * Build a Fuji workspace bundle: `{ ydoc, tables, kv, actions, entryContentDocs }`.
+ *
+ * Encrypted under the supplied keyring; the same factory is used in both
+ * browser and daemon entrypoints.
+ */
+export function createFujiWorkspace(opts: { keyring: () => Keyring }) {
+	const workspace = createWorkspace({
+		id: FUJI_ID,
+		keyring: opts.keyring,
+		tables: fujiTables,
+		kv: {},
+	});
+	const actions = createFujiActions(workspace);
+	const entryContentDocs = createDisposableCache((entryId: EntryId) => {
+		const childYdoc = new Y.Doc({
+			guid: entryContentDocGuid(entryId),
+			gc: true,
+		});
+		const body = attachRichText(childYdoc);
+
+		onLocalUpdate(childYdoc, () => {
+			workspace.tables.entries.update(entryId, {
+				updatedAt: DateTimeString.now(),
+			});
+		});
+
+		return {
+			ydoc: childYdoc,
+			body,
+			[Symbol.dispose]() {
+				childYdoc.destroy();
+			},
+		};
+	});
+
+	return defineWorkspace({
+		...workspace,
+		actions,
+		entryContentDocs,
+		[Symbol.dispose]() {
+			entryContentDocs[Symbol.dispose]();
+			workspace[Symbol.dispose]();
+		},
+	});
+}
+export type FujiWorkspace = ReturnType<typeof createFujiWorkspace>;
+
+/**
+ * Deterministic guid of an entry's rich-text content sub-doc.
+ *
+ * Browser editors, daemon materializers, and wipe paths reach this same
+ * function so every layer points at the same Y.Doc identity.
+ */
+export function entryContentDocGuid(entryId: EntryId): string {
+	return docGuid({
+		workspaceId: FUJI_ID,
+		collection: 'entries',
+		rowId: entryId,
+		field: 'content',
+	});
+}
+
+export function createFujiActions(workspace: FujiActionHost) {
 	const { tables } = workspace;
 	return defineActions({
 		entries_get: defineQuery({
 			title: 'Get Entry',
-			description: 'Read one entry by ID from the daemon workspace.',
+			description: 'Read one entry by ID from the Fuji workspace.',
 			input: Type.Object({
 				id: Type.String({ description: 'Entry ID to read' }),
 			}),
@@ -36,23 +195,21 @@ export function createFujiActions(workspace: FujiWorkspace) {
 		}),
 		entries_get_all_valid: defineQuery({
 			title: 'List Valid Entries',
-			description: 'Read all valid entries from the daemon workspace.',
-			input: Type.Object({}),
+			description: 'Read all valid entries from the Fuji workspace.',
 			handler: () => {
 				return tables.entries.getAllValid();
 			},
 		}),
 		entries_count: defineQuery({
 			title: 'Count Entries',
-			description: 'Count entries in the daemon workspace.',
-			input: Type.Object({}),
+			description: 'Count entries in the Fuji workspace.',
 			handler: () => {
 				return tables.entries.count();
 			},
 		}),
 		entries_has: defineQuery({
 			title: 'Has Entry',
-			description: 'Check whether an entry exists in the daemon workspace.',
+			description: 'Check whether an entry exists in the Fuji workspace.',
 			input: Type.Object({
 				id: Type.String({ description: 'Entry ID to check' }),
 			}),

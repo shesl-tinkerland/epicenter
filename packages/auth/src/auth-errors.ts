@@ -4,6 +4,12 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 
+/**
+ * Public auth-core failures returned by `AuthClient` methods.
+ *
+ * Launcher and storage-specific errors stay as causes. Callers should branch on
+ * the auth-core operation that failed, then inspect `cause` only for diagnostics.
+ */
 export const AuthError = defineErrors({
 	StartSignInFailed: ({ cause }: { cause: unknown }) => ({
 		message: `Failed to start sign-in: ${extractErrorMessage(cause)}`,

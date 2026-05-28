@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { Loading } from '@epicenter/ui/loading';
+	import { untrack } from 'svelte';
 	import { baseKeymap, toggleMark } from 'prosemirror-commands';
 	import {
 		ellipsis,
@@ -21,21 +23,23 @@
 	import { Decoration, DecorationSet, EditorView } from 'prosemirror-view';
 	import 'prosemirror-view/style/prosemirror.css';
 	import { redo, undo, ySyncPlugin, yUndoPlugin } from 'y-prosemirror';
-	import type * as Y from 'yjs';
+	import { requireFuji } from '$lib/session';
+	import type { EntryId } from '../../../../fuji.workspace';
 
 	let {
-		yxmlfragment,
-		placeholder = 'Start writing…',
+		entryId,
 		onWordCountChange,
 	}: {
-		yxmlfragment: Y.XmlFragment;
-		placeholder?: string;
+		entryId: EntryId;
 		onWordCountChange?: (count: number) => void;
 	} = $props();
 
-	let element: HTMLDivElement | undefined = $state();
+	const fuji = requireFuji();
+	// svelte-ignore state_referenced_locally - EntryEditor remounts this component by entry id
+	const contentDoc = fuji.entryContentDocs.open(entryId);
+	$effect(() => () => contentDoc[Symbol.dispose]());
 
-	// ─── Schema ──────────────────────────────────────────────────────────────
+	let element: HTMLDivElement | undefined = $state();
 
 	const extraMarks = {
 		strikethrough: {
@@ -61,28 +65,33 @@
 		marks: basicSchema.spec.marks.append(extraMarks),
 	});
 
-	// ─── Plugins ─────────────────────────────────────────────────────────────
-
-	function countWords(text: string): number {
-		const trimmed = text.trim();
-		if (!trimmed) return 0;
-		return trimmed.split(/\s+/).length;
-	}
-
 	function createWordCountPlugin() {
+		let previousCount: number | undefined;
+		const onChange = untrack(() => onWordCountChange);
+
+		function report(view: EditorView) {
+			const textContent = view.state.doc.textContent.trim();
+			const nextCount = textContent ? textContent.split(/\s+/).length : 0;
+			if (nextCount === previousCount) return;
+
+			previousCount = nextCount;
+			onChange?.(nextCount);
+		}
+
 		return new Plugin({
-			view() {
+			view(view) {
+				report(view);
 				return {
-					update(view) {
-						onWordCountChange?.(countWords(view.state.doc.textContent));
-					},
+					update: report,
 				};
 			},
 		});
 	}
 
-	function createPlaceholderPlugin(text: string) {
-		return new Plugin({
+	$effect(() => {
+		if (!element) return;
+
+		const placeholderPlugin = new Plugin({
 			props: {
 				decorations(state) {
 					const { doc } = state;
@@ -94,7 +103,7 @@
 						return DecorationSet.create(doc, [
 							Decoration.node(0, doc.firstChild.nodeSize, {
 								class: 'is-editor-empty',
-								'data-placeholder': text,
+								'data-placeholder': 'Start writing...',
 							}),
 						]);
 					}
@@ -102,20 +111,14 @@
 				},
 			},
 		});
-	}
-
-	// ─── Editor lifecycle ────────────────────────────────────────────────────
-
-	$effect(() => {
-		if (!element) return;
 
 		const view = new EditorView(element, {
 			state: EditorState.create({
 				schema,
 				plugins: [
-					ySyncPlugin(yxmlfragment),
+					ySyncPlugin(contentDoc.body.binding),
 					yUndoPlugin(),
-					createPlaceholderPlugin(placeholder),
+					placeholderPlugin,
 					keymap({
 						'Mod-z': undo,
 						'Mod-y': redo,
@@ -166,7 +169,11 @@
 	});
 </script>
 
-<div bind:this={element} class="flex-1 overflow-y-auto px-6 py-4"></div>
+{#await contentDoc.idb.whenLoaded}
+	<Loading class="flex-1" />
+{:then _}
+	<div bind:this={element} class="flex-1 overflow-y-auto px-6 py-4"></div>
+{/await}
 
 <style>
 	:global(.ProseMirror) {

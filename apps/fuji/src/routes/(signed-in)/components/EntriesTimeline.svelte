@@ -17,7 +17,7 @@
 	import { goto } from '$app/navigation';
 	import { matchesEntrySearch } from '$lib/entries-search';
 	import { requireFuji } from '$lib/session';
-	import type { Entry } from '$lib/workspace';
+	import type { Entry } from '../../../../fuji.workspace';
 	import { viewState } from '../state/view.svelte';
 
 	let { entries, title }: { entries: Entry[]; title?: string } = $props();

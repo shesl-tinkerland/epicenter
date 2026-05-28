@@ -223,7 +223,6 @@ export type MachineIdentity = {
 type CommonConfig = {
 	baseURL?: string;
 	clientId?: string;
-	redirectUri?: string;
 	filePath?: string;
 	fetch?: AuthFetch;
 	log?: Logger;
@@ -231,8 +230,22 @@ type CommonConfig = {
 };
 
 export type LoginWithOobConfig = CommonConfig & {
+	/**
+	 * Optional OOB callback override for tests and local trusted-client fixtures.
+	 * Production login uses the callback derived from `baseURL`.
+	 */
+	redirectUri?: string;
+	/**
+	 * Output sink for the URL and success messages printed by the CLI.
+	 */
 	print?: (line: string) => void;
+	/**
+	 * Best-effort browser opener used by the OOB launcher.
+	 */
 	openBrowser?: (url: string) => Promise<void> | void;
+	/**
+	 * Reads the one-time code pasted from the hosted CLI callback page.
+	 */
 	readCode?: () => Promise<string>;
 };
 
@@ -280,14 +293,15 @@ export async function loginWithOob({
 			MachineAuthRequestError.RequestFailed({ cause: grantResult.error }).error,
 		);
 	}
-	if (!grantResult.data) {
+	const launchResult = grantResult.data;
+	if (launchResult?.status !== 'completed') {
 		return Err(
 			MachineAuthRequestError.RequestFailed({
 				cause: new Error('OOB launcher returned no grant.'),
 			}).error,
 		);
 	}
-	const grant = grantResult.data;
+	const grant = launchResult.grant;
 
 	const sessionResult = await fetchApiSession(
 		baseURL,
@@ -472,7 +486,12 @@ export async function createMachineAuthClient({
 			launcher: {
 				// Daemons never sign in interactively; a human must run
 				// `epicenter auth login` to refresh the persisted cell.
-				startSignIn: async () => Ok(null),
+				startSignIn: async () =>
+					Err(
+						new Error(
+							'Machine auth clients cannot start interactive sign-in. Run `epicenter auth login` first.',
+						),
+					),
 			},
 			persistedAuthStorage: {
 				get: () => currentCell,
@@ -490,6 +509,13 @@ export async function createMachineAuthClient({
 	);
 }
 
+/**
+ * Resolve the local workspace identity for a freshly exchanged OOB grant.
+ *
+ * This is intentionally local to machine login. Long-lived clients use
+ * `createOAuthAppAuth`, but login needs one explicit `/api/session` call so it
+ * can both persist `PersistedAuth` and return the email for CLI output.
+ */
 async function fetchApiSession(
 	baseURL: string,
 	accessToken: string,

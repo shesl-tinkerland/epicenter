@@ -51,6 +51,8 @@ export const EPICENTER_CLI_OAUTH_CLIENT_ID = 'epicenter-cli';
 
 export const EPICENTER_DASHBOARD_OAUTH_CLIENT_ID = 'epicenter-dashboard';
 export const EPICENTER_FUJI_OAUTH_CLIENT_ID = 'epicenter-fuji';
+export const EPICENTER_FUJI_TAURI_OAUTH_REDIRECT_URI =
+	'epicenter-fuji://auth/callback';
 export const EPICENTER_HONEYCRISP_OAUTH_CLIENT_ID = 'epicenter-honeycrisp';
 export const EPICENTER_OPENSIDIAN_OAUTH_CLIENT_ID = 'epicenter-opensidian';
 export const EPICENTER_TAB_MANAGER_OAUTH_CLIENT_ID = 'epicenter-tab-manager';
@@ -103,7 +105,10 @@ export function buildTrustedOAuthClients(apiBaseURL: string) {
 			clientId: EPICENTER_FUJI_OAUTH_CLIENT_ID,
 			name: 'Fuji',
 			type: 'user-agent-based',
-			redirectUris: appCallbacks(APPS.FUJI, '/auth/callback'),
+			redirectUris: [
+				...appCallbacks(APPS.FUJI, '/auth/callback'),
+				EPICENTER_FUJI_TAURI_OAUTH_REDIRECT_URI,
+			],
 		},
 		{
 			clientId: EPICENTER_HONEYCRISP_OAUTH_CLIENT_ID,

@@ -17,6 +17,7 @@ import {
 	type OAuthTokenGrant,
 	type PersistedAuth,
 } from './auth-types.js';
+import type { OAuthLauncher } from './oauth-launchers/contract.js';
 import { parseOAuthTokenGrant } from './oauth-token-response.js';
 
 /**
@@ -31,25 +32,64 @@ export type PersistedAuthStorage = {
 	set(value: PersistedAuth | null): void | Promise<void>;
 };
 
-export type OAuthSignInLauncher = {
-	startSignIn(): Promise<Result<OAuthTokenGrant | null, unknown>>;
-};
-
 type AuthFetchInput = Request | string | URL;
 
+/**
+ * Fetch-compatible transport used by auth-owned HTTP calls.
+ *
+ * Consumers usually pass `auth.fetch` into API clients. Tests and machine auth
+ * inject this shape so the auth runtime can exercise refresh, revoke, and
+ * bearer attach without depending on global `fetch`.
+ */
 export type AuthFetch = (
 	input: AuthFetchInput,
 	init?: RequestInit,
 ) => Promise<Response>;
 
+/**
+ * Construction inputs for the framework-agnostic auth runtime.
+ *
+ * The caller supplies storage and a launcher. Auth core then owns the durable
+ * session cell, refresh, `/api/session` verification, and bearer-bearing
+ * transports. Launchers never write persisted identity, and app code never
+ * reads raw tokens.
+ */
 export type CreateOAuthAppAuthConfig = {
+	/**
+	 * Epicenter API origin. Defaults to the production API and is used for
+	 * relative API paths, OAuth refresh/revoke routes, and session verification.
+	 */
 	baseURL?: string;
+	/**
+	 * Public OAuth client id registered for this runtime.
+	 */
 	clientId: string;
+	/**
+	 * Durable storage for the single persisted auth cell.
+	 */
 	persistedAuthStorage: PersistedAuthStorage;
-	launcher: OAuthSignInLauncher;
+	/**
+	 * Runtime-specific sign-in transport. It either returns a token grant or
+	 * reports that control has moved to a later redirect/deep-link callback.
+	 */
+	launcher: OAuthLauncher;
+	/**
+	 * Fetch implementation for API session, refresh, revoke, and authenticated
+	 * resource calls.
+	 */
 	fetch?: AuthFetch;
+	/**
+	 * WebSocket constructor. Tests and non-browser runtimes inject this because
+	 * browsers do not allow request headers during WebSocket upgrades.
+	 */
 	WebSocket?: typeof WebSocket;
+	/**
+	 * Clock used for refresh-skew checks and refresh-token grant parsing.
+	 */
 	now?: () => number;
+	/**
+	 * Library logger for subscriber and refresh failures.
+	 */
 	log?: Logger;
 };
 
@@ -398,8 +438,16 @@ export function createOAuthAppAuth({
 					if (result.error) {
 						return AuthError.StartSignInFailed({ cause: result.error });
 					}
-					if (result.data === null) return Ok(undefined);
-					return completeSignInWithGrant(result.data, generation);
+					const launchResult = result.data;
+					switch (launchResult?.status) {
+						case 'launched':
+							return Ok(undefined);
+						case 'completed':
+							return completeSignInWithGrant(launchResult.grant, generation);
+					}
+					return AuthError.StartSignInFailed({
+						cause: new Error('OAuth launcher returned no launch result.'),
+					});
 				} catch (cause) {
 					if (!isCurrentSignIn(generation)) {
 						return Ok(undefined);
@@ -454,6 +502,14 @@ export function createOAuthAppAuth({
 	};
 }
 
+/**
+ * Owns the in-memory projection of the persisted auth cell.
+ *
+ * This is a one-caller helper, but it earns the boundary by keeping the storage
+ * write queue, listener fan-out, and public state projection in one small
+ * runtime object. OAuth flow code mutates the runtime through verbs instead of
+ * rewriting state shapes directly.
+ */
 function createAuthSessionRuntime({
 	initialPersistedAuth,
 	persistedAuthStorage,
@@ -585,66 +641,23 @@ function authStatesEqual(left: AuthState, right: AuthState) {
 	);
 }
 
+/**
+ * Merge Request headers with RequestInit headers using Fetch's own normalization.
+ *
+ * This stays as a helper because `HeadersInit` accepts several runtime shapes,
+ * including iterable entries that TypeScript does not always model directly.
+ */
 function headersFromRequest(input: Request | string | URL, init?: RequestInit) {
 	const headers = new Headers(
 		input instanceof Request ? input.headers : undefined,
 	);
-	copyHeaders(headers, init?.headers);
+	const source = init?.headers;
+	if (!source) return headers;
+
+	new Headers(source).forEach((value, key) => {
+		headers.set(key, value);
+	});
 	return headers;
-}
-
-function copyHeaders(target: Headers, source: RequestInit['headers']) {
-	if (!source) return;
-
-	if (source instanceof Headers) {
-		source.forEach((value, key) => {
-			target.set(key, value);
-		});
-		return;
-	}
-
-	const value = source as unknown;
-
-	if (Array.isArray(value)) {
-		for (const [key, headerValue] of value) {
-			setHeaderValue(target, key, headerValue);
-		}
-		return;
-	}
-
-	if (isHeaderIterable(value)) {
-		for (const [key, headerValue] of value) {
-			setHeaderValue(target, key, headerValue);
-		}
-		return;
-	}
-
-	for (const [key, headerValue] of Object.entries(
-		value as Record<string, string | readonly string[] | undefined>,
-	)) {
-		setHeaderValue(target, key, headerValue);
-	}
-}
-
-function setHeaderValue(
-	target: Headers,
-	key: string,
-	value: string | readonly string[] | undefined,
-) {
-	if (value === undefined) return;
-	if (typeof value === 'string') {
-		target.set(key, value);
-		return;
-	}
-	for (const item of value) target.append(key, item);
-}
-
-function isHeaderIterable(
-	value: unknown,
-): value is Iterable<readonly [string, string]> {
-	return (
-		value !== null && typeof value === 'object' && Symbol.iterator in value
-	);
 }
 
 async function refreshOAuthTokenWithEndpoint({

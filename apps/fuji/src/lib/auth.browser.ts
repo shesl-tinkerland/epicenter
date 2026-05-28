@@ -16,8 +16,8 @@ export const auth = createOAuthAppAuth({
 	launcher: createBrowserOAuthLauncher({
 		issuer: `${APP_URLS.API}/auth`,
 		clientId: EPICENTER_FUJI_OAUTH_CLIENT_ID,
-		redirectUri: `${window.location.origin}/auth/callback`,
 		resource: APP_URLS.API,
+		redirectUri: `${window.location.origin}/auth/callback`,
 		storage: window.sessionStorage,
 	}),
 });
