@@ -16,22 +16,6 @@ import type { DeviceConfigKey } from '$lib/state/device-config.svelte';
 type Capabilities = { supportsPrompt: boolean; supportsLanguage: boolean };
 type CloudModel = { name: string; description: string; cost: string };
 
-/**
- * Settings keys holding the per-provider cloud model selection. Spelled out as
- * a standalone literal union on purpose: it cannot be derived. Both a template
- * literal over `CloudProviderId` and pulling the key type from the settings
- * store are circular, because `PROVIDERS` below is checked with `satisfies
- * Record<..., TranscriptionProvider>` and `TranscriptionProvider` already
- * references this type, so any derivation that reads back from `PROVIDERS` or
- * the KV schema closes the loop.
- */
-type CloudModelKey =
-	| 'transcription.openai.model'
-	| 'transcription.groq.model'
-	| 'transcription.elevenlabs.model'
-	| 'transcription.deepgram.model'
-	| 'transcription.mistral.model';
-
 type CloudProvider = {
 	location: 'cloud';
 	label: string;
@@ -40,7 +24,14 @@ type CloudProvider = {
 	models: readonly CloudModel[];
 	defaultModel: string;
 	apiKeyKey: DeviceConfigKey;
-	modelKey: CloudModelKey;
+	/**
+	 * The settings key holding this provider's model selection. Constrained to
+	 * the leaf shape `transcription.${string}.model` ON PURPOSE: a precise union
+	 * here would make `typeof PROVIDERS` reference a type derived from itself
+	 * (`satisfies Record<..., TranscriptionProvider>` closes the loop). The
+	 * precise union is read back out downstream as `CloudModelKey`.
+	 */
+	modelKey: `transcription.${string}.model`;
 	/** Optional custom base URL override (OpenAI-compatible reverse proxies). */
 	endpointKey?: DeviceConfigKey;
 };
@@ -261,6 +252,16 @@ export type CloudProviderId = {
 		? K
 		: never;
 }[TranscriptionServiceId];
+
+/**
+ * Settings keys holding each cloud provider's model selection, read straight
+ * back out of the registry. Deriving it HERE (instead of constraining the
+ * `modelKey` field to it above) is what keeps the type non-circular: the field
+ * uses the leaf constraint `transcription.${string}.model`, so `typeof
+ * PROVIDERS` resolves without referencing this type. `as const` keeps the
+ * stored literals narrow, so this is still the exact five-key union.
+ */
+export type CloudModelKey = (typeof PROVIDERS)[CloudProviderId]['modelKey'];
 
 /** Every provider ID, e.g. for `column.enum(TRANSCRIPTION_SERVICE_IDS)`. */
 export const TRANSCRIPTION_SERVICE_IDS = Object.keys(
