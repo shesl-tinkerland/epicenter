@@ -149,16 +149,60 @@ test('requireBearerUser rejects tokens whose user no longer exists with 401 Inva
 });
 
 test('requireBearerUser returns 503 ServerError when the signing keys cannot be read', async () => {
-	// A failure reading the signing keys means the token was never checked: the
-	// client must retry (503), not discard and refresh a token that may be fine
-	// (401). No `WWW-Authenticate` challenge belongs on an infrastructure fault.
+	const setup = createMiddlewareTestServer();
+	try {
+		const { accessToken } = await issueOAuthTokens(setup, {
+			clientName: 'Bearer Middleware Test',
+			email: 'middleware-test@example.com',
+			name: 'Middleware Test',
+		});
+
+		// Same valid token, but the signing-key read fails. The token decodes far
+		// enough to need a key, so verification reaches the failing read: that
+		// means the token was never checked, so the client must retry (503), not
+		// discard and refresh a token that may be fine (401). No
+		// `WWW-Authenticate` challenge belongs on an infrastructure fault.
+		const app = new Hono<Env>()
+			.use('*', async (c, next) => {
+				c.set('db', createFakeDb(setup.db));
+				c.set('authBaseURL', setup.baseURL);
+				c.set('auth', {
+					api: {
+						getJwks: async () => {
+							throw new Error('signing keys unreadable');
+						},
+					},
+				} as unknown as Env['Variables']['auth']);
+				await next();
+			})
+			.get('/protected', requireBearerUser, (c) => c.json(c.var.user));
+
+		const response = await app.request('/protected', {
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+
+		expect(response.status).toBe(503);
+		expect(response.headers.get('WWW-Authenticate')).toBeNull();
+		const body = (await response.json()) as { name: string };
+		expect(body.name).toBe('ServerError');
+	} finally {
+		setup.server.stop(true);
+	}
+});
+
+test('requireBearerUser does not read signing keys for a non-JWT bearer', async () => {
+	// A non-JWT never decodes far enough to need a key, so verification fails
+	// before `jwksFetch` runs: a garbage bearer costs no database read, and the
+	// failure is a 401, not an infrastructure 503.
+	let getJwksCalls = 0;
 	const app = new Hono<Env>()
 		.use('*', async (c, next) => {
 			c.set('authBaseURL', 'http://localhost');
 			c.set('auth', {
 				api: {
 					getJwks: async () => {
-						throw new Error('signing keys unreadable');
+						getJwksCalls += 1;
+						return { keys: [] };
 					},
 				},
 			} as unknown as Env['Variables']['auth']);
@@ -167,13 +211,11 @@ test('requireBearerUser returns 503 ServerError when the signing keys cannot be 
 		.get('/protected', requireBearerUser, (c) => c.json(c.var.user));
 
 	const response = await app.request('/protected', {
-		headers: { authorization: 'Bearer any-token' },
+		headers: { authorization: 'Bearer not-a-real-jwt' },
 	});
 
-	expect(response.status).toBe(503);
-	expect(response.headers.get('WWW-Authenticate')).toBeNull();
-	const body = (await response.json()) as { name: string };
-	expect(body.name).toBe('ServerError');
+	expect(response.status).toBe(401);
+	expect(getJwksCalls).toBe(0);
 });
 
 function createMiddlewareTestServer() {

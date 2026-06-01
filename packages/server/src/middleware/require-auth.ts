@@ -34,21 +34,30 @@ import type { Env } from '../types.js';
 /**
  * Resolve the OAuth bearer on the current request to the calling user.
  *
- * Verification is two operations whose failures mean different things, so the
- * HTTP status is decided by WHICH step failed, not by inspecting error
- * internals:
+ * Both infrastructure reads (the signing keys and the user row) mean the token
+ * could not be CHECKED, not that it is bad, so the HTTP status is decided by
+ * WHICH step failed, not by inspecting error internals:
  *
- *   1. Read the signing keys. `auth.api.getJwks()` is Better Auth's own JWKS
- *      projection, read from the same database in-process, with no HTTP hop to
- *      our own `/auth/jwks` (that loopback fails inside a Cloudflare Worker).
- *      A failure here is infrastructure: the token was never checked, so it is
- *      a retryable 503, never a rejection. A 401 would make the client discard
- *      and refresh a good token over a transient server fault.
+ *   1. Verify the token against the signing keys. The keys come from
+ *      `auth.api.getJwks()` (Better Auth's own JWKS projection, read from the
+ *      same database in-process, with no HTTP hop to our own `/auth/jwks`,
+ *      which loops back and fails inside a Cloudflare Worker). It is passed as
+ *      `jwksFetch` rather than pre-fetched so Better Auth's module-level JWKS
+ *      cache serves it: a token whose `kid` is already cached, or a non-JWT
+ *      that never decodes far enough to need a key, costs no database read.
+ *      `keysUnreadable` carries a key-read failure across that callback
+ *      boundary. A verification failure with `keysUnreadable` set is a
+ *      retryable 503 (the keys were unreachable, so the token was never
+ *      checked); any other verification failure (bad signature, wrong
+ *      audience/issuer, expired, malformed, unknown `kid`) is a 401.
  *
- *   2. Verify the token against those keys. Any failure here (bad signature,
- *      wrong audience/issuer, expired, malformed, unknown `kid`) is a genuine
- *      bad token: a 401. Because the keys are already in hand, `jwksFetch`
- *      cannot fail, so nothing infrastructural leaks into this branch.
+ *   2. Look up the subject. A database failure here is again infrastructure
+ *      (a retryable 503); a successful query that finds no row is a genuine
+ *      401 (the subject was deleted).
+ *
+ * A 503 matters because returning 401 on an infrastructure fault would make
+ * the client discard and refresh a token that may be perfectly good, and pause
+ * network auth over a transient server blip.
  *
  * The API origin (`c.var.authBaseURL`) is the resource audience; the same
  * origin plus `/auth` is the issuer. Cheap by design: skips owner keyring
@@ -61,30 +70,38 @@ async function resolveRequestOAuthUser(
 	const accessToken = parseBearer(c.req.header('authorization') ?? null);
 	if (!accessToken) return OAuthError.InvalidToken();
 
-	let jwks: Awaited<ReturnType<typeof c.var.auth.api.getJwks>>;
-	try {
-		jwks = await c.var.auth.api.getJwks();
-	} catch {
-		return OAuthError.ServerError();
-	}
-
 	const audience = c.var.authBaseURL;
+	let keysUnreadable = false;
 	let payload: Awaited<ReturnType<typeof verifyJwsAccessToken>>;
 	try {
 		payload = await verifyJwsAccessToken(accessToken, {
-			jwksFetch: async () => jwks,
+			jwksFetch: async () => {
+				try {
+					return await c.var.auth.api.getJwks();
+				} catch {
+					keysUnreadable = true;
+					return undefined;
+				}
+			},
 			verifyOptions: { audience, issuer: createOAuthIssuerURL(audience) },
 		});
 	} catch {
-		return OAuthError.InvalidToken();
+		return keysUnreadable
+			? OAuthError.ServerError()
+			: OAuthError.InvalidToken();
 	}
 
 	const userId = typeof payload?.sub === 'string' ? payload.sub : null;
 	if (!userId) return OAuthError.InvalidToken();
 
-	const user = await c.var.db.query.user.findFirst({
-		where: eq(schema.user.id, userId),
-	});
+	let user: Awaited<ReturnType<typeof c.var.db.query.user.findFirst>>;
+	try {
+		user = await c.var.db.query.user.findFirst({
+			where: eq(schema.user.id, userId),
+		});
+	} catch {
+		return OAuthError.ServerError();
+	}
 	if (!user) return OAuthError.InvalidToken();
 
 	return Ok(AuthUser.assert(user));
