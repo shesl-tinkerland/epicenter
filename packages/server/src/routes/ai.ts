@@ -29,6 +29,7 @@ import { createOpenaiChat, OPENAI_CHAT_MODELS } from '@tanstack/ai-openai';
 import { type } from 'arktype';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { describeRoute } from 'hono-openapi';
+import { requireBearerUser } from '../middleware/require-auth.js';
 import { createRequireOwnership } from '../middleware/require-ownership.js';
 import type { OwnershipRule } from '../ownership.js';
 import type { Env } from '../types.js';
@@ -56,10 +57,12 @@ const aiChatBody = type({
 });
 
 /**
- * `/api/ai/chat` sub-app. Auth and credit policies are supplied by the
- * deployment via {@link mountAiApp}.
+ * `/api/ai/chat` sub-app. Auth and ownership are wired by {@link mountAiApp};
+ * credit policies are supplied by the deployment. Exported so the handler can
+ * be exercised directly in tests; it is NOT re-exported from the package index,
+ * so a deployment can only reach it through `mountAiApp` (auth bundled in).
  */
-const aiApp = new Hono<Env>().post(
+export const aiApp = new Hono<Env>().post(
 	API_ROUTES.ai.chat.pattern,
 	describeRoute({
 		description: 'Stream AI chat completions via SSE',
@@ -114,17 +117,17 @@ const aiApp = new Hono<Env>().post(
 /**
  * Mount the AI surface on a deployment's server app.
  *
- * Bundles the deployment's chosen auth middleware (cloud uses
- * `requireBearerUser`; AI chat is for external clients only), the ownership
- * rule, any deployment policies (cloud passes `[chargeAiCreditsWithAutumn]`),
- * and the route mount into one call.
+ * Bundles bearer auth, the ownership rule, any deployment policies (cloud
+ * passes `[chargeAiCreditsWithAutumn]`), and the route mount into one call.
+ * Like rooms, AI chat is for external clients only, so auth is bearer-only and
+ * fixed here rather than a deployment knob.
  *
- * `ownership` is mandatory and runs right after auth, so the AI route shares
- * the same authorization boundary as rooms and assets: in team mode the
- * deployment's `isMember` predicate gates the route (a non-member gets 403
- * before any provider call), and in personal mode it resolves to the caller's
- * own partition. Authenticating the caller is not enough on a team
- * deployment, or any signed-in user could spend the deployment's AI budget.
+ * `ownership` runs right after auth, so the AI route shares the same
+ * authorization boundary as rooms and assets: in team mode the deployment's
+ * `isMember` predicate gates the route (a non-member gets 403 before any
+ * provider call), and in personal mode it resolves to the caller's own
+ * partition. Authenticating the caller is not enough on a team deployment, or
+ * any signed-in user could spend the deployment's AI budget.
  *
  * The library remains billing-agnostic: policies are opaque middleware
  * that run after auth and ownership and may short-circuit the request (e.g.
@@ -138,7 +141,6 @@ const aiApp = new Hono<Env>().post(
 export function mountAiApp(
 	app: Hono<Env>,
 	opts: {
-		auth: MiddlewareHandler;
 		ownership: OwnershipRule;
 		policies?: MiddlewareHandler[];
 	},
@@ -146,7 +148,7 @@ export function mountAiApp(
 	const policies = opts.policies ?? [];
 	app.use(
 		API_ROUTES.ai.chat.prefixPattern,
-		opts.auth,
+		requireBearerUser,
 		createRequireOwnership(opts.ownership),
 		...policies,
 	);

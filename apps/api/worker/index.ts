@@ -23,7 +23,6 @@ import {
 	mountSessionApp,
 	personal,
 	Room,
-	requireBearerUser,
 	requireCookieOrBearerUser,
 } from '@epicenter/server';
 import { describeRoute } from 'hono-openapi';
@@ -69,7 +68,6 @@ mountAssetsApp(app, {
 	policies: [syncAssetStorageWithAutumn],
 });
 mountAiApp(app, {
-	auth: requireBearerUser,
 	ownership,
 	policies: [chargeAiCreditsWithAutumn],
 });

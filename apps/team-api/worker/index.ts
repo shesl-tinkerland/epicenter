@@ -25,7 +25,6 @@ import {
 	mountRoomsApp,
 	mountSessionApp,
 	Room,
-	requireBearerUser,
 	team,
 } from '@epicenter/server';
 
@@ -68,7 +67,7 @@ app.route('/', authApp);
 mountSessionApp(app, { ownership });
 mountRoomsApp(app, { ownership });
 mountAssetsApp(app, { ownership });
-mountAiApp(app, { auth: requireBearerUser, ownership });
+mountAiApp(app, { ownership });
 
 export default app;
 export { Room };
