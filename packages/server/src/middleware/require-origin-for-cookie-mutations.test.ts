@@ -83,11 +83,11 @@ test('CSRF guard admits GET regardless of origin', async () => {
 
 function createCsrfTestApp() {
 	const app = new Hono<Env>();
-	// The guard scopes its allow-list to the deployment's authBaseURL. Run the
-	// test as a local deployment so the localhost dev origin under test
-	// (localUrl(APPS.API)) is trusted, mirroring `dev`.
+	// The guard checks `c.var.trustedOrigins`, supplied by the deployment. Trust
+	// the origin under test (localUrl(APPS.API)) so it is admitted while
+	// `https://evil.example` is rejected.
 	app.use('/api/*', async (c, next) => {
-		c.set('authBaseURL', localUrl(APPS.API));
+		c.set('trustedOrigins', [TRUSTED_ORIGIN]);
 		await next();
 	});
 	app.use('/api/*', requireOriginForCookieMutations);

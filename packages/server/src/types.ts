@@ -64,6 +64,13 @@ export type Env = {
 		db: NodePgDatabase<typeof schema>;
 		auth: ReturnType<typeof createAuth>;
 		authBaseURL: string;
+		/**
+		 * Origins this deployment trusts for CORS, cookie-mutation CSRF, and
+		 * Better Auth's redirect allow-list. Supplied by the deployment
+		 * (`createServerApp`'s `resolveTrustedOrigins`), never hardcoded in the
+		 * library: a self-host trusts its own origins, not Epicenter cloud's.
+		 */
+		trustedOrigins: string[];
 		user: AuthUser;
 		/**
 		 * Resolved owner partition for this request. Populated by the

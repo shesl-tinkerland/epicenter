@@ -7,7 +7,10 @@
  *
  * Key behaviors:
  * - Localhost uses host-only, Lax, non-secure cookies
- * - Production uses .epicenter.so, SameSite=None, Secure cookies
+ * - A deployed origin without a cross-subdomain domain uses host-only,
+ *   SameSite=None, Secure cookies (the self-host default)
+ * - A deployed origin given a cross-subdomain domain (Epicenter cloud passes
+ *   .epicenter.so) scopes cookies to that domain
  */
 
 import { expect, test } from 'bun:test';
@@ -16,10 +19,8 @@ import { getCookies } from 'better-auth/cookies';
 import { createCookieAdvancedConfig } from './cookie-config.js';
 
 test('localhost cookies are host-only, Lax, and non-secure', () => {
-	const advanced = createCookieAdvancedConfig('http://localhost:8787');
 	const cookie = sessionTokenCookie('http://localhost:8787');
 
-	expect(advanced.crossSubDomainCookies).toBeUndefined();
 	expect(cookie.name).toBe('better-auth.session_token');
 	expect(cookie.attributes.secure).toBe(false);
 	expect(cookie.attributes.sameSite).toBe('lax');
@@ -27,10 +28,8 @@ test('localhost cookies are host-only, Lax, and non-secure', () => {
 });
 
 test('loopback cookies use localhost-compatible attributes', () => {
-	const advanced = createCookieAdvancedConfig('http://127.0.0.1:8787');
 	const cookie = sessionTokenCookie('http://127.0.0.1:8787');
 
-	expect(advanced.crossSubDomainCookies).toBeUndefined();
 	expect(cookie.name).toBe('better-auth.session_token');
 	expect(cookie.attributes.secure).toBe(false);
 	expect(cookie.attributes.sameSite).toBe('lax');
@@ -38,35 +37,37 @@ test('loopback cookies use localhost-compatible attributes', () => {
 });
 
 test('IPv6 localhost cookies use localhost-compatible attributes', () => {
-	const advanced = createCookieAdvancedConfig('http://[::1]:8787');
 	const cookie = sessionTokenCookie('http://[::1]:8787');
 
-	expect(advanced.crossSubDomainCookies).toBeUndefined();
 	expect(cookie.name).toBe('better-auth.session_token');
 	expect(cookie.attributes.secure).toBe(false);
 	expect(cookie.attributes.sameSite).toBe('lax');
 	expect('domain' in cookie.attributes).toBe(false);
 });
 
-test('production API cookies are cross-subdomain, SameSite=None, and secure', () => {
-	const advanced = createCookieAdvancedConfig('https://api.epicenter.so');
-	const cookie = sessionTokenCookie('https://api.epicenter.so');
+test('a deployed origin without a cross-subdomain domain uses host-only secure cookies', () => {
+	const cookie = sessionTokenCookie('https://team.example.com');
 
-	expect(advanced.crossSubDomainCookies).toEqual({
-		enabled: true,
-		domain: '.epicenter.so',
-	});
+	expect(cookie.name).toBe('__Secure-better-auth.session_token');
+	expect(cookie.attributes.secure).toBe(true);
+	expect(cookie.attributes.sameSite).toBe('none');
+	expect('domain' in cookie.attributes).toBe(false);
+});
+
+test('a deployed origin given a cross-subdomain domain scopes cookies to it', () => {
+	const cookie = sessionTokenCookie('https://api.epicenter.so', '.epicenter.so');
+
 	expect(cookie.name).toBe('__Secure-better-auth.session_token');
 	expect(cookie.attributes.secure).toBe(true);
 	expect(cookie.attributes.sameSite).toBe('none');
 	expect(cookie.attributes.domain).toBe('.epicenter.so');
 });
 
-function sessionTokenCookie(baseURL: string) {
+function sessionTokenCookie(baseURL: string, crossSubDomainDomain?: string) {
 	const options = {
 		baseURL,
 		basePath: '/auth',
-		advanced: createCookieAdvancedConfig(baseURL),
+		advanced: createCookieAdvancedConfig(baseURL, crossSubDomainDomain),
 	} satisfies BetterAuthOptions;
 	return getCookies(options).sessionToken;
 }

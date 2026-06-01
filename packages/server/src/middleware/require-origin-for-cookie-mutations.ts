@@ -1,7 +1,6 @@
 import { RequestGuardError } from '@epicenter/constants/request-guard-errors';
 import { createMiddleware } from 'hono/factory';
 import { parseBearer } from '../auth/parse-bearer.js';
-import { buildTrustedOrigins } from '../trusted-origins.js';
 import type { Env } from '../types.js';
 
 /**
@@ -12,8 +11,8 @@ import type { Env } from '../types.js';
  * so they skip the check.
  *
  * Cookie-auth state-changers must carry an `Origin` header in the deployment's
- * trusted-origin allow-list ({@link buildTrustedOrigins}, scoped to
- * `authBaseURL`). The CORS layer in `app.ts` already restricts `Origin` to the
+ * trusted-origin allow-list (`c.var.trustedOrigins`, supplied by the
+ * deployment). The CORS layer in `app.ts` already restricts `Origin` to the
  * same allow-list for credentialed cross-origin requests; this guard defends
  * the missing-`Origin` case (e.g. an HTML form POST that is a "simple request"
  * per the CORS spec and would not be preflighted).
@@ -26,7 +25,7 @@ export const requireOriginForCookieMutations = createMiddleware<Env>(
 		}
 		if (parseBearer(c.req.header('authorization') ?? null)) return next();
 		const origin = c.req.header('origin');
-		if (!origin || !buildTrustedOrigins(c.var.authBaseURL).includes(origin)) {
+		if (!origin || !c.var.trustedOrigins.includes(origin)) {
 			const err = RequestGuardError.ForbiddenOrigin();
 			return c.json(err, err.error.status);
 		}

@@ -1,6 +1,14 @@
 import { APPS, localUrl, prodOrigins } from '@epicenter/constants/apps';
 
 /**
+ * Epicenter cloud's trusted-origin set. This lives in `apps/api`, not in the
+ * shared `@epicenter/server` library: it names Epicenter's own app origins and
+ * browser extension, which only the hosted deployment should trust. A
+ * self-host (`apps/team-api`) supplies its own origins instead, so it never
+ * inherits trust in epicenter.so domains it has no relationship with.
+ */
+
+/**
  * Pinned Chrome extension origin for the tab-manager.
  *
  * Stable across all installs because `apps/tab-manager/wxt.config.ts`
@@ -11,8 +19,9 @@ const TAB_MANAGER_CHROME_EXTENSION_ORIGIN =
 	'chrome-extension://mkbnicfhpacdofmoocppnjjmdfmkkgda';
 
 /**
- * Production origins trusted on every deployment: each app's canonical origin
- * (and aliases), the pinned browser extension, and the Tauri webview origin.
+ * Production origins trusted on every Epicenter cloud deployment: each app's
+ * canonical origin (and aliases), the pinned browser extension, and the Tauri
+ * webview origin.
  *
  * Adding an app to `APPS` auto-extends this. Browser extensions are added
  * explicitly with their pinned origin: Chrome via the WXT `key`, Firefox via
@@ -29,12 +38,13 @@ const PRODUCTION_TRUSTED_ORIGINS: readonly string[] = [
  * Development-only origins: each app's `localhost:<port>` dev server plus the
  * plain-HTTP API host that `wrangler dev` serves the custom domain over.
  *
- * These are trusted ONLY on a local deployment (see {@link buildTrustedOrigins}).
- * A production isolate must not trust `localhost`: `trustedOrigins` gates not
- * just cookie CSRF but Better Auth's `callbackURL` / `redirectTo` open-redirect
- * allow-list, so a permanent localhost entry needlessly widens the production
- * surface. Local iteration against the deployed API still works because a
- * developer runs the API locally too.
+ * These are trusted ONLY on a local deployment (see
+ * {@link buildEpicenterTrustedOrigins}). A production isolate must not trust
+ * `localhost`: `trustedOrigins` gates not just cookie CSRF but Better Auth's
+ * `callbackURL` / `redirectTo` open-redirect allow-list, so a permanent
+ * localhost entry needlessly widens the production surface. Local iteration
+ * against the deployed API still works because a developer runs the API
+ * locally too.
  */
 const DEVELOPMENT_TRUSTED_ORIGINS: readonly string[] = [
 	...Object.values(APPS).map((app) => localUrl(app)),
@@ -55,23 +65,20 @@ function isLocalDeployment(baseURL: string): boolean {
 }
 
 /**
- * Origins permitted by CORS and Better Auth's CSRF / redirect checks for a
- * given deployment.
+ * Origins Epicenter cloud permits for CORS, Better Auth CSRF / redirect checks,
+ * and cookie-mutation guards.
  *
  * A local deployment additionally trusts the localhost dev origins so a
  * developer can iterate against a local API; a deployed origin trusts only the
- * production set. The deployment identity comes from the deployment's own
- * auth base URL (`resolveOrigin(env)`), never the request, so this matches the
- * `localhost`-vs-prod fork already used for cookies in `cookie-config.ts`.
+ * production set. The deployment identity comes from the deployment's own auth
+ * base URL, never the request.
  *
  * Frozen so the long-lived Cloudflare isolate cannot accumulate mutations
  * across requests. Typed `string[]` (not `readonly string[]`) because Better
  * Auth's `trustedOrigins` is mutable, and the readonly type leaks into its
- * inferred Auth, breaking the OAuth metadata helpers in `app.ts`. Not memoized:
- * a deployment resolves exactly one `baseURL`, and `createAuth` already rebuilds
- * the whole Better Auth instance per request, so a cache would dedupe nothing.
+ * inferred Auth, breaking the OAuth metadata helpers.
  */
-export function buildTrustedOrigins(baseURL: string): string[] {
+export function buildEpicenterTrustedOrigins(baseURL: string): string[] {
 	return Object.freeze(
 		isLocalDeployment(baseURL)
 			? [...PRODUCTION_TRUSTED_ORIGINS, ...DEVELOPMENT_TRUSTED_ORIGINS]

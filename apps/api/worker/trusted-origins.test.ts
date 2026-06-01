@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { APPS, localUrl } from '@epicenter/constants/apps';
-import { buildTrustedOrigins } from './trusted-origins';
+import { buildEpicenterTrustedOrigins } from './trusted-origins.js';
 
-const PROD = buildTrustedOrigins('https://api.epicenter.so');
-const LOCAL = buildTrustedOrigins('http://localhost:8787');
+const PROD = buildEpicenterTrustedOrigins('https://api.epicenter.so');
+const LOCAL = buildEpicenterTrustedOrigins('http://localhost:8787');
 
-describe('buildTrustedOrigins', () => {
+describe('buildEpicenterTrustedOrigins', () => {
 	test('rejects arbitrary chrome-extension origins (no wildcard regression)', () => {
 		expect(PROD).not.toContain('chrome-extension://attackerid');
 		expect(PROD).not.toContain('chrome-extension://*');
@@ -14,9 +14,7 @@ describe('buildTrustedOrigins', () => {
 
 	test('contains exactly one chrome-extension origin (the pinned tab-manager)', () => {
 		const exts = PROD.filter((o) => o.startsWith('chrome-extension://'));
-		expect(exts).toEqual([
-			'chrome-extension://mkbnicfhpacdofmoocppnjjmdfmkkgda',
-		]);
+		expect(exts).toEqual(['chrome-extension://mkbnicfhpacdofmoocppnjjmdfmkkgda']);
 	});
 
 	test('a production deployment does not trust localhost dev origins', () => {

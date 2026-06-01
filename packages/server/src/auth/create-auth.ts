@@ -5,7 +5,6 @@ import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../db/schema/index.js';
 import { assetKey } from '../owner.js';
-import { buildTrustedOrigins } from '../trusted-origins.js';
 import { BASE_AUTH_CONFIG } from './base-config.js';
 import { createCookieAdvancedConfig } from './cookie-config.js';
 import { authPlugins } from './plugins.js';
@@ -34,10 +33,20 @@ export function createAuth({
 	db,
 	env,
 	baseURL,
+	trustedOrigins,
+	cookieCrossSubDomain,
 }: {
 	db: Db;
 	env: Cloudflare.Env;
 	baseURL: string;
+	/** Deployment-supplied trusted origins (CORS, CSRF, redirect allow-list). */
+	trustedOrigins: string[];
+	/**
+	 * Registrable domain for cross-subdomain session cookies, when the
+	 * deployment shares sessions across subdomains. Omitted for a single-origin
+	 * deployment, which then uses host-only cookies.
+	 */
+	cookieCrossSubDomain?: string;
 }) {
 	return betterAuth({
 		...BASE_AUTH_CONFIG,
@@ -109,7 +118,7 @@ export function createAuth({
 		// time. During OAuth the top-level site changes mid-flow (client to
 		// Google to API callback), so the cookie becomes invisible at the
 		// callback step. Partitioned is for iframes, not redirect OAuth.
-		advanced: createCookieAdvancedConfig(baseURL),
+		advanced: createCookieAdvancedConfig(baseURL, cookieCrossSubDomain),
 		databaseHooks: {
 			user: {
 				delete: {
@@ -141,7 +150,7 @@ export function createAuth({
 				},
 			},
 		},
-		trustedOrigins: buildTrustedOrigins(baseURL),
+		trustedOrigins,
 		// secondaryStorage = Cloudflare KV as a read-through cache.
 		// Postgres (Germany) is always the source of truth. KV avoids the
 		// ~150ms round-trip on repeated session reads from distant edges.

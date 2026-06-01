@@ -5,11 +5,21 @@ import type { BetterAuthOptions } from 'better-auth';
  *
  * Use this from the auth server factory, not from client code. Localhost must
  * use host-only, non-secure Lax cookies so the Vite auth proxy can work during
- * development. Deployed API origins must use secure cross-subdomain cookies so
- * browser sign-in survives redirects while keeping app clients on bearer tokens
- * for resource access.
+ * development. Deployed API origins use secure `SameSite=None` cookies so
+ * browser apps can send them cross-origin while app clients stay on bearer
+ * tokens for resource access.
+ *
+ * `crossSubDomainDomain` is the registrable domain a deployment serving
+ * multiple subdomains shares sessions across (Epicenter cloud passes
+ * `.epicenter.so` so `app.` and `api.` share a session). It is supplied by the
+ * deployment, never hardcoded here: a single-origin self-host passes nothing
+ * and gets host-only cookies that actually apply to its own host, instead of
+ * cookies scoped to a domain it does not control.
  */
-export function createCookieAdvancedConfig(baseURL: string) {
+export function createCookieAdvancedConfig(
+	baseURL: string,
+	crossSubDomainDomain?: string,
+) {
 	const { hostname } = new URL(baseURL);
 	if (
 		hostname === 'localhost' ||
@@ -27,10 +37,9 @@ export function createCookieAdvancedConfig(baseURL: string) {
 
 	return {
 		useSecureCookies: true,
-		crossSubDomainCookies: {
-			enabled: true,
-			domain: '.epicenter.so',
-		},
+		...(crossSubDomainDomain && {
+			crossSubDomainCookies: { enabled: true, domain: crossSubDomainDomain },
+		}),
 		defaultCookieAttributes: {
 			sameSite: 'none',
 			secure: true,
