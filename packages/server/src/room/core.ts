@@ -389,16 +389,22 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 	 * matching pending entry is a late reply (the caller already gave up,
 	 * or the entry was lost to hibernation) and is dropped.
 	 *
+	 * Only the socket the dispatch was actually sent to may answer it. In a
+	 * team room a different member's socket cannot forge a result for a
+	 * dispatch id it does not own, even if it learns the id. The id is unicast
+	 * to the recipient, so this is defense in depth, not the only barrier.
+	 *
 	 * The TypeBox validator guarantees `frame.result` is a well-formed
 	 * `Result<unknown, ActionResponseError>`. The relay still forwards the
 	 * error side opaquely; the caller's own validator narrows it again to
 	 * `DispatchErrorWire` (which adds `RecipientOffline` to the union).
 	 */
-	function handleDispatchResponse(frame: unknown): void {
+	function handleDispatchResponse(responderWs: RoomSocket, frame: unknown): void {
 		if (!checkDispatchResponseFrame.Check(frame)) return;
 
 		const pending = pendingDispatches.get(frame.id);
 		if (!pending) return;
+		if (pending.recipientWs !== responderWs) return;
 
 		clearTimeout(pending.timeout);
 		pendingDispatches.delete(frame.id);
@@ -477,7 +483,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 				handleDispatchRequest(ws, parsed);
 				return;
 			case 'dispatch_response':
-				handleDispatchResponse(parsed);
+				handleDispatchResponse(ws, parsed);
 				return;
 			case 'presence_publish':
 				handlePresencePublish(ws, parsed);

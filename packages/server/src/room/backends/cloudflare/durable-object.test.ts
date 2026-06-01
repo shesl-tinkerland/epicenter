@@ -700,6 +700,51 @@ describe('Room dispatch: relay round trip', () => {
 			result: { data: 'pong', error: null },
 		});
 	});
+
+	test('dispatch_response from a non-recipient socket is ignored', async () => {
+		const { room } = await makeRoom();
+		const callerWs = await upgrade(room, 'caller');
+		const recipientWs = await upgrade(room, 'recipient');
+		const impostorWs = await upgrade(room, 'impostor');
+
+		await room.webSocketMessage(
+			callerWs,
+			JSON.stringify({
+				type: 'dispatch_request',
+				id: 'd3',
+				to: 'recipient',
+				action: 'noop_ping',
+			}),
+		);
+		// A peer that is not the dispatch target cannot forge the result, even
+		// if it learns the id.
+		await room.webSocketMessage(
+			impostorWs,
+			JSON.stringify({
+				type: 'dispatch_response',
+				id: 'd3',
+				result: { data: 'spoofed', error: null },
+			}),
+		);
+		expect(jsonFrames(callerWs, 'dispatch_result')).toHaveLength(0);
+
+		// The real recipient still resolves it: the pending entry survived the
+		// impostor.
+		await room.webSocketMessage(
+			recipientWs,
+			JSON.stringify({
+				type: 'dispatch_response',
+				id: 'd3',
+				result: { data: 'pong', error: null },
+			}),
+		);
+		const results = jsonFrames(callerWs, 'dispatch_result');
+		expect(results).toHaveLength(1);
+		expect(results[0]).toMatchObject({
+			id: 'd3',
+			result: { data: 'pong', error: null },
+		});
+	});
 });
 
 describe('Room dispatch: recipient offline', () => {
