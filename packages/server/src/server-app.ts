@@ -48,26 +48,26 @@ type CreateServerAppOptions = {
 	 */
 	resolveOrigin: (env: Cloudflare.Env) => string;
 	/**
-	 * Resolve the origins this deployment trusts for CORS, cookie-mutation
-	 * CSRF, and Better Auth's redirect allow-list. The library hardcodes none:
-	 * `apps/api` supplies the Epicenter app origins, a self-host supplies its
-	 * own. Receives the resolved `baseURL` so a deployment can include its own
-	 * origin without restating it.
+	 * The origins this deployment trusts for CORS, cookie-mutation CSRF, and
+	 * Better Auth's redirect allow-list. The library hardcodes none: `apps/api`
+	 * supplies the Epicenter app origins, a self-host supplies its own. Receives
+	 * the resolved `baseURL` so a deployment can include its own origin without
+	 * restating it.
 	 */
-	resolveTrustedOrigins: (env: Cloudflare.Env, baseURL: string) => string[];
+	resolveTrustedOrigins: (baseURL: string) => string[];
 	/**
-	 * Resolve the registrable domain for cross-subdomain session cookies, when
-	 * the deployment shares sessions across subdomains (Epicenter cloud returns
-	 * `.epicenter.so`). Return `undefined` (or omit) for a single-origin
-	 * deployment, which then uses host-only cookies scoped to its own host.
+	 * Registrable domain for cross-subdomain session cookies, when the
+	 * deployment shares sessions across subdomains (Epicenter cloud passes
+	 * `.epicenter.so`). Omit for a single-origin deployment, which then uses
+	 * host-only cookies scoped to its own host.
 	 */
-	resolveCookieDomain?: (env: Cloudflare.Env, baseURL: string) => string | undefined;
+	cookieDomain?: string;
 };
 
 export function createServerApp({
 	resolveOrigin,
 	resolveTrustedOrigins,
-	resolveCookieDomain,
+	cookieDomain,
 }: CreateServerAppOptions): Hono<Env> {
 	const app = new Hono<Env>();
 
@@ -79,7 +79,7 @@ export function createServerApp({
 	app.use('*', async (c, next) => {
 		const baseURL = resolveOrigin(c.env);
 		c.set('authBaseURL', baseURL);
-		c.set('trustedOrigins', resolveTrustedOrigins(c.env, baseURL));
+		c.set('trustedOrigins', resolveTrustedOrigins(baseURL));
 		await next();
 	});
 
@@ -124,7 +124,7 @@ export function createServerApp({
 				env: c.env,
 				baseURL: c.var.authBaseURL,
 				trustedOrigins: c.var.trustedOrigins,
-				cookieCrossSubDomain: resolveCookieDomain?.(c.env, c.var.authBaseURL),
+				cookieCrossSubDomain: cookieDomain,
 			}),
 		);
 		await next();

@@ -50,12 +50,12 @@ const app = createServerApp({
 	// Epicenter cloud's. Add any browser app origins you serve (and the
 	// Epicenter browser-extension origin, if your users point it at this
 	// deployment) here.
-	resolveTrustedOrigins: (_env, baseURL) => [
+	resolveTrustedOrigins: (baseURL) => [
 		new URL(baseURL).origin,
 		'tauri://localhost',
 	],
-	// Single origin: no cross-subdomain cookie domain, so sessions use host-only
-	// cookies scoped to this deployment's own host.
+	// No cookieDomain: a single-origin deployment uses host-only cookies scoped
+	// to its own host.
 });
 
 app.get('/', (c) =>
