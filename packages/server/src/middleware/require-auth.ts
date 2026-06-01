@@ -18,29 +18,37 @@
  * bearer is a JWT verified against JWKS by {@link resolveRequestOAuthUser}.
  */
 
-import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client';
 import { AuthUser } from '@epicenter/auth';
 import { OAuthError } from '@epicenter/constants/oauth-errors';
+import { verifyJwsAccessToken } from 'better-auth/oauth2';
 import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Ok, type Result } from 'wellcrafted/result';
-import {
-	createOAuthIssuerURL,
-	createOAuthJwksURL,
-} from '../auth/oauth-metadata.js';
+import { createOAuthIssuerURL } from '../auth/oauth-metadata.js';
 import { createOAuthUnauthorizedResourceResponse } from '../auth/oauth-resource.js';
 import { parseBearer } from '../auth/parse-bearer.js';
 import * as schema from '../db/schema/index.js';
 import type { Env } from '../types.js';
 
-// `verifyAccessToken` carries no per-request state (`audience`, `issuer`,
-// `jwksUrl` are passed per call), so resolve it once at module load.
-const verifyAccessToken =
-	oauthProviderResourceClient().getActions().verifyAccessToken;
-
 /**
  * Resolve the OAuth bearer on the current request to the calling user.
+ *
+ * Verification is two operations whose failures mean different things, so the
+ * HTTP status is decided by WHICH step failed, not by inspecting error
+ * internals:
+ *
+ *   1. Read the signing keys. `auth.api.getJwks()` is Better Auth's own JWKS
+ *      projection, read from the same database in-process, with no HTTP hop to
+ *      our own `/auth/jwks` (that loopback fails inside a Cloudflare Worker).
+ *      A failure here is infrastructure: the token was never checked, so it is
+ *      a retryable 503, never a rejection. A 401 would make the client discard
+ *      and refresh a good token over a transient server fault.
+ *
+ *   2. Verify the token against those keys. Any failure here (bad signature,
+ *      wrong audience/issuer, expired, malformed, unknown `kid`) is a genuine
+ *      bad token: a 401. Because the keys are already in hand, `jwksFetch`
+ *      cannot fail, so nothing infrastructural leaks into this branch.
  *
  * The API origin (`c.var.authBaseURL`) is the resource audience; the same
  * origin plus `/auth` is the issuer. Cheap by design: skips owner keyring
@@ -53,23 +61,24 @@ async function resolveRequestOAuthUser(
 	const accessToken = parseBearer(c.req.header('authorization') ?? null);
 	if (!accessToken) return OAuthError.InvalidToken();
 
-	const audience = c.var.authBaseURL;
-	let payload: Awaited<ReturnType<typeof verifyAccessToken>>;
+	let jwks: Awaited<ReturnType<typeof c.var.auth.api.getJwks>>;
 	try {
-		payload = await verifyAccessToken(accessToken, {
-			verifyOptions: { audience, issuer: createOAuthIssuerURL(audience) },
-			jwksUrl: createOAuthJwksURL(audience),
-		});
-	} catch (error) {
-		// Separate "the token is bad" from "we could not reach the signing keys".
-		// The former is a real 401; the latter (a JWKS fetch failure) must be a
-		// retryable 503, or the client would discard and refresh a good token and
-		// pause network auth over a transient server fault. See
-		// {@link isTokenVerificationError}.
-		return isTokenVerificationError(error)
-			? OAuthError.InvalidToken()
-			: OAuthError.ServerError();
+		jwks = await c.var.auth.api.getJwks();
+	} catch {
+		return OAuthError.ServerError();
 	}
+
+	const audience = c.var.authBaseURL;
+	let payload: Awaited<ReturnType<typeof verifyJwsAccessToken>>;
+	try {
+		payload = await verifyJwsAccessToken(accessToken, {
+			jwksFetch: async () => jwks,
+			verifyOptions: { audience, issuer: createOAuthIssuerURL(audience) },
+		});
+	} catch {
+		return OAuthError.InvalidToken();
+	}
+
 	const userId = typeof payload?.sub === 'string' ? payload.sub : null;
 	if (!userId) return OAuthError.InvalidToken();
 
@@ -79,27 +88,6 @@ async function resolveRequestOAuthUser(
 	if (!user) return OAuthError.InvalidToken();
 
 	return Ok(AuthUser.assert(user));
-}
-
-/**
- * Distinguish a token-verification failure (expired, wrong audience/issuer,
- * bad signature, malformed) from an infrastructure failure (the JWKS endpoint
- * was unreachable so the token could not be checked at all).
- *
- * `jose` tags every token, claim, and signature failure with a stable `code`
- * that starts with `ERR_J` (e.g. `ERR_JWT_EXPIRED`,
- * `ERR_JWT_CLAIM_VALIDATION_FAILED`, `ERR_JWS_SIGNATURE_VERIFICATION_FAILED`,
- * `ERR_JWKS_NO_MATCHING_KEY`), and Better Auth maps expired/invalid tokens to
- * an `UNAUTHORIZED` API error. A JWKS fetch failure is a plain `Error` with
- * neither marker, so it falls through to `ServerError`. If Better Auth ever
- * changes those internals this degrades safely back to the old behavior (treat
- * the failure as an invalid token).
- */
-function isTokenVerificationError(error: unknown): boolean {
-	if (typeof error !== 'object' || error === null) return false;
-	if ((error as { status?: unknown }).status === 'UNAUTHORIZED') return true;
-	const code = (error as { code?: unknown }).code;
-	return typeof code === 'string' && code.startsWith('ERR_J');
 }
 
 export const requireCookieOrBearerUser = createMiddleware<Env>(

@@ -2,11 +2,14 @@
  * Bearer auth middleware integration tests.
  *
  * Drives `requireBearerUser` through a real Hono app with a real Better Auth
- * server hosted on Bun.serve. Covers the three production paths:
+ * server hosted on Bun.serve. Covers the production paths:
  *
  * - valid token resolves to the calling user on `c.var.user`
- * - token issued for the wrong audience returns 401 InvalidToken
- * - token whose user no longer exists returns 401 InvalidToken
+ * - verification reads the signing keys in-process, with no network hop
+ * - a malformed (non-JWT) bearer returns 401 InvalidToken
+ * - a token issued for the wrong audience returns 401 InvalidToken
+ * - a token whose user no longer exists returns 401 InvalidToken
+ * - a failure reading the signing keys returns 503 ServerError, not 401
  *
  * Header parsing for the bearer scheme lives in `auth/parse-bearer.test.ts`.
  * HTTP and WebSocket failure response shape lives in `auth/oauth-resource.test.ts`.
@@ -14,6 +17,7 @@
 
 import { expect, test } from 'bun:test';
 import { oauthProvider } from '@better-auth/oauth-provider';
+import { JWT_SIGNING_ALG } from '@epicenter/constants/auth';
 import { EPICENTER_OAUTH_SCOPES } from '@epicenter/constants/oauth';
 import { betterAuth } from 'better-auth';
 import { type MemoryDB, memoryAdapter } from 'better-auth/adapters/memory';
@@ -47,6 +51,51 @@ test('requireBearerUser resolves a valid API-audience token to c.var.user', asyn
 			id: expect.any(String),
 			email: 'middleware-test@example.com',
 		});
+	} finally {
+		setup.server.stop(true);
+	}
+});
+
+test('requireBearerUser verifies a valid token in-process, with no network hop', async () => {
+	const setup = createMiddlewareTestServer();
+	try {
+		const { accessToken } = await issueOAuthTokens(setup, {
+			clientName: 'Bearer Middleware Test',
+			email: 'middleware-test@example.com',
+			name: 'Middleware Test',
+		});
+		// Stopping the auth server proves verification never round-trips to
+		// `/auth/jwks`: the signing keys are read in-process from `c.var.auth`.
+		setup.server.stop(true);
+
+		const response = await setup.app.request('/protected', {
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as { id: string; email: string };
+		expect(body).toEqual({
+			id: expect.any(String),
+			email: 'middleware-test@example.com',
+		});
+	} finally {
+		setup.server.stop(true);
+	}
+});
+
+test('requireBearerUser rejects a malformed (non-JWT) bearer with 401 InvalidToken', async () => {
+	const setup = createMiddlewareTestServer();
+	try {
+		const response = await setup.app.request('/protected', {
+			headers: { authorization: 'Bearer not-a-real-jwt' },
+		});
+
+		expect(response.status).toBe(401);
+		expect(response.headers.get('WWW-Authenticate')).toBe(
+			'Bearer error="invalid_token"',
+		);
+		const body = (await response.json()) as { name: string };
+		expect(body.name).toBe('InvalidToken');
 	} finally {
 		setup.server.stop(true);
 	}
@@ -99,6 +148,34 @@ test('requireBearerUser rejects tokens whose user no longer exists with 401 Inva
 	}
 });
 
+test('requireBearerUser returns 503 ServerError when the signing keys cannot be read', async () => {
+	// A failure reading the signing keys means the token was never checked: the
+	// client must retry (503), not discard and refresh a token that may be fine
+	// (401). No `WWW-Authenticate` challenge belongs on an infrastructure fault.
+	const app = new Hono<Env>()
+		.use('*', async (c, next) => {
+			c.set('authBaseURL', 'http://localhost');
+			c.set('auth', {
+				api: {
+					getJwks: async () => {
+						throw new Error('signing keys unreadable');
+					},
+				},
+			} as unknown as Env['Variables']['auth']);
+			await next();
+		})
+		.get('/protected', requireBearerUser, (c) => c.json(c.var.user));
+
+	const response = await app.request('/protected', {
+		headers: { authorization: 'Bearer any-token' },
+	});
+
+	expect(response.status).toBe(503);
+	expect(response.headers.get('WWW-Authenticate')).toBeNull();
+	const body = (await response.json()) as { name: string };
+	expect(body.name).toBe('ServerError');
+});
+
 function createMiddlewareTestServer() {
 	const db = createOAuthTestDb();
 
@@ -113,7 +190,7 @@ function createMiddlewareTestServer() {
 			baseURL,
 			secret: 'test-secret-test-secret-test-secret',
 			plugins: [
-				jwt(),
+				jwt({ jwks: { keyPairConfig: { alg: JWT_SIGNING_ALG } } }),
 				oauthProvider({
 					loginPage: '/sign-in',
 					consentPage: '/consent',
@@ -135,6 +212,7 @@ function createMiddlewareTestServer() {
 			const app = new Hono<Env>()
 				.use('*', async (c, next) => {
 					c.set('db', createFakeDb(db));
+					c.set('auth', auth as unknown as Env['Variables']['auth']);
 					c.set('authBaseURL', baseURL);
 					await next();
 				})
@@ -157,7 +235,8 @@ function createMiddlewareTestServer() {
  * Tests issue exactly one user per setup, so the stub returns the lone row
  * (or null when the test mutates `db.user = []`). The `where` clause is
  * ignored, which is fine: a missing-user assertion only needs the empty
- * branch.
+ * branch. The signing keys are read separately through `c.var.auth.api`, so
+ * the stub does not model the `jwks` table.
  */
 function createFakeDb(memoryDb: MemoryDB) {
 	return {
