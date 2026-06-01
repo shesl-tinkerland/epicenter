@@ -11,17 +11,6 @@ export function createOAuthIssuerURL(baseURL: string) {
 	return `${baseURL.replace(/\/+$/, '')}${AUTH_BASE_PATH}`;
 }
 
-/**
- * Return the JWKS URL paired with {@link createOAuthIssuerURL}.
- *
- * Resource servers use this URL with the issuer and audience checks. Keeping it
- * derived from the same base URL prevents metadata routes and token verifiers
- * from drifting apart when the API origin changes.
- */
-export function createOAuthJwksURL(baseURL: string) {
-	return `${createOAuthIssuerURL(baseURL)}/jwks`;
-}
-
 // AUTH_BASE_PATH is hardcoded to '/auth'. The OpenID configuration sits
 // beneath that path; the auth-server metadata sits at the root with the
 // basepath as a trailing segment (RFC 8414 §3.1).
