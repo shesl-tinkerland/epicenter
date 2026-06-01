@@ -29,6 +29,8 @@ import { createOpenaiChat, OPENAI_CHAT_MODELS } from '@tanstack/ai-openai';
 import { type } from 'arktype';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { describeRoute } from 'hono-openapi';
+import { createRequireOwnership } from '../middleware/require-ownership.js';
+import type { OwnershipRule } from '../ownership.js';
 import type { Env } from '../types.js';
 
 const chatOptions = type({
@@ -113,13 +115,20 @@ const aiApp = new Hono<Env>().post(
  * Mount the AI surface on a deployment's server app.
  *
  * Bundles the deployment's chosen auth middleware (cloud uses
- * `requireBearerUser`; AI chat is for external clients only), any
- * deployment policies (cloud passes `[chargeAiCreditsWithAutumn]`), and
- * the route mount into one call.
+ * `requireBearerUser`; AI chat is for external clients only), the ownership
+ * rule, any deployment policies (cloud passes `[chargeAiCreditsWithAutumn]`),
+ * and the route mount into one call.
+ *
+ * `ownership` is mandatory and runs right after auth, so the AI route shares
+ * the same authorization boundary as rooms and assets: in team mode the
+ * deployment's `isMember` predicate gates the route (a non-member gets 403
+ * before any provider call), and in personal mode it resolves to the caller's
+ * own partition. Authenticating the caller is not enough on a team
+ * deployment, or any signed-in user could spend the deployment's AI budget.
  *
  * The library remains billing-agnostic: policies are opaque middleware
- * that run after auth and may short-circuit the request (e.g. 402
- * insufficient credits) before the AI handler streams.
+ * that run after auth and ownership and may short-circuit the request (e.g.
+ * 402 insufficient credits) before the AI handler streams.
  *
  * Policies are typed loosely (`MiddlewareHandler`) so deployments that
  * extend the library `Env` with their own `Variables` can pass policies
@@ -130,10 +139,16 @@ export function mountAiApp(
 	app: Hono<Env>,
 	opts: {
 		auth: MiddlewareHandler;
+		ownership: OwnershipRule;
 		policies?: MiddlewareHandler[];
 	},
 ): void {
 	const policies = opts.policies ?? [];
-	app.use(API_ROUTES.ai.chat.prefixPattern, opts.auth, ...policies);
+	app.use(
+		API_ROUTES.ai.chat.prefixPattern,
+		opts.auth,
+		createRequireOwnership(opts.ownership),
+		...policies,
+	);
 	app.route('/', aiApp);
 }

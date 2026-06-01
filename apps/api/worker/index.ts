@@ -63,6 +63,7 @@ mountAssetsApp(app, {
 });
 mountAiApp(app, {
 	auth: requireBearerUser,
+	ownership,
 	policies: [chargeAiCreditsWithAutumn],
 });
 

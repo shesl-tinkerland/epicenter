@@ -58,7 +58,7 @@ app.route('/', authApp);
 mountSessionApp(app, { ownership });
 mountRoomsApp(app, { ownership });
 mountAssetsApp(app, { ownership });
-mountAiApp(app, { auth: requireBearerUser });
+mountAiApp(app, { auth: requireBearerUser, ownership });
 
 export default app;
 export { Room };

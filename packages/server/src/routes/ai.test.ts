@@ -14,6 +14,7 @@ import {
 } from '@epicenter/constants/ai-chat-errors';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import { Hono } from 'hono';
+import { personal } from '../ownership.js';
 import type { Env } from '../types.js';
 import { mountAiApp } from './ai.js';
 
@@ -83,9 +84,14 @@ describe('AI chat route HTTP responses', () => {
 	function createTestApp() {
 		const app = new Hono<Env>();
 		mountAiApp(app, {
-			// Permissive auth for the slice we're testing; the route reaches
-			// the ProviderNotConfigured branch before any policy runs.
-			auth: async (_c, next) => next(),
+			// Permissive auth for the slice we're testing: stamp a user so the
+			// mandatory ownership rule resolves, and the route reaches the
+			// ProviderNotConfigured branch before any policy runs.
+			auth: async (c, next) => {
+				c.set('user', { id: 'test-user' } as Env['Variables']['user']);
+				return next();
+			},
+			ownership: personal(),
 		});
 		return app;
 	}
