@@ -18,6 +18,10 @@ type CreateWebSocketPair = () => InstanceType<typeof WebSocketPair>;
 export function createOAuthUnauthorizedResourceResponse(
 	c: Context,
 	error: OAuthError,
+	// Injectable so the WebSocket close path is testable: `WebSocketPair` is a
+	// Cloudflare Workers global that does not exist in the Bun test runtime, and
+	// the test needs to observe the close code and reason on the server socket.
+	// Production always uses the default.
 	createWebSocketPair: CreateWebSocketPair = () => new WebSocketPair(),
 ) {
 	const isUpgrade = isWebSocketUpgrade(c);
