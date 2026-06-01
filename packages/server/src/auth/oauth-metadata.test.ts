@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
 	createOAuthIssuerURL,
-	createOAuthJwksURL,
 	OAUTH_AUTHORIZATION_SERVER_METADATA_PATH,
 	OAUTH_OPENID_CONFIGURATION_PATH,
 	OAUTH_PROTECTED_RESOURCE_METADATA_PATH,
@@ -10,9 +9,6 @@ import {
 test('OAuth metadata paths follow Better Auth issuer-path layout', () => {
 	expect(createOAuthIssuerURL('https://api.epicenter.so')).toBe(
 		'https://api.epicenter.so/auth',
-	);
-	expect(createOAuthJwksURL('https://api.epicenter.so')).toBe(
-		'https://api.epicenter.so/auth/jwks',
 	);
 	expect(OAUTH_OPENID_CONFIGURATION_PATH).toBe(
 		'/auth/.well-known/openid-configuration',

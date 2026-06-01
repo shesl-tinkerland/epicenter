@@ -2,11 +2,12 @@
  * Bearer auth middleware integration tests.
  *
  * Drives `requireBearerUser` through a real Hono app with a real Better Auth
- * server hosted on Bun.serve. Covers the three production paths:
+ * server hosted on Bun.serve. Covers the production paths:
  *
  * - valid token resolves to the calling user on `c.var.user`
  * - token issued for the wrong audience returns 401 InvalidToken
  * - token whose user no longer exists returns 401 InvalidToken
+ * - signing keys unreachable returns 503 ServerError (retryable, not a 401)
  *
  * Header parsing for the bearer scheme lives in `auth/parse-bearer.test.ts`.
  * HTTP and WebSocket failure response shape lives in `auth/oauth-resource.test.ts`.
@@ -99,6 +100,28 @@ test('requireBearerUser rejects tokens whose user no longer exists with 401 Inva
 	}
 });
 
+test('requireBearerUser returns 503 ServerError when the signing keys are unreachable', async () => {
+	const setup = createMiddlewareTestServer();
+	try {
+		const { accessToken } = await issueOAuthTokens(setup, {
+			clientName: 'Bearer Middleware Test',
+			email: 'middleware-test@example.com',
+			name: 'Middleware Test',
+		});
+
+		const response = await setup.app.request('/keys-unreadable', {
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+
+		expect(response.status).toBe(503);
+		expect(response.headers.get('WWW-Authenticate')).toBeNull();
+		const body = (await response.json()) as { name: string };
+		expect(body.name).toBe('ServerError');
+	} finally {
+		setup.server.stop(true);
+	}
+});
+
 function createMiddlewareTestServer() {
 	const db = createOAuthTestDb();
 
@@ -136,9 +159,28 @@ function createMiddlewareTestServer() {
 				.use('*', async (c, next) => {
 					c.set('db', createFakeDb(db));
 					c.set('authBaseURL', baseURL);
+					// The test's minimal Better Auth instance is shaped narrower than
+					// the production `Env` auth; the bearer path only reaches
+					// `auth.api.getJwks()`, which it provides.
+					c.set('auth', auth as unknown as Env['Variables']['auth']);
 					await next();
 				})
-				.get('/protected', requireBearerUser, (c) => c.json(c.var.user));
+				.get('/protected', requireBearerUser, (c) => c.json(c.var.user))
+				.get(
+					'/keys-unreadable',
+					async (c, next) => {
+						c.set('auth', {
+							api: {
+								getJwks: async () => {
+									throw new Error('jwks store unreachable');
+								},
+							},
+						} as unknown as Env['Variables']['auth']);
+						await next();
+					},
+					requireBearerUser,
+					(c) => c.json(c.var.user),
+				);
 
 			return { auth, baseURL, db, server, wrongAudience, app };
 		} catch (error) {
