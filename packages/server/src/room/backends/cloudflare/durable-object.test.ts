@@ -700,6 +700,51 @@ describe('Room dispatch: relay round trip', () => {
 			result: { data: 'pong', error: null },
 		});
 	});
+
+	test('a dispatch_response from a non-recipient socket is dropped; the real recipient still resolves', async () => {
+		const { room } = await makeRoom();
+		const callerWs = await upgrade(room, 'caller');
+		const recipientWs = await upgrade(room, 'recipient');
+		const impostorWs = await upgrade(room, 'impostor');
+
+		await room.webSocketMessage(
+			callerWs,
+			JSON.stringify({
+				type: 'dispatch_request',
+				id: 'd2b',
+				to: 'recipient',
+				action: 'noop_ping',
+			}),
+		);
+
+		// A different member forges a reply for the caller's dispatch id.
+		await room.webSocketMessage(
+			impostorWs,
+			JSON.stringify({
+				type: 'dispatch_response',
+				id: 'd2b',
+				result: { data: 'forged', error: null },
+			}),
+		);
+		expect(jsonFrames(callerWs, 'dispatch_result')).toHaveLength(0);
+
+		// The real recipient's reply still resolves the dispatch.
+		await room.webSocketMessage(
+			recipientWs,
+			JSON.stringify({
+				type: 'dispatch_response',
+				id: 'd2b',
+				result: { data: 'pong', error: null },
+			}),
+		);
+
+		const results = jsonFrames(callerWs, 'dispatch_result');
+		expect(results).toHaveLength(1);
+		expect(results[0]).toMatchObject({
+			id: 'd2b',
+			result: { data: 'pong', error: null },
+		});
+	});
 });
 
 describe('Room dispatch: recipient offline', () => {
