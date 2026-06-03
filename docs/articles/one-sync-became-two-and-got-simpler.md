@@ -1,5 +1,7 @@
 # One Sync Became Two and Got Simpler
 
+> **Editor's note (later):** the two primitives this article ends on, the editable `attachMarkdownVault` and the read-only `attachMarkdownExport`, were eventually collapsed back into one. The vault was deleted: materialized markdown is now a one-way read-only projection of Yjs, mutated only through validated actions, never by editing the files. The split described here was the right call at the time and the reasoning still holds; the follow-on lesson is that once you separate two jobs you can also discover one of them should not exist. See `specs/20260602T200000-vault-read-only-projection-agent-mutation.md`.
+
 **TL;DR**: When one abstraction is serving two jobs with opposite constraints, splitting it removes more complexity than it adds. A single markdown materializer that tried to handle every direction became two focused primitives, and each one got simpler in the process.
 
 I was looking at a single `attachMarkdownMaterializer` that had four actions, two independent codec halves, a slug-plus-id filename scheme, and a runtime guard called `RoundTripUnproven`. That last one should have been the tell. A runtime guard compensating for a contract the design could not express is almost always a sign that the abstraction is doing two jobs that do not belong together.

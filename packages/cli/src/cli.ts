@@ -20,9 +20,10 @@ const REMOVED_DAEMON_COMMANDS = new Set(['up', 'down', 'ps', 'logs']);
  *   - `run`:   invoke one by mount-prefixed action path; `--peer` dispatches over RPC
  *   - `peers`: enumerate other clients currently online via the workspace presence row
  *
- * Markdown reconcile (`markdown_apply`) and every other mount action are invoked
- * through `run`, e.g. `epicenter run fuji.markdown_apply '{"dryRun":true}'`; the
- * plan (including `refused`) comes back as JSON on stdout.
+ * Every mount action is invoked through `run`, e.g.
+ * `epicenter run fuji.markdown_rebuild '{}'` to re-materialize the read-only
+ * markdown projection; results come back as JSON on stdout. Materialized `.md`
+ * is read-only: mutate app data through actions, never by editing the files.
  *
  * Specs: `specs/20260421T155436-cli-scripting-first-redesign.md` (base
  * surface), `specs/20260423T174126-cli-remote-peer-rpc.md` (`peers` + `--peer`).

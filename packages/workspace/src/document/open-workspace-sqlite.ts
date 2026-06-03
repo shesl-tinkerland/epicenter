@@ -3,8 +3,8 @@
  *
  * The daemon's `attachBunSqliteMaterializer` can write a queryable mirror at
  * `sqlitePath(projectDir, workspaceId)`. This helper only opens that convention
- * path. Mounts that pass a custom `sqliteFile` need `openSqliteReader({ filePath })`
- * with the same explicit path.
+ * path. A caller that passed a custom `filePath` to the materializer needs
+ * `openSqliteReader({ filePath })` with the same explicit path.
  *
  * For ranked FTS5 search plus snippet helpers, use `openSqliteReader`
  * instead; this function intentionally returns a bare `bun:sqlite`

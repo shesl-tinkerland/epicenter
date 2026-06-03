@@ -21,7 +21,7 @@ The pattern: `createWorkspace({ id, tables, kv, keyring? })` constructs the low-
 | attachLocalStorage(ydoc, { server, ownerId, keyring })  // encrypted IDB + scoped BC |
 | wipeLocalStorage({ server, ownerId })           // delete local data for owner |
 | openCollaboration (sync + presence + dispatch)                 |
-| attachBunSqliteMaterializer / attachMarkdownVault / Export     |
+| attachBunSqliteMaterializer / attachMarkdownExport             |
 +----------------------------------------------------------------+
 | Y.Doc (raw CRDT)                                               |
 +----------------------------------------------------------------+

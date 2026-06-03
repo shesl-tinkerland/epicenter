@@ -12,6 +12,8 @@ metadata:
 
 For technical explanations where the user is trying to understand a system, combine this voice with [notebook-explanation](../notebook-explanation/SKILL.md): short working notes, code blocks, tiny definitions, ASCII diagrams, and durable rules.
 
+For PR and commit text, combine this voice with [pull-request](../pull-request/SKILL.md): the voice rules here still apply, but the product and personal-voice sections further down (landing-page framing, "end with an invitation", first-person story openers) are for marketing and community writing, not for a reviewer-facing PR.
+
 ## When to Apply This Skill
 
 Use this pattern when you need to:

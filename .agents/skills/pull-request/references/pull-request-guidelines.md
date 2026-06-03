@@ -112,6 +112,8 @@ Use before/after snippets when:
 
 Use ASCII diagrams liberally to communicate complex ideas. They're more scannable than prose and show relationships at a glance.
 
+Default to the lightest diagram that carries the relationship: two annotated columns, an indented tree, or a small before/after block. Reserve full box-drawing for genuine multi-box architecture. A heavy box around what is really a two-column mapping costs the reader more than it gives.
+
 #### Journey/Evolution Diagrams
 
 For PRs that iterate on previous work, show the evolution:
@@ -359,6 +361,10 @@ State the simplest possible description of what the old system accomplished, the
 **Bad**: "The encryption system was complex and needed simplification." (no contrast, no specifics)
 
 The fix then lands with zero effort—the reader is already rooting for it.
+
+##### Name the One Regression
+
+If a change trades something away, name it and quantify it with the payoff attached, before the reviewer finds it in the diff and reads it as an oversight. A scoped, quantified regression reads as judgment; an unmentioned one reads as a miss.
 
 ##### Lead with What Dies (API-collapse PRs)
 

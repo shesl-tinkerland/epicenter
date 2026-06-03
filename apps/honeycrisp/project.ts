@@ -2,9 +2,9 @@
  * Honeycrisp project mount.
  *
  * `honeycrisp(opts?)` returns the `Mount` that a project's
- * `epicenter.config.ts` default-exports. Default disk paths follow the library
- * convention; options let a project override the markdown directory and
- * SQLite file.
+ * `epicenter.config.ts` default-exports. Disk paths are hardcoded to the vault
+ * layout: the SQLite mirror at `.epicenter/sqlite/<id>.db` (hidden) and the
+ * read-only markdown projection at `apps/honeycrisp/` (visible).
  */
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
@@ -12,22 +12,19 @@ import { defineActions, defineWorkspace } from '@epicenter/workspace';
 import { defineMount } from '@epicenter/workspace/daemon';
 import {
 	attachGitAutosave,
-	attachMarkdownVault,
+	attachMarkdownExport,
 	type GitAutosaveConfig,
 } from '@epicenter/workspace/document/materializer/markdown';
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
+	appsMarkdownPath,
 	attachProjectInfrastructure,
-	markdownPath,
-	resolveProjectPath,
 	sqlitePath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
 import { createHoneycrisp } from './honeycrisp.js';
 
 export type HoneycrispMountOptions = {
-	markdownDir?: string;
-	sqliteFile?: string;
 	git?: GitAutosaveConfig;
 };
 
@@ -49,19 +46,15 @@ export function honeycrisp(opts: HoneycrispMountOptions = {}) {
 			const workspace = createHoneycrisp({ keyring });
 			workspace.ydoc.clientID = yDocClientId;
 
-			const sqliteFile =
-				resolveProjectPath(projectDir, opts.sqliteFile) ??
-				sqlitePath(projectDir, workspace.ydoc.guid);
-			const mdDir =
-				resolveProjectPath(projectDir, opts.markdownDir) ??
-				markdownPath(projectDir, workspace.ydoc.guid);
+			const sqliteFile = sqlitePath(projectDir, workspace.ydoc.guid);
+			const mdDir = appsMarkdownPath(projectDir, mount);
 
 			const sqlite = attachBunSqliteMaterializer(workspace, {
 				filePath: sqliteFile,
 				log: createLogger(`${mount}-sqlite`),
 			});
 
-			const markdown = attachMarkdownVault(workspace, {
+			const markdown = attachMarkdownExport(workspace, {
 				dir: mdDir,
 				tables: { notes: {} },
 			});

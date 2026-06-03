@@ -1,5 +1,7 @@
 # Bidirectional entry bodies (markdown body import, V2)
 
+> **Superseded by `specs/20260602T200000-vault-read-only-projection-agent-mutation.md`.** The materialized markdown is now a one-way read-only projection of Yjs: the disk to Yjs body import this spec describes (`writeBody`, `parseEntryBody`, `markdown_apply`) was deleted along with `attachMarkdownVault`. App data mutates only through validated actions. Kept for history.
+
 **Status**: implemented on `feat/fuji-body-import` (follow-up to the vault/export split, PR #1890). Unit-tested (codec round-trip, vault apply, the HTTP write primitive); the live two-vault relay proof still needs cloud auth.
 **Supersedes**: the "Bodies (v2)" section of `specs/20260601T160000-markdown-sync-greenfield.md`. That section specifies body import on the OLD single-seam `codec` model (paired `toMarkdown`/`fromMarkdown`/`applyBody` + a derived `bodyHash` row column). That model was abandoned in PR #1890, which split the one seam into `attachMarkdownVault` (editable, `readBody`) and `attachMarkdownExport` (read-only, `toMarkdown`). This spec realigns body import to the shipped vault. There is no `codec` and no `bodyHash`.
 

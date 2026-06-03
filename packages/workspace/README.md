@@ -123,7 +123,7 @@ Every exported function in this package falls into one of three verbs. The prefi
 |---|---|---|---|---|
 | `define*` | **None**: pure data or type contract | Schemas, defaults, typed bundle values | Plain config object or same value back | `defineTable`, `defineKv`, `defineMutation`, `defineQuery`, `defineWorkspace` |
 | `create*` | **Constructs**: bundles, models, registries, or pure definitions | Definitions, options | Disposable bundle or pure value | `createWorkspace` (root bundle: ydoc + tables + kv + empty actions + dispose), `createFuji` (app model), `createDisposableCache` (refcounted per-row cache) |
-| `attach*` | **Mutates a Y.Doc**: binds a slot, registers `ydoc.on('destroy')` | An existing `Y.Doc` + config (workspace materializers take the bundle from `createWorkspace`) | Typed handle, non-idempotent, hold the reference | `attachRichText`, `attachPlainText`, `attachTimeline`, `attachIndexedDb`, `attachLocalStorage`, `attachYjsLog`, `attachBroadcastChannel`, `attachMarkdownVault`, `attachMarkdownExport`, `attachBunSqliteMaterializer` |
+| `attach*` | **Mutates a Y.Doc**: binds a slot, registers `ydoc.on('destroy')` | An existing `Y.Doc` + config (workspace materializers take the bundle from `createWorkspace`) | Typed handle, non-idempotent, hold the reference | `attachRichText`, `attachPlainText`, `attachTimeline`, `attachIndexedDb`, `attachLocalStorage`, `attachYjsLog`, `attachBroadcastChannel`, `attachMarkdownExport`, `attachBunSqliteMaterializer` |
 | `open*` | **Opens a runtime over a Y.Doc or a local resource**: returns a typed handle with its own teardown. The Y.Doc-bound case (`openCollaboration`) registers `ydoc.on('destroy')` like `attach*` does; the resource case (`openSqliteReader`) takes no Y.Doc and returns a `[Symbol.dispose]()` handle. | Y.Doc + config, or resource config | Typed runtime handle | `openCollaboration`, `openSqliteReader`, `openWorkspaceSqlite` |
 
 `createDisposableCache(build, opts?)` is the refcounted cache primitive. The
@@ -867,7 +867,7 @@ Browser apps use `attachIndexedDb(ydoc)` for unauthenticated docs, or `attachLoc
 
 For authenticated apps, call `await wipeLocalStorage({ server, ownerId })` after disposing the bundle to delete every owner-scoped encrypted IDB database on the current browser profile (sign-out, "delete my local data", account switch).
 
-`attachBunSqliteMaterializer`, `attachMarkdownVault`, and `attachMarkdownExport` are not persistence: they project workspace rows into queryable SQLite tables or `.md` files. See the materializer subsections below.
+`attachBunSqliteMaterializer` and `attachMarkdownExport` are not persistence: they project workspace rows into queryable SQLite tables or `.md` files. See the materializer subsections below.
 
 ```typescript
 import {
@@ -959,12 +959,11 @@ void openTabs;
 
 Ordering is just lexical: `collaboration` reads `idb.whenLoaded` as `waitFor` because `idb` is defined first. No builder chain, no priority flag.
 
-### Markdown seams: vault (editable) and export (read-only)
+### Markdown seam: read-only export
 
-Markdown comes in two seams from `@epicenter/workspace/document/materializer/markdown`, because an editable directory and a read-only projection are different in kind:
+Markdown comes from one seam, `attachMarkdownExport` (in `@epicenter/workspace/document/materializer/markdown`): a continuous, ONE-WAY Yjs to disk projection with free serialization (custom `filename`, `toMarkdown`, per-table `dir`). It exposes a single `markdown_rebuild` mutation for a destructive full re-export (orphan cleanup after a filename or layout change); there is no import path.
 
-- `attachMarkdownVault` is the editable, two-way seam. It writes `<dir>/<table>/<id>.md` with the frontmatter as the row (rigid by design, so the reconcile cannot lose data), continuously materializes, and exposes `markdown_apply` (disk to Yjs reconcile, guarded and atomic) plus `markdown_rebuild` (destructive re-export). An optional per-table `readBody` adds a read-only body section. Selection is `tables[name]` presence.
-- `attachMarkdownExport` is the read-only projection: continuous Yjs to disk only, with free serialization (custom `filename`, `toMarkdown`, per-table `dir`) and no import path. Use it for a human-readable slug export or a published view. The sqlite materializer is the read-only sibling for a relational projection.
+The projection is read-only on purpose. The materialized `.md` is never read back into Yjs, so it carries no round-trip obligation and can shape the output however a human-readable export or a published site wants. App data mutates only through validated actions (`epicenter run <mount>.<action>`), never by editing the materialized files. The sqlite materializer is the read-only sibling for a relational projection.
 
 ```typescript
 import {
@@ -973,7 +972,7 @@ import {
 	defineTable,
 } from '@epicenter/workspace';
 import { attachYjsLog } from '@epicenter/workspace/node';
-import { attachMarkdownVault } from '@epicenter/workspace/document/materializer/markdown';
+import { attachMarkdownExport } from '@epicenter/workspace/document/materializer/markdown';
 
 const notes = defineTable({
 	id: column.string(),
@@ -990,7 +989,7 @@ function openNotes() {
 	const yjsLog = attachYjsLog(workspace.ydoc, {
 		filePath: '/tmp/epicenter/notes-workspace.db',
 	});
-	const markdown = attachMarkdownVault(workspace, {
+	const markdown = attachMarkdownExport(workspace, {
 		dir: '/tmp/epicenter/markdown',
 		tables: { notes: {} },
 	});
@@ -1315,7 +1314,7 @@ browser-safe entry point.
 | --- | --- | --- |
 | `@epicenter/workspace` | `createDisposableCache`, `defineTable`, `defineKv`, browser-safe `attach*` (tables, kv, indexeddb, broadcast-channel, encryption, rich-text, plain-text, timeline), `openCollaboration`, `roomWsUrl`, action helpers, `onLocalUpdate`, `docGuid`, ids, dates, types | Yes |
 | `@epicenter/workspace/node` | Bun/Node `attach*` and `open*` (`attachYjsLog`, `attachYjsLogReader`, `openSqliteReader`, `openWorkspaceSqlite`), daemon clients (`connectDaemonActions`, `findProjectRoot`), workspace paths | Yes |
-| `@epicenter/workspace/document/materializer/markdown` | `attachMarkdownVault`, `attachMarkdownExport`, `ApplyPlan` | Yes |
+| `@epicenter/workspace/document/materializer/markdown` | `attachMarkdownExport`, `attachGitAutosave`, `MarkdownShape` | Yes |
 | `@epicenter/workspace/document/materializer/sqlite` | `attachBunSqliteMaterializer`, `generateDdl`, types | Yes |
 | `@epicenter/workspace/ai` | `actionsToAiTools` (TanStack AI bindings) | Yes |
 

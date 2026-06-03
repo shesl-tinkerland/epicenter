@@ -1,5 +1,7 @@
 # Markdown <-> Yjs sync (greenfield)
 
+> **Superseded by `specs/20260602T200000-vault-read-only-projection-agent-mutation.md`.** That spec refuses the disk to Yjs editing path entirely: materialized markdown is a one-way read-only projection and `markdown_apply` was deleted. App data mutates only through validated actions. Kept for history.
+
 Status: greenfield design. Consolidates the whole `markdown_apply` effort into
 the shape it should have had from the start. Supersedes the incremental design in
 `20260601T120000-epicenter-apply-markdown-reconcile.md` (kept for history).

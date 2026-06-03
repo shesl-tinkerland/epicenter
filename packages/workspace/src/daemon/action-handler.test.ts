@@ -237,7 +237,7 @@ describe('executeInvoke mount-prefixed routing', () => {
 		const entry = fakeEntry({
 			mount: 'fuji',
 			actions: {
-				markdown_apply: defineMutation({
+				bulk_delete: defineMutation({
 					input: Type.Object({ maxDeletes: Type.Optional(Type.Number()) }),
 					handler: (input) => ({ maxDeletes: input.maxDeletes ?? 10 }),
 				}),
@@ -245,7 +245,7 @@ describe('executeInvoke mount-prefixed routing', () => {
 		});
 
 		const result = await executeInvoke([entry], {
-			actionPath: 'fuji.markdown_apply',
+			actionPath: 'fuji.bulk_delete',
 			input: { maxDeletes: 'lots' },
 		});
 

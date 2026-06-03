@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+	appsMarkdownPath,
 	markdownPath,
-	resolveProjectPath,
 	sqlitePath,
 	yjsPath,
 } from './workspace-paths.js';
@@ -29,19 +29,8 @@ describe('document/workspace-paths', () => {
 		);
 	});
 
-	describe('resolveProjectPath', () => {
+	test('appsMarkdownPath is visible, keyed by mount name, outside .epicenter/', () => {
 		const dir = '/Users/me/vault';
-
-		test('returns undefined when no override is given, so callers fall back', () => {
-			expect(resolveProjectPath(dir, undefined)).toBeUndefined();
-		});
-
-		test('resolves a relative override against the project root', () => {
-			expect(resolveProjectPath(dir, 'notes')).toBe('/Users/me/vault/notes');
-		});
-
-		test('passes an absolute override through unchanged', () => {
-			expect(resolveProjectPath(dir, '/tmp/notes')).toBe('/tmp/notes');
-		});
+		expect(appsMarkdownPath(dir, 'fuji')).toBe('/Users/me/vault/apps/fuji');
 	});
 });

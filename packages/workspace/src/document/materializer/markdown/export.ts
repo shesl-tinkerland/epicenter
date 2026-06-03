@@ -1,19 +1,13 @@
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { Type } from 'typebox';
+import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import { assembleMarkdown } from '../../../markdown/assemble-markdown.js';
 import { defineActions, defineMutation } from '../../../shared/actions.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { BaseRow, Table } from '../../table.js';
 import type { AnyTable, MaterializerInput, TablesRecord } from '../shared.js';
-import {
-	type FileState,
-	type MarkdownShape,
-	materializeTable,
-	type RenderRow,
-	rebuildTable,
-} from './shared.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // attachMarkdownExport: the read-only markdown projection
@@ -22,10 +16,21 @@ import {
 // custom filenames (slugs), custom `toMarkdown` (layouts, publish transforms),
 // per-table subdirectories. There is no `apply`: this projection is never read
 // back, so it carries no round-trip obligation and can shape the output however a
-// human-readable export or a published site wants. The editable, reconciled seam
-// is `attachMarkdownVault`; the sqlite materializer is the read-only sibling for
-// a relational projection.
+// human-readable export or a published site wants. Mutating app data goes through
+// validated actions instead, never by editing the materialized `.md`. The sqlite
+// materializer is the read-only sibling for a relational projection.
+//
+// The observe/flush/rebuild machinery (materializeTable, rebuildTable) lives at
+// the bottom of this file: it was a shared substrate back when an editable vault
+// seam also consumed it; with that seam deleted, this export is its only caller,
+// so it is no longer a separate module.
 // ════════════════════════════════════════════════════════════════════════════
+
+/** Frontmatter + optional body, the assembled shape of a `.md` file. */
+export type MarkdownShape = {
+	frontmatter: Record<string, unknown>;
+	body: string | undefined;
+};
 
 /** Per-table customization for the read-only export. Every field is optional. */
 export type ExportTableConfig<TRow extends BaseRow> = {
@@ -184,10 +189,7 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 	return {
 		whenFlushed,
 		actions: defineActions({
-			// Distinct key from the vault's `markdown_rebuild`: a workspace can compose
-			// both seams, and spreading two `markdown_rebuild` actions into one set
-			// would silently clobber the vault's.
-			markdown_export_rebuild: defineMutation({
+			markdown_rebuild: defineMutation({
 				title: 'Rebuild Markdown Export',
 				description:
 					'Destructive: delete existing .md files in registered table directories and re-serialize all valid rows. Optionally limit to one table.',
@@ -206,3 +208,204 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 }
 
 export type MarkdownExport = ReturnType<typeof attachMarkdownExport>;
+
+// ════════════════════════════════════════════════════════════════════════════
+// Materialize machinery: Yjs -> disk observe/flush/rebuild
+//
+// HOW a row renders to a file (custom filename + serialization) is injected as a
+// `RenderRow`; everything below is the generic write loop the export drives.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Render a row to its on-disk artifact: the export's injected serialization. */
+type RenderRow = (
+	row: BaseRow,
+) => Promise<{ filename: string; content: string }>;
+
+/**
+ * What materialize last wrote for a row, keyed by id. Drives rename cleanup:
+ * when a row's filename changes, unlink the previous file before writing the new
+ * one so a rename does not leave an orphan behind.
+ */
+type FileState = Map<string, { filename: string; content: string }>;
+
+/**
+ * Errors produced by the background write-observer (table row → .md file).
+ * These run inside `.catch(...)` of a detached async task, so they ship to the
+ * logger, not through a Result to the caller.
+ */
+const MaterializerWriteError = defineErrors({
+	TableWriteFailed: ({
+		tableName,
+		id,
+		cause,
+	}: {
+		tableName: string;
+		id?: string;
+		cause: unknown;
+	}) => ({
+		message: `[markdown] table write failed for "${tableName}"${id ? ` (row "${id}")` : ''}: ${extractErrorMessage(cause)}`,
+		tableName,
+		id,
+		cause,
+	}),
+});
+
+/** Best-effort unlink; a missing file or a failed remove is ignored. */
+async function tryUnlink(directory: string, filename: string): Promise<void> {
+	try {
+		await unlink(join(directory, filename));
+	} catch {
+		// already gone, or the remove failed; nothing to do
+	}
+}
+
+/**
+ * Write a markdown file under `directory`, creating any intermediate
+ * subdirectories implied by a filename like `"archive/old.md"`.
+ */
+async function writeMarkdownFile(
+	directory: string,
+	filename: string,
+	content: string,
+): Promise<void> {
+	const fullPath = join(directory, filename);
+	const parent = dirname(fullPath);
+	if (parent !== directory) {
+		await mkdir(parent, { recursive: true });
+	}
+	await writeFile(fullPath, content);
+}
+
+/**
+ * Continuously materialize one table to `directory`: an initial flush of every
+ * valid row, then an observe that rewrites a row's file on change and unlinks it
+ * when the row goes invalid or is deleted. Returns the observer unsubscribe.
+ *
+ * Only CONTENT PRODUCTION is guarded: a throwing `render` (e.g. a body read
+ * hitting its connect deadline) skips that one row and leaves its existing `.md`
+ * intact, instead of aborting the rest of the flush or the observe batch. A real
+ * filesystem write failure (ENOSPC, EACCES) is NOT swallowed: it propagates, so
+ * the initial flush rejects and the observer's outer catch surfaces it.
+ */
+async function materializeTable(opts: {
+	table: AnyTable;
+	directory: string;
+	render: RenderRow;
+	fileState: FileState;
+	log: Logger;
+}): Promise<() => void> {
+	const { table, directory, render, fileState, log } = opts;
+
+	await mkdir(directory, { recursive: true });
+
+	// Write one valid row to disk, shared by the initial flush and the observer.
+	// The rename branch is a no-op on first write (`fileState` starts empty), so
+	// both paths run this exact code.
+	async function writeRow(id: string, row: BaseRow): Promise<void> {
+		let rendered: { filename: string; content: string };
+		try {
+			rendered = await render(row);
+		} catch (cause) {
+			log.warn(
+				MaterializerWriteError.TableWriteFailed({
+					tableName: table.name,
+					id,
+					cause,
+				}),
+			);
+			return;
+		}
+		const { filename, content } = rendered;
+		const previous = fileState.get(id);
+		if (previous && previous.filename !== filename) {
+			await tryUnlink(directory, previous.filename);
+		}
+		await writeMarkdownFile(directory, filename, content);
+		fileState.set(id, { filename, content });
+	}
+
+	for (const row of table.getAllValid()) {
+		await writeRow(row.id, row);
+	}
+
+	// Sequential writes inside the observer avoid rename races; a parallel
+	// approach (Promise.allSettled) could delete a file another write needs.
+	return table.observe((changedIds) => {
+		void (async () => {
+			for (const id of changedIds) {
+				const { data: row, error } = table.get(id);
+
+				// Invalid or missing → unlink any previously-written file.
+				if (error || row === null) {
+					const previous = fileState.get(id);
+					if (previous) {
+						await tryUnlink(directory, previous.filename);
+						fileState.delete(id);
+					}
+					continue;
+				}
+
+				await writeRow(id, row);
+			}
+		})().catch((cause) => {
+			// Reached only by a genuine failure `writeRow` does not swallow: a
+			// filesystem write error, or an unexpected throw in the loop scaffolding.
+			log.warn(
+				MaterializerWriteError.TableWriteFailed({
+					tableName: table.name,
+					cause,
+				}),
+			);
+		});
+	});
+}
+
+/**
+ * Destructive re-export of one table to `directory`: render every valid row
+ * BEFORE touching disk (a throwing render aborts the rebuild with the existing
+ * files intact, rather than deleting everything and then failing to rewrite),
+ * then sweep existing `.md` files and write the rendered set. Updates `fileState`
+ * so the live observer stays consistent.
+ */
+async function rebuildTable(opts: {
+	table: AnyTable;
+	directory: string;
+	render: RenderRow;
+	fileState: FileState;
+}): Promise<{ deleted: number; written: number }> {
+	const { table, directory, render, fileState } = opts;
+	let deleted = 0;
+	let written = 0;
+
+	const rendered: { id: string; filename: string; content: string }[] = [];
+	for (const row of table.getAllValid()) {
+		const r = await render(row);
+		rendered.push({ id: row.id, filename: r.filename, content: r.content });
+	}
+
+	try {
+		const files = await readdir(directory, { recursive: true });
+		for (const filename of files) {
+			if (!filename.endsWith('.md')) continue;
+			const path = join(directory, filename);
+			await unlink(path).then(
+				() => {
+					deleted++;
+				},
+				() => undefined,
+			);
+		}
+	} catch {
+		// Directory doesn't exist yet. Fine.
+	}
+
+	fileState.clear();
+	await mkdir(directory, { recursive: true });
+	for (const { id, filename, content } of rendered) {
+		await writeMarkdownFile(directory, filename, content);
+		fileState.set(id, { filename, content });
+		written++;
+	}
+
+	return { deleted, written };
+}

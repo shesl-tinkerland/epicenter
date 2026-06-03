@@ -3,6 +3,7 @@
 **Date**: 2026-05-18
 **Status**: Draft
 **Author**: AI assisted
+**Revised in part by**: `specs/20260602T235900-the-ark-anti-slop-doctrine.md` (demotes video from the default unit to an optional export; the carousel is now the primary external unit)
 **Related**:
 
 - `specs/20260413T120000-server-authoritative-apps-wager-social.md`

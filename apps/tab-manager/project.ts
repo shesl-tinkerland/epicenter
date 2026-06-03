@@ -11,24 +11,19 @@ import { defineActions, defineWorkspace } from '@epicenter/workspace';
 import { defineMount } from '@epicenter/workspace/daemon';
 import {
 	attachGitAutosave,
-	attachMarkdownVault,
+	attachMarkdownExport,
 	type GitAutosaveConfig,
 } from '@epicenter/workspace/document/materializer/markdown';
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
+	appsMarkdownPath,
 	attachProjectInfrastructure,
-	markdownPath,
-	resolveProjectPath,
 	sqlitePath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
 import { createTabManager } from './src/lib/workspace/definition.js';
 
 export type TabManagerMountOptions = {
-	/** Markdown directory; relative paths resolve against `projectDir`. */
-	markdownDir?: string;
-	/** SQLite file path; relative paths resolve against `projectDir`. */
-	sqliteFile?: string;
 	/** Enable per-materializer Git autosave for markdown output. */
 	git?: GitAutosaveConfig;
 };
@@ -51,12 +46,8 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 			const workspace = createTabManager({ keyring });
 			workspace.ydoc.clientID = yDocClientId;
 
-			const sqliteFile =
-				resolveProjectPath(projectDir, opts.sqliteFile) ??
-				sqlitePath(projectDir, workspace.ydoc.guid);
-			const mdDir =
-				resolveProjectPath(projectDir, opts.markdownDir) ??
-				markdownPath(projectDir, workspace.ydoc.guid);
+			const sqliteFile = sqlitePath(projectDir, workspace.ydoc.guid);
+			const mdDir = appsMarkdownPath(projectDir, mount);
 
 			const sqlite = attachBunSqliteMaterializer(workspace, {
 				filePath: sqliteFile,
@@ -66,7 +57,7 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 				},
 				log: createLogger(`${mount}-sqlite`),
 			});
-			const markdown = attachMarkdownVault(workspace, {
+			const markdown = attachMarkdownExport(workspace, {
 				dir: mdDir,
 				tables: {
 					bookmarks: {},

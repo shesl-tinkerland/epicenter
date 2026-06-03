@@ -1,19 +1,17 @@
 /**
- * Tests for the faithful markdown codec for entry bodies.
- *
- * The serialize cases build a ProseMirror doc with `entryBodySchema`, load it
- * into a fresh Yjs XmlFragment via `prosemirrorToYXmlFragment`, then serialize
- * that fragment back to markdown the way the daemon materializer does. The
- * round-trip cases prove the parser is the serializer's inverse: re-serializing
- * a parsed body reproduces the original markdown (a fixed point), the gate that
- * makes body import safe.
+ * Tests for the entry-body markdown serializer (the read half of the
+ * projection). Each case builds a ProseMirror doc with `entryBodySchema`, loads
+ * it into a fresh Yjs XmlFragment via `prosemirrorToYXmlFragment`, then
+ * serializes that fragment back to markdown the way the daemon materializer
+ * does. There is no parse half to round-trip against: the projection is
+ * read-only.
  */
 
 import { describe, expect, test } from 'bun:test';
 import type { Node } from 'prosemirror-model';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
-import { parseEntryBody, serializeEntryBody } from './entry-body-markdown.js';
+import { serializeEntryBody } from './entry-body-markdown.js';
 import { entryBodySchema as schema } from './entry-body-schema.js';
 
 /** Serialize a ProseMirror doc node through a real Yjs fragment round trip. */
@@ -101,87 +99,5 @@ describe('serializeEntryBody', () => {
 	test('serializes an empty body to an empty string', () => {
 		const node = doc(paragraph());
 		expect(serialize(node)).toBe('');
-	});
-});
-
-describe('parseEntryBody round trip', () => {
-	// The gate for body import: re-serializing a parsed body must reproduce the
-	// serializer's own output. `serialize(parse(md)) === md` for every node and
-	// both custom marks (underline-as-<u> and ~~strikethrough~~), the two the
-	// default CommonMark parser would otherwise drop.
-	const item = (text: string, marks: ReturnType<typeof schema.mark>[] = []) =>
-		schema.node('list_item', null, paragraph(schema.text(text, marks)));
-
-	const cases: Record<string, Node> = {
-		heading: doc(schema.node('heading', { level: 2 }, schema.text('Title'))),
-		paragraph: doc(paragraph(schema.text('plain text'))),
-		strong: doc(paragraph(schema.text('bold', [schema.mark('strong')]))),
-		em: doc(paragraph(schema.text('italic', [schema.mark('em')]))),
-		code: doc(paragraph(schema.text('x', [schema.mark('code')]))),
-		link: doc(
-			paragraph(
-				schema.text('site', [schema.mark('link', { href: 'https://x.com' })]),
-			),
-		),
-		underline: doc(paragraph(schema.text('under', [schema.mark('underline')]))),
-		strikethrough: doc(
-			paragraph(schema.text('gone', [schema.mark('strikethrough')])),
-		),
-		'bold + underline': doc(
-			paragraph(
-				schema.text('both', [schema.mark('strong'), schema.mark('underline')]),
-			),
-		),
-		'underline mid-sentence': doc(
-			paragraph(
-				schema.text('a '),
-				schema.text('b', [schema.mark('underline')]),
-				schema.text(' c'),
-			),
-		),
-		blockquote: doc(
-			schema.node('blockquote', null, paragraph(schema.text('quoted'))),
-		),
-		code_block: doc(
-			schema.node('code_block', null, schema.text('const x = 1;')),
-		),
-		bullet_list: doc(
-			schema.node('bullet_list', null, [item('first'), item('second')]),
-		),
-		ordered_list: doc(
-			schema.node('ordered_list', { order: 1 }, [item('one'), item('two')]),
-		),
-		'list item with strikethrough': doc(
-			schema.node('bullet_list', null, [
-				item('struck', [schema.mark('strikethrough')]),
-			]),
-		),
-	};
-
-	for (const [name, node] of Object.entries(cases)) {
-		test(`is a fixed point: ${name}`, () => {
-			const md = serialize(node);
-			expect(serialize(parseEntryBody(md))).toBe(md);
-		});
-	}
-
-	test('parses an empty string to an empty body', () => {
-		expect(serialize(parseEntryBody(''))).toBe('');
-	});
-
-	test('reads hand-authored <u> as underline (the intended way to author it)', () => {
-		// Underline has no CommonMark syntax, so a human authoring a `.md` writes the
-		// `<u>` HTML the serializer also emits. That must round-trip to the underline
-		// mark, not survive as literal text. This is by design, not a leak.
-		expect(serialize(parseEntryBody('<u>by hand</u>'))).toBe('<u>by hand</u>');
-	});
-
-	test('drops stray inline HTML instead of throwing on import', () => {
-		// A hand-edited body may contain a tag other than the serializer's own
-		// `<u>`. It must not crash the import: the stray tag is dropped, its text
-		// kept. (Underline `<u>` is still recovered; see the fixed-point cases.)
-		expect(serialize(parseEntryBody('before <b>x</b> after'))).toBe(
-			'before x after',
-		);
 	});
 });

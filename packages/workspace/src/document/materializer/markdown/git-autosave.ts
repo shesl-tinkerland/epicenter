@@ -11,12 +11,12 @@ import type { MaybePromise } from '../../../shared/types.js';
 // attachGitAutosave: optional, standalone git history for a directory
 //
 // Git is history/backup/publish, never the sync engine and never part of
-// materialization or reconcile. So this is a SEPARATE primitive, decoupled from
-// the markdown seams: it watches a directory and debounce-commits whatever
-// changes there, knowing nothing about Yjs rows or the vault. Compose it next to
-// a vault (or any directory) when a project wants an autosaved git trail; the
-// seam itself stays git-unaware. Teardown is hooked to a Y.Doc's `destroy` so it
-// disposes with the workspace it accompanies.
+// materialization. So this is a SEPARATE primitive, decoupled from the markdown
+// export: it watches a directory and debounce-commits whatever changes there,
+// knowing nothing about Yjs rows or the projection. Compose it next to a
+// markdown export (or any directory) when a project wants an autosaved git
+// trail; the export itself stays git-unaware. Teardown is hooked to a Y.Doc's
+// `destroy` so it disposes with the workspace it accompanies.
 // ════════════════════════════════════════════════════════════════════════════
 
 const GitAutosaveError = defineErrors({

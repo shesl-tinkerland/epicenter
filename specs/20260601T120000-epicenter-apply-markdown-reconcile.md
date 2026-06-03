@@ -1,5 +1,7 @@
 # epicenter apply: declarative markdown reconcile into Yjs
 
+> **Superseded by `specs/20260602T200000-vault-read-only-projection-agent-mutation.md`.** The declarative `markdown_apply` reconcile this spec introduces was deleted: materialized markdown is now a one-way read-only projection of Yjs, mutated only through validated actions. Kept for history.
+
 Status: Phase 1 built (frontmatter reconcile); CLI via `epicenter run`; Phase 2 (bodies) pending
 Date: 2026-06-01
 Mounts touched: `apps/fuji`, `packages/workspace` (markdown materializer), `packages/cli`

@@ -1,10 +1,10 @@
 /**
  * Markdown Export Tests
  *
- * Covers the read-only, free-serialization seam `attachMarkdownExport`: the
- * path that moved OUT of the vault (custom filename, custom toMarkdown, per-table
- * subdirectory). There is no `apply` here; the only mutation is the destructive
- * `markdown_export_rebuild`. Uses real temp directories and Yjs workspaces.
+ * Covers the read-only, free-serialization seam `attachMarkdownExport`: custom
+ * filename, custom toMarkdown, per-table subdirectory. There is no `apply` here;
+ * the only mutation is the destructive `markdown_rebuild`. Uses real temp
+ * directories and Yjs workspaces.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -56,7 +56,7 @@ describe('attachMarkdownExport', () => {
 		await exporter.whenFlushed;
 
 		workspace.tables.posts.set({ id: 'a', title: 'alpha', published: true });
-		await exporter.actions.markdown_export_rebuild({});
+		await exporter.actions.markdown_rebuild({});
 
 		const files = await listDir('posts');
 		expect(files).toContain('alpha-a.md');
@@ -84,7 +84,7 @@ describe('attachMarkdownExport', () => {
 		await exporter.whenFlushed;
 
 		workspace.tables.posts.set({ id: 'a', title: 'Alpha', published: true });
-		await exporter.actions.markdown_export_rebuild({});
+		await exporter.actions.markdown_rebuild({});
 
 		const content = await readDir('posts/a.md');
 		// Chosen frontmatter keys present; the unselected `published` key is not.
@@ -110,7 +110,7 @@ describe('attachMarkdownExport', () => {
 		await exporter.whenFlushed;
 
 		workspace.tables.posts.set({ id: 'a', title: 'Alpha', published: true });
-		await exporter.actions.markdown_export_rebuild({});
+		await exporter.actions.markdown_rebuild({});
 
 		const files = await listDir('published');
 		expect(files).toContain('a.md');
@@ -120,7 +120,7 @@ describe('attachMarkdownExport', () => {
 		workspace[Symbol.dispose]();
 	});
 
-	test('markdown_export_rebuild removes an orphan and rewrites rows', async () => {
+	test('markdown_rebuild removes an orphan and rewrites rows', async () => {
 		const workspace = createWorkspace({
 			id: 'export-rebuild',
 			tables: tableDefinitions,
@@ -133,7 +133,7 @@ describe('attachMarkdownExport', () => {
 		await exporter.whenFlushed;
 
 		workspace.tables.posts.set({ id: 'p1', title: 'Live', published: true });
-		await exporter.actions.markdown_export_rebuild({});
+		await exporter.actions.markdown_rebuild({});
 
 		// Drop an orphan file that no row backs.
 		await mkdir(join(TEST_DIR, 'posts'), { recursive: true });
@@ -147,7 +147,7 @@ describe('attachMarkdownExport', () => {
 		expect(before).toContain('p1.md');
 		expect(before).toContain('orphan.md');
 
-		const result = await exporter.actions.markdown_export_rebuild({});
+		const result = await exporter.actions.markdown_rebuild({});
 
 		expect(result.deleted).toBe(2); // p1.md + orphan.md both unlinked
 		expect(result.written).toBe(1); // only p1 re-written

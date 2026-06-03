@@ -45,7 +45,7 @@ Relational integrity would come free: foreign keys, unique constraints, CHECK cl
 
 ## What it would cost us
 
-Automatic conflict resolution. Yjs resolves concurrent edits across devices without any application logic. Two users edit the same document offline, both edits survive in the CRDT, and the merge is deterministic. Every SQLite sync engine either uses LWW (someone's edit gets silently dropped) or punts conflict handling to you.
+Automatic conflict resolution. Yjs resolves concurrent edits across devices without any application logic. Two users edit the same document offline, both edits survive in the CRDT, and the merge is deterministic. Every SQLite sync engine either uses LWW (someone's edit gets silently dropped) or punts conflict handling to you. Merge is the famous reason, but it is not even the main one for a single-user tool; the quieter and stronger reason is that an in-memory observable document lets local edits and remote syncs drive the same materialize callback (see [You Keep Yjs for the Callback, Not the Conflict](./20260602T220000-keep-yjs-for-the-callback-not-the-conflict.md)).
 
 Rich text collaboration. Y.Text is the battle-tested CRDT for collaborative text editing—it powers Tiptap, BlockNote, and dozens of production editors. No SQLite sync tool has anything equivalent. If we switched, we'd bolt Yjs back on for text editing anyway.
 
