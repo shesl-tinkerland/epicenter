@@ -24,14 +24,18 @@ import {
 } from '@epicenter/workspace';
 import { Type } from 'typebox';
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
-import { Ok, type Result } from 'wellcrafted/result';
+import { Err, Ok, type Result } from 'wellcrafted/result';
 import {
-	isTSchemaObject,
+	buildColumnSchema,
+	COLUMN_ID_PATTERN,
+	type ColumnInput,
+	type ColumnSpec,
 	type Page,
 	type PageId,
 	type PageTagValues,
 	RESERVED_TAG_ID,
 	type TagId,
+	tagColumns,
 	TAG_ID_PATTERN,
 	type WikiTag,
 	wikiTableDefinitions,
@@ -50,16 +54,19 @@ export const WikiActionError = defineErrors({
 		message: `Tag id "${tagId}" is reserved`,
 		tagId,
 	}),
-	/** A tag definition carries a column whose `schema` is not a TSchema object. */
-	InvalidColumnSchema: ({
+	/** A tag edit named a tag id with no registry row. */
+	TagNotFound: ({ tagId }: { tagId: string }) => ({
+		message: `No tag with id "${tagId}"`,
 		tagId,
+	}),
+	/** A column id is not a stable slug ([a-z][a-z0-9_]*) or collides with the page_id PK. */
+	InvalidColumnId: ({ columnId }: { columnId: string }) => ({
+		message: `Column id "${columnId}" must be a slug matching ${COLUMN_ID_PATTERN} and not "page_id"`,
 		columnId,
-	}: {
-		tagId: string;
-		columnId: string;
-	}) => ({
-		message: `Tag "${tagId}" column "${columnId}" schema must be a TSchema object (a column.* result)`,
-		tagId,
+	}),
+	/** An `enum` column was authored with no allowed values. */
+	EnumValuesRequired: ({ columnId }: { columnId: string }) => ({
+		message: `Column "${columnId}" is an enum and needs at least one value`,
 		columnId,
 	}),
 	/** A body write or tag assignment named a page id that has no row. */
@@ -82,13 +89,54 @@ export const WikiActionError = defineErrors({
 });
 export type WikiActionError = InferErrors<typeof WikiActionError>;
 
-const columnSpecInput = Type.Object({
-	id: Type.String(),
-	name: Type.String(),
-	schema: Type.Unknown({
-		description: 'A column.* result (a TypeBox TSchema)',
-	}),
+/**
+ * The column authoring descriptor (see `ColumnInput`). `kind` is a closed
+ * literal union, so `invokeAction`'s input validation rejects an unknown kind
+ * before the handler runs: an agent picks from a menu, never hand-writes JSON
+ * Schema, and no junk schema can be stored.
+ */
+const columnInputSchema = Type.Object({
+	id: Type.String({ description: 'Stable column slug, e.g. duration' }),
+	name: Type.String({ description: 'Display name' }),
+	kind: Type.Union(
+		[
+			Type.Literal('string'),
+			Type.Literal('number'),
+			Type.Literal('integer'),
+			Type.Literal('boolean'),
+			Type.Literal('datetime'),
+			Type.Literal('url'),
+			Type.Literal('enum'),
+		],
+		{
+			description:
+				'Column kind (closed set). A reference is just a string holding an epicenter:// URN, found by value.',
+		},
+	),
+	nullable: Type.Optional(Type.Boolean({ description: 'Allow null' })),
+	array: Type.Optional(Type.Boolean({ description: 'A list of the kind' })),
+	enumValues: Type.Optional(
+		Type.Array(Type.String(), {
+			description: 'Allowed values; required when kind is enum',
+		}),
+	),
 });
+
+/**
+ * Validate one authoring descriptor and compile it to a stored `ColumnSpec`. The
+ * `kind` is already validated by the action input layer; this catches the two
+ * domain rules that layer cannot: the column id must be a slug (it becomes a
+ * bare SQL column name) and an `enum` must carry values.
+ */
+function compileColumn(input: ColumnInput): Result<ColumnSpec, WikiActionError> {
+	if (!COLUMN_ID_PATTERN.test(input.id) || input.id === 'page_id') {
+		return WikiActionError.InvalidColumnId({ columnId: input.id });
+	}
+	if (input.kind === 'enum' && !(input.enumValues && input.enumValues.length)) {
+		return WikiActionError.EnumValuesRequired({ columnId: input.id });
+	}
+	return Ok({ id: input.id, name: input.name, schema: buildColumnSchema(input) });
+}
 
 const tagValuesInput = Type.Record(
 	Type.String(),
@@ -157,7 +205,7 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 				id: Type.String({ description: 'Stable slug, e.g. youtube_video' }),
 				name: Type.String({ description: 'Display name' }),
 				icon: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-				columns: Type.Array(columnSpecInput),
+				columns: Type.Array(columnInputSchema),
 				description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 			}),
 			handler: ({
@@ -176,27 +224,78 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 				if (id === RESERVED_TAG_ID) {
 					return WikiActionError.ReservedTagId({ tagId: id });
 				}
-				// A tag whose column schema is not a TSchema object is not worth
-				// storing; it would only fail validation and projection later.
-				for (const spec of columns) {
-					if (!isTSchemaObject(spec.schema)) {
-						return WikiActionError.InvalidColumnSchema({
-							tagId: id,
-							columnId: spec.id,
-						});
-					}
+				// Compile each descriptor to its stored schema, bailing on the first
+				// bad column (a non-slug id, or an enum with no values).
+				const specs: ColumnSpec[] = [];
+				for (const col of columns) {
+					const { data: spec, error } = compileColumn(col);
+					if (error) return Err(error);
+					specs.push(spec!);
 				}
 				const now = DateTimeString.now();
 				tables.tags.set({
 					id: id as TagId,
 					name,
 					icon: icon ?? null,
-					columns: columns as unknown as WikiTag['columns'],
+					columns: specs as unknown as WikiTag['columns'],
 					description: description ?? null,
 					createdAt: now,
 					updatedAt: now,
 				});
 				return Ok({ id: id as TagId });
+			},
+		}),
+
+		tags_set_column: defineMutation({
+			title: 'Set Tag Column',
+			description:
+				'Add or change one typed column on an existing tag (upsert by column id). Rename = same id with a new name (no DDL); retype = same id with a new kind. The agent picks a kind from a closed menu; it never writes a schema by hand.',
+			input: Type.Object({
+				tagId: Type.String({ description: 'The tag to edit' }),
+				column: columnInputSchema,
+			}),
+			handler: ({
+				tagId,
+				column,
+			}): Result<{ tagId: string; columnId: string }, WikiActionError> => {
+				const { data: tag } = tables.tags.get(tagId);
+				if (!tag) return WikiActionError.TagNotFound({ tagId });
+				const { data: spec, error } = compileColumn(column);
+				if (error) return Err(error);
+				const existing = tagColumns(tag);
+				const next = existing.some((c) => c.id === spec!.id)
+					? existing.map((c) => (c.id === spec!.id ? spec! : c))
+					: [...existing, spec!];
+				tables.tags.set({
+					...tag,
+					columns: next as unknown as WikiTag['columns'],
+					updatedAt: DateTimeString.now(),
+				});
+				return Ok({ tagId, columnId: spec!.id });
+			},
+		}),
+
+		tags_remove_column: defineMutation({
+			title: 'Remove Tag Column',
+			description:
+				'Drop one column from a tag by id (a no-op if the column is absent). Stored page values for it survive in Yjs; they just stop projecting.',
+			input: Type.Object({
+				tagId: Type.String(),
+				columnId: Type.String(),
+			}),
+			handler: ({
+				tagId,
+				columnId,
+			}): Result<{ tagId: string }, WikiActionError> => {
+				const { data: tag } = tables.tags.get(tagId);
+				if (!tag) return WikiActionError.TagNotFound({ tagId });
+				const next = tagColumns(tag).filter((c) => c.id !== columnId);
+				tables.tags.set({
+					...tag,
+					columns: next as unknown as WikiTag['columns'],
+					updatedAt: DateTimeString.now(),
+				});
+				return Ok({ tagId });
 			},
 		}),
 

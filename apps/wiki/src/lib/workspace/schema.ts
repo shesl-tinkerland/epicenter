@@ -52,32 +52,94 @@ export const RESERVED_TAG_ID = 'columns';
 /** A column id is a stable slug, separate from its display name. */
 export const COLUMN_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
-/** A column.* result is a non-null JSON object; a string/array/primitive is not. */
-export function isTSchemaObject(value: unknown): boolean {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /**
- * One column of a structured tag.
+ * One column of a structured tag, AS STORED.
  *
  * - `id` is the stable physical id. A rename never touches it, which is what
  *   makes a display rename metadata-only (no SQL DDL).
  * - `name` is the display name; free to change.
- * - `schema` is the column's TypeBox schema, authored with the real `column.*`
- *   builders (`column.url()`, `column.array(column.string())`) so call sites
- *   get autocomplete and type-checking. A reference is just a `column.string()`
- *   whose value is an `epicenter://` URN; the projector recognizes it by value,
- *   never a schema marker. A `TSchema` IS JSON Schema,
- *   so it is stored verbatim and re-validated with `Value.Check` after the
- *   Yjs/JSON round-trip (this TypeBox validates on plain JSON Schema, no
- *   `[Kind]` symbols, so a round-tripped schema validates identically). NO
- *   eval, NO codegen, NO interpreter.
+ * - `schema` is the column's TypeBox schema. It is never hand-authored: an agent
+ *   passes a `ColumnInput` descriptor and `buildColumnSchema` compiles it. The
+ *   resulting `TSchema` IS JSON Schema, so it is stored verbatim and re-validated
+ *   with `Value.Check` after the Yjs/JSON round-trip (TypeBox validates on plain
+ *   JSON Schema, no `[Kind]` symbols, so a round-tripped schema validates
+ *   identically). NO eval, NO codegen, NO interpreter.
  */
 export type ColumnSpec = {
 	id: string;
 	name: string;
 	schema: TSchema;
 };
+
+/**
+ * The closed set of column kinds an agent can author. Each maps to a `column.*`
+ * builder; the projector derives SQLite storage from the built schema. A
+ * reference is NOT a kind: it is a `string` (or an `array` of strings) whose
+ * value is an `epicenter://` URN, recognized by value, never by the schema.
+ */
+export type ColumnKind =
+	| 'string'
+	| 'number'
+	| 'integer'
+	| 'boolean'
+	| 'datetime'
+	| 'url'
+	| 'enum';
+
+/**
+ * The authoring descriptor for one column: a closed `kind` plus modifiers, never
+ * a hand-written JSON Schema. `buildColumnSchema` compiles it to the stored
+ * `TSchema`. This is the ONLY vocabulary the actions accept, so a stored schema
+ * is always a real `column.*` result (the input layer rejects unknown kinds, so
+ * no junk can land).
+ */
+export type ColumnInput = {
+	id: string;
+	name: string;
+	kind: ColumnKind;
+	/** Wrap the value as `value | null`. */
+	nullable?: boolean;
+	/** A list of the kind ("many of a kind"); each `epicenter://` element is its own edge. */
+	array?: boolean;
+	/** Required when `kind` is `enum`: the allowed literal values. */
+	enumValues?: string[];
+};
+
+/**
+ * Compile an authoring descriptor to the stored `TSchema`, via the `column.*`
+ * builders (no eval, no parser, just a switch). Modifiers compose on the base:
+ * `nullable` wraps the value, `array` wraps a list. Throws on an `enum` with no
+ * values (the action validates that first and returns a clean error).
+ */
+export function buildColumnSchema(input: ColumnInput): TSchema {
+	let schema: TSchema = baseColumnSchema(input);
+	if (input.nullable) schema = column.nullable(schema);
+	if (input.array) schema = column.array(schema);
+	return schema;
+}
+
+function baseColumnSchema(input: ColumnInput): TSchema {
+	switch (input.kind) {
+		case 'string':
+			return column.string();
+		case 'number':
+			return column.number();
+		case 'integer':
+			return column.integer();
+		case 'boolean':
+			return column.boolean();
+		case 'datetime':
+			return column.dateTime();
+		case 'url':
+			return column.url();
+		case 'enum':
+			return column.enum(input.enumValues ?? []);
+		default: {
+			const unreachable: never = input.kind;
+			throw new Error(`unknown column kind: ${String(unreachable)}`);
+		}
+	}
+}
 
 /**
  * The `tags.columns` cell.

@@ -15,20 +15,19 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { column } from '@epicenter/workspace';
 import { createWiki } from './index';
 import { viewThroughTag } from './lens';
 import { attachWikiVault } from './markdown';
 import { projectWiki } from './projection';
-import type { ColumnSpec } from './schema';
+import {
+	buildColumnSchema,
+	type ColumnInput,
+	type ColumnSpec,
+} from './schema';
 
-const youtubeColumns: ColumnSpec[] = [
-	{ id: 'url', name: 'URL', schema: column.url() },
-	{
-		id: 'duration',
-		name: 'Duration',
-		schema: column.nullable(column.number()),
-	},
+const youtubeColumns: ColumnInput[] = [
+	{ id: 'url', name: 'URL', kind: 'url' },
+	{ id: 'duration', name: 'Duration', kind: 'number', nullable: true },
 ];
 
 /** Define the structured tags the spec's example page wears. */
@@ -41,12 +40,12 @@ function defineExampleTags(wiki: ReturnType<typeof createWiki>): void {
 	wiki.actions.tags_define({
 		id: 'publishable',
 		name: 'Publishable',
-		columns: [{ id: 'stage', name: 'Stage', schema: column.string() }],
+		columns: [{ id: 'stage', name: 'Stage', kind: 'string' }],
 	});
 	wiki.actions.tags_define({
 		id: 'whispering_recording',
 		name: 'Whispering Recording',
-		columns: [{ id: 'recording', name: 'Recording', schema: column.string() }],
+		columns: [{ id: 'recording', name: 'Recording', kind: 'string' }],
 		description: 'A page captured from a [[whispering]] recording.',
 	});
 }
@@ -197,10 +196,13 @@ test('materializes the spec example page one-way, writes through an action, answ
 });
 
 test('schema-on-read lens buckets match / excess / missing', () => {
-	const columns: ColumnSpec[] = [
-		...youtubeColumns,
-		{ id: 'rating', name: 'Rating', schema: column.number() },
-	];
+	// The lens reads stored ColumnSpec (TSchema); compile the descriptors to it.
+	const columns: ColumnSpec[] = (
+		[
+			...youtubeColumns,
+			{ id: 'rating', name: 'Rating', kind: 'number' },
+		] satisfies ColumnInput[]
+	).map((c) => ({ id: c.id, name: c.name, schema: buildColumnSchema(c) }));
 	const data = {
 		url: 'https://youtu.be/abc',
 		duration: 'not-a-number',
@@ -225,7 +227,7 @@ test('tags_define rejects a non-slug tag id and the reserved `columns`', () => {
 		const bad = wiki.actions.tags_define({
 			id: 'Not A Slug',
 			name: 'Bad',
-			columns: [{ id: 'x', name: 'X', schema: column.string() }],
+			columns: [{ id: 'x', name: 'X', kind: 'string' }],
 		});
 		expect(bad.error?.name).toBe('InvalidTagId');
 
@@ -269,12 +271,8 @@ test('column rename is metadata-only; adding a column re-projects', () => {
 			id: 'youtube_video',
 			name: 'YouTube Video',
 			columns: [
-				{ id: 'url', name: 'Link', schema: column.url() },
-				{
-					id: 'duration',
-					name: 'Length',
-					schema: column.nullable(column.number()),
-				},
+				{ id: 'url', name: 'Link', kind: 'url' },
+				{ id: 'duration', name: 'Length', kind: 'number', nullable: true },
 			],
 		});
 		expect(project()).toBe(ddlBefore); // no DDL: a rename is metadata-only
@@ -284,13 +282,9 @@ test('column rename is metadata-only; adding a column re-projects', () => {
 			id: 'youtube_video',
 			name: 'YouTube Video',
 			columns: [
-				{ id: 'url', name: 'Link', schema: column.url() },
-				{
-					id: 'duration',
-					name: 'Length',
-					schema: column.nullable(column.number()),
-				},
-				{ id: 'rating', name: 'Rating', schema: column.number() },
+				{ id: 'url', name: 'Link', kind: 'url' },
+				{ id: 'duration', name: 'Length', kind: 'number', nullable: true },
+				{ id: 'rating', name: 'Rating', kind: 'number' },
 			],
 		});
 		const ddlAfterAdd = project();
@@ -329,6 +323,79 @@ test('pages_assign_tag auto-mints an unknown tag and wears it once', () => {
 		// An invalid slug is rejected where the cause is visible.
 		const bad = wiki.actions.pages_assign_tag({ id, tagId: 'Bad Slug' });
 		expect(bad.error?.name).toBe('InvalidTagId');
+	} finally {
+		wiki[Symbol.dispose]();
+	}
+});
+
+test('tags_set_column adds and upserts a typed column from a kind descriptor', () => {
+	const wiki = createWiki();
+	const db = new Database(':memory:');
+	try {
+		wiki.actions.tags_define({ id: 'note', name: 'Note', columns: [] });
+
+		// Add a column to an existing tag. The agent picks a kind, not a schema.
+		const added = wiki.actions.tags_set_column({
+			tagId: 'note',
+			column: { id: 'rating', name: 'Rating', kind: 'integer' },
+		});
+		expect(added.error).toBeNull();
+
+		const noteDdl = () =>
+			projectWiki(db, { tags: wiki.actions.tags_get_all(), pages: [] })
+				.tagTableDdl.note;
+		expect(noteDdl()).toContain('"rating" INTEGER'); // kind -> storage class
+
+		// Upsert by id: retype to an enum (now TEXT) and rename, still one column.
+		wiki.actions.tags_set_column({
+			tagId: 'note',
+			column: { id: 'rating', name: 'Stars', kind: 'enum', enumValues: ['lo', 'hi'] },
+		});
+		const note = wiki.actions.tags_get_all().find((t) => t.id === 'note')!;
+		expect(note.columns).toHaveLength(1); // upsert, not append
+		expect(note.columns[0]!.name).toBe('Stars');
+		expect(noteDdl()).toContain('"rating" TEXT');
+
+		// Remove it: the column is gone, the tag becomes plain again.
+		wiki.actions.tags_remove_column({ tagId: 'note', columnId: 'rating' });
+		expect(
+			wiki.actions.tags_get_all().find((t) => t.id === 'note')!.columns,
+		).toEqual([]);
+	} finally {
+		db.close();
+		wiki[Symbol.dispose]();
+	}
+});
+
+test('the column authoring surface rejects bad input', () => {
+	const wiki = createWiki();
+	try {
+		wiki.actions.tags_define({ id: 'note', name: 'Note', columns: [] });
+
+		const unknownTag = wiki.actions.tags_set_column({
+			tagId: 'nope',
+			column: { id: 'x', name: 'X', kind: 'string' },
+		});
+		expect(unknownTag.error?.name).toBe('TagNotFound');
+
+		const badId = wiki.actions.tags_set_column({
+			tagId: 'note',
+			column: { id: 'Bad Id', name: 'X', kind: 'string' },
+		});
+		expect(badId.error?.name).toBe('InvalidColumnId');
+
+		// A column id colliding with the page_id PK is rejected too.
+		const pkClash = wiki.actions.tags_set_column({
+			tagId: 'note',
+			column: { id: 'page_id', name: 'X', kind: 'string' },
+		});
+		expect(pkClash.error?.name).toBe('InvalidColumnId');
+
+		const emptyEnum = wiki.actions.tags_set_column({
+			tagId: 'note',
+			column: { id: 'x', name: 'X', kind: 'enum' },
+		});
+		expect(emptyEnum.error?.name).toBe('EnumValuesRequired');
 	} finally {
 		wiki[Symbol.dispose]();
 	}
