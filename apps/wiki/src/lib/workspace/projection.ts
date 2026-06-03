@@ -8,13 +8,11 @@
  *
  *   pages (id PK, title, body, created_at, updated_at)            WITHOUT ROWID
  *   tags  (id PK, name, icon, description, created_at, updated_at) WITHOUT ROWID
- *   tag_columns (tag_id, column_id, name, schema_json, storage, ordinal)
  *   page_tags (page_id, tag_id)            -- THE membership owner (every tag)
  *   tag_<slug> (page_id PK, <col> <storage>, ...)  STRICT, WITHOUT ROWID
  *                                          -- ONLY for tags with >= 1 column
  *   edges (source_id, rel, target_id, source_kind, field_id)
  *                                          -- provenance-aware; derived, never truth
- *   projection_issues (page_id, tag_id, column_id, kind, value_json, message)
  *
  * Consequences that fall straight out of this layout:
  *
@@ -24,9 +22,9 @@
  *     DDL, so it re-projects.
  *   - Plain tags get NO side table; their membership lives in `page_tags`.
  *   - TypeBox is the single validator: the projector `Value.Check`s every cell
- *     and routes failures to `projection_issues` (kind `invalid`), excess
- *     values (present in data, absent from the current schema) to
- *     `projection_issues` (kind `excess`), and never emits a `CHECK` constraint.
+ *     before insert and stores NULL on a miss, never a generated `CHECK`
+ *     constraint. The durable value survives in Yjs; the on-read lens
+ *     (`./lens.ts`) is what surfaces invalid / excess values for a page.
  *   - `edges` is rebuilt every run from body `[[id]]` wikilinks (source_kind
  *     `body_wikilink`) and every `column.ref()` value (source_kind
  *     `structured_field`); a `column.array(column.ref())` emits one row per
@@ -100,13 +98,6 @@ function createFixedTables(db: Database): void {
 			`${q('created_at')} TEXT NOT NULL, ${q('updated_at')} TEXT NOT NULL) WITHOUT ROWID`,
 	);
 	db.run(
-		`CREATE TABLE ${q('tag_columns')} (` +
-			`${q('tag_id')} TEXT NOT NULL, ${q('column_id')} TEXT NOT NULL, ` +
-			`${q('name')} TEXT NOT NULL, ${q('schema_json')} TEXT NOT NULL, ` +
-			`${q('storage')} TEXT NOT NULL, ${q('ordinal')} INTEGER NOT NULL, ` +
-			`PRIMARY KEY (${q('tag_id')}, ${q('column_id')})) WITHOUT ROWID`,
-	);
-	db.run(
 		`CREATE TABLE ${q('page_tags')} (` +
 			`${q('page_id')} TEXT NOT NULL, ${q('tag_id')} TEXT NOT NULL, ` +
 			`PRIMARY KEY (${q('page_id')}, ${q('tag_id')})) WITHOUT ROWID`,
@@ -116,12 +107,6 @@ function createFixedTables(db: Database): void {
 			`${q('source_id')} TEXT NOT NULL, ${q('rel')} TEXT NOT NULL, ` +
 			`${q('target_id')} TEXT NOT NULL, ${q('source_kind')} TEXT NOT NULL, ` +
 			`${q('field_id')} TEXT)`,
-	);
-	db.run(
-		`CREATE TABLE ${q('projection_issues')} (` +
-			`${q('page_id')} TEXT NOT NULL, ${q('tag_id')} TEXT NOT NULL, ` +
-			`${q('column_id')} TEXT NOT NULL, ${q('kind')} TEXT NOT NULL, ` +
-			`${q('value_json')} TEXT, ${q('message')} TEXT NOT NULL)`,
 	);
 }
 
@@ -142,11 +127,6 @@ function insertTags(db: Database, tags: WikiTag[]): void {
 			`(${q('id')}, ${q('name')}, ${q('icon')}, ${q('description')}, ${q('created_at')}, ${q('updated_at')}) ` +
 			'VALUES (?, ?, ?, ?, ?, ?)',
 	);
-	const insertColumn = db.prepare(
-		`INSERT INTO ${q('tag_columns')} ` +
-			`(${q('tag_id')}, ${q('column_id')}, ${q('name')}, ${q('schema_json')}, ${q('storage')}, ${q('ordinal')}) ` +
-			'VALUES (?, ?, ?, ?, ?, ?)',
-	);
 	for (const tag of tags) {
 		insertTag.run(
 			tag.id,
@@ -156,16 +136,6 @@ function insertTags(db: Database, tags: WikiTag[]): void {
 			tag.createdAt,
 			tag.updatedAt,
 		);
-		tagColumns(tag).forEach((spec, ordinal) => {
-			insertColumn.run(
-				tag.id,
-				spec.id,
-				spec.name,
-				JSON.stringify(spec.schema),
-				deriveStorage(spec.schema),
-				ordinal,
-			);
-		});
 	}
 }
 
@@ -187,7 +157,10 @@ function insertMembership(db: Database, pages: Page[]): void {
  * Build and populate one `tag_<slug>` side table from the tag's CURRENT
  * columns. Returns the `CREATE TABLE` statement so callers can prove a rename
  * emits identical DDL while an add does not. Each cell is `Value.Check`ed before
- * insert; failures route to `projection_issues` and store NULL instead.
+ * insert; a value that fails its column schema (or is absent) stores NULL. The
+ * durable value survives in Yjs, and the on-read lens (`./lens.ts`) is what
+ * surfaces the mismatch; excess values (no current column) simply do not
+ * project.
  */
 function projectStructuredTag(
 	db: Database,
@@ -209,44 +182,17 @@ function projectStructuredTag(
 		`INSERT INTO ${q(tableName)} (${physicalCols.join(', ')}) ` +
 			`VALUES (${physicalCols.map(() => '?').join(', ')})`,
 	);
-	const insertIssue = db.prepare(
-		`INSERT INTO ${q('projection_issues')} ` +
-			`(${q('page_id')}, ${q('tag_id')}, ${q('column_id')}, ${q('kind')}, ${q('value_json')}, ${q('message')}) ` +
-			'VALUES (?, ?, ?, ?, ?, ?)',
-	);
 
-	const schemaIds = new Set(specs.map((s) => s.id));
 	for (const page of pages) {
 		const data = page.tags[tag.id];
 		if (data === undefined) continue; // page does not wear this tag
 
 		const cells = specs.map((spec) => {
-			if (!Object.hasOwn(data, spec.id)) return null; // missing is not an issue
+			if (!Object.hasOwn(data, spec.id)) return null;
 			const value = data[spec.id]!;
-			if (Value.Check(spec.schema, value)) return serializeValue(value);
-			insertIssue.run(
-				page.id,
-				tag.id,
-				spec.id,
-				'invalid',
-				JSON.stringify(value),
-				`value does not satisfy column "${spec.id}" schema`,
-			);
-			return null;
+			return Value.Check(spec.schema, value) ? serializeValue(value) : null;
 		});
 		insert.run(page.id, ...cells);
-
-		for (const [columnId, value] of Object.entries(data)) {
-			if (schemaIds.has(columnId)) continue;
-			insertIssue.run(
-				page.id,
-				tag.id,
-				columnId,
-				'excess',
-				JSON.stringify(value),
-				`no column "${columnId}" in the current schema of tag "${tag.id}"`,
-			);
-		}
 	}
 
 	return ddl;
@@ -328,19 +274,11 @@ function refTargets(kind: RefKind, value: JsonValue | undefined): string[] {
 // ════════════════════════════════════════════════════════════════════════════
 
 /** The fixed (non-`tag_<slug>`) tables this projection owns. */
-const FIXED_TABLES = new Set([
-	'pages',
-	'tags',
-	'tag_columns',
-	'page_tags',
-	'edges',
-	'projection_issues',
-]);
+const FIXED_TABLES = new Set(['pages', 'tags', 'page_tags', 'edges']);
 
 /**
  * Drop every projected table so the next projection is a clean rebuild: the
- * fixed set plus every `tag_<slug>` side table (any `tag_*` name, which also
- * sweeps `tag_columns`, already in the fixed set).
+ * fixed set plus every `tag_<slug>` side table (any `tag_*` name).
  */
 function dropProjectedTables(db: Database): void {
 	const rows = db

@@ -47,8 +47,8 @@ export const asTagId = (value: string): TagId => value as TagId;
 export const TAG_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 /**
- * `columns` is reserved as a tag id: it would collide with the `tag_columns`
- * projection table.
+ * `columns` is reserved as a tag id by the wiki normalization rules, keeping the
+ * tag-id namespace clear of an internal-sounding name.
  */
 export const RESERVED_TAG_ID = 'columns';
 

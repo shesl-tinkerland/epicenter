@@ -45,7 +45,7 @@ export const WikiActionError = defineErrors({
 		message: `Tag id "${tagId}" must be a slug matching ${TAG_ID_PATTERN}`,
 		tagId,
 	}),
-	/** The reserved tag id `columns` (collides with the tag_columns projection table). */
+	/** The reserved tag id `columns` (kept clear of an internal-sounding name). */
 	ReservedTagId: ({ tagId }: { tagId: string }) => ({
 		message: `Tag id "${tagId}" is reserved`,
 		tagId,
