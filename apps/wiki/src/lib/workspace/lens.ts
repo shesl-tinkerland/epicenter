@@ -1,9 +1,9 @@
 /**
- * Schema-on-read: a type's `columns` are a LENS over a page's stored values,
+ * Schema-on-read: a tag's `columns` are a LENS over a page's stored values,
  * never a gate or a migration.
  *
- * Changing a type's schema does not rewrite any page. Instead, at read time we
- * line a page's stored `types[typeId]` values up against the type's CURRENT
+ * Changing a tag's schema does not rewrite any page. Instead, at read time we
+ * line a page's stored `tags[tagId]` values up against the tag's CURRENT
  * columns and bucket each property:
  *
  *   match    in data AND in schema   render typed (with a validity flag)
@@ -37,28 +37,28 @@ export type LensMissing = { id: string; name: string };
 /** A stored value with no matching column in the current schema. */
 export type LensExcess = { id: string; value: JsonValue };
 
-export type TypeLens = {
-	typeId: string;
+export type TagLens = {
+	tagId: string;
 	match: LensMatch[];
 	missing: LensMissing[];
 	excess: LensExcess[];
 };
 
 /**
- * Project one page's values for one type through that type's current columns.
+ * Project one page's values for one tag through that tag's current columns.
  *
- * `data` is the page's `types[typeId]` cell (or `undefined` when the page does
- * not carry the type, in which case every column reads as missing).
+ * `data` is the page's `tags[tagId]` cell (or `undefined` when the page does
+ * not carry the tag, in which case every column reads as missing).
  */
-export function viewThroughType({
-	typeId,
+export function viewThroughTag({
+	tagId,
 	columns,
 	data,
 }: {
-	typeId: string;
+	tagId: string;
 	columns: ColumnSpec[];
 	data: Record<string, JsonValue> | undefined;
-}): TypeLens {
+}): TagLens {
 	const values = data ?? {};
 	const schemaIds = new Set(columns.map((c) => c.id));
 
@@ -83,5 +83,5 @@ export function viewThroughType({
 		if (!schemaIds.has(id)) excess.push({ id, value });
 	}
 
-	return { typeId, match, missing, excess };
+	return { tagId, match, missing, excess };
 }

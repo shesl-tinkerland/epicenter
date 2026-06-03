@@ -35,6 +35,7 @@
 
 import {
 	type Static,
+	type TArray,
 	type TLiteral,
 	type TLiteralValue,
 	type TNull,
@@ -93,6 +94,49 @@ function string<T extends string = string>(
  */
 function url(opts?: TStringOptions): TString {
 	return Type.String({ format: 'uri', ...opts });
+}
+
+/**
+ * The custom JSON-Schema keyword that marks a string column as an
+ * `epicenter://` reference (see `column.ref`). Shared contract: `column.ref`
+ * writes it, a projector reads it to build link edges. A custom keyword, not
+ * `format`, on purpose (see `ref` below).
+ */
+export const EPICENTER_REF_KEYWORD = 'x-epicenter-ref';
+
+/**
+ * Reference string column: a page id or an `epicenter://` URN naming another
+ * entity. A `TString` carrying the `x-epicenter-ref` keyword as a marker so a
+ * projector can recognize reference columns and build edges from their values.
+ * Static type is `string`: a reference is just a stable name, never "how to
+ * open" (that is a per-platform resolver, not stored data).
+ *
+ * The marker is a CUSTOM KEYWORD, not `format`, on purpose:
+ * - A reference is a slug (`page_abc`) OR an `epicenter://` URN, neither of
+ *   which is a valid URI, so `format: 'uri'` would be a lie and could reject
+ *   real refs if that format were ever registered.
+ * - `Value.Check` never touches unknown keywords, so a reference is always free
+ *   to dangle (wiki red-link behavior) with zero dependence on global validator
+ *   state. A `format` marker only validates-as-pass because nobody registered
+ *   it yet; a keyword can never be hijacked that way.
+ */
+function ref(opts?: TStringOptions): TString {
+	return Type.String({ [EPICENTER_REF_KEYWORD]: true, ...opts });
+}
+
+/**
+ * Array column. Wraps `Type.Array`, exposed as `column.array`. The standard way
+ * to model "many of the same kind": `column.array(column.ref())` is a list of
+ * references (sources, citations), each element its own `edges` row in a
+ * projection.
+ *
+ * This is for DYNAMIC schemas (a structured tag's `ColumnSpec.schema`), where
+ * the value stores JSON-encoded in a single TEXT cell (and a ref-array unnests
+ * into edges). It is NOT a top-level `defineTable` column: `FlatJsonTSchema`
+ * rejects a raw array there and steers you to `column.json` instead.
+ */
+function array<S extends TSchema>(items: S, opts?: TSchemaOptions): TArray<S> {
+	return Type.Array(items, opts);
 }
 
 /** Pass-through to `Type.Number`, exposed as `column.number`. */
@@ -221,6 +265,8 @@ function ianaTimeZone(opts?: TSchemaOptions): TUnsafe<IanaTimeZone> {
 export const column = {
 	string,
 	url,
+	ref,
+	array,
 	number,
 	integer,
 	boolean,

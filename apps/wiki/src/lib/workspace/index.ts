@@ -1,11 +1,11 @@
 /**
- * Wiki workspace contract: id, the two tables, the runtime "define a type" /
- * "create a page" actions, and the workspace factory.
+ * Wiki workspace contract: id, the two tables, the runtime "define a tag" /
+ * "create a page" / "assign a tag" actions, and the workspace factory.
  *
  * Isomorphic, mirroring fuji's `src/lib/workspace/index.ts`: this file imports
  * only isomorphic dependencies (`@epicenter/workspace`, `typebox`,
  * `wellcrafted`). Filesystem wiring (the markdown vault) lives in
- * `./markdown.ts`; the per-type SQLite index lives in `./projection.ts`.
+ * `./markdown.ts`; the SQLite projection lives in `./projection.ts`.
  *
  * `body` is a row column for this slice (see `./schema.ts`), so there is no
  * per-page content doc to open here; the markdown codec routes it to the file
@@ -29,34 +29,40 @@ import {
 	isTSchemaObject,
 	type Page,
 	type PageId,
-	type PageTypeValues,
-	TYPE_ID_PATTERN,
-	type TypeId,
-	type WikiType,
+	type PageTagValues,
+	RESERVED_TAG_ID,
+	type TagId,
+	TAG_ID_PATTERN,
+	type WikiTag,
 	wikiTableDefinitions,
 } from './schema';
 
 export const WIKI_ID = 'epicenter-wiki';
 
 export const WikiActionError = defineErrors({
-	/** A type id is not a stable slug ([a-z0-9_]+); it also names a SQL table. */
-	InvalidTypeId: ({ typeId }: { typeId: string }) => ({
-		message: `Type id "${typeId}" must be a slug matching ${TYPE_ID_PATTERN}`,
-		typeId,
+	/** A tag id is not a stable slug ([a-z][a-z0-9_]*); it also names a SQL table. */
+	InvalidTagId: ({ tagId }: { tagId: string }) => ({
+		message: `Tag id "${tagId}" must be a slug matching ${TAG_ID_PATTERN}`,
+		tagId,
 	}),
-	/** A type definition carries a column whose `schema` is not a TSchema object. */
+	/** The reserved tag id `columns` (collides with the tag_columns projection table). */
+	ReservedTagId: ({ tagId }: { tagId: string }) => ({
+		message: `Tag id "${tagId}" is reserved`,
+		tagId,
+	}),
+	/** A tag definition carries a column whose `schema` is not a TSchema object. */
 	InvalidColumnSchema: ({
-		typeId,
+		tagId,
 		columnId,
 	}: {
-		typeId: string;
+		tagId: string;
 		columnId: string;
 	}) => ({
-		message: `Type "${typeId}" column "${columnId}" schema must be a TSchema object (a column.* result)`,
-		typeId,
+		message: `Tag "${tagId}" column "${columnId}" schema must be a TSchema object (a column.* result)`,
+		tagId,
 		columnId,
 	}),
-	/** A body write named a page id that has no row. */
+	/** A body write or tag assignment named a page id that has no row. */
 	PageNotFound: ({ id }: { id: string }) => ({
 		message: `No page with id "${id}"`,
 		id,
@@ -84,10 +90,51 @@ const columnSpecInput = Type.Object({
 	}),
 });
 
-const typeValuesInput = Type.Record(
+const tagValuesInput = Type.Record(
 	Type.String(),
 	Type.Record(Type.String(), Type.Unknown()),
 );
+
+/**
+ * The slice of the wiki tables handle the auto-mint helper needs: just enough
+ * of the `tags` table to look a row up and upsert a bare one.
+ */
+type TagsRegistry = {
+	tags: {
+		get(id: string): { data: WikiTag | null };
+		set(row: WikiTag): void;
+	};
+};
+
+/**
+ * Auto-mint a bare tag definition for every assigned tag with no registry row.
+ *
+ * Typing `#newidea` (assigning a tag that was never defined) upserts
+ * `{ id, name: id, columns: [], description: null }`. Capture stays instant;
+ * promote later by adding columns. Both the assign path and `markdown_push`
+ * call this, so `page_tags` always resolves to a real row. Invalid slugs are
+ * skipped (the caller validates them where the cause is visible); a valid but
+ * unwanted slug is acceptable junk, same risk as today's free `string[]` tags.
+ */
+export function mintMissingTags(
+	tables: TagsRegistry,
+	tagIds: Iterable<string>,
+): void {
+	const now = DateTimeString.now();
+	for (const tagId of tagIds) {
+		if (!TAG_ID_PATTERN.test(tagId) || tagId === RESERVED_TAG_ID) continue;
+		if (tables.tags.get(tagId).data) continue;
+		tables.tags.set({
+			id: tagId as TagId,
+			name: tagId,
+			icon: null,
+			columns: [],
+			description: null,
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+}
 
 /**
  * Build a Wiki workspace: `{ ydoc, tables, kv, actions }`.
@@ -105,78 +152,118 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 	const { tables } = workspace;
 
 	const actions = defineActions({
-		types_define: defineMutation({
-			title: 'Define Type',
+		tags_define: defineMutation({
+			title: 'Define Tag',
 			description:
-				'Register a user-defined type (a Tana supertag) with a column schema.',
+				'Register a tag (a reusable annotation / schema facet). Empty columns = a plain tag; columns make it a structured tag with its own SQLite table.',
 			input: Type.Object({
 				id: Type.String({ description: 'Stable slug, e.g. youtube_video' }),
 				name: Type.String({ description: 'Display name' }),
 				icon: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 				columns: Type.Array(columnSpecInput),
+				description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 			}),
 			handler: ({
 				id,
 				name,
 				icon,
 				columns,
-			}): Result<{ id: TypeId }, WikiActionError> => {
+				description,
+			}): Result<{ id: TagId }, WikiActionError> => {
 				// Validate the id at definition time, where the cause is visible.
 				// The same slug rule is re-checked in projection (it names a SQL
 				// table) as defense in depth, but this is the gate that fails early.
-				if (!TYPE_ID_PATTERN.test(id)) {
-					return WikiActionError.InvalidTypeId({ typeId: id });
+				if (!TAG_ID_PATTERN.test(id)) {
+					return WikiActionError.InvalidTagId({ tagId: id });
 				}
-				// A type whose column schema is not a TSchema object is not worth
+				if (id === RESERVED_TAG_ID) {
+					return WikiActionError.ReservedTagId({ tagId: id });
+				}
+				// A tag whose column schema is not a TSchema object is not worth
 				// storing; it would only fail validation and projection later.
 				for (const spec of columns) {
 					if (!isTSchemaObject(spec.schema)) {
 						return WikiActionError.InvalidColumnSchema({
-							typeId: id,
+							tagId: id,
 							columnId: spec.id,
 						});
 					}
 				}
 				const now = DateTimeString.now();
-				tables.types.set({
-					id: id as TypeId,
+				tables.tags.set({
+					id: id as TagId,
 					name,
 					icon: icon ?? null,
-					columns: columns as unknown as WikiType['columns'],
+					columns: columns as unknown as WikiTag['columns'],
+					description: description ?? null,
 					createdAt: now,
 					updatedAt: now,
 				});
-				return Ok({ id: id as TypeId });
+				return Ok({ id: id as TagId });
 			},
 		}),
 
 		pages_create: defineMutation({
 			title: 'Create Page',
 			description:
-				'Create a wiki page with core fields, an optional body, and optional type values.',
+				'Create a wiki page with a title, an optional body, and an optional tags map. Unknown tags auto-mint a bare definition.',
 			input: Type.Object({
 				title: Type.Optional(Type.String()),
-				description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-				tags: Type.Optional(Type.Array(Type.String())),
-				source: Type.Optional(Type.Array(Type.String())),
-				types: Type.Optional(typeValuesInput),
+				tags: Type.Optional(tagValuesInput),
 				body: Type.Optional(Type.String()),
 			}),
-			handler: ({ title, description, tags, source, types, body }) => {
+			handler: ({ title, tags, body }) => {
 				const id = generateId<PageId>();
 				const now = DateTimeString.now();
+				const tagValues = (tags ?? {}) as PageTagValues;
+				// Assigning a tag at creation mints it, same as the assign action.
+				mintMissingTags(tables, Object.keys(tagValues));
 				tables.pages.set({
 					id,
 					title: title ?? '',
-					description: description ?? null,
-					tags: tags ?? [],
-					source: source ?? [],
-					types: (types ?? {}) as PageTypeValues,
 					body: body ?? '',
+					tags: tagValues,
 					createdAt: now,
 					updatedAt: now,
 				});
 				return { id };
+			},
+		}),
+
+		pages_assign_tag: defineMutation({
+			title: 'Assign Tag',
+			description:
+				'Wear a tag on a page, with optional column values. An unknown tag auto-mints a bare definition. A page wears each tag at most once; re-assigning overwrites the values.',
+			input: Type.Object({
+				id: Type.String({ description: 'The page id' }),
+				tagId: Type.String({ description: 'The tag slug to wear' }),
+				values: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+			}),
+			/**
+			 * Auto-mint at the write boundary so `page_tags` always resolves, and
+			 * never block on a dangling `column.ref()` value: references may dangle
+			 * (wiki red-link behavior), discoverable later as an `edges` LEFT JOIN.
+			 */
+			handler: ({ id, tagId, values }): Result<Page, WikiActionError> => {
+				if (!TAG_ID_PATTERN.test(tagId)) {
+					return WikiActionError.InvalidTagId({ tagId });
+				}
+				if (tagId === RESERVED_TAG_ID) {
+					return WikiActionError.ReservedTagId({ tagId });
+				}
+				const { data: page } = tables.pages.get(id);
+				if (!page) return WikiActionError.PageNotFound({ id });
+				mintMissingTags(tables, [tagId]);
+				const updated: Page = {
+					...page,
+					tags: {
+						...page.tags,
+						[tagId]: (values ?? {}) as unknown as PageTagValues[string],
+					},
+					updatedAt: DateTimeString.now(),
+				};
+				tables.pages.set(updated);
+				return Ok(updated);
 			},
 		}),
 
@@ -257,10 +344,10 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 			handler: () => tables.pages.getAllValid(),
 		}),
 
-		types_get_all: defineQuery({
-			title: 'List Types',
-			description: 'Read every user-defined type.',
-			handler: () => tables.types.getAllValid(),
+		tags_get_all: defineQuery({
+			title: 'List Tags',
+			description: 'Read every tag definition.',
+			handler: () => tables.tags.getAllValid(),
 		}),
 	});
 

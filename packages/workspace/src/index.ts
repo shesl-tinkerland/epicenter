@@ -151,8 +151,11 @@ export { generateGuid, generateId } from './shared/id';
 export {
 	type ColumnError,
 	column,
+	deriveStorage,
+	EPICENTER_REF_KEYWORD,
 	type FlatJsonTSchema,
 	type Infer,
+	type SqliteStorage,
 } from './document/column/index';
 
 // ════════════════════════════════════════════════════════════════════════════
