@@ -27,6 +27,7 @@ import { defineErrors, type InferErrors } from 'wellcrafted/error';
 import { Ok, type Result } from 'wellcrafted/result';
 import {
 	isTSchemaObject,
+	type Page,
 	type PageId,
 	type PageTypeValues,
 	TYPE_ID_PATTERN,
@@ -54,6 +55,23 @@ export const WikiActionError = defineErrors({
 		message: `Type "${typeId}" column "${columnId}" schema must be a TSchema object (a column.* result)`,
 		typeId,
 		columnId,
+	}),
+	/** A body write named a page id that has no row. */
+	PageNotFound: ({ id }: { id: string }) => ({
+		message: `No page with id "${id}"`,
+		id,
+	}),
+	/** A body_patch anchor (the exact text to replace) was not present in the body. */
+	AnchorNotFound: ({ id, old }: { id: string; old: string }) => ({
+		message: `Anchor not found in page "${id}": the exact text to replace is not present in the body`,
+		id,
+		old,
+	}),
+	/** A body_patch anchor appears more than once, so the target is ambiguous. */
+	AnchorAmbiguous: ({ id, old }: { id: string; old: string }) => ({
+		message: `Anchor is ambiguous in page "${id}": the text to replace appears more than once; include more surrounding context`,
+		id,
+		old,
 	}),
 });
 export type WikiActionError = InferErrors<typeof WikiActionError>;
@@ -159,6 +177,70 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 					updatedAt: now,
 				});
 				return { id };
+			},
+		}),
+
+		pages_set_body: defineMutation({
+			title: 'Set Page Body',
+			description:
+				'Overwrite a page body with new markdown (the whole-rewrite shape). Returns the updated page so the caller never has to re-read the file.',
+			input: Type.Object({
+				id: Type.String(),
+				body: Type.String({ description: 'The full new markdown body' }),
+			}),
+			/**
+			 * The agent-path body write: text in, whole-row LWW write out. There is
+			 * no codec and no round-trip; the body is a plain string column, so the
+			 * materialized markdown is this value verbatim. Promote to a `Y.Text`
+			 * child doc with a positional diff only when concurrent body editing is
+			 * real (see `./schema.ts`).
+			 */
+			handler: ({ id, body }): Result<Page, WikiActionError> => {
+				const { data: page } = tables.pages.get(id);
+				if (!page) return WikiActionError.PageNotFound({ id });
+				const updated = { ...page, body, updatedAt: DateTimeString.now() };
+				tables.pages.set(updated);
+				return Ok(updated);
+			},
+		}),
+
+		pages_patch_body: defineMutation({
+			title: 'Patch Page Body',
+			description:
+				'Anchored search/replace on a page body, mirroring a coding agent str_replace. Fails loud if the anchor is missing or appears more than once.',
+			input: Type.Object({
+				id: Type.String(),
+				old: Type.String({
+					description: 'Exact existing substring to replace; must be unique',
+				}),
+				new: Type.String({ description: 'Replacement text' }),
+			}),
+			/**
+			 * `slice` splice, not `String.replace`: a string `replace` hits only the
+			 * first match and interprets `$` sequences in the replacement, both silent
+			 * bugs. We locate the single occurrence, reject zero or multiple matches,
+			 * and splice exactly that range. The anchor check doubles as a staleness
+			 * guard: a stale read fails here instead of corrupting the body.
+			 */
+			handler: ({
+				id,
+				old,
+				new: replacement,
+			}): Result<Page, WikiActionError> => {
+				const { data: page } = tables.pages.get(id);
+				if (!page) return WikiActionError.PageNotFound({ id });
+				const at = page.body.indexOf(old);
+				if (at < 0) return WikiActionError.AnchorNotFound({ id, old });
+				if (page.body.indexOf(old, at + old.length) >= 0) {
+					return WikiActionError.AnchorAmbiguous({ id, old });
+				}
+				const body =
+					page.body.slice(0, at) +
+					replacement +
+					page.body.slice(at + old.length);
+				const updated = { ...page, body, updatedAt: DateTimeString.now() };
+				tables.pages.set(updated);
+				return Ok(updated);
 			},
 		}),
 
