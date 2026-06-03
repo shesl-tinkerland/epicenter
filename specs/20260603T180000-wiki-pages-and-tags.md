@@ -36,6 +36,25 @@ are disposable projections of the Yjs truth.
 - **Two id kinds for two id uses** (a consequence of rejecting G3): page ids are
   generated and opaque; tag ids are human slugs. `column.ref()` targets page ids.
 
+## Finalized: capture-cheap and lossless
+
+Three decisions, all chosen to keep capture instant and never lose data:
+
+- **A page wears each tag at most once.** Multiplicity ("two source recordings,
+  three citations") lives in a LIST-valued column, not in wearing a tag twice:
+  `whispering_recording: { recordings: column.array(column.ref()) }`. The `tags`
+  map stays a simple `Record<tagId, values>`; a list-of-refs column expands to
+  multiple `edges` rows (still fully queryable). We REFUSE `Record<tagId, values[]>`
+  (it would push arrays through every projection, query, and markdown shape).
+- **Unknown tags auto-mint a bare definition.** Assigning a tag with no `tags` row
+  (typing `#newidea`) upserts a bare definition `{ id, name: id, columns: [], 
+  description: null }`. Capture stays instant; promote later by adding columns.
+  The assign action and `markdown_push` both mint, so `page_tags` always resolves.
+  Typos mint junk tags, same risk as today's free `string[]` tags; acceptable.
+- **References may dangle.** A `[[id]]` or `column.ref()` to a not-yet-existing page
+  is allowed (wiki red-link behavior). The write never blocks; a dangling ref is
+  discoverable as `edges LEFT JOIN pages WHERE pages.id IS NULL`, never an error.
+
 ## What a "tag" is
 
 ```
@@ -86,7 +105,9 @@ stays the raw `column.*` TSchema, stored verbatim, re-validated with `Value.Chec
 
 `column.ref()` is a new helper: a string id with a marker (`format: 'epicenter-ref'`)
 so the projector can recognize reference columns and build edges. It validates as
-a string; its value is a page id or an `epicenter://` URN.
+a string; its value is a page id or an `epicenter://` URN. `column.array(column.ref())`
+is the list form, the standard way to model "many of the same kind" (sources,
+citations); each element becomes its own `edges` row.
 
 ### 2. SQLite projection (disposable; own database file)
 
@@ -131,7 +152,9 @@ Projection rules:
   `projection_issues`.
 - `edges` is rebuilt from Yjs each projection by scanning body `[[id]]` links
   (source_kind = body_wikilink) and every `column.ref()` value (source_kind =
-  structured_field, field_id = the column). Never treat `edges` as truth.
+  structured_field, field_id = the column). A `column.array(column.ref())` emits
+  one row per element. Dangling targets are allowed (no FK); find them with a
+  LEFT JOIN to `pages`. Never treat `edges` as truth.
 
 ### 3. Markdown vault (the browse projection)
 
@@ -217,10 +240,12 @@ markdown     = one-shot vault rewrite: tags: [..] + types: {..} -> tags: {..};
 ```
 1. Rename types -> tags in schema/index/lens/projection/markdown; pages.types -> pages.tags;
    fold pages.tags string[] into the map as {} entries. (mechanical; see naming table)
-2. Add column.ref() to the column.* sugar (string + format marker).
-3. Projection: page_tags membership + tag_<slug> structured tables + edges (provenance-aware)
-   + projection_issues. Own database file; bare names; STRICT; WITHOUT ROWID.
-4. documentationPageId on the tags table + markdown round-trip.
+   Auto-mint a bare tag definition when an assigned tag has no row.
+2. Add column.ref() (string + format marker) and column.array() to the column.* sugar.
+3. Projection: page_tags membership + tag_<slug> structured tables + edges (provenance-aware,
+   ref[] expands to many rows, dangling allowed) + projection_issues. Own database file;
+   bare names; STRICT; WITHOUT ROWID.
+4. description on the tags table + markdown round-trip.
 5. Tests: plain-tag membership (no side table); structured typed query; rename-no-DDL vs
    add-column-DDL; ref column -> edges row; body [[id]] -> edges row (distinct source_kind).
 6. One-way migration script for existing vault data.
