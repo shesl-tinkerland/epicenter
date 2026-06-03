@@ -55,6 +55,10 @@
 		"#platform/os-notify": {
 			"tauri": "./src/lib/report/os-notify.tauri.ts",
 			"default": "./src/lib/report/os-notify.browser.ts"
+		},
+		"#platform/auth": {
+			"tauri": "./src/lib/platform/auth.tauri.ts",
+			"default": "./src/lib/platform/auth.browser.ts"
 		}
 	},
 	"scripts": {
@@ -98,6 +102,7 @@
 		"@anthropic-ai/sdk": "^0.55.0",
 		"@aptabase/tauri": "^0.4.1",
 		"@aptabase/web": "^0.4.3",
+		"@epicenter/auth": "workspace:*",
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/svelte": "workspace:*",
 		"@epicenter/util": "workspace:*",
@@ -113,6 +118,7 @@
 		"@tauri-apps/api": "catalog:",
 		"@tauri-apps/plugin-autostart": "^2.0.1",
 		"@tauri-apps/plugin-clipboard-manager": "^2.3.0",
+		"@tauri-apps/plugin-deep-link": "^2.4.9",
 		"@tauri-apps/plugin-dialog": "^2.3.2",
 		"@tauri-apps/plugin-fs": "catalog:",
 		"@tauri-apps/plugin-global-shortcut": "^2.3.0",

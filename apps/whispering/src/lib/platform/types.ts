@@ -10,6 +10,15 @@
  * ships under the web (default) resolution.
  */
 
+import type { createOAuthAppAuth } from '@epicenter/svelte/auth';
+
+/**
+ * Contract for `#platform/auth`. Identical on web and Tauri: both build the
+ * same Epicenter OAuth client, differing only in the launcher (a redirect on
+ * web, a deep-link round-trip on Tauri).
+ */
+export type PlatformAuth = ReturnType<typeof createOAuthAppAuth>;
+
 /**
  * Contract for `#platform/os`: host-OS identity, resolved once per build target.
  * The Tauri build reads the real OS natively; the web build infers it from the
