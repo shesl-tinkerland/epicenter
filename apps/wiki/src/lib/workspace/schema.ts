@@ -36,9 +36,6 @@ export type PageId = string & Brand<'PageId'>;
 /** Stable id of a tag (a human slug like `youtube_video`); also names a SQL table. */
 export type TagId = string & Brand<'TagId'>;
 
-export const asPageId = (value: string): PageId => value as PageId;
-export const asTagId = (value: string): TagId => value as TagId;
-
 /**
  * A tag id is a stable slug (must start with a letter); it also becomes a SQL
  * table-name segment. No slashes: hierarchy is a future `parent` field, never
@@ -108,12 +105,21 @@ const columnsCell = Type.Unsafe<StoredColumnSpec[]>(
  *
  *   { idea: {}, youtube_video: { url: "https://...", duration: 1240 } }
  *
- * `{}` is a plain tag (membership only). Like `columnsCell`, this uses
- * `Type.Unsafe` rather than `column.json`: the exact
- * `Record<string, Record<string, JsonValue>>` static carries through while the
- * runtime schema stays an `object` the SQLite layer maps to a TEXT cell. Do not
- * "simplify" it back to `column.json`; the nested-record static does not
- * survive that gate.
+ * `{}` is a plain tag (membership only). This schema is a live validator, not a
+ * typing trick: `getAllValid` runs `Value.Check` on it when materializing a
+ * page, so a `tags` cell that is not a map-of-maps is rejected before it can
+ * reach SQLite or any reader. Writes only ever arrive through validated actions
+ * (`pages_create`, `pages_assign_tag`) or a statically-typed `.set`, so that read
+ * gate is defense in depth. The `Unknown` leaf is deliberate: leaf values are
+ * already JSON (every ingress is a JSON round-trip), so re-policing them on every
+ * read would be wasted work.
+ *
+ * It uses raw `Type.Unsafe` rather than `column.json` because `column.json`
+ * derives its static from the schema and gates on `Static<S> extends JsonValue`;
+ * the `Unknown` leaf infers `unknown`, which is not `JsonValue`, so the naive
+ * `column.json(Type.Record(..., Type.Unknown()))` is a compile error.
+ * `Type.Unsafe` pins the precise `PageTagValues` static while the same `object`
+ * runtime schema maps to a TEXT cell. Do not "simplify" it back to `column.json`.
  */
 export type PageTagValues = Record<string, Record<string, JsonValue>>;
 
