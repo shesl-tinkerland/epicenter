@@ -86,6 +86,8 @@
     "updater:default",
     "aptabase:allow-track-event",
     "macos-permissions:default",
-    "log:default"
+    "log:default",
+    "deep-link:default",
+    "opener:allow-open-url"
   ]
 }

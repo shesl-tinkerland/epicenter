@@ -175,6 +175,7 @@ pub async fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Mutex::new(Recorder::new()))
         .setup(|app| {
             // ModelManager owns an `AppHandle` for emitting lifecycle events
@@ -185,6 +186,15 @@ pub async fn run() {
             let manager = ModelManager::new(app.handle().clone());
             manager.start_idle_watcher();
             app.manage(manager);
+
+            // Register the `epicenter-whispering://` scheme at runtime on
+            // Windows and Linux (macOS registers it from the bundle plist).
+            // Lets the OAuth sign-in deep-link callback reach the running app.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
             Ok(())
         });
 
