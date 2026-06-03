@@ -45,6 +45,12 @@ export const EPICENTER_FUJI_OAUTH_CLIENT_ID = 'epicenter-fuji';
 export const EPICENTER_FUJI_TAURI_OAUTH_REDIRECT_URI =
 	'epicenter-fuji://auth/callback';
 export const EPICENTER_HONEYCRISP_OAUTH_CLIENT_ID = 'epicenter-honeycrisp';
+// Whispering is `APPS.AUDIO` (the entry key predates the product name). Like
+// Fuji it ships both web and Tauri, so it has a deep-link redirect for the
+// desktop build in addition to its web `/auth/callback` origins.
+export const EPICENTER_WHISPERING_OAUTH_CLIENT_ID = 'epicenter-whispering';
+export const EPICENTER_WHISPERING_TAURI_OAUTH_REDIRECT_URI =
+	'epicenter-whispering://auth/callback';
 export const EPICENTER_OPENSIDIAN_OAUTH_CLIENT_ID = 'epicenter-opensidian';
 export const EPICENTER_TAB_MANAGER_OAUTH_CLIENT_ID = 'epicenter-tab-manager';
 export const EPICENTER_ZHONGWEN_OAUTH_CLIENT_ID = 'epicenter-zhongwen';
@@ -102,6 +108,15 @@ export function buildTrustedOAuthClients(apiBaseURL: string) {
 			redirectUris: [
 				...appCallbacks(APPS.FUJI),
 				EPICENTER_FUJI_TAURI_OAUTH_REDIRECT_URI,
+			],
+		},
+		{
+			clientId: EPICENTER_WHISPERING_OAUTH_CLIENT_ID,
+			name: 'Whispering',
+			type: 'user-agent-based',
+			redirectUris: [
+				...appCallbacks(APPS.AUDIO),
+				EPICENTER_WHISPERING_TAURI_OAUTH_REDIRECT_URI,
 			],
 		},
 		{
