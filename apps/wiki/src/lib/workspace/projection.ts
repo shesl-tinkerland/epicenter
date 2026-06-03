@@ -7,7 +7,6 @@
  * bare, typed column names (no `c_` prefix). The shape:
  *
  *   pages (id PK, title, body, created_at, updated_at)            WITHOUT ROWID
- *   tags  (id PK, name, icon, description, created_at, updated_at) WITHOUT ROWID
  *   page_tags (page_id, tag_id)            -- THE membership owner (every tag)
  *   tag_<slug> (page_id PK, <col> <storage>, ...)  STRICT, WITHOUT ROWID
  *                                          -- ONLY for tags with >= 1 column
@@ -64,7 +63,6 @@ export function projectWiki(
 	createFixedTables(db);
 
 	insertPages(db, pages);
-	insertTags(db, tags);
 	insertMembership(db, pages);
 
 	const tagTableDdl: Record<string, string> = {};
@@ -90,12 +88,6 @@ function createFixedTables(db: Database): void {
 			`${q('updated_at')} TEXT NOT NULL) WITHOUT ROWID`,
 	);
 	db.run(
-		`CREATE TABLE ${q('tags')} (` +
-			`${q('id')} TEXT PRIMARY KEY, ${q('name')} TEXT NOT NULL, ` +
-			`${q('icon')} TEXT, ${q('description')} TEXT, ` +
-			`${q('created_at')} TEXT NOT NULL, ${q('updated_at')} TEXT NOT NULL) WITHOUT ROWID`,
-	);
-	db.run(
 		`CREATE TABLE ${q('page_tags')} (` +
 			`${q('page_id')} TEXT NOT NULL, ${q('tag_id')} TEXT NOT NULL, ` +
 			`PRIMARY KEY (${q('page_id')}, ${q('tag_id')})) WITHOUT ROWID`,
@@ -116,24 +108,6 @@ function insertPages(db: Database, pages: Page[]): void {
 	);
 	for (const page of pages) {
 		insert.run(page.id, page.title, page.body, page.createdAt, page.updatedAt);
-	}
-}
-
-function insertTags(db: Database, tags: WikiTag[]): void {
-	const insertTag = db.prepare(
-		`INSERT INTO ${q('tags')} ` +
-			`(${q('id')}, ${q('name')}, ${q('icon')}, ${q('description')}, ${q('created_at')}, ${q('updated_at')}) ` +
-			'VALUES (?, ?, ?, ?, ?, ?)',
-	);
-	for (const tag of tags) {
-		insertTag.run(
-			tag.id,
-			tag.name,
-			tag.icon,
-			tag.description,
-			tag.createdAt,
-			tag.updatedAt,
-		);
 	}
 }
 
@@ -258,7 +232,7 @@ function refUrns(value: JsonValue | undefined): string[] {
 // ════════════════════════════════════════════════════════════════════════════
 
 /** The fixed (non-`tag_<slug>`) tables this projection owns. */
-const FIXED_TABLES = new Set(['pages', 'tags', 'page_tags', 'edges']);
+const FIXED_TABLES = new Set(['pages', 'page_tags', 'edges']);
 
 /**
  * Drop every projected table so the next projection is a clean rebuild: the

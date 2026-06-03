@@ -2,29 +2,25 @@
  * The wiki pages-and-tags model, end to end. The first test walks the spec's
  * example page: define structured tags at runtime, create a page that wears a
  * mix of plain and structured tags (auto-minting an unknown one), materialize
- * it to `pages/<id>.md`, edit the file, reconcile it back into Yjs, project to
- * SQLite, and answer the typed JOIN. Focused tests cover the schema-on-read
- * lens, the rename-vs-add DDL distinction, plain-tag membership, the two edge
- * provenances, and auto-mint.
+ * it one-way to `pages/<id>.md`, write through an action, project to SQLite, and
+ * answer the typed JOIN. Focused tests cover the schema-on-read lens, the
+ * rename-vs-add DDL distinction, plain-tag membership, the two edge provenances,
+ * and auto-mint.
  *
  * If this loop holds, the Entity-Component architecture is real.
  */
 
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { column } from '@epicenter/workspace';
-import {
-	assembleMarkdown,
-	parseMarkdownFile,
-} from '@epicenter/workspace/markdown';
 import { createWiki } from './index';
 import { viewThroughTag } from './lens';
 import { attachWikiVault } from './markdown';
 import { projectWiki } from './projection';
-import type { ColumnSpec, Page } from './schema';
+import type { ColumnSpec } from './schema';
 
 const youtubeColumns: ColumnSpec[] = [
 	{ id: 'url', name: 'URL', schema: column.url() },
@@ -55,7 +51,7 @@ function defineExampleTags(wiki: ReturnType<typeof createWiki>): void {
 	});
 }
 
-test('round-trips the spec example page Yjs <-> markdown <-> Yjs, answers the typed JOIN, and builds both edge kinds', async () => {
+test('materializes the spec example page one-way, writes through an action, answers the typed JOIN, and builds both edge kinds', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'wiki-vault-'));
 	const wiki = createWiki();
 	try {
@@ -110,21 +106,14 @@ test('round-trips the spec example page Yjs <-> markdown <-> Yjs, answers the ty
 		// recognized from the `epicenter://` URN value, not the schema.
 		expect(recordingTagMd).toContain('captured from a [[whispering]]');
 
-		// Edit the .md as a text editor would, then reconcile (markdown push).
-		const parsed = parseMarkdownFile(pageMd)!;
-		(parsed.frontmatter.tags as Page['tags']).youtube_video!.duration = 999;
-		await writeFile(
-			pagePath,
-			assembleMarkdown(parsed.frontmatter, 'Edited notes. See also [[page_def]].'),
-		);
-
-		const push = await vault.actions.markdown_push();
-		expect(push.errored).toBe(0);
-
-		const after = wiki.actions.pages_get({ id: pageId }).data!;
-		expect(after.tags.youtube_video!.duration).toBe(999);
-		expect(after.tags.youtube_video!.url).toBe('https://youtu.be/abc');
-		expect(after.body).toBe('Edited notes. See also [[page_def]].');
+		// Writes go through actions, never by editing the .md (the vault is a
+		// one-way read projection). Re-wearing the tag overwrites its values.
+		const reassigned = wiki.actions.pages_assign_tag({
+			id: pageId,
+			tagId: 'youtube_video',
+			values: { url: 'https://youtu.be/abc', duration: 999 },
+		});
+		expect(reassigned.data!.tags.youtube_video!.duration).toBe(999);
 
 		// Project to SQLite and answer the typed JOIN (bare column names).
 		const db = new Database(':memory:');

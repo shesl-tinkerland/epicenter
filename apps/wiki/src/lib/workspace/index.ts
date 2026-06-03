@@ -111,15 +111,12 @@ type TagsRegistry = {
  *
  * Typing `#newidea` (assigning a tag that was never defined) upserts
  * `{ id, name: id, columns: [], description: null }`. Capture stays instant;
- * promote later by adding columns. Both the assign path and `markdown_push`
+ * promote later by adding columns. `pages_create` and `pages_assign_tag` both
  * call this, so `page_tags` always resolves to a real row. Invalid slugs are
  * skipped (the caller validates them where the cause is visible); a valid but
- * unwanted slug is acceptable junk, same risk as today's free `string[]` tags.
+ * unwanted slug is acceptable junk, same risk as a free-text tag.
  */
-export function mintMissingTags(
-	tables: TagsRegistry,
-	tagIds: Iterable<string>,
-): void {
+function mintMissingTags(tables: TagsRegistry, tagIds: Iterable<string>): void {
 	const now = DateTimeString.now();
 	for (const tagId of tagIds) {
 		if (!TAG_ID_PATTERN.test(tagId) || tagId === RESERVED_TAG_ID) continue;
