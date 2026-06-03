@@ -152,7 +152,6 @@ export {
 	type ColumnError,
 	column,
 	deriveStorage,
-	EPICENTER_REF_KEYWORD,
 	type FlatJsonTSchema,
 	type Infer,
 	type SqliteStorage,

@@ -16,7 +16,7 @@
  *           plus ONE nested json cell `tags` holding membership + values, keyed
  *           by tag id. A page is a `youtube_video` iff its `tags` cell has that
  *           key; a plain tag is the empty object `{}`. A page wears each tag at
- *           most once (multiplicity lives in a `column.array(column.ref())`
+ *           most once (multiplicity lives in a `column.array(column.string())`
  *           column, never in wearing a tag twice).
  *
  * `body` is a plain string column on the row for this slice (routed to the
@@ -67,8 +67,10 @@ export function isTSchemaObject(value: unknown): boolean {
  *   makes a display rename metadata-only (no SQL DDL).
  * - `name` is the display name; free to change.
  * - `schema` is the column's TypeBox schema, authored with the real `column.*`
- *   builders (`column.url()`, `column.ref()`, `column.array(column.ref())`) so
- *   call sites get autocomplete and type-checking. A `TSchema` IS JSON Schema,
+ *   builders (`column.url()`, `column.array(column.string())`) so call sites
+ *   get autocomplete and type-checking. A reference is just a `column.string()`
+ *   whose value is an `epicenter://` URN; the projector recognizes it by value,
+ *   never a schema marker. A `TSchema` IS JSON Schema,
  *   so it is stored verbatim and re-validated with `Value.Check` after the
  *   Yjs/JSON round-trip (this TypeBox validates on plain JSON Schema, no
  *   `[Kind]` symbols, so a round-tripped schema validates identically). NO

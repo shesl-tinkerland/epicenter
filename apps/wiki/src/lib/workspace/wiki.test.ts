@@ -50,7 +50,7 @@ function defineExampleTags(wiki: ReturnType<typeof createWiki>): void {
 	wiki.actions.tags_define({
 		id: 'whispering_recording',
 		name: 'Whispering Recording',
-		columns: [{ id: 'recording', name: 'Recording', schema: column.ref() }],
+		columns: [{ id: 'recording', name: 'Recording', schema: column.string() }],
 		description: 'A page captured from a [[whispering]] recording.',
 	});
 }
@@ -62,7 +62,8 @@ test('round-trips the spec example page Yjs <-> markdown <-> Yjs, answers the ty
 		defineExampleTags(wiki);
 
 		// Create the example page. `idea` is never defined: it auto-mints as a
-		// bare plain tag. The recording is a column.ref() to a cross-app source.
+		// bare plain tag. The recording is an `epicenter://` URN to a cross-app
+		// source (a plain string column; the projector reads the edge by value).
 		const created = wiki.actions.pages_create({
 			title: 'Great talk',
 			tags: {
@@ -105,7 +106,8 @@ test('round-trips the spec example page Yjs <-> markdown <-> Yjs, answers the ty
 			join(dir, 'tags', 'whispering_recording.md'),
 			'utf-8',
 		);
-		expect(recordingTagMd).toContain('x-epicenter-ref: true'); // column.ref()
+		// The recording column is a plain string (no schema marker); references are
+		// recognized from the `epicenter://` URN value, not the schema.
 		expect(recordingTagMd).toContain('captured from a [[whispering]]');
 
 		// Edit the .md as a text editor would, then reconcile (markdown push).
@@ -159,7 +161,8 @@ test('round-trips the spec example page Yjs <-> markdown <-> Yjs, answers the ty
 				.all();
 			expect(ideaTable).toHaveLength(0);
 
-			// A column.ref() value becomes a structured_field edge.
+			// An `epicenter://` URN cell value becomes a structured_field edge,
+			// detected by value (no schema marker).
 			const refEdges = db
 				.query<
 					{ target_id: string; source_kind: string; field_id: string },

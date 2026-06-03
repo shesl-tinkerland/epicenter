@@ -241,8 +241,9 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 			}),
 			/**
 			 * Auto-mint at the write boundary so `page_tags` always resolves, and
-			 * never block on a dangling `column.ref()` value: references may dangle
-			 * (wiki red-link behavior), discoverable later as an `edges` LEFT JOIN.
+			 * never block on a dangling `epicenter://` reference value: references
+			 * may dangle (wiki red-link behavior), discoverable later as an `edges`
+			 * LEFT JOIN.
 			 */
 			handler: ({ id, tagId, values }): Result<Page, WikiActionError> => {
 				if (!TAG_ID_PATTERN.test(tagId)) {

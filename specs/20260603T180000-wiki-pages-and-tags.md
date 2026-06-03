@@ -34,7 +34,9 @@ are disposable projections of the Yjs truth.
   desktop, markdown file) resolves it to a locator at render. The reference never
   carries "how to open."
 - **Two id kinds for two id uses** (a consequence of rejecting G3): page ids are
-  generated and opaque; tag ids are human slugs. `column.ref()` targets page ids.
+  generated and opaque; tag ids are human slugs. A reference is a plain string
+  holding a page id or an `epicenter://` URN; the projector reads edges from the
+  value, not a schema marker.
 
 ## Finalized: capture-cheap and lossless
 
@@ -42,8 +44,8 @@ Three decisions, all chosen to keep capture instant and never lose data:
 
 - **A page wears each tag at most once.** Multiplicity ("two source recordings,
   three citations") lives in a LIST-valued column, not in wearing a tag twice:
-  `whispering_recording: { recordings: column.array(column.ref()) }`. The `tags`
-  map stays a simple `Record<tagId, values>`; a list-of-refs column expands to
+  `whispering_recording: { recordings: column.array(column.string()) }`. The `tags`
+  map stays a simple `Record<tagId, values>`; a list of URN strings expands to
   multiple `edges` rows (still fully queryable). We REFUSE `Record<tagId, values[]>`
   (it would push arrays through every projection, query, and markdown shape).
 - **Unknown tags auto-mint a bare definition.** Assigning a tag with no `tags` row
@@ -51,7 +53,7 @@ Three decisions, all chosen to keep capture instant and never lose data:
   description: null }`. Capture stays instant; promote later by adding columns.
   The assign action and `markdown_push` both mint, so `page_tags` always resolves.
   Typos mint junk tags, same risk as today's free `string[]` tags; acceptable.
-- **References may dangle.** A `[[id]]` or `column.ref()` to a not-yet-existing page
+- **References may dangle.** A `[[id]]` or an `epicenter://` URN to a not-yet-existing page
   is allowed (wiki red-link behavior). The write never blocks; a dangling ref is
   discoverable as `edges LEFT JOIN pages WHERE pages.id IS NULL`, never an error.
 
@@ -103,11 +105,13 @@ array, exactly as the current branch does for `pages.types` and `types.columns`
 (the nested static does not survive the `column.json` gate). `ColumnSpec.schema`
 stays the raw `column.*` TSchema, stored verbatim, re-validated with `Value.Check`.
 
-`column.ref()` is a new helper: a string id with a marker (`format: 'epicenter-ref'`)
-so the projector can recognize reference columns and build edges. It validates as
-a string; its value is a page id or an `epicenter://` URN. `column.array(column.ref())`
-is the list form, the standard way to model "many of the same kind" (sources,
-citations); each element becomes its own `edges` row.
+A reference needs NO new helper. It is a plain `column.string()` whose value is an
+`epicenter://` URN; the projector recognizes it from the value (the URN scheme),
+exactly like it recognizes a `[[id]]` in body prose. No schema marker, so there is
+one reference mechanism for the whole wiki, and a value is free to dangle with zero
+dependence on validator state. `column.array(column.string())` is the list form, the
+standard way to model "many of the same kind" (sources, citations); each URN element
+becomes its own `edges` row.
 
 ### 2. SQLite projection (disposable; own database file)
 
@@ -132,7 +136,7 @@ tag_<id> (                             -- ONLY for tags with >= 1 column
 edges (                                -- provenance-aware; derived, never truth
   source_id, rel, target_id,
   source_kind,                         -- 'body_wikilink' | 'structured_field'
-  field_id                             -- nullable; the column.ref() column for structured edges
+  field_id                             -- nullable; the column id holding the URN, for structured edges
 );
 
 projection_issues (                    -- durable values the typed projection refused to place
@@ -151,10 +155,11 @@ Projection rules:
   because the projector validates every cell before insert and routes failures to
   `projection_issues`.
 - `edges` is rebuilt from Yjs each projection by scanning body `[[id]]` links
-  (source_kind = body_wikilink) and every `column.ref()` value (source_kind =
-  structured_field, field_id = the column). A `column.array(column.ref())` emits
-  one row per element. Dangling targets are allowed (no FK); find them with a
-  LEFT JOIN to `pages`. Never treat `edges` as truth.
+  (source_kind = body_wikilink) and every cell value that is an `epicenter://` URN
+  (source_kind = structured_field, field_id = the column). A list of URNs emits one
+  row per element. Both edge kinds are recognized from the VALUE (the `[[id]]` syntax
+  or the URN scheme), never a schema marker. Dangling targets are allowed (no FK);
+  find them with a LEFT JOIN to `pages`. Never treat `edges` as truth.
 
 ### 3. Markdown vault (the browse projection)
 
@@ -177,7 +182,7 @@ tags:
   publishable:
     stage: draft
   whispering_recording:
-    recording: epicenter://whispering/recordings/rec_123   # a column.ref() to a cross-app source
+    recording: epicenter://whispering/recordings/rec_123   # a plain string URN; edge read by value
 createdAt: 2026-06-03T19:00:00.000Z
 updatedAt: 2026-06-03T19:00:00.000Z
 ---
@@ -198,8 +203,9 @@ References:
   `[[id]]`) covers the only real need without the recursion. Trigger to revisit:
   tags routinely need their own tags, backlinks, and history as first-class.
 - **`source` and `description` as core fields.** Refused.
-  - `source` is a typed edge: model it as a tag with a `column.ref()` field
-    (`whispering_recording: { recording }`), richer than an opaque `string[]`.
+  - `source` is a typed edge: model it as a tag with a `column.string()` field
+    holding an `epicenter://` URN (`whispering_recording: { recording }`), richer
+    than an opaque `string[]`.
   - `description` decomposes: the preview is derived from `body`; the publish blurb
     is `publishable.excerpt`. Nothing called "description" remains.
 - **A separate link-graph subsystem.** Refused. Tags-with-ref-columns already are
@@ -241,13 +247,14 @@ markdown     = one-shot vault rewrite: tags: [..] + types: {..} -> tags: {..};
 1. Rename types -> tags in schema/index/lens/projection/markdown; pages.types -> pages.tags;
    fold pages.tags string[] into the map as {} entries. (mechanical; see naming table)
    Auto-mint a bare tag definition when an assigned tag has no row.
-2. Add column.ref() (string + format marker) and column.array() to the column.* sugar.
+2. Add column.array() to the column.* sugar. References need no helper: a plain
+   column.string() holds an `epicenter://` URN, recognized by value.
 3. Projection: page_tags membership + tag_<slug> structured tables + edges (provenance-aware,
-   ref[] expands to many rows, dangling allowed) + projection_issues. Own database file;
-   bare names; STRICT; WITHOUT ROWID.
+   URN values + URN-list elements expand to many rows, dangling allowed) + projection_issues.
+   Own database file; bare names; STRICT; WITHOUT ROWID.
 4. description on the tags table + markdown round-trip.
 5. Tests: plain-tag membership (no side table); structured typed query; rename-no-DDL vs
-   add-column-DDL; ref column -> edges row; body [[id]] -> edges row (distinct source_kind).
+   add-column-DDL; URN cell value -> edges row; body [[id]] -> edges row (distinct source_kind).
 6. One-way migration script for existing vault data.
 ```
 

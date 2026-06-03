@@ -26,15 +26,16 @@
  *     constraint. The durable value survives in Yjs; the on-read lens
  *     (`./lens.ts`) is what surfaces invalid / excess values for a page.
  *   - `edges` is rebuilt every run from body `[[id]]` wikilinks (source_kind
- *     `body_wikilink`) and every `column.ref()` value (source_kind
- *     `structured_field`); a `column.array(column.ref())` emits one row per
- *     element. Dangling targets are allowed (no FK): find them with a LEFT JOIN
- *     to `pages`.
+ *     `body_wikilink`) and every cell value that is an `epicenter://` URN
+ *     (source_kind `structured_field`); a list of URNs emits one row per
+ *     element. References are recognized from the VALUE (the URN scheme), never
+ *     a schema marker, exactly like `[[id]]` is recognized in body prose.
+ *     Dangling targets are allowed (no FK): find them with a LEFT JOIN to
+ *     `pages`.
  */
 
 import type { Database } from 'bun:sqlite';
-import { deriveStorage, EPICENTER_REF_KEYWORD } from '@epicenter/workspace';
-import type { TSchema } from 'typebox';
+import { deriveStorage } from '@epicenter/workspace';
 import { Value } from 'typebox/value';
 import type { JsonValue } from 'wellcrafted/json';
 import {
@@ -50,9 +51,6 @@ type ProjectionResult = {
 	/** `tagId -> CREATE TABLE` for that structured tag's side table. */
 	tagTableDdl: Record<string, string>;
 };
-
-/** A reference column's value shape, recognized from its `x-epicenter-ref` keyword. */
-type RefKind = 'ref' | 'ref_array';
 
 /**
  * Drop and rebuild the entire derived index from the current registry + pages.
@@ -75,7 +73,7 @@ export function projectWiki(
 		tagTableDdl[tag.id] = projectStructuredTag(db, tag, pages);
 	}
 
-	insertEdges(db, tags, pages);
+	insertEdges(db, pages);
 
 	return { tagTableDdl };
 }
@@ -202,13 +200,12 @@ function projectStructuredTag(
 // EDGES (provenance-aware; rebuilt every run, dangling targets allowed)
 // ════════════════════════════════════════════════════════════════════════════
 
-function insertEdges(db: Database, tags: WikiTag[], pages: Page[]): void {
+function insertEdges(db: Database, pages: Page[]): void {
 	const insert = db.prepare(
 		`INSERT INTO ${q('edges')} ` +
 			`(${q('source_id')}, ${q('rel')}, ${q('target_id')}, ${q('source_kind')}, ${q('field_id')}) ` +
 			'VALUES (?, ?, ?, ?, ?)',
 	);
-	const byId = new Map<string, WikiTag>(tags.map((tag) => [tag.id, tag]));
 
 	for (const page of pages) {
 		// Body wikilinks: [[id]] (or [[id|Title]]) become a body_wikilink edge.
@@ -216,18 +213,15 @@ function insertEdges(db: Database, tags: WikiTag[], pages: Page[]): void {
 			insert.run(page.id, 'links_to', targetId, 'body_wikilink', null);
 		}
 
-		// Structured-field references: each column.ref() / column.array(column.ref())
-		// value names a target. The relationship is the tag id; the field is the
-		// column. An array expands to one row per element.
+		// Structured-field references: any cell value that is an `epicenter://`
+		// URN (or a list of them) names a target. References are recognized from
+		// the VALUE, never a schema marker, exactly like `[[id]]` in the body: the
+		// URN scheme is self-describing. The relationship is the tag id; the field
+		// is the column. A list expands to one row per URN element.
 		for (const [tagId, data] of Object.entries(page.tags)) {
-			const tag = byId.get(tagId);
-			if (tag === undefined) continue;
-			for (const spec of tagColumns(tag)) {
-				if (!Object.hasOwn(data, spec.id)) continue;
-				const kind = refKind(spec.schema);
-				if (kind === null) continue;
-				for (const targetId of refTargets(kind, data[spec.id])) {
-					insert.run(page.id, tagId, targetId, 'structured_field', spec.id);
+			for (const [fieldId, value] of Object.entries(data)) {
+				for (const targetId of refUrns(value)) {
+					insert.run(page.id, tagId, targetId, 'structured_field', fieldId);
 				}
 			}
 		}
@@ -245,28 +239,18 @@ function parseWikilinks(body: string): string[] {
 	return targets;
 }
 
-type SchemaShape = {
-	type?: string;
-	[EPICENTER_REF_KEYWORD]?: unknown;
-	items?: TSchema & SchemaShape;
-};
+/** The `epicenter://` URN scheme that self-identifies a value as a cross-entity reference. */
+const REF_URN_PREFIX = 'epicenter://';
 
-const isRefString = (s: SchemaShape): boolean =>
-	s.type === 'string' && s[EPICENTER_REF_KEYWORD] === true;
+const isRefUrn = (value: JsonValue): value is string =>
+	typeof value === 'string' && value.startsWith(REF_URN_PREFIX);
 
-/** Whether a column schema is a reference (`column.ref`) or a list of references. */
-function refKind(schema: TSchema): RefKind | null {
-	const s = schema as SchemaShape;
-	if (isRefString(s)) return 'ref';
-	if (s.type === 'array' && s.items && isRefString(s.items)) return 'ref_array';
-	return null;
-}
-
-/** Extract the target id(s) of a stored reference value (one for `ref`, N for `ref_array`). */
-function refTargets(kind: RefKind, value: JsonValue | undefined): string[] {
-	if (kind === 'ref') return typeof value === 'string' ? [value] : [];
-	if (!Array.isArray(value)) return [];
-	return value.filter((element): element is string => typeof element === 'string');
+/** Reference targets in a stored cell value: the value itself if a URN, or every URN element of a list. */
+function refUrns(value: JsonValue | undefined): string[] {
+	if (value === undefined) return [];
+	if (isRefUrn(value)) return [value];
+	if (Array.isArray(value)) return value.filter(isRefUrn);
+	return [];
 }
 
 // ════════════════════════════════════════════════════════════════════════════

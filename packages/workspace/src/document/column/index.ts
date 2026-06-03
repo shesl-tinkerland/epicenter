@@ -13,4 +13,4 @@ export {
 	isNullable,
 	type SqliteStorage,
 } from './derive';
-export { column, EPICENTER_REF_KEYWORD, type Infer } from './sugar';
+export { column, type Infer } from './sugar';
