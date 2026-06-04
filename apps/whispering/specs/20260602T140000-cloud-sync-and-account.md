@@ -98,7 +98,7 @@ tab-manager / fuji:   auth -> session -> workspace        (no auth, no workspace
 whispering:           workspace (always) ; auth -> sync   (sync is a detachable layer)
 ```
 
-The consequence: the workspace is either the local doc (signed out) or an owner-scoped synced doc (signed in). They are *different Y.Docs* because encryption is fixed at construction (`createWhispering({ keyring })`) and local storage is partitioned by owner. **The doc is chosen once at startup from `auth.state`, and signing in or out triggers a full-page `window.location.reload()`** so the next startup rebuilds the right doc. There is no live in-place swap: nothing is mounted at startup, so there are no observers to dispose or re-subscribe, and `whispering` stays a plain stable import (no reactive accessor, no `$derived` over a swapping doc). Sign-in/out is rare, and the app already reloads after `forgetDevice` ("restart-as-heal" is the established contract).
+The consequence: the workspace is either the local doc (signed out) or an owner-scoped synced doc (signed in). They are *different Y.Docs* because encryption is fixed at construction (`createWhispering({ keyring })`) and local storage is partitioned by owner. Crucially, **both can be constructed synchronously at boot**: the keyring lives in `PersistedAuth` and `auth.state` is hydrated synchronously from localStorage at construction (`persisted-auth-storage.ts` reads `initial` once, sync), so the signed-in branch is *not* async. The seam reads `auth.state` once at boot, builds the local or synced doc, and exports `whispering` as a **stable module singleton** (data still loads async behind the existing `whenReady` gate, exactly as today). Signing in or out, or switching owner, triggers `window.location.reload()` so the next boot rebuilds the right doc. This keeps the singleton stable: the 6 `$lib/state` modules and their ~70 importers are UNCHANGED (no context migration, no reactive accessor, no `$derived` over a swapping doc). We deliberately do NOT copy fuji's `createSession` + context pattern: fuji needs it because its workspace does not exist when signed out, but Whispering's always does, so a boot-time pick plus reload is the smaller, honest fit (verified against the auth/workspace primitives and grilled with a second model).
 
 ## Research Findings
 
@@ -261,12 +261,12 @@ export const whispering = openWhispering();   // always the local doc
 **After** (startup picks local vs synced from auth; the import stays stable):
 
 ```ts
-// signed out -> local doc (today's construction, synchronous)
-// signed in  -> await the session, build the owner-scoped synced doc
-export const whispering = await openActiveWhispering();   // chosen once at startup
+// signed out -> local doc (today's construction)
+// signed in  -> synced doc built from the synchronously-cached keyring in auth.state
+export const whispering = openActiveWhispering();   // sync, chosen once at boot
 ```
 
-**Semantic shift to flag**: construction becomes async for the signed-in branch (it awaits the keyring/session), so the root needs a ready-gate before rendering (see the `sync-construction-async-property-ui-render-gate-pattern` skill). But `whispering` stays a plain stable import: `$lib/state/*` and every component are UNCHANGED. No reactive accessor, no `$derived` over a swapping doc, no observer teardown.
+**Semantic shift to flag**: none for consumers. Construction stays synchronous (the keyring is cached in `auth.state`); data still loads async behind the existing `whenReady` gate. `whispering` remains a plain stable import, so `$lib/state/*` and every component are UNCHANGED: no reactive accessor, no `$derived` over a swapping doc, no observer teardown. Identity changes are handled by a reload, not an in-place swap.
 
 ### Recordings state binding
 
@@ -293,9 +293,9 @@ With reload-on-auth there is no live swap, so no `$derived` rewrap and no leaked
 
 - [ ] **2.1** Make `createWhispering` accept an optional `keyring` and thread it to `createWorkspace`.
 - [ ] **2.2** `whispering.synced.ts`: owner-scoped doc with `attachLocalStorage` + `openCollaboration` + `roomWsUrl`.
-- [ ] **2.3** `session.svelte.ts`: `createSession({ auth, build })` returning the synced workspace + collaboration.
-- [ ] **2.4** At startup, export `whispering` as the local doc (signed out) or the synced doc (signed in), chosen from `auth.state`; add a root ready-gate for the async signed-in build. NO `getActiveWhispering`, NO `$lib/state` migration.
-- [ ] **2.5** Reload on auth change: sign-in completion and sign-out call `window.location.reload()`.
+- [ ] **2.3** Build the synced payload from auth's cached `SignedIn` (keyring, ownerId, openWebSocket, onReconnectSignal). `createSession({ auth, build })` packages this; in option A we read `session.current` ONCE at boot (not reactively, reload handles change) or build directly from `auth.state`. Settle during impl.
+- [ ] **2.4** `openActiveWhispering()`: at boot, read `auth.state` (sync) and build the local doc (signed out) or the synced doc (signed in); export `whispering` as a stable singleton. Construction is synchronous (keyring is cached in `auth.state`); data load stays behind the existing `whenReady` gate. NO `getActiveWhispering`, NO `$lib/state` migration.
+- [ ] **2.5** `bindAuthReload(auth)` in the root layout: subscribe to `auth.state` and `window.location.reload()` **synchronously on the first identity-boundary event** (signed-out <-> signed-in, or owner change), so the old doc is never live under a new identity (auth emits `signed-out` then `signed-in:owner`). Guard: block (or defer) the reload while a recording is in progress, since the browser recorder cannot survive a reload (`index.browser.ts`); the Tauri CPAL recorder can.
 - [ ] **2.6** Wire `collaboration` into the footer `AccountPopover` so sync phase renders.
 
 ### Phase 3 (deferred): Settings sync allowlist
