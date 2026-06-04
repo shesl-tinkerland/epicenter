@@ -268,3 +268,46 @@ markdown     = one-shot vault rewrite: tags: [..] + types: {..} -> tags: {..};
   support `[[id|Title]]`. Trigger: the wikilink authoring UX is built.
 - **Single id namespace / G3 fold**: only if the two-things boundary ever stops
   paying for itself.
+
+## Amendments (20260603, code is ahead of this draft)
+
+This draft was written before the final refactor wave. The text above is preserved
+as the original record; the items below are current truth where they conflict.
+
+Implemented since the draft:
+
+- **One-way vault.** The markdown vault is a read-only projection of Yjs; there is
+  no `markdown_push` disk-to-Yjs reconcile. Writes happen ONLY through actions, so
+  the `markdown_push` mentions (lines 54, 196) are obsolete: the assign action is
+  the sole minting path.
+- **Typed column authoring via a closed `kind` descriptor.** An agent passes a
+  `ColumnInput` `{ id, name, kind, nullable?, array?, enumValues? }`, never a
+  hand-written schema; `buildColumnSchema` compiles it. The "raw `column.*`
+  TSchema, stored verbatim" language (line 106) describes the OLD path. Junk can no
+  longer be authored: the input `kind` union rejects unknown kinds before the
+  handler runs, which retired the `isTSchemaObject` guard.
+- **Naming.** The tables are `pages` / `tags` (the draft's `pages.types` /
+  `types.columns`, line 104, predates the rename).
+
+New decisions (this review):
+
+- **Deletion (the symmetric closure of create/define).** Add `pages_delete`,
+  `tags_remove`, `pages_remove_tag`. Safe by construction: the model already
+  supports dangling refs (a delete just creates one) and excess values (an orphaned
+  tag's values render as excess through the lens, never lost). Soft-delete / trash
+  deferred; trigger: an undo or trash UX.
+- **Verb symmetry.** Rename `pages_assign_tag` to `pages_set_tag` so the page-tag
+  verbs mirror the tag-column verbs exactly:
+  `tags_set_column` / `tags_remove_column` to `pages_set_tag` / `pages_remove_tag`.
+- **Law: kinds validate leaves, edges are value-detected.** A column `kind`
+  validates a LEAF value (url, datetime, enum). A reference is never a kind; it is
+  an EDGE recognized by its `epicenter://` URN value at projection. The next
+  "special string" follows the law: a leaf format becomes a kind, a cross-entity
+  pointer is value-detected.
+- **Store the descriptor, derive the schema.** Store the `ColumnInput` descriptor
+  and compile the `TSchema` on read. The compiled schema is a pure function of the
+  descriptor (`buildColumnSchema`), so storing it is storing a derived value;
+  storing the descriptor instead deletes the `StoredColumnSpec` / `Type.Unsafe` /
+  `tagColumns`-cast impedance (lines 103-106) and is even more constrained than a
+  raw TSchema (a closed switch, no eval). `pageTagsCell` keeps its `Type.Unsafe`:
+  its leaf values are genuinely arbitrary JSON, the one earned escape hatch.
