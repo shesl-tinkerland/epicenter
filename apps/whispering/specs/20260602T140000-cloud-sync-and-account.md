@@ -23,7 +23,7 @@ Read first:
 Read if changing the architecture:
   Design Decisions
   Architecture
-  Settings partition
+  Settings (device-local in v1)
   Audio blobs
   Edge Cases
 
@@ -33,7 +33,7 @@ Decide these:
 
 ## Overview
 
-Whispering is already a `@epicenter/workspace` Yjs app, but local-only: it persists to IndexedDB and same-device BroadcastChannel with no account, no keyring, and no relay. This spec adds an **optional** cloud layer: sign in with Epicenter, and the workspace (recording metadata, transcripts, transformations, and a curated subset of settings) syncs across devices through the existing `openCollaboration` relay. Audio files stay on the device that recorded them unless the user presses "Upload audio," which pushes the blob to R2.
+Whispering is already a `@epicenter/workspace` Yjs app, but local-only: it persists to IndexedDB and same-device BroadcastChannel with no account, no keyring, and no relay. This spec adds an **optional** cloud layer: sign in with Epicenter, and the workspace (recording metadata, transcripts, transformations) syncs across devices through the existing `openCollaboration` relay. Settings stay device-local in v1. Audio files stay on the device that recorded them unless the user presses "Upload audio," which pushes the blob to R2.
 
 ## Motivation
 
@@ -98,7 +98,7 @@ tab-manager / fuji:   auth -> session -> workspace        (no auth, no workspace
 whispering:           workspace (always) ; auth -> sync   (sync is a detachable layer)
 ```
 
-The consequence: there is an **active workspace** that is either the local doc (signed out) or an owner-scoped synced doc (signed in). They are *different Y.Docs* because encryption is fixed at construction (`createWhispering({ keyring })`) and local storage is partitioned by owner. Switching identity rebuilds the active workspace and migrates data once. The leverage point that keeps this contained: components already read through `$lib/state/*`, so only those few state modules (plus the singleton) need to follow the swap, not every component.
+The consequence: the workspace is either the local doc (signed out) or an owner-scoped synced doc (signed in). They are *different Y.Docs* because encryption is fixed at construction (`createWhispering({ keyring })`) and local storage is partitioned by owner. **The doc is chosen once at startup from `auth.state`, and signing in or out triggers a full-page `window.location.reload()`** so the next startup rebuilds the right doc. There is no live in-place swap: nothing is mounted at startup, so there are no observers to dispose or re-subscribe, and `whispering` stays a plain stable import (no reactive accessor, no `$derived` over a swapping doc). Sign-in/out is rare, and the app already reloads after `forgetDevice` ("restart-as-heal" is the established contract).
 
 ## Research Findings
 
@@ -108,9 +108,9 @@ The consequence: there is an **active workspace** that is either the local doc (
 | --- | --- | --- | --- | --- |
 | tab-manager | auth-gated | `createSession` build cb | `attachLocalStorage` (owner-partitioned) | `openCollaboration` |
 | fuji | auth-gated | `createSession` build cb | `attachLocalStorage` | `openCollaboration` + child docs |
-| **whispering (target)** | **optional** | **module singleton + reactive swap** | local plaintext OR owner-partitioned | `openCollaboration` when signed in |
+| **whispering (target)** | **optional** | **module singleton; doc chosen at startup from auth, reload on auth change** | local plaintext OR owner-partitioned | `openCollaboration` when signed in |
 
-**Key finding**: every existing synced app is auth-gated, so none of them model "optional sync over an always-on local doc." Whispering is the first. The reusable pieces (`createOAuthAppAuth`, `createSession`, `SignedIn`, `openCollaboration`, `attachLocalStorage`, `roomWsUrl`, `AccountPopover`) all transfer; the *composition* (active-workspace indirection + first-sign-in migration) is new.
+**Key finding**: every existing synced app is auth-gated, so none of them model "optional sync over an always-on local doc." Whispering is the first. The reusable pieces (`createOAuthAppAuth`, `createSession`, `SignedIn`, `openCollaboration`, `attachLocalStorage`, `roomWsUrl`, `AccountPopover`) all transfer; the *composition* (startup doc selection by auth + reload-on-auth-change + first-sign-in migration) is new.
 
 **Implication**: we reuse `createSession` for the signed-in branch only, and place the local doc as the fallback when `session.current` is null.
 
@@ -137,11 +137,11 @@ Whispering selects browser-vs-Tauri implementations through `#platform/*` packag
 | Decision | Class | Choice | Rationale |
 | --- | --- | --- | --- |
 | Gating model | 2 coherence | Optional, not gated | Whispering's identity is free, offline, local-first. Sync is additive. |
-| Workspace lifecycle | 2 coherence | Active workspace = `session.current ?? localWhispering` | Local doc always exists; signed-in branch is a separate owner-scoped doc. |
-| Where the swap is absorbed | 3 taste | In `$lib/state/*` + the `whispering` accessor | Components read through state modules; insulate them, not every call site. Revisit if a component reaches the doc directly. |
+| Workspace lifecycle | 2 coherence | Doc chosen once at startup from `auth.state`; reload on sign-in/out | Local doc always exists; signed-in branch is a separate owner-scoped doc. A reload (not a live swap) means nothing is mounted when the doc is picked. |
+| Live in-place swap | 2 coherence | Refused: reload on auth change instead | Deletes the reactive accessor, the `$lib/state` `$derived` migration, and the leaked-observer risk. `$lib/state/*` keeps importing the `whispering` singleton unchanged. |
 | Auth factory | 1 evidence | `createOAuthAppAuth` via `@epicenter/svelte/auth` | One blessed factory (verify against `packages/auth`). Needs a Whispering OAuth client id in `@epicenter/constants/oauth`. |
 | UI placement | 2 coherence | Sidebar footer `AccountPopover` + Settings -> Account page | Footer is route-independent (renders on the bare homepage); Settings page is the discoverable canonical home. |
-| Settings sync | 2 coherence | Per-key allowlist: sync portable prefs, exclude secrets + device-bound | API keys, shortcuts, selected mic are wrong to sync. (User decision.) |
+| Settings sync | 2 coherence | None in v1: settings stay device-local | Skips the secret-leak risk entirely. The per-key allowlist (sync portable prefs, exclude secrets + device-bound) is deferred until a preference actually needs to roam. (Revised from the earlier allowlist decision.) |
 | Audio blobs | 2 coherence | Stay local; opt-in per-recording upload to R2 | Audio is large; the relay/body model targets CRDT/text, not big binaries. (User decision.) |
 | First sign-in data | 1 evidence | Migrate local rows/allowlisted KV into the owner doc once | Verify merge-vs-copy semantics against `createWorkspace` + actions during impl. |
 | Audio encryption at rest | Deferred | Deferred | Client-side keyring-encrypt before R2 PUT is the ambition; plaintext-in-R2 is the cheap start. See Open Questions. |
@@ -149,15 +149,15 @@ Whispering selects browser-vs-Tauri implementations through `#platform/*` packag
 
 ## Architecture
 
-### Active workspace selection
+### Startup doc selection (no live swap)
 
 ```txt
-                        auth.state
+            app startup: read persisted auth.state
                             |
             +---------------+----------------+
             | signed-out                     | signed-in / reauth-required
             v                                v
-   localWhispering (singleton)      createSession build:
+   build LOCAL doc (sync)            await session (ownerId, keyring), build SYNCED doc
      createWhispering()               createWhispering({ keyring: signedIn.keyring })
      attachIndexedDb (plaintext)      attachLocalStorage (owner-partitioned, encrypted)
      attachBroadcastChannel           attachBroadcastChannel
@@ -165,50 +165,56 @@ Whispering selects browser-vs-Tauri implementations through `#platform/*` packag
             \                                /
              \                              /
               v                            v
-        getActiveWhispering()  =  session.current ?? localWhispering
+          export const whispering    (a plain singleton, picked once at startup)
                             |
                             v
-              $lib/state/recordings.svelte.ts
-              $lib/state/settings.svelte.ts   (re-subscribe on swap)
+              $lib/state/* import it directly   (UNCHANGED from today)
                             |
                             v
                        components (unchanged)
+
+  on sign-in completion / sign-out:  window.location.reload()
+     -> next startup re-runs this selection against the new auth.state
 ```
 
 ### Sign-in flow
 
 ```txt
 Step 1: User clicks sidebar AccountPopover -> "Sign in with Epicenter"
-  auth.startSignIn()  (browser: redirect launcher; tauri: deep-link / OOB launcher)
+  auth.startSignIn()  (browser: redirect launcher; tauri: deep-link launcher)
 
-Step 2: auth.state -> 'signed-in' (ownerId, keyring)
-  createSession build() fires -> owner doc + attachLocalStorage + openCollaboration
+Step 2: auth completes -> auth.state becomes 'signed-in' (ownerId, keyring), persisted
 
-Step 3: First time on this device with local data?
-  migrate local rows + allowlisted KV into the owner doc (idempotent by id)
+Step 3: window.location.reload()
 
-Step 4: getActiveWhispering() now returns the synced doc
-  state modules re-subscribe; UI shows Cloud + "Connected"
+Step 4: next startup sees signed-in auth -> builds the owner doc
+  (createSession build -> attachLocalStorage + openCollaboration).
+  First time on this device with local data? migrate local rows into the
+  owner doc once (idempotent by id). UI shows Cloud + "Connected".
 ```
 
 ### New files (mirrors fuji/tab-manager)
 
 ```txt
 apps/whispering/src/lib/
-  auth/
-    auth.browser.ts      # createWebStoragePersistedAuthStorage + redirect launcher
-    auth.tauri.ts        # file/Stronghold-backed storage + deep-link/OOB launcher
-  session.svelte.ts      # createSession({ auth, build: openWhisperingSynced })
+  platform/
+    auth.browser.ts      # DONE: persisted web storage + shared browser redirect launcher
+    auth.tauri.ts        # DONE: persisted storage + shared createTauriDeepLinkOAuthLauncher
+  session.svelte.ts      # TODO: createSession({ auth, build: openWhisperingSynced })
   whispering/
-    whispering.synced.ts # owner-scoped: attachLocalStorage + openCollaboration
-    active.svelte.ts     # getActiveWhispering() = session.current ?? localWhispering
+    whispering.synced.ts # TODO: owner-scoped: createWhispering({ keyring }) + attachLocalStorage + openCollaboration
+    whispering.{tauri,browser}.ts  # MODIFY: pick local vs synced at startup from auth.state; export `whispering`
 package.json#imports
-  "#platform/auth": { "tauri": "./src/lib/auth/auth.tauri.ts", "default": "./src/lib/auth/auth.browser.ts" }
+  "#platform/auth": { "tauri": "./src/lib/platform/auth.tauri.ts", "default": "./src/lib/platform/auth.browser.ts" }  # DONE
 ```
 
-## Settings partition (the KV allowlist)
+No `active.svelte.ts` and no `getActiveWhispering`: reload-on-auth means the doc is picked once where `whispering` is exported, so there is no accessor and no `$lib/state` migration.
 
-`definition.ts` currently defines ~40 KV keys in one map. Split them:
+## Settings (device-local in v1)
+
+Settings do **not** sync in v1. They stay in their current device-local KV regardless of sign-in state, so no secret (provider API keys) or device-bound value (shortcuts, selected microphone) can reach the relay. `settings.svelte.ts` is unchanged.
+
+Deferred (the per-key allowlist):
 
 ```txt
 syncedKv   (portable prefs): ui.*, transcription provider CHOICE, sound.*, output.*, transformation defaults
@@ -216,9 +222,7 @@ localKv    (excluded):       api-keys / provider secrets, shortcuts (local + glo
                              retention/cleanup that is device-specific
 ```
 
-- The owner doc carries only `syncedKv`. `localKv` always lives in a device-local store (the local doc, or a dedicated always-local KV), regardless of sign-in state.
-- `settings.svelte.ts` reads from both and merges; writes route to the correct store by key.
-- This is the riskiest single refactor in the spec because a misclassified key either leaks a secret to the relay or pushes a device-bound setting to the wrong machine. Treat the allowlist as the review gate.
+This allowlist is the riskiest single refactor in the original plan: a misclassified key either leaks a secret to the relay or pushes a device-bound setting to the wrong machine. "Sync nothing from settings" is the safe default, so the allowlist waits until a specific portable preference actually needs to roam, and gets its own review gate then.
 
 ## Audio blobs (opt-in R2)
 
@@ -246,40 +250,33 @@ Billing note: R2 storage/egress is hosted-personal-cloud only; keep it in `apps/
 
 ## Call sites: before and after
 
-### The workspace accessor
+### The workspace export
 
 **Before** (`apps/whispering/src/lib/whispering/whispering.tauri.ts:108`):
 
 ```ts
-export const whispering = openWhispering();
+export const whispering = openWhispering();   // always the local doc
 ```
 
-**After** (local doc stays a singleton; add a reactive active accessor):
+**After** (startup picks local vs synced from auth; the import stays stable):
 
 ```ts
-export const localWhispering = openWhispering();           // unchanged construction
-// active.svelte.ts
-export const getActiveWhispering = () => session.current?.whispering ?? localWhispering;
+// signed out -> local doc (today's construction, synchronous)
+// signed in  -> await the session, build the owner-scoped synced doc
+export const whispering = await openActiveWhispering();   // chosen once at startup
 ```
 
-**Semantic shift to flag**: `whispering` was a stable import. Direct `import { whispering }` users must move to `getActiveWhispering()` (a reactive read). Grep for `whispering.tables`, `whispering.kv`, `whispering.actions` outside `$lib/state/*`; each is a call site that must go through the accessor or be proven local-only.
+**Semantic shift to flag**: construction becomes async for the signed-in branch (it awaits the keyring/session), so the root needs a ready-gate before rendering (see the `sync-construction-async-property-ui-render-gate-pattern` skill). But `whispering` stays a plain stable import: `$lib/state/*` and every component are UNCHANGED. No reactive accessor, no `$derived` over a swapping doc, no observer teardown.
 
 ### Recordings state binding
 
-**Before** (`apps/whispering/src/lib/state/recordings.svelte.ts`):
+Unchanged from today:
 
 ```ts
 const recordings = fromTable(whispering.tables.recordings);
 ```
 
-**After**:
-
-```ts
-// re-derive when the active workspace swaps (sign-in / sign-out)
-const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
-```
-
-**Semantic shift to flag**: bindings become `$derived` over the active workspace. On swap, subscriptions must dispose and re-create cleanly (no leaked observers from the previous doc).
+With reload-on-auth there is no live swap, so no `$derived` rewrap and no leaked-observer risk.
 
 ## Implementation Plan
 
@@ -292,15 +289,18 @@ const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
 - [x] **1.5** Added Settings -> Account page (`(config)/settings/account/+page.svelte`) + `SidebarNav` entry. Built directly against the `#platform/auth` client (no popover indirection on the page): identity (email via `/api/session`), sign in/out, reauth. Forget-device + live sync status deferred to Phase 2 (need `wipe()` + `collaboration`); page shows an honest "sync not on yet" note.
 - [x] **1.6** Verified statically: `typecheck` 0 errors, web `build` green (browser condition resolves the `#platform/auth` seam + `account-popover` + new page). Blast radius is 3 UI files only; no workspace/state/doc files touched, so the signed-out path is structurally unchanged. STILL TODO: live click-through sign-in and the Tauri deep-link round-trip (needs a desktop build + running OAuth backend + account).
 
-### Phase 2: Optional synced workspace
+### Phase 2: Optional synced workspace (reload-on-auth)
 
 - [ ] **2.1** Make `createWhispering` accept an optional `keyring` and thread it to `createWorkspace`.
 - [ ] **2.2** `whispering.synced.ts`: owner-scoped doc with `attachLocalStorage` + `openCollaboration` + `roomWsUrl`.
 - [ ] **2.3** `session.svelte.ts`: `createSession({ auth, build })` returning the synced workspace + collaboration.
-- [ ] **2.4** `active.svelte.ts`: `getActiveWhispering()`; migrate `$lib/state/*` to `$derived` over it.
-- [ ] **2.5** Wire `collaboration` into the footer `AccountPopover` so sync phase renders.
+- [ ] **2.4** At startup, export `whispering` as the local doc (signed out) or the synced doc (signed in), chosen from `auth.state`; add a root ready-gate for the async signed-in build. NO `getActiveWhispering`, NO `$lib/state` migration.
+- [ ] **2.5** Reload on auth change: sign-in completion and sign-out call `window.location.reload()`.
+- [ ] **2.6** Wire `collaboration` into the footer `AccountPopover` so sync phase renders.
 
-### Phase 3: Settings partition
+### Phase 3 (deferred): Settings sync allowlist
+
+Not in the MVP: settings stay device-local. Build only when a specific portable preference needs to roam.
 
 - [ ] **3.1** Split KV into `syncedKv` / `localKv` per the allowlist; owner doc carries only `syncedKv`.
 - [ ] **3.2** Update `settings.svelte.ts` to read both and route writes by key.
@@ -330,8 +330,8 @@ const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
 3. Expected: metadata/transcripts present, audio absent until uploaded.
 
 ### Sign out
-1. `session.current` -> null; synced doc disposed.
-2. `getActiveWhispering()` falls back to `localWhispering`.
+1. Sign-out clears auth and calls `window.location.reload()`.
+2. Next startup sees signed-out auth and builds the local doc.
 3. Expected: local data (whatever the local doc holds) remains; no wipe. Synced-only data is not in the local doc. See Open Questions on local/owner doc reconciliation.
 
 ### Reauth-required (token expired)
@@ -340,15 +340,15 @@ const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
 3. `AccountPopover` shows the failed/offline glyph + Reconnect. Expected: no data loss.
 
 ### Sign in as a different account on the same device
-1. Owner changes; `createSession` disposes and rebuilds for the new owner.
+1. Owner changes; the reload rebuilds at startup for the new owner.
 2. `attachLocalStorage` is owner-partitioned, so account B never sees account A's local owner store.
 3. Expected: no cross-account contamination. The first-sign-in migration must key off the *local* doc, not a previous owner's doc.
 
 ## Open Questions
 
 1. **Local doc vs owner doc reconciliation after sign-out.**
-   - Options: (a) signed-out always reads `localWhispering`, and signed-in work lives only in the owner doc (sign-out "hides" synced-only recordings until you sign back in); (b) mirror owner writes back into the local doc so signed-out keeps a read-only copy; (c) after first sign-in, treat the owner doc as the only doc on that device and never fall back.
-   - **Recommendation**: (a) for MVP. It is the simplest honest model and matches "sync is an optional layer." Revisit if users find disappearing-on-sign-out surprising. Leave open.
+   - Options: (a) signed-out startup always builds the local doc, and signed-in work lives only in the owner doc (sign-out "hides" synced-only recordings until you sign back in); (b) mirror owner writes back into the local doc so signed-out keeps a read-only copy; (c) after first sign-in, treat the owner doc as the only doc on that device and never fall back.
+   - **Recommendation**: (a) for MVP. Reload-on-auth implements it directly (the signed-out startup picks the local doc), it is the simplest honest model, and it matches "sync is an optional layer." Revisit if users find disappearing-on-sign-out surprising. Leave open.
 
 2. **Audio encryption at rest in R2.**
    - Options: (a) plaintext in R2 (server-readable, simplest, consistent with today's plaintext-body gap); (b) client-side keyring-encrypt the whole blob before PUT and decrypt on GET (E2E, but no range/streaming).
@@ -367,7 +367,7 @@ const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
 - [ ] Signed-out Whispering is behaviorally identical to today (offline, no account, local IDB + BroadcastChannel).
 - [ ] Sign-in works from both the sidebar footer popover and Settings -> Account, on web and Tauri.
 - [ ] A recording made on device A appears (metadata + transcript) on device B after sign-in; sync phase shows "Connected."
-- [ ] No secret or device-bound setting (API keys, shortcuts, selected mic) ever enters the synced doc.
+- [ ] Settings do not sync in v1, so no secret or device-bound setting (API keys, shortcuts, selected mic) can enter the synced doc.
 - [ ] "Upload audio" makes a recording's audio playable on another signed-in device; un-uploaded recordings clearly read as device-local.
 - [ ] First sign-in migrates existing local data once with no duplication.
 - [ ] `bun run --filter @epicenter/whispering check` passes; signed-out smoke test green.
@@ -376,7 +376,7 @@ const recordings = $derived(fromTable(getActiveWhispering().tables.recordings));
 
 - `apps/whispering/src/lib/whispering/whispering.tauri.ts:46` - current local-only `openWhispering`.
 - `apps/whispering/src/lib/workspace/definition.ts` - tables + ~40 KV keys to partition.
-- `apps/whispering/src/lib/state/recordings.svelte.ts`, `settings.svelte.ts` - the swap-absorbing layer.
+- `apps/whispering/src/lib/state/recordings.svelte.ts`, `settings.svelte.ts` - unchanged; they keep importing the `whispering` singleton (reload-on-auth means no swap to absorb).
 - `apps/whispering/src/routes/(app)/_components/VerticalNav.svelte:77` - sidebar footer (popover home).
 - `apps/whispering/src/routes/(app)/(config)/settings/SidebarNav.svelte` - add Account entry.
 - `apps/tab-manager/src/lib/session.svelte.ts` - `createSession` + `openCollaboration` reference wiring.
