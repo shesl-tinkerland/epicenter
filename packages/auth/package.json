@@ -7,7 +7,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./node": "./src/node.ts",
-		"./oauth-launchers": "./src/oauth-launchers/index.ts"
+		"./oauth-launchers": "./src/oauth-launchers/index.ts",
+		"./oauth-launchers/tauri": "./src/oauth-launchers/tauri.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
@@ -24,7 +25,20 @@
 		"oauth4webapi": "catalog:",
 		"wellcrafted": "catalog:"
 	},
+	"peerDependencies": {
+		"@tauri-apps/api": "^2",
+		"@tauri-apps/plugin-deep-link": "^2",
+		"@tauri-apps/plugin-opener": "^2"
+	},
+	"peerDependenciesMeta": {
+		"@tauri-apps/api": { "optional": true },
+		"@tauri-apps/plugin-deep-link": { "optional": true },
+		"@tauri-apps/plugin-opener": { "optional": true }
+	},
 	"devDependencies": {
+		"@tauri-apps/api": "catalog:",
+		"@tauri-apps/plugin-deep-link": "^2.4.9",
+		"@tauri-apps/plugin-opener": "catalog:",
 		"@types/bun": "catalog:",
 		"typescript": "catalog:"
 	},

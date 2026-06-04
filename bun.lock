@@ -574,9 +574,22 @@
         "wellcrafted": "catalog:",
       },
       "devDependencies": {
+        "@tauri-apps/api": "catalog:",
+        "@tauri-apps/plugin-deep-link": "^2.4.9",
+        "@tauri-apps/plugin-opener": "catalog:",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
+      "peerDependencies": {
+        "@tauri-apps/api": "^2",
+        "@tauri-apps/plugin-deep-link": "^2",
+        "@tauri-apps/plugin-opener": "^2",
+      },
+      "optionalPeers": [
+        "@tauri-apps/api",
+        "@tauri-apps/plugin-deep-link",
+        "@tauri-apps/plugin-opener",
+      ],
     },
     "packages/cli": {
       "name": "@epicenter/cli",
