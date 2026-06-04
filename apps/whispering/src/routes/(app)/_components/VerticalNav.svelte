@@ -10,6 +10,8 @@
 	import { GithubIcon } from '$lib/components/icons';
 	import { NAV_ITEMS } from './nav-items';
 	import { tauri } from '#platform/tauri';
+	import { auth } from '#platform/auth';
+	import { AccountPopover } from '@epicenter/svelte/account-popover';
 	import MigrationDialog from '$lib/migration/MigrationDialog.svelte';
 	import { migrationDialog } from '$lib/migration/migration-dialog.svelte';
 
@@ -76,6 +78,13 @@
 
 	<Sidebar.Footer>
 		<Sidebar.Menu>
+			<!-- Account / sync (route-independent: visible on the bare home page) -->
+			<Sidebar.MenuItem>
+				<div class="flex items-center px-1.5 py-1">
+					<AccountPopover {auth} syncNoun="recordings" />
+				</div>
+			</Sidebar.MenuItem>
+
 			<!-- Toggle dark mode -->
 			<Sidebar.MenuItem>
 				<Sidebar.MenuButton>
