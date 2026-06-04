@@ -19,6 +19,7 @@
 			activePathPrefix: '/settings/shortcuts',
 		},
 		{ title: 'Privacy & Analytics', href: '/settings/analytics' },
+		{ title: 'Account', href: '/settings/account' },
 	] satisfies {
 		title: string;
 		href: string;
