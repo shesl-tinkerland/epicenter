@@ -2,34 +2,15 @@
 	import { Button } from '@epicenter/ui/button';
 	import * as Field from '@epicenter/ui/field';
 	import { toastOnError } from '@epicenter/ui/sonner';
-	import { createMutation, createQuery } from '@tanstack/svelte-query';
+	import { createMutation } from '@tanstack/svelte-query';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import { auth } from '#platform/auth';
 
-	type AccountProfile = { user: { id: string; email: string } };
-
+	// Identity (email) is shown by the footer AccountPopover, which owns the
+	// /api/session query. This page is for the sign in / sign out actions, so it
+	// reads auth.state directly and does not re-fetch the profile.
 	const isSignedIn = $derived(auth.state.status === 'signed-in');
-	const profileCacheKey = $derived(
-		auth.state.status === 'signed-out' ? null : auth.state.ownerId,
-	);
-
-	const profile = createQuery(() => ({
-		queryKey: ['account-profile', profileCacheKey],
-		queryFn: async (): Promise<AccountProfile> => {
-			const response = await auth.fetch('/api/session');
-			if (!response.ok) {
-				throw new Error(`Failed to load account (${response.status}).`);
-			}
-			return (await response.json()) as AccountProfile;
-		},
-		enabled: auth.state.status !== 'signed-out',
-		staleTime: Infinity,
-	}));
-
-	const email = $derived(
-		profile.data?.user.email ?? (profile.error ? 'Offline' : 'Loading...'),
-	);
 
 	const startSignIn = createMutation(() => ({
 		mutationKey: ['account', 'startSignIn'],
@@ -58,7 +39,9 @@
 			<Field.Field orientation="horizontal">
 				<Field.Content>
 					<Field.Label>Signed in</Field.Label>
-					<Field.Description>{email}</Field.Description>
+					<Field.Description>
+						Your Epicenter account is connected on this device.
+					</Field.Description>
 				</Field.Content>
 				<Button
 					variant="outline"
