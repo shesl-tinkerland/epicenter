@@ -10,8 +10,8 @@
  * It returns the raw `{ workspace, whenReady, collaboration }` so each platform
  * file can layer its one platform-specific action (`recordings_export_markdown`)
  * on top before exporting the `whispering` singleton. Identity changes are never
- * an in-place swap: `bindAuthReload` reloads the page so the next boot re-runs
- * this selection.
+ * an in-place swap: `reloadOnOwnerChange` reloads the page so the next boot
+ * re-runs this selection.
  */
 
 import { auth } from '#platform/auth';
