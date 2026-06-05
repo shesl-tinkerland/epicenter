@@ -11,6 +11,7 @@
 	import { NAV_ITEMS } from './nav-items';
 	import { tauri } from '#platform/tauri';
 	import { auth } from '#platform/auth';
+	import { whispering } from '#platform/whispering';
 	import { AccountPopover } from '@epicenter/svelte/account-popover';
 	import MigrationDialog from '$lib/migration/MigrationDialog.svelte';
 	import { migrationDialog } from '$lib/migration/migration-dialog.svelte';
@@ -81,7 +82,11 @@
 			<!-- Account / sync (route-independent: visible on the bare home page) -->
 			<Sidebar.MenuItem>
 				<div class="flex items-center px-1.5 py-1">
-					<AccountPopover {auth} syncNoun="recordings" />
+					<AccountPopover
+						{auth}
+						collaboration={whispering.collaboration}
+						syncNoun="recordings"
+					/>
 				</div>
 			</Sidebar.MenuItem>
 

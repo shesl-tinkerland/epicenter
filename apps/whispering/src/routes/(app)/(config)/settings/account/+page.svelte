@@ -86,8 +86,9 @@
 	<Field.Set>
 		<Field.Legend variant="label">Sync</Field.Legend>
 		<Field.Description>
-			Device sync is not turned on yet. Sign-in is ready; syncing your
-			recordings across devices ships next.
+			While signed in, your recordings, transcripts, and transformations sync
+			across your devices. Audio files stay on the device that recorded them.
+			Live sync status shows in the account menu in the sidebar.
 		</Field.Description>
 	</Field.Set>
 </Field.Set>
