@@ -12,6 +12,8 @@
 		VAD_STATE_TO_ICON,
 	} from '$lib/constants/audio';
 	import { migrationDialog } from '$lib/migration/migration-dialog.svelte';
+	import SignInMigrationDialog from '$lib/migration/SignInMigrationDialog.svelte';
+	import { signInMigration } from '$lib/migration/sign-in-migration.svelte';
 	import { services } from '$lib/services';
 	import { tauri } from '#platform/tauri';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
@@ -43,6 +45,9 @@
 
 		// Platform-agnostic async checks
 		migrationDialog.check();
+		// Signed-in only: prompt to migrate this device's local recordings into
+		// the account (no-op when signed out or when there is no local data).
+		signInMigration.check();
 
 		if (tauri) {
 			syncGlobalShortcutsWithSettings();
@@ -116,3 +121,4 @@
 <ConfirmationDialog />
 <MoreDetailsDialog />
 <UpdateDialog />
+<SignInMigrationDialog />
