@@ -1,13 +1,13 @@
 /**
  * Tauri runtime client for Whispering.
  *
- * Builds the workspace, attaches IndexedDB persistence and same-device
- * broadcast sync, and adds native actions only available in the desktop app.
+ * Picks the active doc (local or synced) at boot via `openActiveWhispering`,
+ * then layers the native desktop action (markdown export touches the native
+ * dialog and filesystem). The `whispering` singleton it exports is consumed
+ * everywhere through the `#platform/whispering` seam.
  */
 
 import {
-	attachBroadcastChannel,
-	attachIndexedDb,
 	defineActions,
 	defineMutation,
 	defineWorkspace,
@@ -21,7 +21,8 @@ import {
 } from 'wellcrafted/error';
 import { type Result, tryAsync } from 'wellcrafted/result';
 import { commands } from '$lib/tauri/commands';
-import { createWhispering, type Recording } from '$lib/workspace';
+import type { Recording } from '$lib/workspace';
+import { openActiveWhispering } from './whispering.active';
 
 const RecordingMarkdownExportError = defineErrors({
 	WriteFailed: ({ cause }: { cause: unknown }) => ({
@@ -43,66 +44,57 @@ type RecordingMarkdownExportResult =
 			written: number;
 	  };
 
-export function openWhispering() {
-	const workspace = createWhispering();
+const { workspace, whenReady, collaboration } = openActiveWhispering();
 
-	const idb = attachIndexedDb(workspace.ydoc);
-	attachBroadcastChannel(workspace.ydoc);
+export const whispering = defineWorkspace({
+	...workspace,
+	actions: defineActions({
+		...workspace.actions,
+		/**
+		 * Open a folder picker and write every current recording as markdown.
+		 *
+		 * This is a Tauri action because it touches the native dialog and
+		 * filesystem command surfaces. It is a click-time snapshot: later edits
+		 * in Whispering do not update the exported files.
+		 */
+		recordings_export_markdown: defineMutation({
+			title: 'Export recording markdown',
+			description: 'Export current recordings as markdown files',
+			handler: async (): Promise<
+				Result<RecordingMarkdownExportResult, RecordingMarkdownExportError>
+			> =>
+				tryAsync({
+					try: async () => {
+						const selected = await open({
+							directory: true,
+							multiple: false,
+							title: 'Choose folder for recording markdown export',
+						});
+						if (typeof selected !== 'string') return { status: 'cancelled' };
 
-	return defineWorkspace({
-		...workspace,
-		actions: defineActions({
-			...workspace.actions,
-			/**
-			 * Open a folder picker and write every current recording as markdown.
-			 *
-			 * This is a Tauri action because it touches the native dialog and
-			 * filesystem command surfaces. It is a click-time snapshot: later edits
-			 * in Whispering do not update the exported files.
-			 */
-			recordings_export_markdown: defineMutation({
-				title: 'Export recording markdown',
-				description: 'Export current recordings as markdown files',
-				handler: async (): Promise<
-					Result<RecordingMarkdownExportResult, RecordingMarkdownExportError>
-				> =>
-					tryAsync({
-						try: async () => {
-							const selected = await open({
-								directory: true,
-								multiple: false,
-								title: 'Choose folder for recording markdown export',
+						const files = workspace.tables.recordings
+							.getAllValid()
+							.map((row: Recording) => {
+								const { transcript, ...frontmatter } = row;
+								const yamlStr = yaml.dump(frontmatter, { lineWidth: -1 });
+								return {
+									filename: `${row.id}.md`,
+									content: `---\n${yamlStr}---\n${transcript || ''}\n`,
+								};
 							});
-							if (typeof selected !== 'string') return { status: 'cancelled' };
-
-							const files = workspace.tables.recordings
-								.getAllValid()
-								.map((row: Recording) => {
-									const { transcript, ...frontmatter } = row;
-									const yamlStr = yaml.dump(frontmatter, { lineWidth: -1 });
-									return {
-										filename: `${row.id}.md`,
-										content: `---\n${yamlStr}---\n${transcript || ''}\n`,
-									};
-								});
-							const { error } = await commands.writeMarkdownFiles(
-								selected,
-								files,
-							);
-							if (error !== null) throw error;
-							return {
-								status: 'exported',
-								dir: selected,
-								written: files.length,
-							};
-						},
-						catch: (error) =>
-							RecordingMarkdownExportError.WriteFailed({ cause: error }),
-					}),
-			}),
+						const { error } = await commands.writeMarkdownFiles(selected, files);
+						if (error !== null) throw error;
+						return {
+							status: 'exported',
+							dir: selected,
+							written: files.length,
+						};
+					},
+					catch: (error) =>
+						RecordingMarkdownExportError.WriteFailed({ cause: error }),
+				}),
 		}),
-		whenReady: idb.whenLoaded,
-	});
-}
-
-export const whispering = openWhispering();
+	}),
+	whenReady,
+	collaboration,
+});
