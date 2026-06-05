@@ -139,6 +139,7 @@ Whispering selects browser-vs-Tauri implementations through `#platform/*` packag
 | Gating model | 2 coherence | Optional, not gated | Whispering's identity is free, offline, local-first. Sync is additive. |
 | Workspace lifecycle | 2 coherence | Doc chosen once at startup from `auth.state`; reload on sign-in/out | Local doc always exists; signed-in branch is a separate owner-scoped doc. A reload (not a live swap) means nothing is mounted when the doc is picked. |
 | Live in-place swap | 2 coherence | Refused: reload on auth change instead | Deletes the reactive accessor, the `$lib/state` `$derived` migration, and the leaked-observer risk. `$lib/state/*` keeps importing the `whispering` singleton unchanged. |
+| Both docs always alive | 2 coherence | Refused: mutually exclusive (overlap only during migration) | Keeping the local doc alive while signed in buys nothing: the state-layer read still switches on logout, which needs reload-or-context regardless. The only design that removes the switch (always read local, mirror to synced) keeps ALL data PLAINTEXT on disk, defeating the encrypted store. One doc at a time + reload is leaner and safer. |
 | Auth factory | 1 evidence | `createOAuthAppAuth` via `@epicenter/svelte/auth` | One blessed factory (verify against `packages/auth`). Needs a Whispering OAuth client id in `@epicenter/constants/oauth`. |
 | UI placement | 2 coherence | Sidebar footer `AccountPopover` + Settings -> Account page | Footer is route-independent (renders on the bare homepage); Settings page is the discoverable canonical home. |
 | Settings sync | 2 coherence | None in v1: settings stay device-local | Skips the secret-leak risk entirely. The per-key allowlist (sync portable prefs, exclude secrets + device-bound) is deferred until a preference actually needs to roam. (Revised from the earlier allowlist decision.) |
@@ -306,10 +307,33 @@ Not in the MVP: settings stay device-local. Build only when a specific portable 
 - [ ] **3.2** Update `settings.svelte.ts` to read both and route writes by key.
 - [ ] **3.3** Review gate: confirm no secret or device-bound key is in `syncedKv`.
 
-### Phase 4: First-sign-in migration
+### Phase 4: First-sign-in migration (flag-free)
 
-- [ ] **4.1** On first owner build with existing local data, copy local rows + allowlisted KV into the owner doc, idempotent by id.
-- [ ] **4.2** Mark migrated; do not re-run. Verify no duplication on repeat sign-in.
+The signed-out plaintext doc is the migration SOURCE; the signed-in encrypted doc is the TARGET. They overlap ONLY here: a throwaway source reader (`openWhisperingLocal()` re-opened from the persisted plaintext IDB) alongside the active target singleton, then the source is disposed. Model the dialog/probe/copy on the existing `$lib/migration` (`probeForOldData` -> counts -> `migrateDatabaseToWorkspace`).
+
+**State is the local data itself, not a flag.** `count = localReader.tables.recordings.size`:
+
+```txt
+count === 0  -> resolved (migrated-then-deleted, or never had data). No prompt.
+count  >  0  -> prompt on EACH signed-in boot (nag; no "declined" flag)
+```
+
+Dialog, shown only when `count > 0`, three actions:
+
+```txt
+[ Add to my account ]    copy local -> owner (idempotent by id), THEN clearLocal()  -> count = 0
+                         deleting the plaintext copy after encrypting it removes the need for any
+                         "migrated" flag AND drops the lingering plaintext duplicate (privacy win)
+[ Delete from device ]   clearLocal() only                                          -> count = 0
+[ Keep for now ]         defer; count stays > 0, so the prompt returns next sign-in (the nag)
+```
+
+`clearLocal` is the existing `attachIndexedDb` primitive (`attach-indexed-db.ts:19,36`).
+
+- [ ] **4.1** `probeLocalData()`: re-open the local doc, count rows, dispose if empty.
+- [ ] **4.2** Sign-in migration dialog (sibling of `$lib/migration`): the three actions above. "Add" copies then `clearLocal()`; "Delete" `clearLocal()`; "Keep" defers. Idempotent by id (interrupted runs re-prompt and skip copied rows). **No flags**: local data presence is the only state. Per device (each device migrates its own local data into the owner doc).
+
+Consequence to accept: after "Add", signing out shows an empty local app (data lives in the account now). That is the reconciliation option (a), made duplicate-free.
 
 ### Phase 5: Audio to R2 (opt-in)
 
