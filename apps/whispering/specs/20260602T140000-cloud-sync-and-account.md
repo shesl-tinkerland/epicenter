@@ -142,7 +142,7 @@ Whispering selects browser-vs-Tauri implementations through `#platform/*` packag
 | Both docs always alive | 2 coherence | Refused: mutually exclusive (overlap only during migration) | Keeping the local doc alive while signed in buys nothing: the state-layer read still switches on logout, which needs reload-or-context regardless. The only design that removes the switch (always read local, mirror to synced) keeps ALL data PLAINTEXT on disk, defeating the encrypted store. One doc at a time + reload is leaner and safer. |
 | Auth factory | 1 evidence | `createOAuthAppAuth` via `@epicenter/svelte/auth` | One blessed factory (verify against `packages/auth`). Needs a Whispering OAuth client id in `@epicenter/constants/oauth`. |
 | UI placement | 2 coherence | Sidebar footer `AccountPopover` + Settings -> Account page | Footer is route-independent (renders on the bare homepage); Settings page is the discoverable canonical home. |
-| Settings sync | 2 coherence | None in v1: settings stay device-local | Skips the secret-leak risk entirely. The per-key allowlist (sync portable prefs, exclude secrets + device-bound) is deferred until a preference actually needs to roam. (Revised from the earlier allowlist decision.) |
+| Settings sync | 2 coherence | Portable KV syncs; secrets + device-bound stay local | The existing two-store split already IS the allowlist. `whispering.kv` (sound, ui, transcription model choice, in-window shortcuts, recording.mode) rides the synced ydoc and roams across devices when signed in; `deviceConfig` (API keys, selected mic, global OS shortcuts, model paths) lives in separate `localStorage` and never syncs. No new split, no Phase 3; `settings.svelte.ts` is unchanged. |
 | Audio blobs | 2 coherence | Stay local; opt-in per-recording upload to R2 | Audio is large; the relay/body model targets CRDT/text, not big binaries. (User decision.) |
 | First sign-in data | 1 evidence | Migrate local rows/allowlisted KV into the owner doc once | Verify merge-vs-copy semantics against `createWorkspace` + actions during impl. |
 | Audio encryption at rest | Deferred | Deferred | Client-side keyring-encrypt before R2 PUT is the ambition; plaintext-in-R2 is the cheap start. See Open Questions. |
@@ -211,19 +211,26 @@ package.json#imports
 
 No `active.svelte.ts` and no `getActiveWhispering`: reload-on-auth means the doc is picked once where `whispering` is exported, so there is no accessor and no `$lib/state` migration.
 
-## Settings (device-local in v1)
+## Settings (portable prefs sync; secrets and device-bound stay local)
 
-Settings do **not** sync in v1. They stay in their current device-local KV regardless of sign-in state, so no secret (provider API keys) or device-bound value (shortcuts, selected microphone) can reach the relay. `settings.svelte.ts` is unchanged.
-
-Deferred (the per-key allowlist):
+The allowlist already exists, physically, as two separate stores. There is no Phase 3 split to do and `settings.svelte.ts` is unchanged.
 
 ```txt
-syncedKv   (portable prefs): ui.*, transcription provider CHOICE, sound.*, output.*, transformation defaults
-localKv    (excluded):       api-keys / provider secrets, shortcuts (local + global), selected audio device,
-                             retention/cleanup that is device-specific
+deviceConfig  (localStorage "whispering.device.*", a SEPARATE store)   NEVER syncs
+  apiKeys.* (secrets) · apiEndpoints.* · recording.cpal/navigator.deviceId (the MIC)
+  · recording bitrate/sampleRate · transcription.*.modelPath/baseUrl
+  · localModelUnloadPolicy · shortcuts.global.* (OS shortcuts)
+        ^ definition.ts: "should NEVER sync across devices"
+
+whispering.kv  (the workspace ydoc)                                    SYNCS when signed in
+  sound · output · ui · dataRetention · recording.mode (manual/vad)
+  · transcription.service + per-provider model + language + prompt
+  · transformation.selectedId · analytics.enabled · shortcut.* (IN-WINDOW only)
 ```
 
-This allowlist is the riskiest single refactor in the original plan: a misclassified key either leaks a secret to the relay or pushes a device-bound setting to the wrong machine. "Sync nothing from settings" is the safe default, so the allowlist waits until a specific portable preference actually needs to roam, and gets its own review gate then.
+Every dangerous value (provider API keys, selected mic, global OS shortcuts, model paths) is already in `deviceConfig`, which sign-in never touches: it is a plain `createPersistedMap` over `localStorage`, not part of any Y.Doc. The workspace KV holds genuinely portable preferences, and `settings.svelte.ts` already reads it through an observer whose own comment says "local writes OR remote sync": that KV was built to sync. So when signed in, those portable prefs ride the encrypted owner doc and roam across devices. That is desirable and free; the only mildly-device-y items that roam are the in-window (window-focused) shortcuts, which is benign.
+
+The earlier "sync nothing from settings / defer a per-key allowlist (Phase 3)" framing was inaccurate: it described a single-doc world that the existing `deviceConfig` vs `whispering.kv` split already moved past. There is nothing to defer.
 
 ## Audio blobs (opt-in R2)
 
@@ -294,18 +301,14 @@ With reload-on-auth there is no live swap, so no `$derived` rewrap and no leaked
 
 - [ ] **2.1** Make `createWhispering` accept an optional `keyring` and thread it to `createWorkspace`.
 - [ ] **2.2** `whispering.synced.ts`: owner-scoped doc with `attachLocalStorage` + `openCollaboration` + `roomWsUrl`.
-- [ ] **2.3** Build the synced payload from auth's cached `SignedIn` (keyring, ownerId, openWebSocket, onReconnectSignal). `createSession({ auth, build })` packages this; in option A we read `session.current` ONCE at boot (not reactively, reload handles change) or build directly from `auth.state`. Settle during impl.
+- [ ] **2.3** Build the `SignedIn` payload **directly from `auth.state`** with a small local `buildSignedIn(auth)` (~12 lines: server/baseURL projection, ownerId, a `keyring()` callback that re-reads `auth.state.keyring`, plus `openWebSocket` + `onReconnectSignal`). Do **NOT** use `createSession`: its whole job is the live reactive swap (`reconcile` disposes/rebuilds the payload on every auth event), which fights reload-on-auth: on a live sign-in it would eagerly construct the synced doc and open a WebSocket only for `bindAuthReload` to discard, and on sign-out it would dispose under the captured `whispering` const. Option A picks the doc once at boot, so the live machinery is exactly the part we do not want. `buildSignedIn` duplicates ~12 lines of `createSession`'s projection; that duplication is the honest cost of not using the wrong abstraction, and stays inlined until a second local-first consumer exists.
 - [ ] **2.4** `openActiveWhispering()`: at boot, read `auth.state` (sync) and build the local doc (signed out) or the synced doc (signed in); export `whispering` as a stable singleton. Construction is synchronous (keyring is cached in `auth.state`); data load stays behind the existing `whenReady` gate. NO `getActiveWhispering`, NO `$lib/state` migration.
-- [ ] **2.5** `bindAuthReload(auth)` in the root layout: subscribe to `auth.state` and `window.location.reload()` **synchronously on the first identity-boundary event** (signed-out <-> signed-in, or owner change), so the old doc is never live under a new identity (auth emits `signed-out` then `signed-in:owner`). Guard: block (or defer) the reload while a recording is in progress, since the browser recorder cannot survive a reload (`index.browser.ts`); the Tauri CPAL recorder can.
+- [ ] **2.5** `bindAuthReload(auth)` in the root layout: subscribe to `auth.onStateChange` and `window.location.reload()` when the **identity key** changes. The key is `state.status === 'signed-out' ? null : state.ownerId`; capture it at boot, reload on the first change, behind a one-shot guard so the signed-out -> signed-in:owner pair on an account switch fires only one reload. **Token expiry does NOT reload**: that is `networkAccess: 'paused'` within `signed-in`, so `ownerId` (the key) is unchanged, and `openCollaboration` already reconnects internally via `onReconnectSignal` (fuji's `browser.ts` has no app-level listener for exactly this reason). So the only events that reload are deliberate sign in / sign out / switch. Recorder safety is handled at the source, not here: disable the account controls (popover + Settings) while the recorder is `RECORDING` (D3), so a reload can never interrupt an in-flight browser `MediaRecorder`. One code path for web and Tauri.
 - [ ] **2.6** Wire `collaboration` into the footer `AccountPopover` so sync phase renders.
 
-### Phase 3 (deferred): Settings sync allowlist
+### Phase 3: Settings sync allowlist (already done, no work)
 
-Not in the MVP: settings stay device-local. Build only when a specific portable preference needs to roam.
-
-- [ ] **3.1** Split KV into `syncedKv` / `localKv` per the allowlist; owner doc carries only `syncedKv`.
-- [ ] **3.2** Update `settings.svelte.ts` to read both and route writes by key.
-- [ ] **3.3** Review gate: confirm no secret or device-bound key is in `syncedKv`.
+The `deviceConfig` (localStorage) vs `whispering.kv` (workspace ydoc) split already implements the allowlist (see Settings above). Secrets, selected mic, global OS shortcuts, and model paths are in `deviceConfig` and never sync; portable prefs ride the synced owner doc. Nothing to build, `settings.svelte.ts` is unchanged. Revisit only if a key is ever misfiled (e.g. a new secret added to the workspace KV by mistake): the review gate is "no secret or device-bound key in `whispering.kv`."
 
 ### Phase 4: First-sign-in migration (flag-free)
 
@@ -391,7 +394,7 @@ Consequence to accept: after "Add", signing out shows an empty local app (data l
 - [ ] Signed-out Whispering is behaviorally identical to today (offline, no account, local IDB + BroadcastChannel).
 - [ ] Sign-in works from both the sidebar footer popover and Settings -> Account, on web and Tauri.
 - [ ] A recording made on device A appears (metadata + transcript) on device B after sign-in; sync phase shows "Connected."
-- [ ] Settings do not sync in v1, so no secret or device-bound setting (API keys, shortcuts, selected mic) can enter the synced doc.
+- [ ] No secret or device-bound setting (API keys, selected mic, global OS shortcuts, model paths) can enter the synced doc: they live in `deviceConfig` (localStorage), which sign-in never touches. Portable prefs in `whispering.kv` do roam across devices, by design.
 - [ ] "Upload audio" makes a recording's audio playable on another signed-in device; un-uploaded recordings clearly read as device-local.
 - [ ] First sign-in migrates existing local data once with no duplication.
 - [ ] `bun run --filter @epicenter/whispering check` passes; signed-out smoke test green.
