@@ -317,9 +317,11 @@ so it does not depend on Phase 4 migration).
 
 The `deviceConfig` (localStorage) vs `whispering.kv` (workspace ydoc) split already implements the allowlist (see Settings above). Secrets, selected mic, global OS shortcuts, and model paths are in `deviceConfig` and never sync; portable prefs ride the synced owner doc. Nothing to build, `settings.svelte.ts` is unchanged. Revisit only if a key is ever misfiled (e.g. a new secret added to the workspace KV by mistake): the review gate is "no secret or device-bound key in `whispering.kv`."
 
-### Phase 4: First-sign-in migration (flag-free)
+### Phase 4: First-sign-in migration (flag-free) [IMPLEMENTED]
 
-The signed-out plaintext doc is the migration SOURCE; the signed-in encrypted doc is the TARGET. They overlap ONLY here: a throwaway source reader (`openWhisperingLocal()` re-opened from the persisted plaintext IDB) alongside the active target singleton, then the source is disposed. Model the dialog/probe/copy on the existing `$lib/migration` (`probeForOldData` -> counts -> `migrateDatabaseToWorkspace`).
+Implemented in `$lib/migration/sign-in-migration.svelte.ts` (+ `SignInMigrationDialog.svelte`), wired from `AppLayout` `onMount` next to `migrationDialog.check()`. typecheck + web build green; interactive verification (sign in on a device that already has local recordings) still pending a live backend.
+
+The signed-out plaintext doc is the migration SOURCE; the signed-in encrypted doc is the TARGET. Refinement from the original sketch: the source is opened only MOMENTARILY (the probe opens it, counts via `tables.recordings.count()`, and disposes immediately; each action re-opens a fresh source). Nothing is held across the dialog's lifetime, so a dismissed dialog leaks nothing and there is no source to dispose on close. The copy runs in one `whispering.ydoc.transact()` (one observer fire / one relay batch), and `stamp` only adds `_v`, so `recordedAt` and all timestamps are preserved.
 
 **State is the local data itself, not a flag.** `count = localReader.tables.recordings.size`:
 
@@ -340,8 +342,8 @@ Dialog, shown only when `count > 0`, three actions:
 
 `clearLocal` is the existing `attachIndexedDb` primitive (`attach-indexed-db.ts:19,36`).
 
-- [ ] **4.1** `probeLocalData()`: re-open the local doc, count rows, dispose if empty.
-- [ ] **4.2** Sign-in migration dialog (sibling of `$lib/migration`): the three actions above. "Add" copies then `clearLocal()`; "Delete" `clearLocal()`; "Keep" defers. Idempotent by id (interrupted runs re-prompt and skip copied rows). **No flags**: local data presence is the only state. Per device (each device migrates its own local data into the owner doc).
+- [x] **4.1** `probeLocalData()`: re-open the local doc, count rows, dispose if empty.
+- [x] **4.2** Sign-in migration dialog (sibling of `$lib/migration`): the three actions above. "Add" copies then `clearLocal()`; "Delete" `clearLocal()`; "Keep" defers. Idempotent by id (interrupted runs re-prompt and skip copied rows). **No flags**: local data presence is the only state. Per device (each device migrates its own local data into the owner doc).
 
 Consequence to accept: after "Add", signing out shows an empty local app (data lives in the account now). That is the reconciliation option (a), made duplicate-free.
 
