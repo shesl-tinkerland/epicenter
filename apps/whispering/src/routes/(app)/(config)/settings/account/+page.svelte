@@ -6,11 +6,16 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import { auth } from '#platform/auth';
+	import { recordingActive } from '$lib/state/recording-active.svelte';
 
 	// Identity (email) is shown by the footer AccountPopover, which owns the
 	// /api/session query. This page is for the sign in / sign out actions, so it
 	// reads auth.state directly and does not re-fetch the profile.
 	const isSignedIn = $derived(auth.state.status === 'signed-in');
+
+	// Sign in/out reloads the page (Option A) and a reload kills an in-flight
+	// browser recording, so block account changes while a capture is active.
+	const accountLocked = $derived(recordingActive.current);
 
 	const startSignIn = createMutation(() => ({
 		mutationKey: ['account', 'startSignIn'],
@@ -35,6 +40,11 @@
 	<Field.Separator />
 
 	<Field.Group>
+		{#if accountLocked}
+			<Field.Description class="text-muted-foreground">
+				Stop recording to change your account.
+			</Field.Description>
+		{/if}
 		{#if isSignedIn}
 			<Field.Field orientation="horizontal">
 				<Field.Content>
@@ -46,7 +56,7 @@
 				<Button
 					variant="outline"
 					onclick={() => signOut.mutate()}
-					disabled={signOut.isPending}
+					disabled={signOut.isPending || accountLocked}
 				>
 					{#if signOut.isPending}
 						<LoaderCircle class="size-4 animate-spin" />
@@ -66,7 +76,7 @@
 				<Button
 					class="w-full sm:w-auto sm:self-start"
 					onclick={() => startSignIn.mutate()}
-					disabled={startSignIn.isPending}
+					disabled={startSignIn.isPending || accountLocked}
 				>
 					{#if startSignIn.isPending}
 						<LoaderCircle class="size-4 animate-spin" />

@@ -15,6 +15,7 @@
 	import { AccountPopover } from '@epicenter/svelte/account-popover';
 	import MigrationDialog from '$lib/migration/MigrationDialog.svelte';
 	import { migrationDialog } from '$lib/migration/migration-dialog.svelte';
+	import { recordingActive } from '$lib/state/recording-active.svelte';
 
 	const shouldShowMigrationButton = $derived(
 		import.meta.env.DEV || migrationDialog.isPending,
@@ -86,6 +87,9 @@
 						{auth}
 						collaboration={whispering.collaboration}
 						syncNoun="recordings"
+						disabledReason={recordingActive.current
+							? 'Stop recording to change your account'
+							: undefined}
 					/>
 				</div>
 			</Sidebar.MenuItem>

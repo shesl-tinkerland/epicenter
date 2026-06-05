@@ -60,6 +60,12 @@
 		/** Noun describing what gets synced, e.g. "tabs" or "notes". */
 		syncNoun: string;
 		/**
+		 * When set, the trigger is disabled and shows this string as its tooltip.
+		 * Lets a host block account changes that would reload the page at an unsafe
+		 * moment (e.g. while a recording is in progress). Omit to leave it enabled.
+		 */
+		disabledReason?: string;
+		/**
 		 * If provided, exposes a Forget this device button. The callback is
 		 * the destructive primitive (typically the workspace bundle's
 		 * `wipe()`). The popover confirms with the user, awaits the
@@ -70,8 +76,13 @@
 		onForgetDevice?: () => void | Promise<void>;
 	};
 
-	let { auth, collaboration, syncNoun, onForgetDevice }: AccountPopoverProps =
-		$props();
+	let {
+		auth,
+		collaboration,
+		syncNoun,
+		onForgetDevice,
+		disabledReason,
+	}: AccountPopoverProps = $props();
 
 	let syncStatus = $state<SyncStatus>();
 	let popoverOpen = $state(false);
@@ -155,7 +166,9 @@
 		}
 	}
 
-	const tooltip = $derived(getSyncTooltip(syncStatus, isSignedIn));
+	const tooltip = $derived(
+		disabledReason ?? getSyncTooltip(syncStatus, isSignedIn),
+	);
 
 	function forgetDevice() {
 		if (!onForgetDevice) return;
@@ -184,7 +197,13 @@
 <Popover.Root bind:open={popoverOpen}>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="ghost" size="icon-sm" {tooltip}>
+			<Button
+				{...props}
+				variant="ghost"
+				size="icon-sm"
+				{tooltip}
+				disabled={!!disabledReason}
+			>
 				<div class="relative">
 					{#if signOut.isPending}
 						<LoaderCircle class="size-4 animate-spin" />
