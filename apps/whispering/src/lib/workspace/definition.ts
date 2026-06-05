@@ -6,6 +6,7 @@ import {
 	defineWorkspace,
 	type InferKvValue,
 	type InferTableRow,
+	type Keyring,
 } from '@epicenter/workspace';
 import { type Static, Type } from 'typebox';
 
@@ -338,7 +339,15 @@ const shortcuts = {
 	),
 } as const;
 
-export function createWhispering() {
+/**
+ * Build the Whispering workspace bundle: `{ ydoc, tables, kv, actions, settings }`.
+ *
+ * Pass `keyring` to encrypt the doc at rest (the signed-in, owner-partitioned
+ * path); omit it for the signed-out local doc, which stays plaintext exactly as
+ * before. Encryption is fixed at construction, so the local and synced docs are
+ * different `Y.Doc`s chosen once at boot (see `openActiveWhispering`).
+ */
+export function createWhispering(opts?: { keyring?: () => Keyring }) {
 	/**
 	 * Whispering KV schemas: ~40 entries for synced preferences. Defined locally
 	 * so the raw schema map is not a module-level export. Callers reach the
@@ -360,6 +369,7 @@ export function createWhispering() {
 
 	const workspace = createWorkspace({
 		id: 'epicenter-whispering',
+		keyring: opts?.keyring,
 		tables: {
 			recordings,
 			transformations,
