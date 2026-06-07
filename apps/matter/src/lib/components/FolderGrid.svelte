@@ -3,6 +3,7 @@
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Empty from '@epicenter/ui/empty';
+	import { Input } from '@epicenter/ui/input';
 	import * as Table from '@epicenter/ui/table';
 	import * as Tabs from '@epicenter/ui/tabs';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -14,6 +15,7 @@
 	import type { Kind } from '@epicenter/field';
 	import type { Cell } from '$lib/core/conformance';
 	import type { FolderGridVault } from '$lib/vault.svelte';
+	import type { WhereFilter } from '$lib/where-filter.svelte';
 	import ModeledCell from './ModeledCell.svelte';
 	import RowDetailDialog from './RowDetailDialog.svelte';
 
@@ -21,10 +23,13 @@
 	// in-memory demo vault, injected by the route. The narrow getters are bound once
 	// here so the template reads `read` / `folder` / `onSave*` exactly as before, and a
 	// vault swap (open another folder) flows through these derivations.
-	// `matchedFileNames` is the file names of the rows a WHERE clause matched, computed by
-	// the page (the live-vault owner) and handed down as data. `undefined` means no filter.
-	let { vault, matchedFileNames }: { vault: FolderGridVault; matchedFileNames?: Set<string> } =
-		$props();
+	// `filter` is the tab's WHERE filter (the live vault provides one; the demo does not).
+	// The grid renders its input in the header and narrows rows to the names it matched;
+	// `undefined` (no filter, or an empty clause) means show every row.
+	let { vault, filter }: { vault: FolderGridVault; filter?: WhereFilter } = $props();
+
+	// The file names the WHERE clause matched, or undefined when no clause is active.
+	const matchedFileNames = $derived(filter?.matchedFileNames);
 
 	const read = $derived(vault.read);
 	const folder = $derived(vault.folderName);
@@ -262,45 +267,71 @@
 					{/if}
 				</div>
 			</div>
-			<Tabs.Root
-				class="min-w-0 max-w-full"
-				value={rowFilter}
-				onValueChange={(value) => {
-					if (value === 'all' || value === 'attention' || value === 'ready') {
-						rowFilter = value;
-					}
-				}}
-			>
-				<Tabs.List class="h-8 max-w-full overflow-x-auto">
-					<Tabs.Trigger
-						value="all"
-						aria-label="Show all rows"
-						class="h-full flex-none gap-1.5 px-2"
-					>
-						<ListIcon />
-						<span>All</span>
-						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{filteredRows.length}</Badge>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="attention"
-						aria-label="Show rows that need attention"
-						class="h-full flex-none gap-1.5 px-2"
-					>
-						<ListFilterIcon />
-						<span>Needs attention</span>
-						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{needsAttentionCount}</Badge>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="ready"
-						aria-label="Show ready rows"
-						class="h-full flex-none gap-1.5 px-2"
-					>
-						<CheckIcon />
-						<span>Ready</span>
-						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{readyRowsCount}</Badge>
-					</Tabs.Trigger>
-				</Tabs.List>
-			</Tabs.Root>
+			<div class="flex min-w-0 items-center gap-3">
+				{#if filter}
+					<div class="flex items-center gap-1.5">
+						<span
+							class="font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+						>
+							where
+						</span>
+						<Input
+							bind:value={filter.text}
+							placeholder="status = 'ready'"
+							spellcheck={false}
+							autocapitalize="off"
+							autocomplete="off"
+							autocorrect="off"
+							aria-invalid={Boolean(filter.error)}
+							aria-label="Filter rows with a SQL WHERE clause"
+							title={filter.error}
+							class={[
+								'h-8 w-64 font-mono text-xs',
+								filter.error && 'border-destructive focus-visible:ring-destructive/30',
+							]}
+						/>
+					</div>
+				{/if}
+				<Tabs.Root
+					class="min-w-0 max-w-full"
+					value={rowFilter}
+					onValueChange={(value) => {
+						if (value === 'all' || value === 'attention' || value === 'ready') {
+							rowFilter = value;
+						}
+					}}
+				>
+					<Tabs.List class="h-8 max-w-full overflow-x-auto">
+						<Tabs.Trigger
+							value="all"
+							aria-label="Show all rows"
+							class="h-full flex-none gap-1.5 px-2"
+						>
+							<ListIcon />
+							<span>All</span>
+							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{filteredRows.length}</Badge>
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="attention"
+							aria-label="Show rows that need attention"
+							class="h-full flex-none gap-1.5 px-2"
+						>
+							<ListFilterIcon />
+							<span>Needs attention</span>
+							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{needsAttentionCount}</Badge>
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="ready"
+							aria-label="Show ready rows"
+							class="h-full flex-none gap-1.5 px-2"
+						>
+							<CheckIcon />
+							<span>Ready</span>
+							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{readyRowsCount}</Badge>
+						</Tabs.Trigger>
+					</Tabs.List>
+				</Tabs.Root>
+			</div>
 		</header>
 
 		{#if view.model.unmodeled.length}
