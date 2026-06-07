@@ -4,7 +4,8 @@
 	import { Button } from '@epicenter/ui/button';
 	import * as Empty from '@epicenter/ui/empty';
 	import * as Table from '@epicenter/ui/table';
-	import * as ToggleGroup from '@epicenter/ui/toggle-group';
+	import * as Tabs from '@epicenter/ui/tabs';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import FileWarningIcon from '@lucide/svelte/icons/file-warning';
 	import ListIcon from '@lucide/svelte/icons/list';
@@ -31,42 +32,53 @@
 	const onSaveBody = $derived(vault.saveBody);
 	const view = $derived(read.view);
 
-	type RowFilter = 'all' | 'attention';
+	type RowFilter = 'all' | 'attention' | 'ready';
 
-	// The attention filter is a view mode over the same table, not a relayout.
+	// The row filter is a view mode over the same table, not a relayout.
 	let rowFilter = $state<RowFilter>('all');
 
-	const visibleRows = $derived.by(() => {
+	const filteredRows = $derived.by(() => {
 		if (view.mode !== 'modeled') return [];
-		let rows =
-			rowFilter === 'attention'
-				? view.conformance.filter((c) => !c.rowValid)
-				: view.conformance;
 		// The WHERE filter (matched row file names from the mirror, computed by the page)
 		// narrows the visible set; no active filter leaves it undefined, nothing to do. The
 		// local alias is load-bearing: it narrows `Set | undefined` to `Set` in the closure.
 		const fileNames = matchedFileNames;
-		if (fileNames) rows = rows.filter((c) => fileNames.has(c.row.fileName));
-		return rows;
+		if (fileNames) return view.conformance.filter((c) => fileNames.has(c.row.fileName));
+		return view.conformance;
+	});
+
+	const visibleRows = $derived.by(() => {
+		if (rowFilter === 'attention') return filteredRows.filter((c) => !c.rowValid);
+		if (rowFilter === 'ready') return filteredRows.filter((c) => c.rowValid);
+		return filteredRows;
 	});
 
 	// "X of Y rows" whenever a lens is narrowing the table (attention OR a WHERE clause).
-	const isFiltered = $derived(rowFilter === 'attention' || matchedFileNames !== undefined);
+	const isFiltered = $derived(rowFilter !== 'all' || matchedFileNames !== undefined);
 
 	// The modeled empty-state copy as ONE mutually exclusive decision, so the title and the
 	// description always describe the same case. Reads top-down like the question a person
 	// asks ("is a filter on? is attention on? otherwise it is just empty") instead of two
 	// nested ternaries in the markup that have to be kept in sync by hand.
 	const emptyState = $derived.by(() => {
-		if (matchedFileNames)
+		if (matchedFileNames && filteredRows.length === 0)
 			return {
 				title: 'No rows match the filter',
-				description: 'No valid rows match this WHERE clause.',
+				description: 'No rows match this WHERE clause.',
 			};
 		if (rowFilter === 'attention')
 			return {
-				title: 'No rows need attention',
-				description: 'Every readable row matches this model.',
+				title: matchedFileNames ? 'No matching rows need attention' : 'No rows need attention',
+				description: matchedFileNames
+					? 'Rows matched by this WHERE clause are valid.'
+					: 'Every readable row matches this model.',
+			};
+		if (rowFilter === 'ready')
+			return {
+				title: matchedFileNames ? 'No matching ready rows' : 'No ready rows',
+				description: matchedFileNames
+					? 'Rows matched by this WHERE clause need attention.'
+					: 'Fix required or invalid fields to make rows ready.',
 			};
 		return {
 			title: 'No rows yet',
@@ -74,9 +86,8 @@
 		};
 	});
 
-	const needsAttentionCount = $derived(
-		view.mode === 'modeled' ? view.conformance.filter((c) => !c.rowValid).length : 0,
-	);
+	const needsAttentionCount = $derived(filteredRows.filter((c) => !c.rowValid).length);
+	const readyRowsCount = $derived(filteredRows.filter((c) => c.rowValid).length);
 
 	let detailOpen = $state(false);
 	let detailFileName = $state<string>();
@@ -172,7 +183,7 @@
 		<header
 			class="flex flex-wrap items-center justify-between gap-3 border-b bg-background/95 px-4 py-3"
 		>
-			<div>
+			<div class="min-w-0">
 				<h1 class="max-w-[70vw] truncate text-sm font-semibold">{folder}</h1>
 				<div class="mt-1 flex flex-wrap gap-1.5">
 					<Badge variant="secondary">{read.rows.length} rows</Badge>
@@ -237,7 +248,7 @@
 		<header
 			class="flex flex-wrap items-center justify-between gap-3 border-b bg-background/95 px-4 py-3"
 		>
-			<div>
+			<div class="min-w-0">
 				<h1 class="max-w-[70vw] truncate text-sm font-semibold">{folder}</h1>
 				<div class="mt-1 flex flex-wrap gap-1.5">
 					<Badge variant="secondary">
@@ -251,24 +262,45 @@
 					{/if}
 				</div>
 			</div>
-			<ToggleGroup.Root
-				type="single"
-				variant="outline"
-				size="sm"
+			<Tabs.Root
+				class="min-w-0 max-w-full"
 				value={rowFilter}
 				onValueChange={(value) => {
-					if (value === 'all' || value === 'attention') rowFilter = value;
+					if (value === 'all' || value === 'attention' || value === 'ready') {
+						rowFilter = value;
+					}
 				}}
 			>
-				<ToggleGroup.Item value="all" aria-label="Show all rows">
-					<ListIcon />
-					All rows ({read.rows.length})
-				</ToggleGroup.Item>
-				<ToggleGroup.Item value="attention" aria-label="Show rows that need attention">
-					<ListFilterIcon />
-					Needs attention ({needsAttentionCount})
-				</ToggleGroup.Item>
-			</ToggleGroup.Root>
+				<Tabs.List class="h-8 max-w-full overflow-x-auto">
+					<Tabs.Trigger
+						value="all"
+						aria-label="Show all rows"
+						class="h-full flex-none gap-1.5 px-2"
+					>
+						<ListIcon />
+						<span>All</span>
+						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{filteredRows.length}</Badge>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="attention"
+						aria-label="Show rows that need attention"
+						class="h-full flex-none gap-1.5 px-2"
+					>
+						<ListFilterIcon />
+						<span>Needs attention</span>
+						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{needsAttentionCount}</Badge>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="ready"
+						aria-label="Show ready rows"
+						class="h-full flex-none gap-1.5 px-2"
+					>
+						<CheckIcon />
+						<span>Ready</span>
+						<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{readyRowsCount}</Badge>
+					</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
 		</header>
 
 		{#if view.model.unmodeled.length}
