@@ -5,7 +5,7 @@
 	import * as Empty from '@epicenter/ui/empty';
 	import { Input } from '@epicenter/ui/input';
 	import * as Table from '@epicenter/ui/table';
-	import * as Tabs from '@epicenter/ui/tabs';
+	import * as ToggleGroup from '@epicenter/ui/toggle-group';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import FileWarningIcon from '@lucide/svelte/icons/file-warning';
@@ -149,6 +149,12 @@
 		return '';
 	}
 
+	function setRowFilter(value: string | undefined): void {
+		if (value === 'all' || value === 'attention' || value === 'ready') {
+			rowFilter = value;
+		}
+	}
+
 	$effect(() => {
 		if (!detailOpen) {
 			detailFileName = undefined;
@@ -183,6 +189,25 @@
 	{/if}
 {/snippet}
 
+{#snippet rowFilterItem(
+	value: RowFilter,
+	label: string,
+	count: number,
+	Icon: typeof ListIcon,
+	ariaLabel: string,
+)}
+	<ToggleGroup.Item {value} aria-label={ariaLabel} class="h-8 flex-none gap-2 px-3 text-xs">
+		<Icon data-icon="inline-start" class="size-4" />
+		<span>{label}</span>
+		<Badge
+			variant="secondary"
+			class="ml-0.5 h-5 min-w-5 justify-center rounded-md px-1.5 font-mono text-[11px]"
+		>
+			{count}
+		</Badge>
+	</ToggleGroup.Item>
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col">
 	{#if view.mode === 'unmodeled'}
 		<header
@@ -212,7 +237,9 @@
 			</Alert.Description>
 		</Alert.Root>
 
-		<div class="flex-1 overflow-auto">
+		<!-- Table.Root includes a horizontal scroll wrapper. This grid pane owns both
+		     axes so sticky headers and the frozen file column use the same scrollport. -->
+		<div class="flex-1 overflow-auto [&>[data-slot=table-container]]:overflow-visible">
 			<Table.Root class="min-w-full">
 				<Table.Header>
 					<Table.Row>
@@ -267,9 +294,9 @@
 					{/if}
 				</div>
 			</div>
-			<div class="flex min-w-0 items-center gap-3">
+			<div class="flex min-w-0 flex-wrap items-center justify-end gap-3">
 				{#if filter}
-					<div class="flex items-center gap-1.5">
+					<div class="flex min-w-0 items-center gap-1.5">
 						<span
 							class="font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
 						>
@@ -286,51 +313,36 @@
 							aria-label="Filter rows with a SQL WHERE clause"
 							title={filter.error}
 							class={[
-								'h-8 w-64 font-mono text-xs',
+								'h-8 w-64 max-w-[min(16rem,60vw)] font-mono text-xs',
 								filter.error && 'border-destructive focus-visible:ring-destructive/30',
 							]}
 						/>
 					</div>
 				{/if}
-				<Tabs.Root
-					class="min-w-0 max-w-full"
-					value={rowFilter}
-					onValueChange={(value) => {
-						if (value === 'all' || value === 'attention' || value === 'ready') {
-							rowFilter = value;
-						}
-					}}
+				<ToggleGroup.Root
+					type="single"
+					variant="outline"
+					size="sm"
+					spacing={1}
+					class="max-w-full flex-wrap justify-end"
+					bind:value={() => rowFilter, setRowFilter}
 				>
-					<Tabs.List class="h-8 max-w-full overflow-x-auto">
-						<Tabs.Trigger
-							value="all"
-							aria-label="Show all rows"
-							class="h-full flex-none gap-1.5 px-2"
-						>
-							<ListIcon />
-							<span>All</span>
-							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{filteredRows.length}</Badge>
-						</Tabs.Trigger>
-						<Tabs.Trigger
-							value="attention"
-							aria-label="Show rows that need attention"
-							class="h-full flex-none gap-1.5 px-2"
-						>
-							<ListFilterIcon />
-							<span>Needs attention</span>
-							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{needsAttentionCount}</Badge>
-						</Tabs.Trigger>
-						<Tabs.Trigger
-							value="ready"
-							aria-label="Show ready rows"
-							class="h-full flex-none gap-1.5 px-2"
-						>
-							<CheckIcon />
-							<span>Ready</span>
-							<Badge variant="secondary" class="ml-0.5 h-5 px-1.5">{readyRowsCount}</Badge>
-						</Tabs.Trigger>
-					</Tabs.List>
-				</Tabs.Root>
+					{@render rowFilterItem(
+						'all',
+						'All',
+						filteredRows.length,
+						ListIcon,
+						'Show all rows',
+					)}
+					{@render rowFilterItem(
+						'attention',
+						'Attention',
+						needsAttentionCount,
+						ListFilterIcon,
+						'Show rows that need attention',
+					)}
+					{@render rowFilterItem('ready', 'Ready', readyRowsCount, CheckIcon, 'Show ready rows')}
+				</ToggleGroup.Root>
 			</div>
 		</header>
 
@@ -345,7 +357,9 @@
 			</Alert.Root>
 		{/if}
 
-		<div class="flex-1 overflow-auto">
+		<!-- Table.Root includes a horizontal scroll wrapper. This grid pane owns both
+		     axes so sticky headers and the frozen file column use the same scrollport. -->
+		<div class="flex-1 overflow-auto [&>[data-slot=table-container]]:overflow-visible">
 			<Table.Root class="min-w-full table-fixed">
 				<!-- table-fixed honours these <col> widths, so cells truncate instead of
 				     stretching the column to the widest value. -->
