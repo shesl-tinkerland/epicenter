@@ -1,21 +1,20 @@
 /**
- * The page-owned SQL WHERE filter over a vault's mirror.
+ * The per-tab SQL WHERE filter over a vault's mirror.
  *
  * Bundles the three things a filter is, the input (`text`), the result
  * (`matchedFileNames`), and a bad-clause `error`, plus the debounced query into ONE unit, so
- * the page binds `filter.text` and reads `filter.matchedFileNames` instead of carrying three
+ * VaultView binds `filter.text` and reads `filter.matchedFileNames` instead of carrying three
  * loose `$state`s and an inline effect that a reader has to mentally group. The states
  * still exist (reactive state is always `let $state`); this just gives them an owner and
  * a name.
  *
- * The vault is NOT stored: it is passed to `resolve` at call time. The vault is
- * page-owned, swappable (open another folder reassigns it), and per-route (the `/demo`
- * route runs its own), so there is no singleton to capture and storing one instance would
- * go stale on the next swap. The page drives the filter with
- * `$effect(() => filter.resolve(vault))`: the effect reads the reactive `vault` (and,
- * inside `resolve`, the vault's `read`), so it re-runs when the folder swaps OR its rows
- * change, and `resolve` returns a cleanup that cancels an in-flight query so a newer
- * clause, a data change, or a folder swap never lands a stale result set.
+ * The vault is passed to `resolve` at call time (not captured) so the dependency is visible
+ * at the call site and the reactive read happens in VaultView's effect, not buried here. Each
+ * tab is its own VaultView with its own filter over a single, non-swappable vault (a folder
+ * switch remounts VaultView), so `resolve` always gets a live vault. VaultView drives it with
+ * `$effect(() => filter.resolve(vault))`: the effect reads `vault.read` (inside `resolve`), so
+ * it re-runs when the rows change, and `resolve` returns a cleanup that cancels an in-flight
+ * query so a newer clause or a data change never lands a stale result set.
  */
 
 import type { Vault } from './vault.svelte';
@@ -30,16 +29,15 @@ export function createWhereFilter() {
 
 	/**
 	 * Resolve the current clause to matched names against `vault`. Call inside an `$effect`
-	 * so the reactive reads (`vault` and, when present, its `read`) are tracked; the
-	 * returned cleanup cancels the pending/in-flight query so only the latest run can
-	 * assign. `vault` is passed in rather than captured because the page owns it and can
-	 * swap it.
+	 * so the reactive read (`vault.read`) is tracked; the returned cleanup cancels the
+	 * pending/in-flight query so only the latest run can assign. `vault` is passed in rather
+	 * than captured so the dependency is visible at the call site.
 	 */
-	function resolve(vault: Vault | undefined): (() => void) | void {
+	function resolve(vault: Vault): (() => void) | void {
 		const clause = text.trim();
-		if (vault) void vault.read; // re-run when rows change so an edit updates membership
-		// No vault or empty clause: there is no filter, so show every row.
-		if (!vault || !clause) {
+		void vault.read; // re-run when rows change so an edit updates membership
+		// Empty clause: there is no filter, so show every row.
+		if (!clause) {
 			matchedFileNames = undefined;
 			error = undefined;
 			return;
@@ -47,7 +45,7 @@ export function createWhereFilter() {
 		let cancelled = false;
 		const handle = setTimeout(async () => {
 			const { data, error: failure } = await vault.matchingFileNames(clause);
-			if (cancelled) return; // a newer clause, a data change, or a folder swap won
+			if (cancelled) return; // a newer clause, a data change, or this tab being torn down won
 			if (failure) error = failure.message;
 			else {
 				matchedFileNames = data;

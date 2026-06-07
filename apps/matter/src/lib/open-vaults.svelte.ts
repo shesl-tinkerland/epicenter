@@ -4,7 +4,7 @@
  * Multi-vault state is split three ways, and this file owns only the durable slice.
  * WHICH vault is active lives in the URL (`/vault/[id]`); the LIVE watcher lives in
  * the route component (construct on mount, dispose on destroy). All that is left is
- * WHICH folders are open: a small persisted list of `{ id, path, name }` that
+ * WHICH folders are open: a small persisted list of `{ id, path, folderName }` that
  * survives relaunch so the tabs come back. The `id` is opaque and URL-safe so the
  * route can carry it; `/vault/[id]` resolves it back to a `path` via {@link get}.
  *
@@ -23,8 +23,8 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
-/** One open vault as persisted: an opaque id, the absolute folder path, its basename. */
-export type OpenVault = { id: string; path: string; name: string };
+/** One open vault as persisted: an opaque id, the absolute folder path, its basename label. */
+export type OpenVault = { id: string; path: string; folderName: string };
 
 const STORAGE_KEY = 'matter.open-vaults';
 
@@ -54,7 +54,7 @@ function isOpenVaultList(value: unknown): value is OpenVault[] {
 				entry !== null &&
 				typeof (entry as OpenVault).id === 'string' &&
 				typeof (entry as OpenVault).path === 'string' &&
-				typeof (entry as OpenVault).name === 'string',
+				typeof (entry as OpenVault).folderName === 'string',
 		)
 	);
 }
@@ -97,7 +97,7 @@ function createOpenVaults() {
 		}
 		// Opaque, URL-safe, collision-free: the URL carries this, not the raw path (paths
 		// contain `/` and special chars that are fragile in a URL).
-		const vault: OpenVault = { id: crypto.randomUUID(), path, name: basename(path) };
+		const vault: OpenVault = { id: crypto.randomUUID(), path, folderName: basename(path) };
 		vaults = [...vaults, vault];
 		persist();
 		await goto(`/vault/${vault.id}`);

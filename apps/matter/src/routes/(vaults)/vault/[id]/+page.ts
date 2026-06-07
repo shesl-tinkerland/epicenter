@@ -11,5 +11,5 @@ import type { PageLoad } from './$types';
 export const load: PageLoad = ({ params }) => {
 	const vault = openVaults.get(params.id);
 	if (!vault) error(404, 'This vault is not open.');
-	return { path: vault.path, name: vault.name };
+	return { path: vault.path, folderName: vault.folderName };
 };

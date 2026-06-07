@@ -35,12 +35,12 @@
 				]}
 			>
 				<a href="/vault/{vault.id}" class="max-w-48 truncate py-1 pl-2.5 pr-1" title={vault.path}>
-					{vault.name}
+					{vault.folderName}
 				</a>
 				<button
 					type="button"
 					onclick={() => closeTab(vault.id)}
-					aria-label="Close {vault.name}"
+					aria-label="Close {vault.folderName}"
 					class="mr-1 rounded-sm p-0.5 text-muted-foreground opacity-0 transition hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
 				>
 					<XIcon class="size-3.5" />
