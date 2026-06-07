@@ -1,7 +1,6 @@
 <script lang="ts">
 	import * as Alert from '@epicenter/ui/alert';
 	import * as Empty from '@epicenter/ui/empty';
-	import { Input } from '@epicenter/ui/input';
 	import { Spinner } from '@epicenter/ui/spinner';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import FolderGrid from '$lib/components/FolderGrid.svelte';
@@ -18,44 +17,13 @@
 	const vault = createVault(path);
 	$effect(() => () => vault.dispose());
 
-	// One WHERE filter per tab: each open vault gets its own clause. The effect reads the
-	// vault (and its rows, inside `resolve`) so it re-queries on a data change; the cleanup
-	// cancels an in-flight query so a stale result never lands.
-	const filter = createWhereFilter();
-	$effect(() => filter.resolve(vault));
-	const view = $derived(vault.read.view);
+	// One WHERE filter per tab: each open vault gets its own clause. It takes the vault at
+	// construction and owns its own effect (re-querying on a clause or mirror change, cancelling
+	// stale runs), so there is nothing to wire here. FolderGrid renders its input and rows.
+	const filter = createWhereFilter(vault);
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	{#if view.mode === 'modeled'}
-		<!-- WHERE filter: a SQL predicate run against matter.sqlite; the grid below narrows
-		     to the matching rows, still typed and editable. -->
-		<div class="flex min-h-12 items-center gap-3 border-b px-4 py-2">
-			<div class="ml-auto flex items-center gap-1.5">
-				<span
-					class="font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
-				>
-					where
-				</span>
-				<Input
-					bind:value={filter.text}
-					placeholder="status = 'ready'"
-					spellcheck={false}
-					autocapitalize="off"
-					autocomplete="off"
-					autocorrect="off"
-					aria-invalid={Boolean(filter.error)}
-					aria-label="Filter rows with a SQL WHERE clause"
-					title={filter.error}
-					class={[
-						'h-8 w-72 font-mono text-xs',
-						filter.error && 'border-destructive focus-visible:ring-destructive/30',
-					]}
-				/>
-			</div>
-		</div>
-	{/if}
-
 	{#await vault.whenReady}
 		<Empty.Root class="flex-1 border-0" aria-live="polite">
 			<Empty.Media><Spinner class="size-5 text-muted-foreground" /></Empty.Media>
@@ -69,7 +37,7 @@
 				</Alert.Description>
 			</Alert.Root>
 		{/if}
-		<FolderGrid {vault} matchedFileNames={filter.matchedFileNames} />
+		<FolderGrid {vault} {filter} />
 	{:catch error}
 		<Empty.Root class="flex-1 border-0">
 			<Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media>
