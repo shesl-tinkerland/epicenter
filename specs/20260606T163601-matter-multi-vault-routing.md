@@ -1,9 +1,9 @@
 # Matter Multi-Vault via the Routing Layer
 
 **Date**: 2026-06-06
-**Status**: Draft (not started)
+**Status**: Implemented (static checks green; live `tauri dev` smoke pending, see Review)
 **Owner**: Braden
-**Branch**: suggest `matter-multi-vault-routing` off `matter-typed-markdown-editor`
+**Branch**: `matter-multi-vault-routing` (off `995cd9390`, the merge of `matter-typed-markdown-editor`)
 **Builds on**: the single-vault work in `matter-typed-markdown-editor` (commits `ba0d611a1`..`fdaeee480`), especially `fdaeee480` which gave the vault `whenReady` + `dispose` and the `vaultSession` singleton this spec replaces.
 
 ## One Sentence
@@ -314,29 +314,21 @@ Follow Build, Prove, Remove: the old `vaultSession` path stays on disk until the
 
 ## Open Questions
 
-1. **`load()` vs reading the singleton in the component for `id -> path`.**
-   - Options: (a) `+page.ts load` returns `{path,name}` + `error(404)`; (b) `VaultView` reads `openVaults.get(id)` and shows inline not-found.
-   - **Recommendation**: (a) for the clean error boundary and framework-native param resolution, but (b) is fewer files and arguably better desktop UX. Leave open; grill both.
+All resolved for v1 (decisions below). Each marks `[RESOLVED]` with the choice taken.
 
-2. **Index route `/` behavior.**
-   - Options: (a) onboarding "open a folder"; (b) redirect to the last open vault; (c) a vault dashboard/grid of tiles.
-   - **Recommendation**: (a) for v1, (b) as a nicety. (c) is a separate feature.
+1. **`load()` vs reading the singleton in the component for `id -> path`.** `[RESOLVED: (a)]`
+   - Chose (a): `+page.ts load` returns `{path,name}` + `error(404)`. Clean framework-native error boundary (`+error.svelte` renders inside the tab strip, verified against kit 2.56) and the component stays lifecycle-only.
+   - Known limit: `load` is not reactive to the `$state` list, so the "viewed id is always in the list" invariant is caller-enforced (`closeTab` always navigates away from a closed active tab). Documented on `close()`. If a future path removes the active vault without navigating, switch to `depends('matter:open-vaults')` + `invalidate`, or to option (b) reactive in-component resolution. See Follow-up.
 
-3. **Keep-alive on tab switch.**
-   - Context: re-seed flash. A small LRU (keep the last 1-2 disposed vaults warm for a few seconds) removes the flash without a full registry.
-   - **Recommendation**: defer until the flash actually annoys; if added, model it on `createDisposableCache` (see `project_body_docs_clean_break`), not a hand-rolled map.
+2. **Index route `/` behavior.** `[RESOLVED: (a)]` Onboarding "open a folder" for v1. (b)/(c) deferred.
 
-4. **Tabs vs native Tauri windows.**
-   - Context: each vault could be a native window instead of an in-app tab.
-   - **Recommendation**: in-app tabs (one window, routes) for v1; native multi-window is a bigger product call. Note it, do not build it.
+3. **Keep-alive on tab switch.** `[RESOLVED: defer]` Re-seed-on-switch, no keep-alive (Decisions Log). Revisit only if the flash is measured as annoying; model on `createDisposableCache`, not a hand-rolled map.
 
-5. **Tab order / session restore fidelity.**
-   - Should tab order persist? Should the app restore the active tab on relaunch?
-   - **Recommendation**: persist the list order; restoring the active tab is a nicety (store `lastActiveId`).
+4. **Tabs vs native Tauri windows.** `[RESOLVED: in-app tabs]` One window, routes. Native multi-window deferred (would add a `storage` listener to `open-vaults` so windows agree on the open set; noted in that file).
 
-6. **Should `createWhereFilter` / `filter.resolve` tighten to a non-optional vault on the route path?**
-   - The route guarantees a vault, so the `undefined` branch is dead there.
-   - **Recommendation**: keep `resolve` tolerant (demo + index still pass undefined) unless the grill finds a cleaner split.
+5. **Tab order / session restore fidelity.** `[RESOLVED: persist order only]` The persisted array order IS the tab order. Auto-restoring the active tab on relaunch (a `lastActiveId`) is deferred; relaunch lands on `/` and the tabs are one click away. See Follow-up.
+
+6. **Tighten `createWhereFilter` / `filter.resolve` to a non-optional vault?** `[RESOLVED: keep tolerant]` `where-filter.svelte.ts` is byte-unchanged; `resolve` stays tolerant of `undefined`. The dead branch on the route path is harmless and keeps the module a true "unchanged" per the architecture table.
 
 ## Adjacent Work
 
@@ -353,13 +345,51 @@ Follow Build, Prove, Remove: the old `vaultSession` path stays on disk until the
 
 ## Success Criteria
 
-- [ ] Open two folders; both appear as tabs; the URL reflects the active one.
-- [ ] Switching tabs disposes the old watcher and seeds the new (verify in `tauri dev`: only one watcher live).
-- [ ] Back/forward navigates between vaults.
-- [ ] Relaunch reopens the persisted vaults; a deleted folder shows the `{:catch}` state, not a crash.
-- [ ] A cold deep-link to an unknown id shows the `error(404)` state.
-- [ ] `vaultSession` is gone; `bun run typecheck` + `bun test` + `cargo test` green; live smoke test passes.
-- [ ] The vault core, `FolderGrid`, `where-filter`, and `/demo` are unchanged.
+Static criteria are checked; the watcher-lifecycle criteria need the live `tauri dev` smoke (Review).
+
+- [~] Open two folders; both appear as tabs; the URL reflects the active one. (built; verify live)
+- [~] Switching tabs disposes the old watcher and seeds the new (verify in `tauri dev`: only one watcher live). (built; verify live)
+- [~] Back/forward navigates between vaults. (built on the router; verify live)
+- [~] Relaunch reopens the persisted vaults; a deleted folder shows the `{:catch}` state, not a crash. (built; verify live)
+- [~] A cold deep-link to an unknown id shows the `error(404)` state. (built; verify live)
+- [x] `vaultSession` is gone; `bun run typecheck` + `bun test` green (44 pass). `cargo test` n/a (no Rust touched). Live smoke pending.
+- [x] The vault core, `FolderGrid`, `where-filter`, and `/demo` are unchanged. (`createVault` gained `export`; otherwise the listed surfaces are untouched.)
+
+## Review
+
+**Completed**: 2026-06-06
+**Branch**: `matter-multi-vault-routing` (commits `9a4be7414`, `7498ad999`, `e2e692d81` on `995cd9390`)
+
+### What Landed
+
+The URL is now the active vault, a persisted `{id,path,name}[]` list is the open vaults, and SvelteKit's router is the entire live-vault lifecycle. `vaultSession` is deleted. The keyed `/vault/[id]` route constructs `createVault(path)` on mount and disposes it on destroy via an `$effect` cleanup; `+page.ts load` resolves the opaque id to a path or `error(404)`; a `(vaults)` route-group `+layout.svelte` renders the tab strip; `+error.svelte` is the not-open state. The one-sentence description holds.
+
+### Deviations and Discoveries
+
+- **Tab strip in a `(vaults)` route group, not the root layout.** A layout cannot be un-inherited, so a root-level strip would force itself onto `/demo`. The group puts index + `vault/[id]` under the shell and keeps `/demo` a clean sibling, with no path-sniffing conditional. The root `+layout.svelte` is unchanged.
+- **Hand-rolled persisted list, not `createPersistedState`.** Matter never imports `@epicenter/svelte`, and that helper requires a `StandardSchemaV1` schema (typebox v1 is not one). A tiny `browser`-guarded localStorage wrapper with a shape guard fit matter's stack; the spec blessed this.
+- **`open()` dedups by path** (reopening a folder focuses its existing tab). This makes key-on-path equivalent to key-on-id (a quietly load-bearing coupling, now commented).
+- **`load()` returns `{path,name}`; `name` sets a per-vault window title** (`Matter / name`, matching the `/demo` title convention) so the field is consumed, not dead.
+- **`createVault` is now exported** (was private to `vaultSession`); the keyed-prop capture uses the repo-idiomatic `// svelte-ignore state_referenced_locally`.
+- **Review pass (code-reviewer subagent)** confirmed: one watcher live, dispose-before-armed race already handled in `vault.svelte.ts`, correct `closeTab` index math, clean 404 boundary that preserves the tab strip. It surfaced two latent reactivity gaps (load not reactive to the list; no cross-context `storage` sync), both with no current trigger (closeTab always navigates; v1 is single-window). Resolved by documenting the invariants rather than adding machinery; see Follow-up.
+
+### Live smoke test (REQUIRED, not run in this session)
+
+The watcher lifecycle is the one thing static checks cannot prove. Run `cd apps/matter && bun tauri dev` and verify:
+
+1. **Open two folders** via the `+` button. Both appear as tabs; the URL is `/vault/<id>`; the active tab is highlighted.
+2. **Switch tabs.** The new vault re-seeds (brief loading), the old watcher stops. Confirm only one OS watcher is live (e.g. the old folder's external edits no longer stream while you are on the other tab).
+3. **Back/forward** navigates between the two vaults.
+4. **Close a tab.** Closing the active tab jumps to a neighbor (or `/` if it was the last); closing an inactive tab leaves you put.
+5. **Relaunch the app.** The persisted tabs are gone from the view (lands on `/`) but reopen when you click a tab; a tab whose folder was deleted/moved shows the "Couldn't watch" `{:catch}` state, not a crash.
+6. **Cold deep-link** to `/vault/does-not-exist` shows the `+error.svelte` "This vault isn't open" 404 state with the tab strip intact.
+
+### Follow-up Work
+
+- **Reopen-active-tab-on-relaunch**: store a `lastActiveId` and `goto` it on boot. Cheap nicety now that the list persists.
+- **Self-healing route** if a non-navigating removal of the active vault ever becomes possible: `depends('matter:open-vaults')` in `load` + `invalidate` in `open`/`close`, or move id->path resolution into the component (Open Q1 option b).
+- **Multi-window** (Open Q4): add a `storage` listener in `open-vaults.svelte.ts` so windows agree on the open set.
+- **Keep-alive LRU** (Open Q3) only if the re-seed flash is measured as annoying.
 
 ## References
 
