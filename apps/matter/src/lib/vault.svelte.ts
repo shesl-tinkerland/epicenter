@@ -61,6 +61,10 @@ export function createVault(path: string) {
 	// Set when the LAST save could not reach disk. A save never mutates the store
 	// (that is the watcher's job); this is the only state a write touches.
 	let writeError = $state<string | undefined>(undefined);
+	// Bumped after each successful `matter.sqlite` rebuild, so a reader can key its query on
+	// the mirror being fresh rather than on the in-memory rows (which lead the file by the
+	// async rebuild). The WHERE filter reacts to this; see `reconcileMirror`.
+	let mirrorVersion = $state(0);
 	// Memoized: Schema.Compile runs only when matter.json changes, not on every
 	// .md change. A single-file change reclassifies against these cached columns.
 	const loaded = $derived(loadModel(modelText));
@@ -114,11 +118,11 @@ export function createVault(path: string) {
 	});
 
 	/**
-	 * Reconcile `<path>/matter.sqlite` from the current VALID rows: a FULL
-	 * DROP + CREATE + INSERT, so the file is a pure function of the folder (self-healing,
-	 * no incremental drift to debug, no stale row an agent could read). The SvelteMap
-	 * stays the live in-app surface; this file is the EXTERNAL one. An unmodeled folder
-	 * has no typed table, so it is skipped. Fire-and-forget: a failure never blocks the
+	 * Reconcile `<path>/matter.sqlite` from the current readable rows (valid AND drafts
+	 * in progress): a FULL DROP + CREATE + INSERT, so the file is a pure function of the
+	 * folder (self-healing, no incremental drift to debug, no stale row an agent could
+	 * read). The SvelteMap stays the live in-app surface; this file is the EXTERNAL one.
+	 * An unmodeled folder has no typed table, so it is skipped. Fire-and-forget: a failure never blocks the
 	 * grid and self-heals on the next batch (the rebuild is a full DROP + CREATE + INSERT),
 	 * so a transient error needs no surfacing. The JS projector builds all the SQL; the
 	 * Rust `write_mirror` command only executes it and binds the rows.
@@ -135,7 +139,11 @@ export function createVault(path: string) {
 			view.model,
 			view.conformance,
 		);
-		void invoke('write_mirror', { path, schema, insert, rows: tuples }).catch(() => {});
+		void invoke('write_mirror', { path, schema, insert, rows: tuples })
+			.then(() => {
+				mirrorVersion++; // the file is now fresh: wake any reader keyed on the mirror
+			})
+			.catch(() => {});
 	}
 
 	/**
@@ -208,13 +216,13 @@ export function createVault(path: string) {
 
 	/**
 	 * Filter the folder with a SQL WHERE clause: run it against the mirror
-	 * (`matter.sqlite`, read-only) and return the FILE NAMES of the matching VALID rows, so the
+	 * (`matter.sqlite`, read-only) and return the FILE NAMES of the matching rows, so the
 	 * grid can narrow its live rows by a SQL predicate while still rendering them with the
-	 * rich, editable widgets. Only valid rows are in the mirror, so the clause filters
-	 * those; invalid / unparseable files (the "needs attention" axis) are not matchable
-	 * here. The clause is interpolated raw, it is the user's own query on their own local
-	 * file and the connection is read-only, so the worst a bad clause does is return an
-	 * error.
+	 * rich, editable widgets. Every readable row is in the mirror (drafts included), with
+	 * a missing cell as NULL, so a clause like `format = 'carousel'` finds an in-progress
+	 * draft too; only unparseable files (which never became a row) are absent. The clause
+	 * is interpolated raw, it is the user's own query on their own local file and the
+	 * connection is read-only, so the worst a bad clause does is return an error.
 	 */
 	function matchingFileNames(
 		where: string,
@@ -270,6 +278,11 @@ export function createVault(path: string) {
 		/** Set if the most recent save could not reach disk. */
 		get writeError(): string | undefined {
 			return writeError;
+		},
+		/** Increments after each successful `matter.sqlite` rebuild. Read it (reactively) to
+		 *  re-run only once the mirror is fresh, rather than the moment the in-memory rows change. */
+		get mirrorVersion(): number {
+			return mirrorVersion;
 		},
 	};
 }
