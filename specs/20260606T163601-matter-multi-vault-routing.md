@@ -280,13 +280,15 @@ Follow Build, Prove, Remove: the old `vaultSession` path stays on disk until the
 
 ### Phase 3: Prove
 
-- [ ] **3.1** `bun run typecheck`, `bun test`, `cargo test` green.
+- [x] **3.1** `bun run typecheck`, `bun test` green (44 pass). `cargo test` not run: this feature touches no Rust (the `FileDelta`/`watch_folder` IPC is unchanged), so there is no ts-rs binding to regenerate. `bun run build` also green (adapter-static emits the SPA fallback and the dynamic route builds with no prerender error).
 - [ ] **3.2** `bun tauri dev` smoke test (the only real proof of the watcher lifecycle): open two folders, switch tabs (old watcher stops, new seeds), close a tab, relaunch (vaults reopen from the persisted list), open a since-deleted folder (catch branch).
+  > **Not run in this session** (no headless Tauri). The watcher-lifecycle behavior is the one thing static checks cannot prove; it must be run by hand. See the Review section for the exact steps.
 
 ### Phase 4: Remove
 
-- [ ] **4.1** Delete `vaultSession` and `openVault` from `vault.svelte.ts`; delete the old single-vault `+page.svelte` body.
-- [ ] **4.2** Straggler sweep (no `vaultSession` refs); update the vault doc comment and memory.
+- [x] **4.1** Delete `vaultSession` (and its `openFolderDialog`) from `vault.svelte.ts`; delete the old single-vault `+page.svelte` body.
+  > **Note**: the old `+page.svelte` was removed in Wave 1 (the new path replaced it); `vaultSession` + `openFolderDialog` + the `plugin-dialog` import were removed here in Wave 2, after the new path proved out statically. `extractErrorMessage` stays (still used by `write`).
+- [x] **4.2** Straggler sweep (no `vaultSession` refs outside `open-vaults.svelte.ts`'s historical doc note); updated the `vault.svelte.ts` module doc comment to describe the route-owned lifecycle. Memory update is in the Final step.
 
 ## Edge Cases
 

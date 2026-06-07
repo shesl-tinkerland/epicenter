@@ -13,16 +13,16 @@
  * Lifecycle: opening a vault IS observing it, so the watcher starts at
  * construction. `whenReady` resolves once it is armed (the seed scan has run, so
  * the store holds the folder's current contents) and rejects if it cannot be, which
- * the UI gates on with `{#await}`. `dispose()` stops the OS watch. The `vaultSession`
- * singleton owns the one open vault and disposes the previous when you switch
- * folders, so no component drives the watcher with an effect.
+ * the UI gates on with `{#await}`. `dispose()` stops the OS watch. The keyed route
+ * component (`/vault/[id]`) owns one vault's lifetime, constructing it on mount and
+ * disposing it on destroy, so no module singleton or standing effect drives the
+ * watcher; the set of open vaults is just a persisted list (`open-vaults.svelte.ts`).
  *
  * Desktop-only: it talks to Tauri directly (no platform seam). Develop with
  * `bun run tauri dev`.
  */
 
 import { invoke, Channel } from '@tauri-apps/api/core';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { SvelteMap } from 'svelte/reactivity';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { Err, type Result, tryAsync } from 'wellcrafted/result';
@@ -286,65 +286,3 @@ export type Vault = ReturnType<typeof createVault>;
  * drop-in rather than a vault pretending to watch a folder.
  */
 export type FolderGridVault = Pick<Vault, 'folderName' | 'read' | 'saveField' | 'saveBody'>;
-
-/** Prompt for a folder; `null` if the dialog was cancelled. */
-async function openFolderDialog(): Promise<string | null> {
-	const path = await openDialog({
-		directory: true,
-		multiple: false,
-		title: 'Open vault folder',
-	});
-	if (path === null || Array.isArray(path)) return null;
-	return path;
-}
-
-/**
- * The one open folder. A module singleton because the desktop app shows a single vault at a
- * time, swapped by "Open folder". It owns the open flow (dialog then {@link createVault}) and
- * the open vault's lifetime, disposing the previous watcher when you switch, so the page just
- * reads `current` and renders. The `/demo` route does NOT use this (it builds its own
- * in-memory vault), which is why {@link FolderGridVault} consumers stay vault-agnostic.
- */
-function createVaultSession() {
-	let current = $state<Vault>();
-	let opening = $state(false);
-	let openError = $state<string | undefined>(undefined);
-
-	/**
-	 * Prompt for a folder and open it, disposing the previously open one. A cancelled dialog
-	 * is a no-op; a failure surfaces in `openError`.
-	 */
-	async function open(): Promise<void> {
-		opening = true;
-		openError = undefined;
-		try {
-			const path = await openFolderDialog();
-			if (path !== null) {
-				current?.dispose();
-				current = createVault(path);
-			}
-		} catch (cause) {
-			openError = extractErrorMessage(cause);
-		} finally {
-			opening = false;
-		}
-	}
-
-	return {
-		/** The open vault, or `undefined` before the first folder is opened. */
-		get current(): Vault | undefined {
-			return current;
-		},
-		/** True while the folder dialog and open are in flight. */
-		get opening(): boolean {
-			return opening;
-		},
-		/** Set if opening the folder failed (a cancel is not a failure). */
-		get openError(): string | undefined {
-			return openError;
-		},
-		open,
-	};
-}
-
-export const vaultSession = createVaultSession();
