@@ -49,7 +49,7 @@ const basename = (path: string) => path.split(/[/\\]/).pop() ?? path;
  * and fills from the first pushed batch once `watch()` runs, so there is no
  * separate initial read and no read-then-watch gap.
  */
-function createVault(path: string) {
+export function createVault(path: string) {
 	const folderName = basename(path);
 
 	// ONE store, keyed by filename: each entry is a `Result` that is either a
