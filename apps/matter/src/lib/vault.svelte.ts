@@ -247,7 +247,7 @@ export function createVault(path: string) {
 		if (disposed) void invoke('unwatch_folder', { id });
 		else watchId = id;
 	});
-	/** Stop the OS watch. The session calls this when it swaps to another folder. */
+	/** Stop the OS watch. The keyed route component calls this when it is torn down (a tab switch or close). */
 	function dispose(): void {
 		disposed = true;
 		if (watchId !== undefined) void invoke('unwatch_folder', { id: watchId });

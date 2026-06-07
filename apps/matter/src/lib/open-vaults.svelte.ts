@@ -12,6 +12,11 @@
  * drove its lifetime, this holds only the list of tabs and the open/close actions.
  * SvelteKit's router owns everything else, so there is no `Map<id, Vault>`, no
  * `activeId`, and no manual dispose policy here.
+ *
+ * Single-context: the list is read once at construction and written on each change,
+ * with no cross-window `storage` sync (the desktop app is one webview). A future
+ * multi-window build (Open Q4) would add a `storage` listener here so the windows
+ * agree on the open set.
  */
 
 import { browser } from '$app/environment';
@@ -33,7 +38,9 @@ async function openFolderDialog(): Promise<string | null> {
 		multiple: false,
 		title: 'Open vault folder',
 	});
-	if (path === null || Array.isArray(path)) return null;
+	// A folder path is a string; null (cancel), an array (multi-select), or anything
+	// else a future plugin version might return is "no pick".
+	if (typeof path !== 'string') return null;
 	return path;
 }
 
@@ -96,7 +103,13 @@ function createOpenVaults() {
 		await goto(`/vault/${vault.id}`);
 	}
 
-	/** Remove a tab. Navigating away from a closed active tab is the caller's job. */
+	/**
+	 * Remove a tab. Navigating away from a closed ACTIVE tab is the caller's job (the
+	 * tab strip's `closeTab` goto()s a neighbor). That is what keeps the invariant "the
+	 * viewed id is always in the list" true: the route's `load` resolves id -> path once
+	 * and is not reactive to this list, so a removal that did NOT navigate would leave a
+	 * now-orphaned vault live until the next navigation.
+	 */
 	function close(id: string): void {
 		vaults = vaults.filter((vault) => vault.id !== id);
 		persist();
