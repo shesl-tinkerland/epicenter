@@ -103,7 +103,7 @@ apps/<mountName>/                  markdown projection   (visible, keyed by MOUN
 Only **markdown** moves: from the hidden `.epicenter/md/<guid>` default to a visible `apps/<mount>`,
 keyed by mount name so the folder reads `apps/fuji`, not `apps/epicenter-fuji`. **yjs and sqlite are
 NOT re-keyed.** yjs is the durable source of truth (the daemon resolves it via `yjsPath(projectDir,
-ydoc.guid)` in `attach-project-infrastructure.ts`); re-keying it would orphan local data and boot the
+ydoc.guid)` in `attach-project-sync.ts`); re-keying it would orphan local data and boot the
 workspace empty offline. sqlite is a regenerable mirror keyed by guid via the existing `sqlitePath`
 default; leaving it is the lowest-churn choice. Removing the freeform `sqliteFile` option just means it
 falls back to that guid default instead of the vault's old `fuji.db` override (regenerates, harmless).

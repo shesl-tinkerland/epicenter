@@ -128,6 +128,12 @@ function writeRuntimeMount({
 	onImportMarker?: string;
 	onDisposeMarker?: string;
 } = {}) {
+	const disposeBody =
+		onDisposeMarker === undefined
+			? ''
+			: `await Bun.sleep(10);
+						writeFileSync(${JSON.stringify(onDisposeMarker)}, 'disposed');`;
+
 	writeDemoMount(`
 		import { writeFileSync } from 'node:fs';
 		${onImportMarker ? `writeFileSync(${JSON.stringify(onImportMarker)}, 'imported');` : ''}
@@ -153,7 +159,7 @@ function writeRuntimeMount({
 				return {
 					collaboration,
 					async [Symbol.asyncDispose]() {
-						${onDisposeMarker ? `writeFileSync(${JSON.stringify(onDisposeMarker)}, 'disposed');` : ''}
+						${disposeBody}
 					},
 				};
 			},
@@ -332,6 +338,7 @@ describe('runUp: failure cleanup', () => {
 						return {
 							collaboration,
 							async [Symbol.asyncDispose]() {
+								await Bun.sleep(10);
 								writeFileSync(${JSON.stringify(disposeMarker)}, 'disposed');
 							},
 						};

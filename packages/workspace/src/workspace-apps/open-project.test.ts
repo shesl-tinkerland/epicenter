@@ -102,7 +102,10 @@ describe('openProject', () => {
 					name: 'good',
 					open: () => ({
 						collaboration: {},
-						async [Symbol.asyncDispose]() { writeFileSync(marker, 'disposed'); },
+						async [Symbol.asyncDispose]() {
+							await Bun.sleep(10);
+							writeFileSync(marker, 'disposed');
+						},
 					}),
 				},
 				{ name: 'bad', open() { throw new Error('boom'); } },

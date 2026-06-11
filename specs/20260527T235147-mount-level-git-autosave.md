@@ -206,7 +206,7 @@ export function fuji(opts: FujiMountOptions = {}) {
         git: opts.git,
       });
 
-      const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+      const infrastructure = attachProjectSync(workspace.ydoc, {
         mount: ctx.mount,
         projectDir: ctx.projectDir,
         ownerId: ctx.ownerId,

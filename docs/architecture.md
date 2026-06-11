@@ -157,6 +157,11 @@ await workspace.idb.whenDisposed;
 await workspace.collaboration.whenDisposed;
 ```
 
+Daemon mounts aggregate that same barrier at the mount boundary: their
+`[Symbol.asyncDispose]()` calls `workspace[Symbol.dispose]()` once, then awaits
+`sync.whenDisposed` plus any materializer `whenDisposed` barriers the
+mount constructed.
+
 Browser bundles expose `wipe()` for explicit local cleanup such as "Forget this device." Sign-out does not call it. The wipe sequence disposes the live bundle, awaits the async attachments needed to unblock storage deletion, then deletes persisted local state. The refcounted cache still calls `[Symbol.dispose]()` on the last release after the `gcTime` grace period; it does not aggregate an async disposal barrier.
 
 ## Write and read flow
