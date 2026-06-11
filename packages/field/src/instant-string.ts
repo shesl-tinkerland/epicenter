@@ -25,9 +25,7 @@ export const InstantString = {
 	 */
 	is(value: unknown): value is InstantString {
 		if (typeof value !== 'string') return false;
-		return (
-			instantStringPattern.test(value) && Format.Test('date-time', value)
-		);
+		return instantStringPattern.test(value) && Format.Test('date-time', value);
 	},
 
 	/**

@@ -155,7 +155,10 @@ const LIST_REFINE = {
  * an `Extract`. Each `meta` reads `{ ...discriminators, ...refinements, ...annotations }`.
  */
 const FIELDS = {
-	select: { storage: 'TEXT', meta: Type.Object({ ...enumProps, ...ANNOT }, CLOSED) },
+	select: {
+		storage: 'TEXT',
+		meta: Type.Object({ ...enumProps, ...ANNOT }, CLOSED),
+	},
 	url: {
 		storage: 'TEXT',
 		meta: Type.Object(
@@ -310,7 +313,8 @@ export function recognize(schema: unknown): Recognized | null {
 		// two as `Recognized` is honest. This is the cast at the MODEL boundary; the field
 		// pipeline has exactly one more, at the UI-dispatch boundary in the widget registry.
 		// Everything between the two stays cast-free.
-		if (Value.Check(FIELDS[kind].meta, schema)) return { kind, schema } as Recognized;
+		if (Value.Check(FIELDS[kind].meta, schema))
+			return { kind, schema } as Recognized;
 	}
 	return null;
 }
@@ -347,7 +351,9 @@ export const META_BY_KIND = Object.fromEntries(
  * registered as a load side effect of `typebox/format` (which `Schema.Compile` imports),
  * so the bare compile already enforces them.
  */
-export function compile(schema: Recognized['schema']): (value: unknown) => boolean {
+export function compile(
+	schema: Recognized['schema'],
+): (value: unknown) => boolean {
 	const validator = Schema.Compile(schema);
 	return (value) => validator.Check(value);
 }

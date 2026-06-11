@@ -51,13 +51,10 @@ import {
 } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
 import type { JsonValue } from 'wellcrafted/json';
-import { JSON_SCHEMA_KEYWORD } from './field';
 import type { CalendarDateString } from './calendar-date-string';
 import type { DateTimeString } from './datetime-string';
-import {
-	INSTANT_STRING_PATTERN,
-	type InstantString,
-} from './instant-string';
+import { JSON_SCHEMA_KEYWORD } from './field';
+import { INSTANT_STRING_PATTERN, type InstantString } from './instant-string';
 
 type BrandedString = string & Brand<string>;
 
@@ -106,7 +103,9 @@ const boolean = Type.Boolean;
  * or time zone meaning. Stored as `YYYY-MM-DD`, which sorts naturally as TEXT.
  */
 function date(opts?: TSchemaOptions): TUnsafe<CalendarDateString> {
-	return Type.Unsafe<CalendarDateString>(Type.String({ ...opts, format: 'date' }));
+	return Type.Unsafe<CalendarDateString>(
+		Type.String({ ...opts, format: 'date' }),
+	);
 }
 
 /**
