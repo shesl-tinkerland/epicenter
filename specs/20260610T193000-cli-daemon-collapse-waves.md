@@ -88,11 +88,13 @@ The fix, in three layers:
   the flush bails if the gate opens after dispose. Draining after
   `ydoc.destroy()` is safe because YKV reads come from in-memory maps that
   survive doc destruction.
-- `attachProjectInfrastructure` takes a `materializers` list and its
-  `[Symbol.asyncDispose]` awaits their `whenDisposed` barriers alongside
-  collaboration and log teardown; the fuji, honeycrisp, and tab-manager
-  mounts register their sqlite + markdown attachments there, and the
-  daemon's teardown stack already awaits each runtime's async dispose.
+- Each daemon mount owns its `[Symbol.asyncDispose]`: it destroys the
+  workspace doc once, then awaits the `whenDisposed` barriers for every
+  attachment it constructed. `attachProjectInfrastructure` exposes its own
+  aggregate `whenDisposed` for collaboration + log teardown; the fuji,
+  honeycrisp, and tab-manager mounts await that alongside their sqlite +
+  markdown materializer drains. The daemon's teardown stack already awaits
+  each runtime's async dispose.
 
 ## Wave 3: daemonless `run` (deferred)
 

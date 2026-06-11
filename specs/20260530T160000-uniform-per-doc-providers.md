@@ -78,7 +78,8 @@ calls it from the built value's `[Symbol.dispose]`.
 
 **4. Dispose composition is under-specified.** Providers self-dispose on
 `ydoc.destroy()`, but their teardown (`collaboration.whenDisposed`, `yjsLog.whenDisposed`)
-is async; `attachProjectInfrastructure` already destroys then `await Promise.all([...whenDisposed])`.
+is async; mount-level `[Symbol.asyncDispose]` destroys the workspace, then awaits
+`infrastructure.whenDisposed` plus any sibling attachment barriers it constructed.
 `attachWorkspaceProviders`' `[Symbol.asyncDispose]` must (a) call `workspace[Symbol.dispose]()`
 (destroys the root ydoc AND disposes the child cache, cascading destroy to every open
 child), then (b) await every collected `whenDisposed`. For (a) to reach children, the

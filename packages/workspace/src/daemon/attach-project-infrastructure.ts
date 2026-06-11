@@ -4,9 +4,8 @@
  * `attachProjectInfrastructure(ydoc, opts)` is the recipe every mount needs:
  * persist the Y.Doc update log to disk under `yjsPath(projectDir, guid)`, join
  * the cloud room at the partitioned `roomWsUrl({ baseURL, ownerId, guid,
- * deviceId })`, and own the ordered async dispose (destroy first so writes
- * flush before sockets close, then await every `whenDisposed` barrier:
- * collaboration, log, and any registered materializers).
+ * deviceId })`, and expose the aggregate teardown barrier for the attachments
+ * it constructs (collaboration + log).
  *
  * A cloud doc is owned by the authenticated `ownerId` and addressed by its
  * `ydoc.guid`. The daemon and browser apps build the same URL with
@@ -19,9 +18,9 @@
  * workspaces with daemon-safe actions pass `workspace.actions`.
  *
  * Returns the parts the host reads (`collaboration`) plus the side-effectful
- * `yjsLog` handle and an `[Symbol.asyncDispose]` that encodes the destroy
- * order. Callers usually spread the result into their `DaemonRuntime` and
- * compose materializers around the same ydoc.
+ * `yjsLog` handle and a `whenDisposed` barrier. The opened mount owns
+ * `[Symbol.asyncDispose]`: it destroys the workspace doc once, then awaits this
+ * barrier alongside any sibling attachments it constructed around the same doc.
  */
 
 import type { OwnerId } from '@epicenter/identity';
@@ -50,13 +49,6 @@ export type AttachProjectInfrastructureOptions<
 	actions: TActions;
 	/** Base URL of the sync server (the Epicenter cloud, or a self-hosted hub). */
 	baseURL: string;
-	/**
-	 * Materializer attachments composed around the same ydoc. Their teardown
-	 * drains are awaited alongside collaboration and log teardown, so a daemon
-	 * shutdown cannot drop projection writes mid-flight. Each drain is bounded
-	 * by the materializer's own `disposeTimeoutMs`.
-	 */
-	materializers?: ReadonlyArray<{ whenDisposed: Promise<void> }>;
 };
 
 export function attachProjectInfrastructure<TActions extends ActionRegistry>(
@@ -69,7 +61,6 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 		onReconnectSignal,
 		actions,
 		baseURL,
-		materializers = [],
 	}: AttachProjectInfrastructureOptions<TActions>,
 ) {
 	const yjsLog = attachYjsLog(ydoc, {
@@ -94,17 +85,14 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 		/** Cloud sync, presence, and dispatch handle for this mount. */
 		collaboration,
 		/**
-		 * Destroy the Y.Doc, then await collaboration, log, and materializer
-		 * teardown (each materializer drains its pending projection writes).
+		 * Resolves after the Y.Doc destroy cascade disposes the collaboration
+		 * transport and local update log. The mount awaits this with its sibling
+		 * attachment barriers before process exit.
 		 */
-		async [Symbol.asyncDispose]() {
-			ydoc.destroy();
-			await Promise.all([
-				collaboration.whenDisposed,
-				yjsLog.whenDisposed,
-				...materializers.map((materializer) => materializer.whenDisposed),
-			]);
-		},
+		whenDisposed: Promise.all([
+			collaboration.whenDisposed,
+			yjsLog.whenDisposed,
+		]).then(() => undefined),
 	};
 }
 

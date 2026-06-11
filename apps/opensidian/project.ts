@@ -34,7 +34,12 @@ export function opensidian() {
 
 			return defineWorkspace({
 				...workspace,
-				...infrastructure,
+				yjsLog: infrastructure.yjsLog,
+				collaboration: infrastructure.collaboration,
+				async [Symbol.asyncDispose]() {
+					workspace[Symbol.dispose]();
+					await infrastructure.whenDisposed;
+				},
 			});
 		},
 	});

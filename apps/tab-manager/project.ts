@@ -86,14 +86,22 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 				openWebSocket,
 				onReconnectSignal,
 				actions,
-				materializers: [sqlite, markdown],
 			});
 
 			return defineWorkspace({
 				...workspace,
-				...infrastructure,
+				yjsLog: infrastructure.yjsLog,
+				collaboration: infrastructure.collaboration,
 				markdown,
 				actions,
+				async [Symbol.asyncDispose]() {
+					workspace[Symbol.dispose]();
+					await Promise.all([
+						infrastructure.whenDisposed,
+						sqlite.whenDisposed,
+						markdown.whenDisposed,
+					]);
+				},
 			});
 		},
 	});
