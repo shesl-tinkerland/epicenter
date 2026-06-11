@@ -4,30 +4,30 @@ Canonical messaging for Epicenter. Every public surface should derive from this 
 
 ## One-Liner
 
-**Local-first apps, one shared workspace.** Your notes, transcripts, and chat histories live in one folder of plain text and SQLite. Every app reads and writes to the same place.
+**Local-first apps. One workspace you own.** Capture in purpose-built apps. Read the generated Markdown. Query the SQLite mirror. Curate what matters into Markdown folders you can grep, version, and keep forever. Sync between devices when you want.
 
-For developers: a CRDT-powered workspace engine that materializes to SQLite and markdown, with typed schemas and multi-device sync. Not another note app: the infrastructure that apps share.
+For developers: a CRDT-powered workspace engine that materializes app state to SQLite and Markdown, with typed schemas, validated actions, and multi-device sync. Not another note app: the infrastructure that lets apps belong to the same workspace.
 
 *"PKM substrate" is accurate but too niche for a tagline. Use it in developer-facing contexts (blog posts, technical talks) but not in the README or landing page hero.*
 
 ## The Hook
 
-Most tools store your data in their own silo. Epicenter stores it in one folder on your machine: plain text and SQLite. Every app reads from the same place. Your transcripts inform your notes. Your notes guide your AI. Nothing gets copy-pasted between apps because there's nothing to copy-paste.
+Most tools store your data in their own silo. Epicenter gives purpose-built apps a shared local-first workspace: app data can be browsed as Markdown, queried through SQLite, and curated into folders you control. Your folders are ordinary Markdown: grep them, open them in Obsidian, version them with Git, publish them with whatever static site stack you like. Your transcripts can inform your notes. Your saved tabs can become drafts. Good captures graduate into your long-term workspace instead of staying trapped in the app that caught them.
 
-Under the hood, Yjs CRDTs are the single source of truth. They materialize *down* to SQLite (for fast queries) and markdown (for human-readable files). Sync happens over the Yjs protocol. The server is a relay, not an authority. It never sees your content if you encrypt it.
+Under the hood, app-owned state lives in Yjs, materializes to SQLite for fast queries, and materializes to Markdown for human-readable projections. User-owned folders stay ordinary Markdown. Sync happens over the Yjs protocol when you turn it on. Workspace sync sends encrypted CRDT values; hosted Epicenter uses server-managed keys, while self-hosting moves the key boundary to infrastructure you control.
 
 ## What Epicenter Is
 
-- An **ecosystem of open-source, local-first apps** that share one workspace
-- A **TypeScript library** (`@epicenter/workspace`) for building CRDT-backed apps with typed schemas
-- A **CLI** (`epicenter`) for inspecting, querying, and automating your workspace from the terminal
+- An **open-source, local-first workspace** for purpose-built apps and curated Markdown
+- A **TypeScript library** (`@epicenter/workspace`) for building CRDT-backed apps with typed schemas, materializers, and actions
+- A **CLI** (`epicenter`) for listing and invoking validated app actions, locally or on a peer that is online right now
 - A **sync server** (AGPL, self-hostable) that relays encrypted CRDT updates between devices
 
 ## What Epicenter Is Not
 
-- Not a single app (it's a platform multiple apps share)
+- Not a single app (purpose-built apps are the capture surfaces)
 - Not cloud-first (local-first by default, sync is optional)
-- Not a Notion/Obsidian clone (it's the layer beneath apps like those)
+- Not a Notion or Obsidian clone (it is the workspace layer beneath capture, curation, and publishing tools)
 
 ## Core Claims (Verifiable)
 
@@ -35,23 +35,23 @@ Every claim we make publicly should be provable by inspecting the repo:
 
 | Claim | Proof |
 |---|---|
-| "Plain text and SQLite" | Markdown materializer writes `.md` files with YAML frontmatter. SQLite persistence stores Yjs updates. |
-| "One folder" | All workspace data lives under a single directory per user. |
-| "CRDT-powered sync" | Yjs `Y.Doc` is source of truth; sync uses the Yjs protocol over WebSocket. |
-| "Encrypted at the CRDT level" | `XChaCha20-Poly1305` via `@noble/ciphers`; HKDF-SHA256 key derivation. Row values encrypted before sync. |
+| "Readable Markdown and queryable SQLite" | Markdown materializers write `.md` files with YAML frontmatter. SQLite materializers keep rebuildable query mirrors. |
+| "A workspace you own" | The local project layout separates user-owned folders from generated app projections and hidden machine state. |
+| "CRDT-powered sync" | App-owned live state uses Yjs documents; sync uses the Yjs protocol over WebSocket. |
+| "Encrypted CRDT values" | `XChaCha20-Poly1305` via `@noble/ciphers`; HKDF-SHA256 key derivation. Workspace values are encrypted before they enter the synced Yjs document. |
 | "Self-hostable" | Sync server is open source under AGPL. Run it on your infrastructure, control the encryption keys. |
 | "Bring your own model" | AI features use user-provided API keys. No middleman, no proxy required. |
 
 ## Competitor Positioning
 
 ### vs Obsidian
-> Obsidian is a markdown editor with sync. Epicenter is the offline-first storage substrate where multiple apps share the same CRDT-backed data.
+> Obsidian is a markdown editor with sync. Epicenter is the local-first workspace where purpose-built apps produce readable projections and curated Markdown stays yours.
 
-- **Win**: Shared memory across apps, not per-plugin storage. CRDT sync instead of file-level conflict resolution.
+- **Win**: App output can become durable workspace material without living in per-plugin storage. CRDT sync instead of file-level conflict resolution.
 - **Lose**: Obsidian's plugin ecosystem and years of UX polish. We're earlier.
 
 ### vs Anytype
-> Anytype is a purpose-built encrypted space ecosystem. Epicenter is the Yjs-backed substrate that lets many apps share the same schema and data.
+> Anytype is a purpose-built encrypted space ecosystem. Epicenter is the Yjs-backed workspace model for local-first app data, readable projections, and curated Markdown.
 
 - **Win**: Standard CRDT stack (Yjs, widely adopted and battle-tested) vs custom protocol. Developer-facing API with typed schemas, not just an end-user app.
 - **Lose**: Anytype's product is more complete today. Their P2P sync story is more mature.
@@ -59,7 +59,7 @@ Every claim we make publicly should be provable by inspecting the repo:
 ### vs Logseq
 > Logseq is an outliner-first app. Epicenter is the structured local-first storage engine that can power outline UIs without trapping data in a single app.
 
-- **Win**: SQL + structured schemas. Shared memory across tools. Encryption.
+- **Win**: SQL plus structured schemas. Purpose-built capture tools can project into a workspace you control. Encrypted CRDT values for sync.
 - **Lose**: Logseq's block/journal UX is more native. Larger community.
 
 ### vs Standard Notes
@@ -75,7 +75,7 @@ Every claim we make publicly should be provable by inspecting the repo:
 - **Lose**: Notion's UX, templates, collaboration, and distribution are years ahead.
 
 ### vs Karpathy's "Second Brain" System
-> Karpathy showed the architecture. Epicenter is the runtime.
+> Karpathy showed the folder. Epicenter is the local-first app layer around it.
 
 - **Win**: CRDT sync across devices, typed schemas, encryption, CLI automation: everything raw folders can't do.
 - **Lose**: Karpathy's system wins on simplicity. A folder of markdown files needs zero infrastructure.
@@ -92,12 +92,12 @@ The two stacks converged from opposite premises: typed tables, query subscriptio
 
 ### Hacker News
 1. "A local-first PKM substrate: CRDT-powered tables that materialize to SQLite and markdown"
-2. "Stop arguing about apps. Own a portable workspace that multiple tools share"
+2. "Local-first apps. One workspace you own."
 3. "CRDTs + plain files: offline-first notes without sync nightmares"
 
 ### Twitter/X
 1. "Your notes shouldn't depend on a vendor. Here's the CRDT-based way to keep them in a folder"
-2. "Markdown is the export. The real system is the CRDT state that powers conflict-free sync"
+2. "Capture in purpose-built apps. Curate the good parts into folders that are yours forever."
 3. "Notion stores knowledge in the cloud. Epicenter stores it in your folder"
 
 ### Karpathy Angle (strongest entry point)
@@ -106,24 +106,23 @@ Karpathy's "second brain" post (41K bookmarks) describes: three folders of .md f
 ## Keywords
 
 ### Use These
-`local-first`, `CRDT`, `Yjs`, `offline-first`, `own your data`, `conflict-free sync`, `personal knowledge base`, `PKM`, `second brain`, `plain text`, `SQLite`, `markdown`, `self-hosted`, `open source`, `end-to-end encryption`, `multi-device sync`, `materialize`, `workspace`
+`local-first`, `CRDT`, `Yjs`, `offline-first`, `own your data`, `conflict-free sync`, `personal knowledge base`, `PKM`, `second brain`, `plain text`, `SQLite`, `markdown`, `self-hosted`, `open source`, `encrypted sync`, `multi-device sync`, `materialize`, `workspace`
 
 ### Avoid These
 `AI-native`, `agentic`, `next-gen`, `revolutionary`, `redefine`, `game changer`, `Web3`, `metaverse`, buzzword-stacking ("CRDT-powered AI-first encrypted next-gen offline-first workspace": say less, prove more)
 
 ## Package Descriptions
 
-Canonical descriptions for npm/GitHub discoverability:
+Canonical descriptions for packages that appear on public front-door surfaces:
 
 | Package | Description |
 |---|---|
-| `@epicenter/workspace` | Local-first workspace engine. CRDT-powered tables that materialize to SQLite and markdown, with typed schemas and multi-device sync. |
-| `@epicenter/cli` | CLI for Epicenter workspaces. Inspect tables, query data, run actions, and manage sync from the terminal. |
+| `@epicenter/workspace` | Local-first workspace engine. CRDT-powered tables that materialize to SQLite and Markdown, with typed schemas and multi-device sync. |
+| `@epicenter/cli` | CLI for Epicenter workspaces. List actions, run them against the local daemon, dispatch them to online peers, and manage the project daemon. |
 | `@epicenter/sync` | Yjs-based sync protocol for Epicenter. Handles CRDT document exchange, awareness, and RPC over WebSocket. |
-| `@epicenter/vault` | Adapter and MCP layer for Epicenter. Schema migrations, codec pipelines, and data access patterns. |
-| `@epicenter/filesystem` | Filesystem operations for Epicenter workspaces. Read, write, and watch plain text and markdown files. |
-| `@epicenter/skills` | Skill definitions and loaders for Epicenter workspace actions. |
+| `@epicenter/filesystem` | Filesystem operations for Epicenter workspaces. Read, write, and watch plain text and Markdown files. |
 | `@epicenter/ui` | Shared UI components for Epicenter apps. Built with Svelte 5 and shadcn-svelte. |
+| `@epicenter/server` | Shared Hono server library for hosted Epicenter and self-hosted deployments. |
 
 ## Keywords per Package
 
@@ -132,4 +131,6 @@ Canonical descriptions for npm/GitHub discoverability:
 | `@epicenter/workspace` | `local-first`, `CRDT`, `Yjs`, `offline-first`, `SQLite`, `markdown`, `personal knowledge base`, `PKM`, `second brain`, `sync`, `workspace`, `typed schema` |
 | `@epicenter/cli` | `local-first`, `CLI`, `workspace`, `CRDT`, `offline-first`, `PKM`, `terminal` |
 | `@epicenter/sync` | `Yjs`, `CRDT`, `sync`, `WebSocket`, `offline-first`, `local-first`, `real-time` |
-| `@epicenter/vault` | `local-first`, `schema`, `migrations`, `MCP`, `adapter`, `CRDT`, `markdown` |
+| `@epicenter/filesystem` | `local-first`, `filesystem`, `workspace`, `CRDT`, `markdown` |
+| `@epicenter/ui` | `Svelte`, `components`, `shadcn-svelte`, `workspace` |
+| `@epicenter/server` | `Hono`, `Cloudflare Workers`, `sync`, `self-hosted`, `workspace` |

@@ -3,26 +3,24 @@
     <img width="200" src="https://github.com/user-attachments/assets/9e210c52-2740-43b6-af3f-e6eaf4b5c397" alt="Epicenter">
   </a>
   <h1 align="center">Epicenter</h1>
-  <p align="center">Local-first, open-source apps</p>
-  <p align="center">One folder of plain text and SQLite on your machine, synced across all your devices.<br>Grep it, query it, host it wherever you want.</p>
+  <p align="center"><strong>Local-first apps. One workspace you own.</strong></p>
+  <p align="center">Capture in purpose-built apps. Read the generated Markdown. Query the SQLite mirror.<br>Curate what matters into Markdown folders you can grep, version, and keep forever. Sync between devices when you want.</p>
+  <p align="center">Whispering is downloadable today. A workspace-native refresh of Whispering is in progress, and the shared workspace for tabs, notes, drafts, and publishing is being built in public on <code>@epicenter/workspace</code>.</p>
 </p>
 
 <p align="center">
-  <!-- GitHub Stars Badge -->
   <a href="https://github.com/EpicenterHQ/epicenter" target="_blank">
     <img alt="GitHub stars" src="https://img.shields.io/github/stars/EpicenterHQ/epicenter?style=flat-square" />
   </a>
-  <!-- Latest Version Badge -->
-  <img src="https://img.shields.io/github/v/release/EpicenterHQ/epicenter?style=flat-square&label=Latest%20Version&color=brightgreen" />
-  <!-- License Badge -->
+  <a href="https://github.com/EpicenterHQ/epicenter/releases/latest" target="_blank">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/EpicenterHQ/epicenter?style=flat-square&label=Latest%20Release&color=brightgreen" />
+  </a>
   <a href="LICENSE" target="_blank">
     <img alt="License" src="https://img.shields.io/github/license/EpicenterHQ/epicenter.svg?style=flat-square" />
   </a>
-  <!-- Discord Badge -->
   <a href="https://go.epicenter.so/discord" target="_blank">
     <img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20us-5865F2?style=flat-square&logo=discord&logoColor=white" />
   </a>
-  <!-- Platform Support Badges -->
   <a href="https://github.com/EpicenterHQ/epicenter/releases" target="_blank">
     <img alt="macOS" src="https://img.shields.io/badge/-macOS-black?style=flat-square&logo=apple&logoColor=white" />
   </a>
@@ -35,309 +33,230 @@
 </p>
 
 <p align="center">
-  <a href="#apps">Apps</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#packages">Packages</a> •
-  <a href="#for-developers">For Developers</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#contributing">Contributing</a> •
-  <a href="https://go.epicenter.so/discord">Discord</a>
+  <a href="#install-whispering">Install</a> |
+  <a href="#build-with-the-toolkit">Toolkit</a> |
+  <a href="#how-it-works">How It Works</a> |
+  <a href="#status">Status</a> |
+  <a href="#trust-boundaries">Trust</a> |
+  <a href="#repo-map">Repo Map</a> |
+  <a href="#development">Development</a> |
+  <a href="#license">License</a>
 </p>
 
 ---
 
-## What is Epicenter?
+## Install Whispering
 
-Epicenter is an ecosystem of open-source, local-first apps. Your notes, transcripts, and chat histories live in a single folder of plain text and SQLite on your machine. Every tool we build reads and writes to the same place. It's open, tweakable, and yours. Grep it, open it in Obsidian, version it with Git, host it wherever you want.
-
-Under the hood, Yjs CRDTs are the single source of truth. They materialize *down* to SQLite (for fast queries) and markdown (for human-readable files). Sync happens over the Yjs protocol; the server is a relay, not an authority. It never sees your content.
-
-The library that powers this, [`@epicenter/workspace`](packages/workspace), is something other developers can build on too. Define a typed schema, get CRDT-backed tables with multi-device sync handled for you.
-
-## Architecture
-
-Epicenter has three different backend boundaries on purpose:
-
-```txt
-Domains split by public protocol role.
-Deployables split by infrastructure and operational boundary.
-Hono modules split by code composition boundary.
-```
-
-Epicenter ships one shared server library and two deployables. The library is `packages/server`; the deployables compose it with different ownership rules:
-
-```txt
-apps/api          hosted personal cloud  (api.epicenter.so)
-                  composes packages/server with personal()
-                  bundles billing routes, dashboard SPA, Autumn policies
-                  worker/ + ui/ deploy as one Cloudflare Worker
-
-apps/self-host     self-hosted shared wiki reference  (community-supported)
-                  composes packages/server with shared({ admit })
-                  no billing surface, no dashboard, deployment-owned secrets
-                  trust boundary: deployer holds ENCRYPTION_SECRETS
-                                   -> functionally zero-knowledge against Epicenter
-```
-
-Inside `packages/server`, route groups mount onto a shared Hono app via
-`mountSessionApp`, `mountRoomsApp`, `mountAssetsApp`, `mountAiApp`, and `authApp`.
-The `personal()` and `shared({ admit })` factories choose the partition rule;
-everything else is shared. The hosted-only billing code (`packages/billing`'s
-old contents, plus `/api/billing/*` routes and the dashboard SPA) lives inside
-`apps/api/worker/billing/` and `apps/api/ui/`. Self-hosted shared-wiki deployments
-never see it.
-
-```
-                              ┌──────────────────────────────────┐
-                              │         @epicenter/api           │
-                              │   Cloudflare Workers + DO hub    │
-                              │   auth · sync relay · AI chat    │
-                              └──────────┬───────────────────────┘
-                                         │ y-websocket protocol
-                    ┌────────────────────┼──────────────────────┐
-                    │                    │                      │
-               ┌────▼──────┐       ┌─────▼────────┐      ┌──────▼──────┐
-               │ Whispering│       │  Opensidian  │      │ Tab Manager │
-               │  (Tauri)  │       │ (SvelteKit)  │      │  (WXT ext)  │
-               └────┬──────┘       └─────┬────────┘      └──────┬──────┘
-                    │                    │                      │
-          ┌─────────┴────────────────────┴──────────────────────┘
-          │              All apps share these layers:
-          │
-    ┌─────▼───────────────────────────────────────────────────────────┐
-    │                     MIDDLEWARE / ADAPTERS                       │
-    │  @epicenter/svelte    : Svelte integration, auth, persistence   │
-    │  @epicenter/filesystem : POSIX file layer over Yjs              │
-    │  @epicenter/skills    : skill/reference tables                  │
-    └──────────────────────────────┬──────────────────────────────────┘
-                                   │
-    ┌──────────────────────────────▼───────────────────────────────────┐
-    │                           CORE                                   │
-    │  @epicenter/workspace : typed schemas, Yjs CRDTs, extensions,    │
-    │                         E2E encryption, lifecycle, materializers │
-    │  @epicenter/sync      : protocol encoding/decoding, V2 updates   │
-    │  @epicenter/constants : app URLs, versions, shared config        │
-    │  @epicenter/ui        : shadcn-svelte component library          │
-    │  @epicenter/cli       : TypeBox→yargs CLI, auth/session APIs     │
-    └──────────────────────────────────────────────────────────────────┘
-```
-
-The dependency flow is strict: core has zero upward dependencies, middleware only reaches into core, and apps compose both. [`@epicenter/workspace`](packages/workspace) is the gravitational center; every middleware package and most apps depend on it. The sync server is a relay, not an authority; it never sees your content because encryption happens client-side before anything leaves the device.
-
-[Full architecture walkthrough →](docs/architecture.md) · [Encryption design →](docs/encryption.md)
-
-## Apps
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <h3><a href="apps/whispering">Whispering</a></h3>
-      <p>Press shortcut, speak, get text. Desktop transcription that cuts out the middleman. Bring your own API key or run locally with Whisper C++.</p>
-      <p><strong><a href="apps/whispering">Source</a></strong> · <strong><a href="apps/whispering#install-whispering">Install</a></strong></p>
-    </td>
-    <td align="center" width="50%">
-      <h3><a href="apps/opensidian">Opensidian</a></h3>
-      <p>Local-first note-taking with a built-in bash terminal, end-to-end encryption, and real-time sync. Your notes live in a CRDT-backed virtual filesystem.</p>
-      <p><strong><a href="apps/opensidian">Source</a></strong> · <strong><a href="https://opensidian.com">Try it</a></strong></p>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <h3><a href="apps/tab-manager">Tab Manager</a></h3>
-      <p>Browser extension side panel for managing tabs with workspace sync and AI chat that can call workspace tools with inline approval.</p>
-      <p><strong><a href="apps/tab-manager">Source</a></strong></p>
-    </td>
-    <td align="center" width="50%">
-      <h3><a href="apps/honeycrisp">Honeycrisp</a></h3>
-      <p>Apple Notes-style local-first notes app. Folders, rich-text editing with ProseMirror, and collaborative sync via Yjs.</p>
-      <p><strong><a href="apps/honeycrisp">Source</a></strong></p>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <h3><a href="apps/api">Epicenter API</a></h3>
-      <p>The hub server. Auth, real-time sync via Durable Objects, and AI inference. Everything that needs a single authority across devices.</p>
-      <p><strong><a href="apps/api">Source</a></strong></p>
-    </td>
-    <td align="center" width="50%">
-      <h3>Build your own</h3>
-      <p>The <a href="packages/workspace"><code>@epicenter/workspace</code></a> library makes it straightforward to build apps that share the same CRDT-backed data. Define a schema, get tables, add sync.</p>
-    </td>
-  </tr>
-</table>
-
-Also in the repo: [Fuji](apps/fuji) (personal CMS), [Zhongwen](apps/zhongwen) (Mandarin learning chat), [Skills Editor](apps/skills) (agent skill manager), and [Landing](apps/landing) (public site).
-
-## Packages
-
-| Package | Description | License |
-| --- | --- | --- |
-| [`@epicenter/workspace`](packages/workspace) | Core library. Typed schemas, Yjs CRDTs, extension builder, E2E encryption, materializers. Everything builds on this. | MIT |
-| [`@epicenter/sync`](packages/sync) | Yjs sync protocol encoding/decoding. Dumb server, smart client; protocol framing is separate from transport. | MIT |
-| [`@epicenter/ui`](packages/ui) | shadcn-svelte component library shared across all apps. | MIT |
-| [`@epicenter/svelte`](packages/svelte-utils) | Svelte 5 integration: persisted state, auth UI, and workspace gates. | AGPL-3.0 |
-| [`@epicenter/filesystem`](packages/filesystem) | POSIX-style virtual filesystem over Yjs workspace tables. `mkdir`, `mv`, `rm`, `stat`. | MIT |
-| [`@epicenter/skills`](packages/skills) | Skill and reference tables for AI-enhanced workspace apps. | AGPL-3.0 |
-| [`@epicenter/cli`](packages/cli) | The `epicenter` command. TypeBox schemas become CLI flags automatically. | AGPL-3.0 |
-| [`@epicenter/constants`](packages/constants) | Shared URLs, ports, and version info across the monorepo. | AGPL-3.0 |
-| [`@epicenter/auth`](packages/auth) | Framework-agnostic auth core. Imperative subscription API over better-auth. | AGPL-3.0 |
-
-## For Developers
-
-The hard problem with local-first apps is synchronization. If each device has its own SQLite file, how do you keep them in sync? If each device has its own markdown folder, same question. We ended up using Yjs CRDTs as the single source of truth, then materializing that data *down* to SQLite (for fast SQL reads) and markdown (for human-readable files). Yjs handles the sync; SQLite and markdown handle the reads.
-
-The [`@epicenter/workspace`](packages/workspace) package wraps this into a single API. Define a schema, get CRDT-backed tables, attach providers to materialize to SQLite or markdown, and add sync when you're ready.
-
-```typescript
-import {
-  attachIndexedDb,
-  column,
-  createWorkspace,
-  defineTable,
-  openCollaboration,
-  roomWsUrl,
-} from '@epicenter/workspace';
-
-const posts = defineTable({
-  id: column.string(),
-  title: column.string(),
-  published: column.boolean(),
-});
-
-function openBlog(id: string, ownerId, deviceId, auth) {
-  const workspace = createWorkspace({
-    id,
-    tables: { posts },
-    kv: {},
-  });
-  const idb = attachIndexedDb(workspace.ydoc);
-  const collaboration = openCollaboration(workspace.ydoc, {
-    url: roomWsUrl({ baseURL: auth.baseURL, ownerId, guid: workspace.ydoc.guid, deviceId }),
-    openWebSocket: auth.openWebSocket,
-    onReconnectSignal: auth.onStateChange,
-    waitFor: idb.whenLoaded,
-    actions: {},
-  });
-
-  return { ...workspace, idb, collaboration };
-}
-
-const workspace = openBlog('epicenter-blog', myOwnerId, 'browser-dev', auth);
-workspace.tables.posts.set({ id: '1', title: 'Hello', published: false });
-```
-
-Each user gets their own database. Schema definitions are plain JSON, so they work with MCP and OpenAPI out of the box. Write to Yjs and SQLite updates; edit a markdown file and the CRDT merges it in.
-
-**[Read the full workspace docs →](packages/workspace/README.md)**
-
-## Where We're Headed
-
-More apps are in progress. Each one shares the same workspace, so data flows between them without import/export. The [`@epicenter/workspace`](packages/workspace) library handles the hard parts (schemas, CRDT sync, materialization), so each new app is mostly UI.
-
-Epicenter Cloud will provide hosted sync for people who don't want to run their own server. Same model as Supabase selling hosted Postgres or Liveblocks selling hosted collaboration. Self-hosting is and will remain first-class. The sync server is open source under AGPL, and when you run it yourself, you control the encryption keys and trust boundary.
-
-## Quick Start
-
-### Install Whispering
+[Whispering](apps/whispering) is the first shipped app in the Epicenter repo: a desktop speech-to-text tool for macOS, Windows, and Linux.
 
 ```bash
 brew install --cask whispering
 ```
 
-Or download directly from [GitHub Releases](https://github.com/EpicenterHQ/epicenter/releases/latest) for macOS (.dmg), Windows (.msi), or Linux (.AppImage, .deb, .rpm).
+On Windows and Linux, download the installer from the [latest release](https://github.com/EpicenterHQ/epicenter/releases/latest).
 
-**[Full installation guide →](apps/whispering#install-whispering)**
+Press a shortcut, speak, optionally transform the transcript, and paste the result where you were working. No Epicenter account is required. You can run local Whisper C++ for offline transcription, or bring your own API key for providers like Groq, OpenAI, and ElevenLabs.
 
-### Build from Source
+[Install Whispering](apps/whispering#install-whispering) | [Download latest release](https://github.com/EpicenterHQ/epicenter/releases/latest)
+
+## Build With The Toolkit
+
+The hard problem with local-first apps is synchronization. If each device has its own SQLite file or Markdown folder, how do you keep them in sync? [`@epicenter/workspace`](packages/workspace) answers by making Yjs the source of truth, then projecting app state to SQLite for queries and Markdown for reading.
+
+The package gives apps typed tables, local persistence, materializers, collaboration hooks, and validated actions.
+
+```typescript
+import { column, createWorkspace, defineTable } from '@epicenter/workspace';
+
+const notes = defineTable({
+  id: column.string(),
+  title: column.string(),
+  body: column.string(),
+});
+
+const workspace = createWorkspace({
+  id: 'notes',
+  tables: { notes },
+  kv: {},
+});
+
+workspace.tables.notes.set({
+  id: '1',
+  title: 'Hello',
+  body: 'Follow up on the README framing.',
+});
+
+// Materializers can project that row to Markdown files and SQLite rows.
+```
+
+[Read the workspace package docs](packages/workspace/README.md)
+
+## How It Works
+
+Epicenter separates app-owned data from user-owned Markdown. The model is being built in public; [Matter](apps/matter) is the current WIP front for the folders-you-own side: a typed grid that edits ordinary Markdown folders directly. It does not write into `apps/<name>/`.
+
+```txt
+workspace/
+|-- apps/<name>/        generated app projections; read, grep, quote, copy
+|-- .epicenter/         machine state; ignore
+|-- journal/            your Markdown; edit, commit, curate, publish
+|-- ideas/              your Markdown
+`-- publish/            your publishable artifacts
+```
+
+The rule is simple: `apps/<name>/` is for reading app output, not hand-editing it. To change app data, use the app or a validated CLI action. To keep something forever, copy it into a folder you own.
+
+Your folders are ordinary Markdown: grep them, open them in Obsidian, version them with Git, publish them with whatever static site stack you like.
+
+```txt
+purpose-built app
+  -> Yjs live state
+  -> Markdown projection for human reading
+  -> SQLite mirror for local queries
+  -> curated Markdown when something is worth keeping
+```
+
+Yjs handles live app state, offline edits, and multi-device sync. SQLite gives scripts and views a fast query surface. Markdown gives you files you can read, quote, copy, version, and publish.
+
+A generated Markdown projection is meant to be boring on purpose (this is the target shape):
+
+```md
+---
+id: note_123
+title: Morning capture
+source: app
+updatedAt: "2026-06-10T16:49:59.180Z"
+---
+Follow up on the README framing.
+```
+
+Matter already implements this pattern for the folders you own: it keeps a disposable `matter.sqlite` mirror of each managed folder, so agents and scripts can query your Markdown as SQL:
 
 ```bash
-# Prerequisites: Bun, local Postgres, and Infisical access for API secrets
+sqlite3 matter.sqlite 'select "name" from "journal" limit 5;'
+```
+
+## Status
+
+Whispering is the first shipped app: install it today on macOS, Windows, or Linux. A larger workspace-native refresh of Whispering is in progress, and current installs will receive it through the normal release path.
+
+The shared workspace for tabs, notes, drafts, and publishing is being built in public around `@epicenter/workspace`. [Matter](apps/matter) is the current WIP front for the folders-you-own side: it edits ordinary Markdown folders and keeps `matter.sqlite` as a query mirror. Other app folders are public research and prototypes.
+
+## Trust Boundaries
+
+Pick the trust model you want.
+
+| Path | What leaves your device |
+| --- | --- |
+| Whispering with local Whisper C++ | Audio can stay on your device. Transcripts and settings are stored locally by the desktop app. |
+| Whispering with a cloud transcription provider | Audio goes from your device to the provider you choose. Epicenter servers are not in that transcription path. |
+| Whispering transformations | Transcript text goes to the LLM provider you choose when you enable that step. |
+| Hosted Epicenter API or sync | Encrypted workspace updates, account/session data, and enabled hosted feature requests go to Epicenter servers. |
+| Self-hosted deployable | You control the server, secrets, deployment, and infrastructure boundary. |
+
+Signed-in workspace sync sends encrypted CRDT values over Yjs. On hosted Epicenter, encryption keys are server-managed; self-hosting moves the key boundary to infrastructure you control. See the [encryption design](docs/encryption.md) for the full trust model.
+
+The detailed privacy notes for Whispering live in [apps/whispering](apps/whispering).
+
+## Repo Map
+
+### Product And Workspace Surfaces
+
+| Surface | Status | Notes |
+| --- | --- | --- |
+| [Whispering](apps/whispering) | Installable app | Desktop speech-to-text with local and bring-your-own-provider transcription paths. |
+| [Matter](apps/matter) | WIP product work | Typed grid for user-owned Markdown folders. It edits ordinary `.md` files directly; `matter.sqlite` is a disposable query mirror. |
+| [API](apps/api) | Hosted infrastructure | Personal cloud Worker for hosted Epicenter services. Includes hosted-only billing and dashboard code. |
+| [Self-host](apps/self-host) | Reference deployable | Community-supported shared wiki deployable without hosted billing. |
+| Other app folders | Research and prototypes | Useful history and experiments, not the current product lineup. |
+
+### Packages
+
+These packages carry the main architecture.
+
+| Package | Role | License |
+| --- | --- | --- |
+| [`@epicenter/workspace`](packages/workspace) | Core workspace primitives: typed schemas, Yjs documents, local persistence, materializers, actions, and collaboration hooks. | MIT |
+| [`@epicenter/sync`](packages/sync) | Yjs sync protocol encoding and decoding. Protocol framing lives separately from transport. | MIT |
+| [`@epicenter/ui`](packages/ui) | Shared Svelte component library used by multiple app surfaces. | MIT |
+| [`@epicenter/filesystem`](packages/filesystem) | POSIX-style virtual filesystem helpers over workspace data. | MIT |
+| [`@epicenter/server`](packages/server) | Shared Hono server library composed by the hosted API and self-host reference deployable. | AGPL-3.0-or-later |
+| [`@epicenter/cli`](packages/cli) | The `epicenter` command and local or hosted API workflows. | AGPL-3.0-or-later |
+
+## Architecture
+
+The server side is split into one shared library and two deployable folders:
+
+```txt
+packages/server
+  shared Hono library
+  route composition for auth, sessions, rooms, assets, and provider-backed APIs
+
+apps/api
+  hosted personal Cloudflare Worker
+  composes packages/server with personal()
+  owns hosted-only dashboard and billing code
+
+apps/self-host
+  self-hosted shared wiki reference deployable
+  composes packages/server with shared({ admit })
+  community-supported
+  no hosted billing surface
+```
+
+[Full architecture walkthrough](docs/architecture.md) | [Encryption design](docs/encryption.md)
+
+## Development
+
+Use Bun in this repo.
+
+```bash
 git clone https://github.com/EpicenterHQ/epicenter.git
 cd epicenter
 bun install
+```
+
+Root `bun dev` starts the current default local workflow: the API and Tab Manager.
+
+```bash
 bun dev
+bun run dev:api
+bun run dev:tab-manager:ui
 ```
 
-Root `bun dev` starts one local workflow: the API and Tab Manager. See
-[`apps/api/README.md`](apps/api/README.md) for local Postgres and Infisical
-setup. Use `bun run dev:api` for only the local API, or
-`bun run dev:tab-manager:ui` for only the extension UI. App folders still
-support `bun dev` for focused local work on that app. Rust is only needed for
-Tauri apps like Whispering.
+See [apps/api/README.md](apps/api/README.md) for local Postgres and Infisical setup. Rust is needed for Tauri surfaces such as Whispering and Matter.
 
-### Troubleshooting
-
-If things break after switching branches or pulling changes:
+Useful checks:
 
 ```bash
-bun clean    # Clears caches and node_modules
-bun install  # Reinstall dependencies
+bun run typecheck
+bun run test
+bun run check
 ```
 
-For a full reset including Rust build artifacts (~10GB, takes longer to rebuild):
+## Design Notes
 
-```bash
-bun nuke     # Clears everything including Rust target
-bun install
-```
-
-You rarely need `bun nuke`. Cargo handles incremental builds well. Use `bun clean` first.
-
-### Developing against a local API
-
-Most CLI commands default to the hosted Epicenter API at `https://api.epicenter.so`. If you are iterating on `apps/api` and want the CLI pointed at your local server, use the `cli:local` script:
-
-```bash
-bun run cli:local auth login
-```
-
-See [`packages/cli/README.md`](packages/cli/README.md) for the full environment table and per-host token file behavior.
+Implementation specs and design notes live in [specs/](specs). Start with [docs/README.md](docs/README.md), [specs/README.md](specs/README.md), and the current front-door plan in [specs/20260610T173324-root-readme-public-front-door.md](specs/20260610T173324-root-readme-public-front-door.md).
 
 ## Contributing
 
-We're looking for contributors who are passionate about open source, local-first software, or just want to build with Svelte and TypeScript.
+Contributions are welcome. Good entry points are docs, Whispering fixes, local-first infrastructure, Svelte interfaces, and small changes that make the repo easier to understand.
 
-**[Read the Contributing Guide →](CONTRIBUTING.md)**
+[Read the Contributing Guide](CONTRIBUTING.md)
 
-Contributors coordinate in our [Discord](https://go.epicenter.so/discord).
-
-## Tech Stack
-
-<p align="center">
-  <img alt="Svelte 5" src="https://img.shields.io/badge/-Svelte%205-orange?style=flat-square&logo=svelte&logoColor=white" />
-  <img alt="Tauri" src="https://img.shields.io/badge/-Tauri-blue?style=flat-square&logo=tauri&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/-TypeScript-blue?style=flat-square&logo=typescript&logoColor=white" />
-  <img alt="Rust" src="https://img.shields.io/badge/-Rust-orange?style=flat-square&logo=rust&logoColor=white" />
-  <img alt="Yjs" src="https://img.shields.io/badge/-Yjs-green?style=flat-square" />
-  <img alt="Cloudflare Workers" src="https://img.shields.io/badge/-Cloudflare%20Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white" />
-  <img alt="Tailwind CSS" src="https://img.shields.io/badge/-Tailwind%20CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" />
-</p>
-
-## Design Decisions
-
-We publish our implementation specs. These are the reasoning behind non-obvious architectural choices: alternatives considered, trade-offs made, and why we landed where we did.
-
-| Spec | What it decided |
-| --- | --- |
-| [Encrypted Workspace Storage](specs/20260213T005300-encrypted-workspace-storage.md) | XChaCha20-Poly1305 at the CRDT value level; server-managed keys with self-hosting as the trust boundary |
-| [Y-Sweet Persistence Architecture](specs/20260212T190000-y-sweet-persistence-architecture.md) | How Yjs documents persist and compact in Durable Objects |
-| [Simple Definition-First Workspace API](specs/20260201T120000-simple-definition-first-workspace.md) | The `defineTable` → `createWorkspace` + `attach*` composition pattern |
-| [Resilient Client Architecture](specs/20260119T231252-resilient-client-architecture.md) | How workspace clients handle offline, reconnect, and extension failures |
-| [Migrate to @epicenter/sync](specs/20260214T120800-migrate-y-sweet-to-epicenter-sync.md) | Custom sync protocol replacing Y-Sweet with our own framing layer |
-
-All 112 implemented specs live in [`specs/`](specs/).
+Contributors coordinate in [Discord](https://go.epicenter.so/discord).
 
 ## License
 
-Epicenter uses a sharp two-tier split:
+Epicenter uses a two-tier split:
 
-- **[MIT](licenses/LICENSE-MIT)** for the local-first-on-Yjs developer toolkit: `@epicenter/workspace`, `@epicenter/ui`, `@epicenter/filesystem`, and `@epicenter/sync`. An external developer can `npm install` any of these and embed them in a closed-source product; the toolkit's dependency closure is entirely MIT, enforced by `bun run check:licenses`.
-- **[AGPL-3.0](licenses/LICENSE-AGPL-3.0)** for everything else Epicenter ships: all 12 apps and the Epicenter-internal packages. Anyone hosting or distributing a modified version must share their changes.
-- **Proprietary (deferred, empty)** as an escape hatch only. Revenue comes from hosting Epicenter Cloud, not from selling licenses, so this tier is intended to stay empty.
+- [MIT](licenses/LICENSE-MIT) for the local-first-on-Yjs developer toolkit: `@epicenter/workspace`, `@epicenter/ui`, `@epicenter/filesystem`, and `@epicenter/sync`.
+- [AGPL-3.0](licenses/LICENSE-AGPL-3.0) or later for non-toolkit app surfaces, hosted server code, and internal packages.
+- Proprietary is a deferred, empty tier. Revenue is intended to come from hosting and services, not from selling closed licenses.
 
-This follows the same pattern as [Plausible](https://github.com/plausible/analytics) and [PostHog](https://github.com/PostHog/posthog) (AGPL apps and servers, hosted SaaS as revenue), and [Yjs](https://github.com/yjs/yjs) (MIT core library, AGPL `y-redis` server).
+The toolkit dependency closure is MIT, enforced by `bun run check:licenses`. The license split follows the same broad pattern as Plausible and PostHog for hosted open-source services, and Yjs for MIT core libraries with copyleft server pieces.
 
-See the root [LICENSE](LICENSE) for the full index, [FINANCIAL_SUSTAINABILITY.md](FINANCIAL_SUSTAINABILITY.md) for the narrative, and [specs/20260428T120000-licensing-strategy.md](specs/20260428T120000-licensing-strategy.md) for the threat model and decision procedure.
+See the root [LICENSE](LICENSE), [FINANCIAL_SUSTAINABILITY.md](FINANCIAL_SUSTAINABILITY.md), and [licensing strategy spec](specs/20260428T120000-licensing-strategy.md) for the full model.
 
 ---
 
@@ -346,5 +265,5 @@ See the root [LICENSE](LICENSE) for the full index, [FINANCIAL_SUSTAINABILITY.md
 </p>
 
 <p align="center">
-  <sub>Local-first · CRDT · Own your data · Open source</sub>
+  <sub>Local-first | Own your data | Markdown | SQLite | Yjs | Open source</sub>
 </p>

@@ -1,7 +1,7 @@
 {
 	"name": "@epicenter/cli",
 	"version": "0.1.0",
-	"description": "Introspect and invoke defineQuery/defineMutation actions from configured project mounts.",
+	"description": "CLI for Epicenter workspaces. List and invoke mounted actions locally or on online peers.",
 	"keywords": [
 		"local-first",
 		"CLI",

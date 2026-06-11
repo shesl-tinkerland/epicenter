@@ -1,7 +1,7 @@
 {
 	"name": "@epicenter/workspace",
 	"version": "0.2.0",
-	"description": "Local-first workspace library. CRDT-backed tables, key-value stores, and sync, built on Yjs.",
+	"description": "Local-first workspace engine. CRDT-powered tables that materialize to SQLite and Markdown.",
 	"keywords": [
 		"local-first",
 		"CRDT",

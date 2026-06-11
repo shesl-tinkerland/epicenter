@@ -1,8 +1,12 @@
-# Epicenter: Yjs-First Collaborative Workspace System
+# @epicenter/workspace
 
-The hard problem with local-first apps is synchronization. If each device has its own SQLite file, how do you keep them in sync? If each device has its own markdown folder, same question.
+Local-first workspace engine for apps that keep live state in Yjs and expose readable projections.
 
-`@epicenter/workspace` solves that by making Yjs the source of truth. Tables, KV entries, and document content all live in a `Y.Doc`; persistence, sync, and materializers hang off that core as attachment primitives. Write to the workspace, and everything else reacts.
+The hard problem with local-first apps is synchronization. If each device has its own SQLite file, how do you keep them in sync? If each device has its own Markdown folder, same question.
+
+`@epicenter/workspace` solves that by making Yjs the source of truth for app-owned state. Tables, KV entries, and document content all live in a `Y.Doc`; persistence, sync, validated actions, and materializers hang off that core as attachment primitives. Write to the workspace, and everything else reacts.
+
+SQLite and Markdown materializers are read-only projections. They let people, scripts, and agents inspect app output without turning generated files into the write path. User-owned Markdown folders are edited by app surfaces like [Matter](../../apps/matter), not by editing generated app output.
 
 The current center is small:
 

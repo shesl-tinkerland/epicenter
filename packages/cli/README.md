@@ -41,18 +41,18 @@ The same env var and scripts apply to every command that talks to the API, inclu
 ```bash
 epicenter auth login
 
-epicenter daemon up -C ~/vault
+epicenter daemon up -C ~/workspace
 epicenter daemon ps
-epicenter daemon logs -C ~/vault
-epicenter daemon down -C ~/vault
+epicenter daemon logs -C ~/workspace
+epicenter daemon down -C ~/workspace
 
-epicenter list -C ~/vault
-epicenter list fuji.entries_update -C ~/vault
+epicenter list -C ~/workspace
+epicenter list fuji.entries_update -C ~/workspace
 
-epicenter run fuji.entries_update '{"id":"entry_1","tags":["triaged"]}' -C ~/vault
-epicenter run fuji.entries_update '{"id":"entry_1","tags":["triaged"]}' --peer user-1 -C ~/vault
+epicenter run fuji.entries_update '{"id":"entry_1","tags":["triaged"]}' -C ~/workspace
+epicenter run fuji.entries_update '{"id":"entry_1","tags":["triaged"]}' --peer user-1 -C ~/workspace
 
-epicenter peers -C ~/vault
+epicenter peers -C ~/workspace
 ```
 
 `-C` is a start directory for project discovery. Discovery walks upward until it finds `epicenter.config.ts`, then the daemon starts every mount in that config.
@@ -126,7 +126,7 @@ export default [
 
 `Mount.name` is the CLI prefix. Two mounts in one project must have distinct names; duplicates fail before any mount opens.
 
-`.epicenter/` holds generated project data such as SQLite materializers, Yjs update logs, markdown materializers, and its generated `.gitignore`. It is not a registry. Runtime files live outside the project: sockets and daemon metadata use the OS runtime directory, while daemon logs use the platform log directory from `env-paths`.
+`.epicenter/` holds generated project data such as SQLite materializers, Yjs update logs, Markdown materializers, and its generated `.gitignore`. It is machine state, not the user-owned Markdown folder. Runtime files live outside the project: sockets and daemon metadata use the OS runtime directory, while daemon logs use the platform log directory from `env-paths`.
 
 ## Scripting
 

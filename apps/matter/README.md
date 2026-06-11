@@ -4,6 +4,11 @@ A grid view over a folder of markdown files. Each `.md` file is a row, its
 frontmatter is the typed columns (declared in `matter.json`), and the body is the
 one rich field.
 
+Matter is WIP product work for user-owned Markdown folders. It edits ordinary
+folders directly and keeps `matter.sqlite` as a disposable query mirror. It is
+not the editor for generated `apps/<name>/` projections; those stay read-only app
+output.
+
 > **One line:** Rust is a race-free, schema-blind streamer of file changes over a
 > caller-supplied channel; TypeScript owns all meaning and funnels every change,
 > external or self-inflicted, through a single path into the grid and a disposable
