@@ -135,7 +135,7 @@ re-derives). When they diverge, three things break, all already live in the repo
 
 3. The example's own layout comment is fiction.
    examples/fuji header claims  .epicenter/yjs.db
-   attach-project-infrastructure.ts:68 writes  .epicenter/yjs/<guid>.db
+   attach-project-sync.ts:68 writes  .epicenter/yjs/<guid>.db
    Result: the documented layout never existed; yjs has no override knob,
            sqlite/markdown do. The override model is already inconsistent.
 ```
@@ -464,7 +464,7 @@ Every value and invariant has exactly one owner.
 | Projection layout policy (`.epicenter/mounts/<name>/...`) | the resolver; not overridable |
 | Content path (where committed markdown lives) | `Mount.resources.markdown.path`, project-relative |
 | Writing / materializing the resources | the daemon, via `open(ctx)` wiring to `ctx.resources.*.path` |
-| Y.Doc CRDT log (source of truth) | the daemon (`attachProjectInfrastructure`, writes `ctx.resources.yjs.path`) |
+| Y.Doc CRDT log (source of truth) | the daemon (`attachProjectSync`, writes `ctx.resources.yjs.path`) |
 | Reading projections (scripts) | `loadProjectResources(projectDir).mount(name).openSqlite()` |
 | Live action calls (scripts) | `connectDaemonActions({ mount, projectDir })` over the socket |
 | Daemon runtime files (socket/lease/log) | `daemon/paths.ts` under `env-paths` (out of `.epicenter/`, unchanged) |
@@ -633,7 +633,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 				dir: mdDir, perTable: { entries: { filename: slugFilename('title') } }, git: opts.git,
 			});
 			const actions = defineActions({ ...workspace.actions, ...sqlite.actions, ...markdown.actions });
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const infrastructure = attachProjectSync(workspace.ydoc, {
 				projectDir, ownerId, deviceId, openWebSocket, onReconnectSignal, actions,
 			});
 			return defineWorkspace({ ...workspace, ...infrastructure, markdown, actions });
@@ -670,7 +670,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 				git: opts.git,
 			});
 			const actions = defineActions({ ...workspace.actions, ...sqlite.actions, ...markdown.actions });
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const infrastructure = attachProjectSync(workspace.ydoc, {
 				yjsLogPath: ctx.resources.yjs.path,
 				ownerId: ctx.ownerId, deviceId: ctx.deviceId,
 				openWebSocket: ctx.openWebSocket, onReconnectSignal: ctx.onReconnectSignal, actions,
@@ -690,7 +690,7 @@ export function fuji(opts: FujiMountOptions = {}) {
   table yields `<project>/entries/`, exactly as today. Declaring `path: 'entries'`
   would wrongly nest at `entries/entries/` (the materializer appends the table
   name under the base). It is now declared in `fuji()` rather than passed per project.
-- `attachProjectInfrastructure` takes `yjsLogPath` instead of `projectDir`. It no
+- `attachProjectSync` takes `yjsLogPath` instead of `projectDir`. It no
   longer knows about path conventions; it persists to the path it is handed.
 
 ### The example config collapses
@@ -722,7 +722,7 @@ export function zhongwen() {
 		open(ctx) {
 			const workspace = createZhongwen({ keyring: ctx.keyring });
 			workspace.ydoc.clientID = ctx.yDocClientId;
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const infrastructure = attachProjectSync(workspace.ydoc, {
 				yjsLogPath: ctx.resources.yjs.path,
 				ownerId: ctx.ownerId, deviceId: ctx.deviceId,
 				openWebSocket: ctx.openWebSocket, onReconnectSignal: ctx.onReconnectSignal,
@@ -792,7 +792,7 @@ proven and the durable-data question is answered.
 - [ ] **1.3** Add `resources: ResolvedMountResources` to `MountContext` (the
   all-optional shape, Open Question 1 option a); have `openOneMount()`
   (`open-project.ts`) call `resolveMountResources(projectDir, mount)` and inject it.
-- [ ] **1.4** Change `attachProjectInfrastructure` to take `yjsLogPath: string`
+- [ ] **1.4** Change `attachProjectSync` to take `yjsLogPath: string`
   instead of `projectDir`.
 - [ ] **1.5** Validate `resources` in `loadProjectConfig`'s `isMount` boundary:
   `markdown.role` is a known literal, content `path` is relative and does not
@@ -1008,7 +1008,7 @@ projection to an arbitrary path). The product sentence survives without an "or."
 - `packages/workspace/src/daemon/define-mount.ts` - add `resources` to `Mount`, host `MountResources`
 - `packages/workspace/src/daemon/mount-resources.ts` - new: `resolveMountResources` (replaces `workspace-paths.ts`)
 - `packages/workspace/src/workspace-apps/open-project.ts` - inject `ctx.resources`
-- `packages/workspace/src/daemon/attach-project-infrastructure.ts` - take `yjsLogPath`
+- `packages/workspace/src/daemon/attach-project-sync.ts` - take `yjsLogPath`
 - `packages/workspace/src/config/load-project-config.ts` - validate `resources` at the boundary
 - `packages/workspace/src/client/connect-daemon-actions.ts` - the live-action sibling (pattern to mirror)
 - `packages/workspace/src/document/open-workspace-sqlite.ts` - delete; replaced by `loadProjectResources`

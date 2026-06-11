@@ -277,7 +277,7 @@ attachMarkdownMaterializer(workspace, {
 
 Two corrections to the earlier sketch, found when it met the real code:
 
-- `openCollaboration` (sync only), NOT `attachProjectInfrastructure` (sync + yjs-log). A
+- `openCollaboration` (sync only), NOT `attachProjectSync` (sync + yjs-log). A
   body read is a read. The daemon already writes the body to disk as the `.md` file, so a
   per-body yjs-log is a redundant second on-disk copy. Persistence buys only delta sync
   over full sync (marginal for KB notes) and does NOT remove the connect wait: the daemon
@@ -579,7 +579,7 @@ destroy. No snapshot map, no startup loop, no per-body persistence.
 - The first implementation pre-loaded bodies into a map gated by a deferred promise; it
   rewrote stale bodies on any `updatedAt` change. Replaced with an inline reactive read in
   `toMarkdown`, which self-heals on every edit and deletes the coordination glue.
-- `openCollaboration` replaced `attachProjectInfrastructure` for body reads: a read needs
+- `openCollaboration` replaced `attachProjectSync` for body reads: a read needs
   sync, not a second on-disk yjs-log (the `.md` is already the daemon's body copy).
 - The deleted subsystem files were already untracked in the worktree when implementation
   started. They were removed from disk, but they do not appear as tracked deletions in

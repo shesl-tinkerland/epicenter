@@ -18,7 +18,7 @@ one mechanism keyed by guid instead of per-app, per-doc, per-runtime boilerplate
 
 A fresh-eyes pass against the actual primitives (`open-collaboration.ts`,
 `attach-indexed-db.ts`, `attach-yjs-log.ts`, `disposable-cache.ts`,
-`attach-project-infrastructure.ts`) confirmed the core (root and child are
+`attach-project-sync.ts`) confirmed the core (root and child are
 symmetric; every provider self-disposes on `ydoc.destroy()`; the cache rebuilds on
 reopen so `register` fires once per live instance). It also found five gaps the
 illustrative snippets below gloss. **Phase 1 builds the corrected shapes in this
@@ -79,7 +79,7 @@ calls it from the built value's `[Symbol.dispose]`.
 **4. Dispose composition is under-specified.** Providers self-dispose on
 `ydoc.destroy()`, but their teardown (`collaboration.whenDisposed`, `yjsLog.whenDisposed`)
 is async; mount-level `[Symbol.asyncDispose]` destroys the workspace, then awaits
-`infrastructure.whenDisposed` plus any sibling attachment barriers it constructed.
+`sync.whenDisposed` plus any sibling attachment barriers it constructed.
 `attachWorkspaceProviders`' `[Symbol.asyncDispose]` must (a) call `workspace[Symbol.dispose]()`
 (destroys the root ydoc AND disposes the child cache, cascading destroy to every open
 child), then (b) await every collected `whenDisposed`. For (a) to reach children, the
@@ -381,7 +381,7 @@ spec. (Whether to await only local load or also cloud sync is a per-deployment c
 - [ ] **2.2** Rewrite each `*.browser.ts` to one `attachWorkspaceProviders` call; delete
   the wrapping child cache.
 - [ ] **2.3** Wire the daemon mount runner to `attachWorkspaceProviders` generically
-  (replaces the per-mount `attachProjectInfrastructure` root-only wiring).
+  (replaces the per-mount `attachProjectSync` root-only wiring).
 
 ### Phase 3: Prove, then remove
 
@@ -398,7 +398,7 @@ spec. (Whether to await only local load or also cloud sync is a per-deployment c
 DELETE
   per-app child-doc wrapping caches in *.browser.ts (root + child hand-wiring)
   opensidian-e2e ad hoc child attachYjsLog(contentYdoc, yjsPath(projectDir, guid))
-  the root-only attachProjectInfrastructure split (folded into attachWorkspaceProviders)
+  the root-only attachProjectSync split (folded into attachWorkspaceProviders)
 
 KEEP
   createDisposableCache (createDocCache builds on it; non-doc caches still use it directly)
@@ -474,5 +474,5 @@ and future," that is scope creep.
 - `apps/fuji/src/lib/workspace/browser.ts` - the per-doc wiring this collapses
 - `apps/fuji/src/lib/workspace/markdown.ts` - Tauri body-aware push/pull (unchanged; shows the body read)
 - `packages/workspace/src/cache/disposable-cache.ts` - `createDocCache` builds on this
-- `packages/workspace/src/daemon/attach-project-infrastructure.ts` - the root-only wiring folded in
+- `packages/workspace/src/daemon/attach-project-sync.ts` - the root-only wiring folded in
 - `specs/20260530T120000-daemon-manifest-and-mount-materializers.md` - the mount shape this enables

@@ -14,8 +14,7 @@
  *      `serializeEntryBody`, read fresh over the cloud per row and never
  *      persisted on the daemon. There is no import path: the only way to mutate
  *      an entry is through a validated action, never by editing the `.md`.
- *   4. infrastructure: Yjs log persistence + cloud sync via
- *      `attachProjectInfrastructure`
+ *   4. project sync: Yjs log persistence + cloud sync via `attachProjectSync`
  */
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
@@ -33,7 +32,7 @@ import {
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
 	appsMarkdownPath,
-	attachProjectInfrastructure,
+	attachProjectSync,
 	sqlitePath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
@@ -123,7 +122,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 				...markdown.actions,
 			});
 
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const sync = attachProjectSync(workspace.ydoc, {
 				baseURL: EPICENTER_API_URL,
 				projectDir,
 				ownerId,
@@ -135,14 +134,13 @@ export function fuji(opts: FujiMountOptions = {}) {
 
 			return defineWorkspace({
 				...workspace,
-				yjsLog: infrastructure.yjsLog,
-				collaboration: infrastructure.collaboration,
+				collaboration: sync.collaboration,
 				markdown,
 				actions,
 				async [Symbol.asyncDispose]() {
 					workspace[Symbol.dispose]();
 					await Promise.all([
-						infrastructure.whenDisposed,
+						sync.whenDisposed,
 						sqlite.whenDisposed,
 						markdown.whenDisposed,
 					]);

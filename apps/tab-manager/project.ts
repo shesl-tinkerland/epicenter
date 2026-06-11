@@ -17,7 +17,7 @@ import {
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
 	appsMarkdownPath,
-	attachProjectInfrastructure,
+	attachProjectSync,
 	sqlitePath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
@@ -78,7 +78,7 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 				...markdown.actions,
 			});
 
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const sync = attachProjectSync(workspace.ydoc, {
 				baseURL: EPICENTER_API_URL,
 				projectDir,
 				ownerId,
@@ -90,14 +90,13 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 
 			return defineWorkspace({
 				...workspace,
-				yjsLog: infrastructure.yjsLog,
-				collaboration: infrastructure.collaboration,
+				collaboration: sync.collaboration,
 				markdown,
 				actions,
 				async [Symbol.asyncDispose]() {
 					workspace[Symbol.dispose]();
 					await Promise.all([
-						infrastructure.whenDisposed,
+						sync.whenDisposed,
 						sqlite.whenDisposed,
 						markdown.whenDisposed,
 					]);

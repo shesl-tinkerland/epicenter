@@ -90,7 +90,7 @@ Root cause (the missing owner):
 3. The daemon already builds the full app iso factory (createFuji), carrying its child
    cache, but NEVER calls .open() on it: it only wires the root workspace.ydoc + the
    materializers. The child cache sits inert on the daemon today.
-     apps/fuji/src/lib/workspace/project.ts (open(ctx): createFuji + attachProjectInfrastructure(workspace.ydoc, ...))
+     apps/fuji/src/lib/workspace/project.ts (open(ctx): createFuji + attachProjectSync(workspace.ydoc, ...))
 
 4. There is NO enumeration of "all rooms for a workspace/owner" anywhere: not in the
    cloud, not in sync. Rooms are name-on-demand by guid. The only way to know the child
@@ -380,7 +380,7 @@ Build closure: `new Y.Doc({ guid, gc:true })` -> `codec.attach(ydoc)` -> `open(y
 ```ts
 const bodies = replicateBodies({
   rooms: () => bodyDocGuids({ workspaceId, tables, rows: tables }),  // recompute on membership change
-  open:  (ydoc) => attachProjectInfrastructure(ydoc, { ..., actions: {} }),  // yjs-log + sync
+  open:  (ydoc) => attachProjectSync(ydoc, { ..., actions: {} }),  // yjs-log + sync
   materialize: (room, text) => markdown.writeBody(room.table, room.rowId, text),
   concurrency: 8,
 });

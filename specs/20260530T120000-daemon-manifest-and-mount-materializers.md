@@ -219,10 +219,10 @@ The daemon owns everything that was boilerplate:
 daemon, per mount, in order:
   1. workspace = mount.workspace({ keyring })          // the only app input #1
   2. workspace.ydoc.clientID = ctx.yDocClientId        // was per-app
-  3. attach yjs log at .epicenter/mounts/<name>/yjs.db // was attachProjectInfrastructure
+  3. attach yjs log at .epicenter/mounts/<name>/yjs.db // was attachProjectSync
   4. apply each materializer (waitFor: log.whenLoaded) // the only app input #2
   5. actions = merge((workspace.actions ?? {}), ...materializer.actions)  // was per-app
-  6. join cloud sync (collaboration) with merged actions          // was attachProjectInfrastructure
+  6. join cloud sync (collaboration) with merged actions          // was attachProjectSync
   7. record each materializer's manifest entry; write manifest.json
   8. compose async dispose (destroy doc -> await log + sync teardown)
 ```
@@ -446,7 +446,7 @@ persists child docs and a body-aware `toMarkdown`/column includes them.)
 > keep `project.ts` at the package root.
 
 **Before** (`apps/fuji/project.ts`, ~40 lines of `open(ctx)`): workspace +
-clientID + sqlite + markdown + action merge + `attachProjectInfrastructure` +
+clientID + sqlite + markdown + action merge + `attachProjectSync` +
 `defineWorkspace` assembly, with `resolveProjectPath ?? sqlitePath` path math.
 
 **After** (~10 lines, declaration only):
@@ -501,7 +501,7 @@ larger refactor. They can land in that order.
   startup (`open-project.ts` / a new mount runner) performs steps 1-8 above.
 - [ ] **2.2** Materializer protocol + `markdown()` / `sqlite()` curries in
   `daemon/materializers/`. Persistence + sync become daemon-native (split
-  `attachProjectInfrastructure` into a daemon-owned persistence call + sync call).
+  `attachProjectSync` into a daemon-owned persistence call + sync call).
 
 ### Phase 3: Switch every mount (stop importing the old path)
 
@@ -536,7 +536,7 @@ larger refactor. They can land in that order.
 ```txt
 DELETE
   open(ctx) imperative closures in 5 app mounts  -> { workspace, materializers }
-  attachProjectInfrastructure (coupled log+sync)  -> daemon-native persistence + sync
+  attachProjectSync (coupled log+sync)  -> daemon-native persistence + sync
   openWorkspaceSqlite(projectDir, workspaceId)    -> loadProjectData().mount().openSqlite()
   resolveProjectPath, workspaceId-keyed path fns  -> daemon owns layout; manifest publishes it
   up.ts type-major dir creation + multi-line .gitignore  -> ensure .epicenter/, gitignore '*'
@@ -674,7 +674,7 @@ survives without an "or".
 - `packages/workspace/src/document/attach-yjs-log.ts` - WAL + compaction (grounded facts 1, 2)
 - `packages/workspace/src/document/attach-yjs-log-reader.ts` - the Y.Doc-replay reader; stays unused under this spec (a dead-code-deletion candidate, since the audit ruled replay out as a script surface)
 - `packages/workspace/src/daemon/metadata.ts` - the existing single-writer sidecar the manifest extends
-- `packages/workspace/src/daemon/attach-project-infrastructure.ts` - split into daemon-native persistence + sync
+- `packages/workspace/src/daemon/attach-project-sync.ts` - split into daemon-native persistence + sync
 - `packages/workspace/src/daemon/define-mount.ts` / `workspace-apps/open-project.ts` - the new mount shape + daemon runner
 - `packages/workspace/src/document/materializer/{sqlite,markdown}/` - curried by `sqlite()` / `markdown()`
 - `apps/{fuji,honeycrisp,tab-manager,opensidian,zhongwen}/project.ts` - the 5 mounts to convert

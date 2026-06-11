@@ -12,7 +12,7 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { defineWorkspace } from '@epicenter/workspace';
 import { defineMount } from '@epicenter/workspace/daemon';
-import { attachProjectInfrastructure } from '@epicenter/workspace/node';
+import { attachProjectSync } from '@epicenter/workspace/node';
 import { createOpensidian } from './opensidian.js';
 
 export function opensidian() {
@@ -22,7 +22,7 @@ export function opensidian() {
 			const workspace = createOpensidian({ keyring: ctx.keyring });
 			workspace.ydoc.clientID = ctx.yDocClientId;
 
-			const infrastructure = attachProjectInfrastructure(workspace.ydoc, {
+			const sync = attachProjectSync(workspace.ydoc, {
 				baseURL: EPICENTER_API_URL,
 				projectDir: ctx.projectDir,
 				ownerId: ctx.ownerId,
@@ -34,11 +34,10 @@ export function opensidian() {
 
 			return defineWorkspace({
 				...workspace,
-				yjsLog: infrastructure.yjsLog,
-				collaboration: infrastructure.collaboration,
+				collaboration: sync.collaboration,
 				async [Symbol.asyncDispose]() {
 					workspace[Symbol.dispose]();
-					await infrastructure.whenDisposed;
+					await sync.whenDisposed;
 				},
 			});
 		},

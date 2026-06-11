@@ -90,7 +90,7 @@ The fix, in three layers:
   survive doc destruction.
 - Each daemon mount owns its `[Symbol.asyncDispose]`: it destroys the
   workspace doc once, then awaits the `whenDisposed` barriers for every
-  attachment it constructed. `attachProjectInfrastructure` exposes its own
+  attachment it constructed. `attachProjectSync` exposes its own
   aggregate `whenDisposed` for collaboration + log teardown; the fuji,
   honeycrisp, and tab-manager mounts await that alongside their sqlite +
   markdown materializer drains. The daemon's teardown stack already awaits

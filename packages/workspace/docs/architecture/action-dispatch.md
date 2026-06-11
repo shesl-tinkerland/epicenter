@@ -247,7 +247,7 @@ Not every workspace needs dispatch. A notes workspace has no runtime-specific ac
 > Historical note: the example below uses an older workspace definition shape.
 > Current apps put actions in the bundle returned by `create<App>()`
 > and pass that registry to `openCollaboration()` or
-> `attachProjectInfrastructure()`. Treat the request-table idea as architectural
+> `attachProjectSync()`. Treat the request-table idea as architectural
 > background, not current setup code.
 
 ```typescript

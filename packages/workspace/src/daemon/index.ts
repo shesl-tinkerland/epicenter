@@ -1,8 +1,8 @@
 export {
-	type AttachProjectInfrastructureOptions,
-	attachProjectInfrastructure,
-	type ProjectInfrastructure,
-} from './attach-project-infrastructure.js';
+	type AttachProjectSyncOptions,
+	attachProjectSync,
+	type ProjectSyncAttachment,
+} from './attach-project-sync.js';
 export {
 	defineMount,
 	type Mount,

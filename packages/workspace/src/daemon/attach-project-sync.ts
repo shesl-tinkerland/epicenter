@@ -1,11 +1,11 @@
 /**
- * Project-daemon persistence + sync infrastructure for a single workspace doc.
+ * Project-daemon durable sync for a single workspace doc.
  *
- * `attachProjectInfrastructure(ydoc, opts)` is the recipe every mount needs:
- * persist the Y.Doc update log to disk under `yjsPath(projectDir, guid)`, join
- * the cloud room at the partitioned `roomWsUrl({ baseURL, ownerId, guid,
- * deviceId })`, and expose the aggregate teardown barrier for the attachments
- * it constructs (collaboration + log).
+ * `attachProjectSync(ydoc, opts)` is the recipe every mount needs: persist the
+ * Y.Doc update log to disk under `yjsPath(projectDir, guid)`, join the cloud
+ * room at the partitioned `roomWsUrl({ baseURL, ownerId, guid, deviceId })`,
+ * and expose the collaboration handle plus aggregate teardown barrier for the
+ * attachments it constructs (collaboration + log).
  *
  * A cloud doc is owned by the authenticated `ownerId` and addressed by its
  * `ydoc.guid`. The daemon and browser apps build the same URL with
@@ -17,10 +17,10 @@
  * browser-only actions pass `{}` to refuse them on the daemon side, while
  * workspaces with daemon-safe actions pass `workspace.actions`.
  *
- * Returns the parts the host reads (`collaboration`) plus the side-effectful
- * `yjsLog` handle and a `whenDisposed` barrier. The opened mount owns
- * `[Symbol.asyncDispose]`: it destroys the workspace doc once, then awaits this
- * barrier alongside any sibling attachments it constructed around the same doc.
+ * Returns the part the host reads (`collaboration`) plus a mount-private
+ * `whenDisposed` barrier. The opened mount owns `[Symbol.asyncDispose]`: it
+ * destroys the workspace doc once, then awaits this barrier alongside any
+ * sibling attachments it constructed around the same doc.
  */
 
 import type { OwnerId } from '@epicenter/identity';
@@ -38,9 +38,7 @@ import { yjsPath } from '../document/workspace-paths.js';
 import type { ActionRegistry } from '../shared/actions.js';
 import type { ProjectDir } from '../shared/types.js';
 
-export type AttachProjectInfrastructureOptions<
-	TActions extends ActionRegistry,
-> = {
+export type AttachProjectSyncOptions<TActions extends ActionRegistry> = {
 	projectDir: ProjectDir;
 	ownerId: OwnerId;
 	deviceId: DeviceId;
@@ -51,7 +49,7 @@ export type AttachProjectInfrastructureOptions<
 	baseURL: string;
 };
 
-export function attachProjectInfrastructure<TActions extends ActionRegistry>(
+export function attachProjectSync<TActions extends ActionRegistry>(
 	ydoc: Y.Doc,
 	{
 		projectDir,
@@ -61,7 +59,7 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 		onReconnectSignal,
 		actions,
 		baseURL,
-	}: AttachProjectInfrastructureOptions<TActions>,
+	}: AttachProjectSyncOptions<TActions>,
 ) {
 	const yjsLog = attachYjsLog(ydoc, {
 		filePath: yjsPath(projectDir, ydoc.guid),
@@ -80,8 +78,6 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 	});
 
 	return {
-		/** Durable Y.Doc update log handle. */
-		yjsLog,
 		/** Cloud sync, presence, and dispatch handle for this mount. */
 		collaboration,
 		/**
@@ -96,6 +92,6 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 	};
 }
 
-export type ProjectInfrastructure<TActions extends ActionRegistry> = ReturnType<
-	typeof attachProjectInfrastructure<TActions>
+export type ProjectSyncAttachment<TActions extends ActionRegistry> = ReturnType<
+	typeof attachProjectSync<TActions>
 >;
