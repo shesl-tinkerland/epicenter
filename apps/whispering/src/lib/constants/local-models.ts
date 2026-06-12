@@ -59,6 +59,11 @@ type BaseModelConfig = {
 	size: string;
 	/** Exact size in bytes for progress tracking */
 	sizeBytes: number;
+	/**
+	 * The engine's default download. Exactly one model per engine carries
+	 * this; the settings UI builds its primary action around it.
+	 */
+	recommended?: true;
 };
 
 /** Whisper models are a single .bin file. */
@@ -137,6 +142,7 @@ export const WHISPER_MODELS = [
 		description: 'Fast, good accuracy',
 		size: '488 MB',
 		sizeBytes: 487_601_967,
+		recommended: true,
 		engine: 'whispercpp',
 		file: {
 			url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
@@ -180,6 +186,7 @@ export const PARAKEET_MODELS = [
 		description: 'Fast and accurate NVIDIA NeMo model',
 		size: '~670 MB',
 		sizeBytes: 670_619_803,
+		recommended: true,
 		engine: 'parakeet',
 		directoryName: 'parakeet-tdt-0.6b-v3-int8',
 		files: [
@@ -230,7 +237,7 @@ export const MOONSHINE_MODELS = [
 	{
 		id: 'moonshine-tiny-en',
 		name: 'Moonshine Tiny (English)',
-		description: 'Fast and efficient English transcription (~28 MB)',
+		description: 'Fast and efficient English transcription',
 		size: '~30 MB',
 		sizeBytes: 30_166_481,
 		engine: 'moonshine',
@@ -257,9 +264,10 @@ export const MOONSHINE_MODELS = [
 	{
 		id: 'moonshine-base-en',
 		name: 'Moonshine Base (English)',
-		description: 'Higher accuracy English transcription (~65 MB)',
+		description: 'Higher accuracy English transcription',
 		size: '~65 MB',
 		sizeBytes: 64_997_467,
+		recommended: true,
 		engine: 'moonshine',
 		language: 'en',
 		directoryName: 'moonshine-base-en',
