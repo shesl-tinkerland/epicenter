@@ -57,6 +57,12 @@
  *
  * - `@epicenter/encryption`: Encryption primitives (encryptValue, decryptValue, isEncryptedBlob)
  * - {@link ./y-keyvalue-lww.ts}: Inner CRDT that handles conflict resolution (unaware of encryption)
+ * - `attachEncryptedIndexedDb` (document/): the local update-log layer. It
+ *   deliberately has no `activateEncryption` counterpart: it snapshots the
+ *   keyring once at attach, and its compaction rewrites old-version rows as
+ *   a side effect. The explicit surface lives here and not there because
+ *   this wrapper's at-rest data is the durable, synced CRDT, while the
+ *   update log is a per-device cache.
  *
  * @module
  */

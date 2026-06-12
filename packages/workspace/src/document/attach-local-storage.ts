@@ -41,9 +41,12 @@ import { createOwnedYjsKey } from './local-yjs-key.js';
  * Snapshotted at attach time; session lifecycles guarantee stability by
  * disposing the workspace on sign-out and re-mounting on the next sign-in.
  *
- * `keyring` is a lazy callback: called once at attach to derive the
- * per-`ydoc.guid` workspace key, and again on each persisted update so
- * rotated keyrings are picked up automatically.
+ * `keyring` is read exactly once at attach and snapshotted, the same
+ * contract as `createWorkspace`. The callback form guarantees the snapshot
+ * is taken inside the attach, as late as possible, never at an earlier
+ * capture point. Rotations are picked up at the next attach; the
+ * {@link attachEncryptedIndexedDb} module doc is the canonical statement of
+ * that contract.
  *
  * @example
  * ```ts

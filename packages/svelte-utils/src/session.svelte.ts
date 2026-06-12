@@ -67,7 +67,10 @@ export type SignedIn = {
  * keyring (callback) for encryption, and the two auth functions
  * (`openWebSocket`, `onReconnectSignal`) for cloud sync. The keyring reader
  * pulls from the live `state.keyring` so refreshed keyrings from
- * `/api/session` are picked up on next access without rebuilding the payload.
+ * `/api/session` are picked up by the next `createWorkspace` or
+ * `attachLocalStorage` construction without rebuilding the payload. Each
+ * construction snapshots the keyring exactly once; nothing re-reads it
+ * mid-attach.
  *
  * Requires a `SyncAuthClient` (it threads `auth.openWebSocket` into the payload
  * for cloud sync) whose `state` is Svelte-reactive (use `@epicenter/svelte/auth`,

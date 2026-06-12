@@ -18,7 +18,9 @@ export const KeyringEntry = type({
  *
  * New writes use the highest version after workspace activation. Older entries
  * stay in the keyring so activation can decrypt old-version blobs and rewrite
- * them under the current version.
+ * them under the current version, and so locally persisted update logs written
+ * before a rotation stay readable on the next attach. Dropping a version
+ * orphans every blob still encrypted under it.
  */
 export const Keyring = type([KeyringEntry, '...', KeyringEntry.array()]);
 

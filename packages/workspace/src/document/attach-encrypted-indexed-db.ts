@@ -1,5 +1,49 @@
 /// <reference lib="dom" />
 
+/**
+ * `attachEncryptedIndexedDb`: encrypted IndexedDB persistence for a Y.Doc's
+ * update log.
+ *
+ * ## Keyring rotation contract: snapshot-by-design
+ *
+ * `keyring()` is read exactly once at attach. The newest version becomes the
+ * write key for every row this attachment persists; the full derived keyring
+ * is kept for decryption, selected per row by the version byte in the blob
+ * header. There is no live rotation surface (no `activateEncryption`
+ * equivalent), on purpose:
+ *
+ * - The inner encryption layer snapshots too. `createWorkspace` derives its
+ *   keyring once at construction, so the Yjs updates persisted here already
+ *   contain value blobs frozen at the construction-time key version.
+ *   Re-keying only this outer envelope mid-session would upgrade nothing.
+ * - The update log converges lazily, and that is enough. After the next
+ *   attach every new row carries the rotated write version; old-version rows
+ *   are rewritten only when the log crosses the compaction threshold
+ *   (compaction encrypts a fresh snapshot and drops the older rows). Below
+ *   the threshold old-version rows simply remain, which is safe because
+ *   rotated-out versions stay in the keyring. An explicit rotation method
+ *   would duplicate what compaction already does.
+ * - Contrast with `createEncryptedYkvLww`, which does expose re-callable
+ *   `activateEncryption`: its at-rest data is the CRDT itself, synced across
+ *   devices, so it needs an explicit walk to upgrade durable entries. This
+ *   store is a per-device cache that can be rebuilt from the doc at any time.
+ *
+ * The contract leans on the `Keyring` invariant that rotated-out versions
+ * stay in the keyring (see `@epicenter/encryption` `Keyring`). A row whose
+ * version is missing from the attach-time keyring fails decryption: at
+ * initial load that rejects `whenLoaded`; during compaction it logs
+ * `CompactionFailed` and leaves rows un-trimmed.
+ *
+ * Known mid-session rotation seam: if another tab attaches after a rotation
+ * and writes newer-version rows into the shared database, a tab still
+ * holding the pre-rotation snapshot cannot decrypt them, so its compaction
+ * degrades (logged, retried, rows accumulate) until that tab re-attaches.
+ * Live updates still flow over BroadcastChannel and nothing is lost; the
+ * next attach in that tab recovers fully.
+ *
+ * @module
+ */
+
 import {
 	decryptBytes,
 	type EncryptedBlob,
@@ -68,9 +112,11 @@ export type EncryptedIndexedDbError = InferErrors<
 type EncryptedIndexedDbOptions = {
 	databaseName: string;
 	/**
-	 * Lazy reader for the current owner keyring. Called once at attach
-	 * time to derive the per-`ydoc.guid` workspace keyring; the latest
-	 * version becomes the write key.
+	 * Lazy reader for the current owner keyring. Called exactly once at
+	 * attach time to derive the per-`ydoc.guid` workspace keyring; the
+	 * newest version becomes the write key for the lifetime of this
+	 * attachment. Rotations are picked up at the next attach, not live.
+	 * See the module doc for the full rotation contract.
 	 */
 	keyring: () => Keyring;
 	/**

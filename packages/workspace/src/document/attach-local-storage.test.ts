@@ -180,6 +180,83 @@ describe('attachLocalStorage', () => {
 		await idb.clearLocal();
 	});
 
+	test('snapshots the keyring exactly once at attach', async () => {
+		const userId = `user-${crypto.randomUUID()}`;
+		const keyring = toKeyring(randomBytes(32));
+		let reads = 0;
+
+		const ydoc = new Y.Doc({ guid: 'encrypted-idb-snapshot', gc: true });
+		const idb = attachLocalStorage(ydoc, {
+			server: SERVER,
+			ownerId: asOwnerId(userId),
+			keyring: () => {
+				reads += 1;
+				return keyring;
+			},
+		});
+		await idb.whenLoaded;
+		ydoc.getText('body').insert(0, 'one');
+		await tick();
+		ydoc.getText('body').insert(3, ' two');
+		await tick();
+
+		expect(reads).toBe(1);
+		ydoc.destroy();
+		await idb.whenDisposed;
+		await idb.clearLocal();
+	});
+
+	test('rotated keyring is picked up on the next attach; pre-rotation rows stay readable', async () => {
+		const userId = `user-${crypto.randomUUID()}`;
+		const databaseName = `epicenter/${SERVER}/owners/${userId}/encrypted-idb-rotation`;
+		const entryV1 = {
+			version: 1,
+			keyBytesBase64: bytesToBase64(randomBytes(32)),
+		};
+
+		const firstDoc = new Y.Doc({ guid: 'encrypted-idb-rotation', gc: true });
+		const firstIdb = attachLocalStorage(firstDoc, {
+			server: SERVER,
+			ownerId: asOwnerId(userId),
+			keyring: () => [entryV1],
+		});
+		await firstIdb.whenLoaded;
+		firstDoc.getText('body').insert(0, 'before rotation');
+		await tick();
+		firstDoc.destroy();
+		await firstIdb.whenDisposed;
+
+		// Rotation appends version 2 as the newest entry; version 1 stays in
+		// the keyring per the Keyring contract so old rows remain readable.
+		const rotatedKeyring: Keyring = [
+			entryV1,
+			{ version: 2, keyBytesBase64: bytesToBase64(randomBytes(32)) },
+		];
+
+		const secondDoc = new Y.Doc({ guid: 'encrypted-idb-rotation', gc: true });
+		const secondIdb = attachLocalStorage(secondDoc, {
+			server: SERVER,
+			ownerId: asOwnerId(userId),
+			keyring: () => rotatedKeyring,
+		});
+		await secondIdb.whenLoaded;
+
+		expect(secondDoc.getText('body').toString()).toBe('before rotation');
+		secondDoc.getText('body').insert('before rotation'.length, ' and after');
+		await tick();
+		secondDoc.destroy();
+		await secondIdb.whenDisposed;
+
+		const rawUpdates = await readEncryptedUpdates(databaseName);
+		// Blob byte 1 is the key version. First-session rows still carry
+		// version 1; everything the second attach wrote carries version 2.
+		const versions = rawUpdates.map((update) => update[1]);
+		expect(versions).toContain(1);
+		expect(versions).toContain(2);
+		expect(versions.at(-1)).toBe(2);
+		await secondIdb.clearLocal();
+	});
+
 	test('clearLocal clears the encrypted IndexedDB database', async () => {
 		const userId = `user-${crypto.randomUUID()}`;
 		const keyring = toKeyring(randomBytes(32));
