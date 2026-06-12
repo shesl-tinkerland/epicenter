@@ -143,7 +143,8 @@ Copy status: screens 1 through 4 above are approved draft copy; refine rhythm bu
   > **Note**: Title and description are passed per-page through existing `BaseLayout` props; `BaseLayout` itself only gained a named `head` slot so the page can load its display font (Fraunces). Visual direction per Open Question 3: warm paper palette, ink text, single ember accent, Fraunces headlines, monospace captions for the file motif.
 - [x] **1.3** Wire the primary CTA to OS-detected download (reuse `components/whispering/OSDetector.svelte` if it fits), with the releases page as fallback.
   > **Note**: Did not reuse `OSDetector.svelte`: it hydrates a Svelte island and renders an empty `href` until JS runs, which fails the no-JS criterion. Instead all three download CTAs are static anchors to the releases page, upgraded to the platform asset by one inline script (same URL scheme as `OSDetector`).
-- [ ] **1.4** Remove all "memory" copy and the "Available now" Destination quote. Grep the landing app for `memory`, `SQLite`, `local-first`, `CRDT` and relocate or delete each hit per the public cut rule.
+- [x] **1.4** Remove all "memory" copy and the "Available now" Destination quote. Grep the landing app for `memory`, `SQLite`, `local-first`, `CRDT` and relocate or delete each hit per the public cut rule.
+  > **Note**: All hits in page and component source are gone (rebuilt `index.astro`, deleted `CorePrinciples.svelte` and `archive/index-v1.astro`). Two `memory` hits remain in `src/content/blog/launch.md`, a dated launch post; left as historical content rather than retroactively edited. Owner call if it should be revised.
 
 ### Phase 2: Interactions
 
@@ -165,7 +166,8 @@ Copy status: screens 1 through 4 above are approved draft copy; refine rhythm bu
 
 - [ ] **4.1** Build passes (`bun run` build for `apps/landing`), pages render with JS disabled.
 - [ ] **4.2** Banned-word and vocabulary sweep (see Success Criteria).
-- [ ] **4.3** Delete dead components and the `archive/index-v1.astro` copy drift if unreferenced.
+- [x] **4.3** Delete dead components and the `archive/index-v1.astro` copy drift if unreferenced.
+  > **Note**: Deleted `RotatingHeadline`, `RotatingTagline`, `CorePrinciples`, `PrinciplesRotatingHeadline`, `ScrollObserver`, `WaitlistForm`, `ui/ToolCard` (it lived in `components/ui/`, not `components/`), and `pages/archive/index-v1.astro`. All verified unreferenced; nothing links to `/archive`.
 
 ## Edge Cases
 
