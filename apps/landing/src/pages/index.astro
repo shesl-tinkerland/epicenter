@@ -83,9 +83,11 @@ const discordUrl = 'https://go.epicenter.so/discord';
 						there by seven. Want me to grab dinner on the way?
 					</p>
 					<div class="demo-hint">
-						<kbd>alt</kbd>
-						<kbd>space</kbd>
-						<span>Hold to talk. Release, and the words type themselves.</span>
+						<span class="demo-mic"></span>
+						<span
+							>Hold your shortcut and talk. Release, and the words type
+							themselves.</span
+						>
 					</div>
 				</div>
 				<figcaption class="fineprint mt-3 text-center">
@@ -545,15 +547,20 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		color: var(--ink-soft);
 	}
 
-	.demo-hint kbd {
-		font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-		font-size: 0.75rem;
-		padding: 0.1rem 0.45rem;
-		border: 1px solid var(--line);
-		border-bottom-width: 2px;
-		border-radius: 6px;
-		background: var(--paper);
+	.demo-mic {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--accent);
+		animation: pulse 1.6s ease-in-out infinite;
 	}
+
+	@keyframes pulse {
+		50% {
+			opacity: 0.35;
+		}
+	}
+
 
 	/* The export gag */
 	.gag-btn {
@@ -719,6 +726,10 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		}
 
 		.gag-btn.done {
+			animation: none;
+		}
+
+		.demo-mic {
 			animation: none;
 		}
 	}

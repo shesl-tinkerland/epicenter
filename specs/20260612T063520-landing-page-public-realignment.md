@@ -1,7 +1,7 @@
 # Landing Page Public Realignment
 
 **Date**: 2026-06-12
-**Status**: In Progress
+**Status**: Implemented (pending owner assets: founder letter text, demo recording)
 **Owner**: Braden
 **Branch**: `landing/public-realignment`
 
@@ -164,8 +164,10 @@ Copy status: screens 1 through 4 above are approved draft copy; refine rhythm bu
 
 ### Phase 4: Verify and clean
 
-- [ ] **4.1** Build passes (`bun run` build for `apps/landing`), pages render with JS disabled.
-- [ ] **4.2** Banned-word and vocabulary sweep (see Success Criteria).
+- [x] **4.1** Build passes (`bun run` build for `apps/landing`), pages render with JS disabled.
+  > **Note**: The build was broken before this spec started: prerendering `/whispering` failed because Vite 7 environments read `resolve.noExternal`, not just `ssr.noExternal`, for the runes-based deps (`bits-ui`, `svelte-toolbelt`, `runed`). Fixed in `astro.config.mjs` as a standalone commit. No-JS reading verified by extracting visible text from `dist/index.html`: all five screens read in order, gag punchline included.
+- [x] **4.2** Banned-word and vocabulary sweep (see Success Criteria).
+  > **Note**: Zero hits for Markdown/SQLite/local-first/CRDT/Yjs/memory/hype words in `dist/index.html` and in landing page/component source. Also corrected an unshipped claim found during review: the demo card showed `alt+space` key chips, but the shipped push-to-talk default is `Command+Shift+D` (macOS) / `Alt+Shift+D` (elsewhere); replaced with a platform-neutral "hold your shortcut" hint.
 - [x] **4.3** Delete dead components and the `archive/index-v1.astro` copy drift if unreferenced.
   > **Note**: Deleted `RotatingHeadline`, `RotatingTagline`, `CorePrinciples`, `PrinciplesRotatingHeadline`, `ScrollObserver`, `WaitlistForm`, `ui/ToolCard` (it lived in `components/ui/`, not `components/`), and `pages/archive/index-v1.astro`. All verified unreferenced; nothing links to `/archive`.
 
@@ -209,13 +211,38 @@ They get one quiet door: the footer and nav keep GitHub links, and screen 4's "F
 
 ## Success Criteria
 
-- [ ] Above the fold contains no instance of: Markdown, SQLite, local-first, CRDT, Yjs, workspace (the folder sense), or any banned hype word.
-- [ ] Every claim above the fold is shipped behavior; the only vision copy on the page sits under explicit "that's what we're building" staging.
-- [ ] Primary CTA on screens 1, 4, and 5 is downloading Whispering; "Star on GitHub" is not a hero CTA.
-- [ ] "memory" vocabulary and the "Available now" Destination quote are gone from the landing app.
-- [ ] Page reads correctly with JavaScript disabled.
-- [ ] `apps/landing` builds clean.
-- [ ] Meta title and description derive from the public cut.
+- [x] Above the fold contains no instance of: Markdown, SQLite, local-first, CRDT, Yjs, workspace (the folder sense), or any banned hype word.
+- [x] Every claim above the fold is shipped behavior; the only vision copy on the page sits under explicit "that's what we're building" staging.
+- [x] Primary CTA on screens 1, 4, and 5 is downloading Whispering; "Star on GitHub" is not a hero CTA.
+- [x] "memory" vocabulary and the "Available now" Destination quote are gone from the landing app.
+  > **Note**: Gone from all page and component source. Two `memory` hits remain in the dated launch blog post (`src/content/blog/launch.md`), left as historical content; owner call whether to revise.
+- [x] Page reads correctly with JavaScript disabled.
+- [x] `apps/landing` builds clean.
+- [x] Meta title and description derive from the public cut.
+
+## Review
+
+**Completed**: 2026-06-12
+**Branch**: `landing/public-realignment`
+
+### What Landed
+
+`index.astro` was rebuilt from scratch as the five-screen public page (superpower hero, export gag, ownership guarantee, vision staged as vision, founder letter placeholder), with all copy from the spec's approved drafts and the public cut. Visual direction per Open Question 3's recommendation: warm paper palette, ink text, single ember accent, Fraunces display headlines, monospace captions for the file motif. Eight dead components and the archived v1 page were deleted; the landing build itself was unbroken along the way.
+
+### Deviations and Discoveries
+
+- `OSDetector.svelte` was not reused: it renders an empty `href` until hydration, which fails the no-JS criterion. The three download CTAs are static anchors to the releases page that one inline script upgrades to the platform asset.
+- The demo card briefly showed `alt+space` key chips; the shipped push-to-talk default is `Command+Shift+D` (macOS) / `Alt+Shift+D` (elsewhere), so the hint became platform-neutral ("hold your shortcut"). Worth remembering: the real defaults are in `apps/whispering/src/lib/state/device-config.svelte.ts`.
+- The landing build was already broken before this work: Vite 7 environments need `resolve.noExternal` (not just `ssr.noExternal`) for `bits-ui`, `svelte-toolbelt`, and `runed`. Fixed in a standalone commit.
+- `ToolCard` lived at `components/ui/ToolCard.svelte`, not `components/`; deleted with the rest.
+- Open Question 2 resolved as recommended (typing simulation now, recording later). Open Question 4 resolved cheaply: a footer "How is it free?" link points at `/whispering#pricing`.
+
+### Follow-up Work
+
+- Owner writes the five-line founder letter (screen 5 placeholder is typeset and commented; the "disappeared tomorrow" beat is reserved for it).
+- Record the real 20-second demo and replace the typed-text simulation (spec item 3.1).
+- Owner call: whether to revise the two `memory` mentions in the dated launch blog post.
+- Deferred per Adjacent Work: v2 hero swaps in the live speak-to-file demo when the Whispering workspace refresh ships.
 
 ## References
 
