@@ -100,6 +100,22 @@ Implication: Epicenter is local-first; the closest references (Obsidian, Logseq)
 
 Asymmetric win surfaced: refusing the feature of "email in chrome" lets the runtime state stop carrying email at all. Email becomes a fetched query at the one surface that wants to display it. See `specs/20260514T210000-profile-as-application-data.md` for the resulting design.
 
+## Worked example: local model pickers (Whispering)
+
+Question: how should a settings screen present downloadable local models (Whisper, Parakeet, Moonshine) when each is a 0.03 to 1.6 GB download?
+
+| App | Category | Picker pattern | Size on action? |
+| --- | --- | --- | --- |
+| Ollama desktop | Local LLM runtime | Picks a default model, downloads on first use; library is secondary | Yes |
+| LM Studio | Local LLM catalog | Full catalog browser with search; "Staff pick" badge | Yes, on every download button |
+| Jan | Local LLM app | Hub with "Recommended" tags | Yes |
+| superwhisper | Local dictation | Onboarding recommends one model with its size; others in a secondary list | Yes |
+| MacWhisper | Local dictation | Model tiers with sizes; recommended default | Yes |
+| Handy | Local dictation (OSS) | Flat model list, recommended default preselected | Yes |
+| Wispr Flow | Dictation (cloud) | No model picker at all; the surface does not exist | n/a |
+
+Implication: local-model apps converge on default-first (one recommended model per engine, size visible on the download action, full catalog secondary). Whispering borrowed default-first plus size-on-action and refused LM Studio's catalog browser, since its largest catalog is four models. Wispr Flow is the refusal boundary: going cloud deletes the surface entirely, which is not Whispering's category. Resulting design: PR #1922 (status hero plus one "All models" disclosure, manual path picker one level deeper).
+
 ## Other questions this lens answers well
 
 ```
