@@ -1,4 +1,5 @@
 ---
+import { Font } from 'astro:assets';
 import { VERSION } from '@epicenter/constants/versions';
 import {
 	Calendar as CalendarIcon,
@@ -20,12 +21,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 	description="Epicenter apps save everything you make as ordinary files in a folder on your computer, so what matters to you outlives every app that made it. Start with Whispering, a free speech-to-text app for macOS, Windows, and Linux."
 >
 	<Fragment slot="head">
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..500&display=swap"
-			rel="stylesheet"
-		/>
+		<Font cssVariable="--font-fraunces" preload />
 	</Fragment>
 
 	<main class="page">
@@ -125,7 +121,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 					on your computer. Readable now, readable in twenty years, no account
 					required.
 				</p>
-				<div class="vault-row mt-14 flex items-end justify-center gap-4 sm:gap-6">
+				<div class="folder-row mt-14 flex items-end justify-center gap-4 sm:gap-6">
 					<div class="app-tile" style="--i: 0"><MessageCircleIcon /></div>
 					<div class="app-tile" style="--i: 1"><ImageIcon /></div>
 					<div class="folder-tile"><FolderIcon /></div>
@@ -246,7 +242,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		},
 		{ threshold: 0.25 },
 	);
-	for (const el of document.querySelectorAll('.reveal, .vault-row')) {
+	for (const el of document.querySelectorAll('.reveal, .folder-row')) {
 		observer.observe(el);
 	}
 
@@ -284,7 +280,10 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		);
 		demoObserver.observe(typed);
 		for (const a of document.querySelectorAll('a[href="#demo"]')) {
-			a.addEventListener('click', run);
+			a.addEventListener('click', () => {
+				demoObserver.disconnect();
+				run();
+			});
 		}
 	}
 </script>
@@ -304,7 +303,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 	}
 
 	.font-display {
-		font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+		font-family: var(--font-fraunces, Georgia, serif);
 	}
 
 	h1 {
@@ -561,7 +560,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		}
 	}
 
-
 	/* The export gag */
 	.gag-btn {
 		font-size: clamp(1.6rem, 4.5vw, 2.6rem);
@@ -655,12 +653,12 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		box-shadow: 0 10px 24px rgb(38 34 26 / 18%);
 	}
 
-	:global(html.js) .vault-row .app-tile {
+	:global(html.js) .folder-row .app-tile {
 		opacity: 1;
 		filter: none;
 	}
 
-	:global(html.js) .vault-row.in .app-tile {
+	:global(html.js) .folder-row.in .app-tile {
 		animation: fade-away 2.2s ease forwards;
 		animation-delay: calc(0.5s + var(--i) * 0.35s);
 	}
@@ -688,7 +686,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 
 	/* The letter */
 	.letter {
-		font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+		font-family: var(--font-fraunces, Georgia, serif);
 		font-size: 1.15rem;
 		line-height: 1.9;
 		color: var(--ink);
@@ -716,12 +714,12 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			transition: none;
 		}
 
-		:global(html.js) .vault-row .app-tile {
+		:global(html.js) .folder-row .app-tile {
 			opacity: 0.3;
 			filter: grayscale(1);
 		}
 
-		:global(html.js) .vault-row.in .app-tile {
+		:global(html.js) .folder-row.in .app-tile {
 			animation: none;
 		}
 
