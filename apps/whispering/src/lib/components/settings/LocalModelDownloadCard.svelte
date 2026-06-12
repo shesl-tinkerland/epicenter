@@ -95,6 +95,9 @@
 	<div class="flex-1">
 		<div class="flex items-center gap-2">
 			<span class="font-medium">{model.name}</span>
+			{#if model.recommended}
+				<Badge variant="outline" class="text-xs">Recommended</Badge>
+			{/if}
 			{#if modelState.type === 'active'}
 				<Badge variant="default" class="text-xs">Active</Badge>
 			{:else if modelState.type === 'ready'}

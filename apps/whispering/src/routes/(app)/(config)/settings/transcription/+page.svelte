@@ -446,12 +446,12 @@
 					<LocalModelSelector
 						models={WHISPER_MODELS}
 						title="Whisper Model"
-						description="Select a pre-built model or browse for your own. Models run locally for private, offline transcription."
+						description="Models run on this device for private, offline transcription."
 						fileExtensions={['bin', 'gguf', 'ggml']}
 						bind:value={() => deviceConfig.get('transcription.whispercpp.modelPath'),
 							(v) => deviceConfig.set('transcription.whispercpp.modelPath', v)}
 					>
-						{#snippet prebuiltFooter()}
+						{#snippet catalogFooter()}
 							<Field.Description>
 								Models are downloaded from{' '}
 								<Link
@@ -461,38 +461,24 @@
 								>
 									Hugging Face
 								</Link>
-								{' '}and stored locally in your app data directory. Quantized
-								models offer smaller sizes with minimal quality loss.
+								{' '}and stored in your app data directory.
 							</Field.Description>
 						{/snippet}
 
-						{#snippet manualInstructions()}
-							<div>
-								<p class="text-sm font-medium mb-2">
-									<span class="text-muted-foreground">Step 1:</span>
-									Download a Whisper model
-								</p>
-								<ul class="ml-6 mt-2 space-y-2 text-sm text-muted-foreground">
-									<li class="list-disc">
-										Visit the{' '}
-										<Link
-											href="https://huggingface.co/ggerganov/whisper.cpp/tree/main"
-											target="_blank"
-											rel="noopener noreferrer"
-										>
-											model repository
-										</Link>
-									</li>
-									<li class="list-disc">
-										Download any model file (e.g., ggml-base.en.bin for
-										English-only)
-									</li>
-									<li class="list-disc">
-										Quantized models (q5_0, q8_0) offer smaller sizes with
-										minimal quality loss
-									</li>
-								</ul>
-							</div>
+						{#snippet manualHelp()}
+							<Field.Description>
+								Works with any whisper.cpp model file (.bin, .gguf, or .ggml).
+								Browse the{' '}
+								<Link
+									href="https://huggingface.co/ggerganov/whisper.cpp/tree/main"
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									model repository
+								</Link>
+								{' '}for more options; quantized models (q5_0, q8_0) are
+								smaller with little quality loss.
+							</Field.Description>
 						{/snippet}
 					</LocalModelSelector>
 				{/if}
@@ -508,7 +494,7 @@
 						bind:value={() => deviceConfig.get('transcription.parakeet.modelPath'),
 						(v) => deviceConfig.set('transcription.parakeet.modelPath', v)}
 					>
-						{#snippet prebuiltFooter()}
+						{#snippet catalogFooter()}
 							<Field.Description>
 								Models are downloaded from{' '}
 								<Link
@@ -524,48 +510,19 @@
 							</Field.Description>
 						{/snippet}
 
-						{#snippet manualInstructions()}
-							<Card.Root class="bg-muted/50">
-								<Card.Content class="p-4">
-									<Field.Legend variant="label">
-										Getting Parakeet Models
-									</Field.Legend>
-									<ul class="space-y-2 text-sm text-muted-foreground">
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Download pre-built models from the "Pre-built Models"
-												tab
-											</span>
-										</li>
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Or download from{' '}
-												<Link
-													href="https://github.com/NVIDIA/NeMo"
-													target="_blank"
-													rel="noopener noreferrer"
-												>
-													NVIDIA NeMo
-												</Link>
-											</span>
-										</li>
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Parakeet models are directories containing ONNX files
-											</span>
-										</li>
-									</ul>
-								</Card.Content>
-							</Card.Root>
+						{#snippet manualHelp()}
+							<Field.Description>
+								Select a directory of Parakeet ONNX files, such as a model
+								exported from{' '}
+								<Link
+									href="https://github.com/NVIDIA/NeMo"
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									NVIDIA NeMo
+								</Link>
+								.
+							</Field.Description>
 						{/snippet}
 					</LocalModelSelector>
 				{/if}
@@ -581,7 +538,7 @@
 						bind:value={() => deviceConfig.get('transcription.moonshine.modelPath'),
 						(v) => deviceConfig.set('transcription.moonshine.modelPath', v)}
 					>
-						{#snippet prebuiltFooter()}
+						{#snippet catalogFooter()}
 							<Field.Description>
 								Models are downloaded from{' '}
 								<Link
@@ -596,72 +553,26 @@
 							</Field.Description>
 						{/snippet}
 
-						{#snippet manualInstructions()}
-							<Card.Root class="bg-muted/50">
-								<Card.Content class="p-4">
-									<Field.Legend variant="label">
-										Getting Moonshine Models
-									</Field.Legend>
-									<ul class="space-y-2 text-sm text-muted-foreground">
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Download pre-built models from the "Pre-built Models"
-												tab
-											</span>
-										</li>
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Or download from{' '}
-												<Link
-													href="https://huggingface.co/UsefulSensors/moonshine"
-													target="_blank"
-													rel="noopener noreferrer"
-												>
-													UsefulSensors on Hugging Face
-												</Link>
-											</span>
-										</li>
-										<li class="flex items-start gap-2">
-											<span
-												class="mt-0.5 block size-1.5 rounded-full bg-muted-foreground/50"
-											/>
-											<span>
-												Moonshine models are directories containing ONNX files
-												and tokenizer
-											</span>
-										</li>
-									</ul>
-									<div
-										class="mt-3 rounded border border-amber-500/20 bg-amber-500/5 p-3"
-									>
-										<p
-											class="text-xs font-medium text-amber-600 dark:text-amber-400"
-										>
-											Directory Naming Requirement
-										</p>
-										<p class="mt-1 text-xs text-muted-foreground">
-											The model directory must be named{' '}
-											<code class="rounded bg-muted px-1 py-0.5 font-mono"
-												>moonshine-&#123;variant&#125;-&#123;lang&#125;</code
-											>
-											{' '}(e.g.,
-											<code class="rounded bg-muted px-1 py-0.5 font-mono"
-												>moonshine-tiny-en</code
-											>,
-											{' '}
-											<code class="rounded bg-muted px-1 py-0.5 font-mono"
-												>moonshine-base-en</code
-											>). The variant (tiny/base) determines model architecture.
-										</p>
-									</div>
-								</Card.Content>
-							</Card.Root>
+						{#snippet manualHelp()}
+							<Field.Description>
+								Select a directory containing Moonshine ONNX files and a
+								tokenizer, such as a model from{' '}
+								<Link
+									href="https://huggingface.co/UsefulSensors/moonshine"
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									UsefulSensors on Hugging Face
+								</Link>
+								. The directory must be named{' '}
+								<code class="rounded bg-muted px-1 py-0.5 font-mono"
+									>moonshine-&#123;variant&#125;-&#123;lang&#125;</code
+								>
+								{' '}(for example{' '}
+								<code class="rounded bg-muted px-1 py-0.5 font-mono"
+									>moonshine-base-en</code
+								>); the variant tells Whispering which architecture to load.
+							</Field.Description>
 						{/snippet}
 					</LocalModelSelector>
 				{/if}

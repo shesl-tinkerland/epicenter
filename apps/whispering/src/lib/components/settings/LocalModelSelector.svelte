@@ -1,16 +1,25 @@
 <script lang="ts">
+	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
+	import * as Collapsible from '@epicenter/ui/collapsible';
+	import * as Empty from '@epicenter/ui/empty';
 	import { Input } from '@epicenter/ui/input';
+	import * as Item from '@epicenter/ui/item';
+	import { Progress } from '@epicenter/ui/progress';
 	import { toast } from '@epicenter/ui/sonner';
-	import * as Tabs from '@epicenter/ui/tabs';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Download from '@lucide/svelte/icons/download';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import HardDriveDownload from '@lucide/svelte/icons/hard-drive-download';
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import X from '@lucide/svelte/icons/x';
 	import { basename } from '@tauri-apps/api/path';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import type { Snippet } from 'svelte';
 	import type { LocalModelConfig } from '$lib/constants/local-models';
+	import { createPrebuiltModel } from '$lib/operations/local-models';
 	import {
 		importModelDirectory,
 		importModelFile,
@@ -42,11 +51,11 @@
 		/** Bindable value with getter/setter for the model path */
 		value: string;
 
-		/** Optional footer content for pre-built models tab */
-		prebuiltFooter?: Snippet;
+		/** Optional footer content for the expanded model catalog */
+		catalogFooter?: Snippet;
 
-		/** Custom instructions for manual selection tab */
-		manualInstructions?: Snippet;
+		/** Help text shown above the bring-your-own-model path picker */
+		manualHelp?: Snippet;
 	};
 
 	let {
@@ -55,8 +64,8 @@
 		description,
 		fileExtensions = [],
 		value = $bindable(),
-		prebuiltFooter,
-		manualInstructions,
+		catalogFooter,
+		manualHelp,
 	}: LocalModelSelectorProps = $props();
 
 	const engine = $derived(models[0].engine);
@@ -86,7 +95,65 @@
 			}
 		}) ?? null,
 	);
-	const isPrebuiltModel = $derived(!!prebuiltModelInfo);
+
+	/** Whether the full catalog (and the manual picker inside it) is expanded. */
+	let allModelsOpen = $state(false);
+
+	// The engine's default download. The catalog marks exactly one model as
+	// recommended; falling back to the first entry keeps the primary action
+	// rendering even if the catalog ever loses the flag.
+	const recommended = $derived(models.find((m) => m.recommended) ?? models[0]);
+	const recommendedModel = $derived(createPrebuiltModel(recommended));
+
+	type RecommendedState =
+		| { type: 'not-downloaded' }
+		| { type: 'downloading'; progress: number }
+		| { type: 'ready' }
+		| { type: 'active' };
+
+	let recommendedState = $state<RecommendedState>({ type: 'not-downloaded' });
+
+	// Check the recommended model's status on mount and whenever the engine's
+	// active model path changes (the getter reads deviceConfig, so this effect
+	// tracks it).
+	$effect(() => {
+		void recommendedModel.activeModelPath;
+		refreshRecommendedStatus();
+	});
+
+	async function refreshRecommendedStatus() {
+		const status = await recommendedModel.getStatus();
+		// While downloading, the download handler owns the state machine; a
+		// download may also have started while we were checking the disk.
+		if (recommendedState.type === 'downloading') return;
+		recommendedState = { type: status };
+	}
+
+	async function downloadRecommended() {
+		if (recommendedState.type === 'downloading') return;
+
+		recommendedState = { type: 'downloading', progress: 0 };
+
+		const { data, error } = await recommendedModel.downloadAndActivate({
+			onProgress: (progress) => {
+				recommendedState = { type: 'downloading', progress };
+			},
+		});
+		if (error) {
+			toast.error('Failed to download model', {
+				description: error.message,
+			});
+			recommendedState = { type: 'not-downloaded' };
+			return;
+		}
+
+		recommendedState = { type: 'active' };
+		toast.success(
+			data.outcome === 'already-installed'
+				? 'Model already downloaded and activated'
+				: 'Model downloaded and activated successfully',
+		);
+	}
 
 	/**
 	 * Open file/folder browser for manual model selection
@@ -161,103 +228,129 @@
 		<Card.Title class="text-lg">{title}</Card.Title>
 		<Card.Description>{description}</Card.Description>
 	</Card.Header>
-	<Card.Content class="space-y-6">
-		<Tabs.Root value="prebuilt" class="w-full">
-			<Tabs.List class="grid w-full grid-cols-2">
-				<Tabs.Trigger value="prebuilt">Pre-built Models</Tabs.Trigger>
-				<Tabs.Trigger value="manual">Manual Selection</Tabs.Trigger>
-			</Tabs.List>
+	<Card.Content class="space-y-3">
+		{#if value}
+			<Item.Root variant="outline">
+				<Item.Content>
+					<Item.Title>
+						{#if prebuiltModelInfo}
+							{prebuiltModelInfo.name}
+						{:else}
+							{#await modelName then name}
+								{name || 'Your own model'}
+							{/await}
+						{/if}
+					</Item.Title>
+					<Item.Description>
+						{prebuiltModelInfo ? prebuiltModelInfo.size : 'Your own model'}
+					</Item.Description>
+				</Item.Content>
+				<Item.Actions>
+					<Badge class="text-xs">Active</Badge>
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => (allModelsOpen = !allModelsOpen)}
+					>
+						Change
+					</Button>
+				</Item.Actions>
+			</Item.Root>
+		{:else}
+			<Empty.Root class="py-8">
+				<Empty.Media variant="icon">
+					<HardDriveDownload class="size-5" />
+				</Empty.Media>
+				<Empty.Title>No model installed</Empty.Title>
+				<Empty.Description>
+					Download the recommended model to start transcribing on this
+					device.
+				</Empty.Description>
+				<Empty.Content>
+					{#if recommendedState.type === 'downloading'}
+						<div class="flex w-full max-w-xs flex-col items-center gap-2">
+							<Progress value={recommendedState.progress} class="h-2" />
+							<span class="text-sm text-muted-foreground">
+								Downloading {recommended.name}: {recommendedState.progress}%
+							</span>
+						</div>
+					{:else if recommendedState.type === 'ready'}
+						<Button onclick={downloadRecommended}>
+							Activate {recommended.name}
+						</Button>
+					{:else}
+						<Button onclick={downloadRecommended}>
+							<Download class="size-4" />
+							Download {recommended.name} ({recommended.size})
+						</Button>
+					{/if}
+				</Empty.Content>
+			</Empty.Root>
+		{/if}
 
-			<!-- Pre-built Models Tab -->
-			<Tabs.Content value="prebuilt" class="mt-4 space-y-3">
-				{#each models as model}
+		<Collapsible.Root bind:open={allModelsOpen}>
+			<Collapsible.Trigger
+				class="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 [&[data-state=open]>svg]:rotate-180"
+			>
+				All models ({models.length})
+				<ChevronDown
+					class="size-4 shrink-0 text-muted-foreground transition-transform"
+				/>
+			</Collapsible.Trigger>
+			<Collapsible.Content class="space-y-3 pt-3">
+				{#each models as model (model.id)}
 					<LocalModelDownloadCard {model} />
 				{/each}
 
-				{#if prebuiltFooter}
+				{#if catalogFooter}
 					<div class="rounded-lg border bg-muted/50 p-4">
-						{@render prebuiltFooter()}
+						{@render catalogFooter()}
 					</div>
 				{/if}
-			</Tabs.Content>
 
-			<!-- Manual Selection Tab -->
-			<Tabs.Content value="manual" class="mt-4 space-y-4">
-				{#if manualInstructions}
-					{@render manualInstructions()}
-				{/if}
+				<Collapsible.Root>
+					<Collapsible.Trigger
+						class="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground [&[data-state=open]>svg]:rotate-90"
+					>
+						<ChevronRight class="size-4 transition-transform" />
+						Use your own model
+					</Collapsible.Trigger>
+					<Collapsible.Content class="space-y-3 pt-3">
+						{#if manualHelp}
+							{@render manualHelp()}
+						{/if}
 
-				<!-- Model Selection Input -->
-				<div>
-					<p class="text-sm font-medium mb-2">
-						{#if manualInstructions}
-							<span class="text-muted-foreground">Step 2:</span>
-							Select the model
-							{fileSelectionMode === 'directory' ? 'directory' : 'file'}
-						{:else}
-							Select the model
-							{fileSelectionMode === 'directory' ? 'directory' : 'file'}
-						{/if}
-					</p>
-					<div class="flex items-center gap-2">
-						<Input
-							type="text"
-							{value}
-							readonly
-							placeholder="No model selected"
-							class="flex-1"
-						/>
-						{#if value}
-							<Button
-								variant="outline"
-								size="icon"
-								onclick={clearModel}
-								title="Clear model path"
-							>
-								<X class="size-4" />
-							</Button>
-						{/if}
-						<Button
-							variant="outline"
-							size="icon"
-							onclick={selectModel}
-							title={fileSelectionMode === 'directory'
-								? 'Browse for model directory'
-								: 'Browse for model file'}
-						>
-							{#if fileSelectionMode === 'directory'}
-								<FolderOpen class="size-4" />
-							{:else}
-								<Paperclip class="size-4" />
+						<div class="flex items-center gap-2">
+							<Input
+								type="text"
+								{value}
+								readonly
+								placeholder="No model selected"
+								class="flex-1"
+							/>
+							{#if value}
+								<Button
+									variant="outline"
+									size="icon"
+									onclick={clearModel}
+									title="Clear model path"
+								>
+									<X class="size-4" />
+								</Button>
 							{/if}
-						</Button>
-					</div>
-
-					<!-- Display selected model info -->
-					{#if value}
-						<div class="mt-2 space-y-1">
-							{#await modelName then name}
-								{#if name}
-									<p class="text-sm text-muted-foreground">
-										<span class="font-medium">Selected:</span>
-										{name}
-									</p>
+							<Button variant="outline" onclick={selectModel}>
+								{#if fileSelectionMode === 'directory'}
+									<FolderOpen class="size-4" />
+									Choose folder
+								{:else}
+									<Paperclip class="size-4" />
+									Choose file
 								{/if}
-							{/await}
-
-							{#if isPrebuiltModel && prebuiltModelInfo}
-								<p class="text-sm text-muted-foreground">
-									<span class="font-medium">Size:</span>
-									{prebuiltModelInfo.size}
-									{#if fileSelectionMode === 'directory'}
-										(directory with model files)
-									{/if}
-								</p>
-							{/if}
+							</Button>
 						</div>
-					{/if}
-				</div>
-			</Tabs.Content>
-		</Tabs.Root>
+					</Collapsible.Content>
+				</Collapsible.Root>
+			</Collapsible.Content>
+		</Collapsible.Root>
 	</Card.Content>
 </Card.Root>
