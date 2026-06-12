@@ -1,5 +1,6 @@
 // @ts-check
 
+import sitemap from '@astrojs/sitemap';
 import svelte from '@astrojs/svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, fontProviders } from 'astro/config';
@@ -27,5 +28,5 @@ export default defineConfig({
 			noExternal: ['bits-ui', 'svelte-toolbelt', 'runed'],
 		},
 	},
-	integrations: [svelte()],
+	integrations: [svelte(), sitemap()],
 });
