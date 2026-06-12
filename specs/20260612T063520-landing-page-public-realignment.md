@@ -1,9 +1,9 @@
 # Landing Page Public Realignment
 
 **Date**: 2026-06-12
-**Status**: Draft
+**Status**: In Progress
 **Owner**: Braden
-**Branch**: not started (suggest `landing/public-realignment`)
+**Branch**: `landing/public-realignment`
 
 ## One Sentence
 
@@ -137,21 +137,29 @@ Copy status: screens 1 through 4 above are approved draft copy; refine rhythm bu
 
 ### Phase 1: Structure and copy
 
-- [ ] **1.1** Create branch, audit `apps/landing/src/pages/index.astro` and its components (`RotatingHeadline`, `RotatingTagline`, `CorePrinciples`, `PrinciplesRotatingHeadline`, `ToolCard`) for what survives, what is rewritten, what is deleted.
-- [ ] **1.2** Rebuild `index.astro` with the five-screen structure and the copy above. Update `BaseLayout` title and meta description to derive from the public cut.
-- [ ] **1.3** Wire the primary CTA to OS-detected download (reuse `components/whispering/OSDetector.svelte` if it fits), with the releases page as fallback.
+- [x] **1.1** Create branch, audit `apps/landing/src/pages/index.astro` and its components (`RotatingHeadline`, `RotatingTagline`, `CorePrinciples`, `PrinciplesRotatingHeadline`, `ToolCard`) for what survives, what is rewritten, what is deleted.
+  > **Note**: Audit result: nothing survives. `ToolCard` did not exist; `RotatingHeadline`, `RotatingTagline`, `CorePrinciples`, `PrinciplesRotatingHeadline`, `ScrollObserver`, and `WaitlistForm` are unreferenced once `index.astro` is rebuilt and are deleted in 4.3.
+- [x] **1.2** Rebuild `index.astro` with the five-screen structure and the copy above. Update `BaseLayout` title and meta description to derive from the public cut.
+  > **Note**: Title and description are passed per-page through existing `BaseLayout` props; `BaseLayout` itself only gained a named `head` slot so the page can load its display font (Fraunces). Visual direction per Open Question 3: warm paper palette, ink text, single ember accent, Fraunces headlines, monospace captions for the file motif.
+- [x] **1.3** Wire the primary CTA to OS-detected download (reuse `components/whispering/OSDetector.svelte` if it fits), with the releases page as fallback.
+  > **Note**: Did not reuse `OSDetector.svelte`: it hydrates a Svelte island and renders an empty `href` until JS runs, which fails the no-JS criterion. Instead all three download CTAs are static anchors to the releases page, upgraded to the platform asset by one inline script (same URL scheme as `OSDetector`).
 - [ ] **1.4** Remove all "memory" copy and the "Available now" Destination quote. Grep the landing app for `memory`, `SQLite`, `local-first`, `CRDT` and relocate or delete each hit per the public cut rule.
 
 ### Phase 2: Interactions
 
-- [ ] **2.1** Export button flip (screen 2). One state change, no library ceremony; it must work without JS as a static joke (button renders, flip text visible below it) per the Ghostty empty-shell failure in the corpus.
-- [ ] **2.2** App-icons-fade, folder-stays visual (screen 3). CSS-only preferred.
-- [ ] **2.3** Page load and scroll reveals: one well-orchestrated staggered reveal, not scattered micro-interactions.
+- [x] **2.1** Export button flip (screen 2). One state change, no library ceremony; it must work without JS as a static joke (button renders, flip text visible below it) per the Ghostty empty-shell failure in the corpus.
+  > **Note**: Without JS the punchline prints below the button; with JS the punchline moves onto the button on click and the static line is hidden (`html.js` gate).
+- [x] **2.2** App-icons-fade, folder-stays visual (screen 3). CSS-only preferred.
+  > **Note**: Static and no-JS base state is the end state (apps already gray, folder solid), so the metaphor reads without animation. With JS, an IntersectionObserver replays the decay when the row scrolls into view. Reduced motion skips the replay.
+- [x] **2.3** Page load and scroll reveals: one well-orchestrated staggered reveal, not scattered micro-interactions.
+  > **Note**: Hero stagger is pure CSS (runs with or without JS). Below-fold reveals are gated behind `html.js` so a no-JS read sees everything immediately.
 
 ### Phase 3: Assets
 
 - [ ] **3.1** Record the 20-second Whispering demo (hold key, speak a real sentence, words land in an email draft). Until it exists, ship a typed-text simulation clearly built from real app behavior; do not fake the unshipped speak-to-file flow.
+  > **Note**: Interim typed-text simulation is shipped (email draft mock, full sentence statically in markup, captioned "Simulated screen"). The recording itself is still outstanding and stays owner work.
 - [ ] **3.2** Founder letter final text from owner.
+  > **Note**: Placeholder is typeset on screen 5 with bracketed beat descriptions and an HTML comment; the "disappeared tomorrow" beat is reserved for the letter per the marketer pass. Owner text outstanding.
 
 ### Phase 4: Verify and clean
 

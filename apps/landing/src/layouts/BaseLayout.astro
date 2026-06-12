@@ -33,6 +33,7 @@ const { title, description = 'Epicenter - Building tools that matter' } =
 		<meta name="theme-color" content="#000000">
 		<meta name="robots" content="index, follow">
 		<title>{title}</title>
+		<slot name="head" />
 		<PostHog />
 	</head>
 	<body>
