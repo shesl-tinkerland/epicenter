@@ -4,11 +4,11 @@ import PostHog from '../components/posthog.astro';
 
 export type Props = {
 	title: string;
-	description?: string;
+	description: string;
 };
 
-const { title, description = 'Epicenter - Building tools that matter' } =
-	Astro.props;
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
@@ -20,7 +20,7 @@ const { title, description = 'Epicenter - Building tools that matter' } =
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 		<meta name="generator" content={Astro.generator}>
 		<meta property="og:type" content="website">
-		<meta property="og:url" content="https://epicenter.so/">
+		<meta property="og:url" content={canonical}>
 		<meta property="og:title" content={title}>
 		<meta property="og:description" content={description}>
 		<meta property="og:image" content="https://epicenter.so/og-image.png">
@@ -29,8 +29,7 @@ const { title, description = 'Epicenter - Building tools that matter' } =
 		<meta name="twitter:card" content="summary_large_image">
 		<meta name="twitter:title" content={title}>
 		<meta name="twitter:description" content={description}>
-		<link rel="canonical" href="https://epicenter.so/">
-		<meta name="theme-color" content="#000000">
+		<link rel="canonical" href={canonical}>
 		<meta name="robots" content="index, follow">
 		<title>{title}</title>
 		<slot name="head" />

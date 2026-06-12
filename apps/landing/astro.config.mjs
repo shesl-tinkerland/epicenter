@@ -6,7 +6,7 @@ import { defineConfig, fontProviders } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
-	output: 'static', // Keep static for now, can change to 'server' if needed
+	site: 'https://epicenter.so',
 	fonts: [
 		{
 			provider: fontProviders.google(),

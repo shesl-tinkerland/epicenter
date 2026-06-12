@@ -42,21 +42,24 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		<header
 			class="mx-auto flex min-h-[92svh] max-w-4xl flex-col items-center justify-center px-6 pb-24 pt-10 text-center"
 		>
-			<h1 class="font-display hero-step text-balance">Talk instead of type.</h1>
-			<p class="hero-step sub mx-auto mt-7 max-w-2xl">
+			<h1 class="font-display hero-step text-balance" style="--step: 0">
+				Talk instead of type.
+			</h1>
+			<p class="hero-step sub mx-auto mt-7 max-w-2xl" style="--step: 1">
 				Whispering is a free speech-to-text app for your computer. Hold a key,
 				say it, and the words land wherever your cursor is: email, doc, chat,
 				anything.
 			</p>
 			<div
 				class="hero-step mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+				style="--step: 2"
 			>
 				<a class="cta cta-solid" data-download href={releasesUrl}>
 					Download Whispering, free
 				</a>
 				<a class="cta cta-quiet" href="#demo">Watch it work (20 seconds)</a>
 			</div>
-			<p class="hero-step fineprint mt-5">
+			<p class="hero-step fineprint mt-5" style="--step: 3">
 				Free and open source. <a class="quiet-link" href={releasesUrl}
 					>macOS, Windows, and Linux.</a
 				>
@@ -64,7 +67,11 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			</p>
 
 			<!-- The demo: a simulated screen built from shipped behavior only -->
-			<figure id="demo" class="hero-step mt-14 w-full max-w-xl text-left">
+			<figure
+				id="demo"
+				class="hero-step mt-14 w-full max-w-xl text-left"
+				style="--step: 4"
+			>
 				<div class="demo-window">
 					<div class="demo-titlebar">
 						<span class="demo-dot"></span>
@@ -440,22 +447,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 	.hero-step {
 		opacity: 0;
 		animation: rise 0.7s ease-out forwards;
-	}
-
-	.hero-step:nth-child(1) {
-		animation-delay: 0ms;
-	}
-	.hero-step:nth-child(2) {
-		animation-delay: 120ms;
-	}
-	.hero-step:nth-child(3) {
-		animation-delay: 240ms;
-	}
-	.hero-step:nth-child(4) {
-		animation-delay: 320ms;
-	}
-	.hero-step:nth-child(5) {
-		animation-delay: 440ms;
+		animation-delay: calc(var(--step) * 110ms);
 	}
 
 	@keyframes rise {
