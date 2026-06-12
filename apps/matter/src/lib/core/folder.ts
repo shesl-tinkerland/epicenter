@@ -5,23 +5,29 @@
  * optional `matter.json` text), it produces the readable rows, the unreadable
  * files (kept separate, never dropped), and EITHER a modeled classification (a
  * valid `matter.json` was supplied) OR a raw untyped view (no model, or junk
- * model). The actual disk/Tauri listing lives in `vault.svelte.ts` (and the
- * `inspect` script) and hands its results here, so this transform is testable
- * without any filesystem.
+ * model). The actual disk listing lives at the boundary (`vault.svelte.ts` in
+ * the app, `src/cli/check.ts` in the headless command), so this transform is
+ * testable without any filesystem.
  *
  * The model is the foundation, never inference: a usable `matter.json` classifies
  * the folder against a contract; without one, the folder is shown as RAW text
  * (no type guessing). A junk model degrades to the raw view with a diagnostic the
- * UI can show as a non-blocking banner. Turning a raw folder into a model
- * ("Create model from folder") is a deferred, schema-emitting step.
+ * UI can show as a non-blocking banner. The headless check command is stricter
+ * about missing or junk models because it has to certify the folder.
  */
 
-import { defineErrors, type InferErrors } from 'wellcrafted/error';
+import {
+	defineErrors,
+	extractErrorMessage,
+	type InferErrors,
+} from 'wellcrafted/error';
 import { classifyRows, type RowConformance } from './conformance';
 import { type MatterModel, type MatterModelError, parseModel } from './model';
 import { type MatterParseError, parseEntry, type Row } from './parse';
 
-export type FolderEntry = { fileName: string; content: string };
+export type FolderEntry =
+	| { fileName: string; content: string }
+	| { fileName: string; error: MatterReadError };
 
 /**
  * Why a file could not be read as text at all, before any parse is attempted:
@@ -32,6 +38,10 @@ export type FolderEntry = { fileName: string; content: string };
 export const MatterReadError = defineErrors({
 	Undecodable: () => ({
 		message: 'File is not readable as UTF-8 text',
+	}),
+	ReadFailed: ({ cause }: { cause: unknown }) => ({
+		message: `File could not be read: ${extractErrorMessage(cause)}`,
+		cause,
 	}),
 });
 export type MatterReadError = InferErrors<typeof MatterReadError>;
@@ -105,7 +115,13 @@ export function readFolder(
 	const rows: Row[] = [];
 	const unreadable: UnreadableFile[] = [];
 
-	for (const { fileName, content } of entries) {
+	for (const entry of entries) {
+		if ('error' in entry) {
+			unreadable.push({ fileName: entry.fileName, error: entry.error });
+			continue;
+		}
+
+		const { fileName, content } = entry;
 		const { data, error } = parseEntry(fileName, content);
 		if (error) {
 			unreadable.push({ fileName, error });

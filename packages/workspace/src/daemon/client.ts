@@ -7,8 +7,7 @@
  *   per route. Each method returns `Promise<Result<T, DomainErr | DaemonError>>`,
  *   merging transport and domain failures into one tagged union the
  *   renderer narrows by `error.name`.
- * - {@link getDaemon}: dispatch decision for `invoke` / `dispatch` / `list`
- *   / `peers`.
+ * - {@link getDaemon}: dispatch decision for `run` / `list` / `peers`.
  *   Returns a typed client on success, or `Required` when the project has no
  *   live daemon.
  *
@@ -27,12 +26,8 @@ import {
 } from 'wellcrafted/error';
 import { Ok, type Result, tryAsync } from 'wellcrafted/result';
 import type { ActionManifest } from '../shared/actions.js';
-import type { InvokeError, PeerDispatchError } from './action-errors.js';
-import type {
-	InvokeRequest,
-	PeerDispatchRequest,
-	PeerSnapshot,
-} from './app.js';
+import type { RunError } from './action-errors.js';
+import type { PeerSnapshot, RunRequest } from './app.js';
 import { socketPathFor } from './paths.js';
 
 /**
@@ -169,15 +164,8 @@ export function daemonClient(
 	return {
 		peers: () => call<PeerSnapshot[], never>(socketPath, timeoutMs, '/peers'),
 		list: () => call<ActionManifest, never>(socketPath, timeoutMs, '/list'),
-		invoke: (request: InvokeRequest) =>
-			call<unknown, InvokeError>(socketPath, timeoutMs, '/invoke', request),
-		dispatch: (request: PeerDispatchRequest) =>
-			call<unknown, PeerDispatchError>(
-				socketPath,
-				timeoutMs,
-				'/dispatch',
-				request,
-			),
+		run: (request: RunRequest) =>
+			call<unknown, RunError>(socketPath, timeoutMs, '/run', request),
 	};
 }
 
@@ -193,8 +181,8 @@ export type DaemonClient = ReturnType<typeof daemonClient>;
  *   - `Required`: no daemon is running. Renderer prints the
  *     start-with-`daemon up` hint.
  *
- * `invoke`, `dispatch`, `list`, and `peers` are mandatory-daemon commands; if
- * they hit no error they have a typed client to call.
+ * `run`, `list`, and `peers` are mandatory-daemon commands; if they hit no
+ * error they have a typed client to call.
  */
 export async function getDaemon(
 	projectDir: string,

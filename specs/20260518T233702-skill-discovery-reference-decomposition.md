@@ -212,7 +212,7 @@ Some skills may intentionally exist for Codex but not validate through the Verce
 
 ### Internal Skills
 
-Internal bootstrap skills should not be made discoverable unless their purpose is normal task execution. For example, `setup-matt-pocock-skills` was intentionally changed to an internal explicit-only bootstrapper.
+Internal bootstrap skills should not be made discoverable unless their purpose is normal task execution. If setup is one-time repo plumbing, delete the skill after setup instead of carrying a hidden routing surface.
 
 ### Reference Moves Can Break Links
 
@@ -231,7 +231,7 @@ When moving sections into `references/`, update all relative links. Validate by 
 
 ### Summary
 
-Wave 3 fixed Vercel skills CLI discovery gaps caused by YAML-sensitive descriptions, raising full-folder discovery from 65 skills to 88 skills. The remaining two repo-local skill files are intentionally hidden by frontmatter: `setup-matt-pocock-skills` is internal, and `zoom-out` has disabled model invocation.
+Wave 3 fixed Vercel skills CLI discovery gaps caused by YAML-sensitive descriptions, raising full-folder discovery from 65 skills to 88 skills. At the time, two repo-local skill files remained intentionally hidden by frontmatter. A later instruction-hygiene pass removed the bootstrap skill and folded the zoom-out trigger into `notebook-explanation`.
 
 The largest three skill bodies were decomposed. `svelte`, `typescript`, and `workspace-api` now keep compact trigger rules and first-pass decisions in `SKILL.md`, with detailed examples and edge cases moved into `references/`.
 
@@ -246,4 +246,4 @@ The largest three skill bodies were decomposed. `svelte`, `typescript`, and `wor
 ### Follow-up Work
 
 - Decide in a later wave whether auth/security/org/2FA skills should be decomposed.
-- Decide whether `zoom-out` should stay disabled or be converted into a discoverable explicit-use skill.
+- Continue deleting or folding hidden skill surfaces when an existing discoverable skill can own the same trigger.

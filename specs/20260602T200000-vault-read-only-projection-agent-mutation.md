@@ -169,6 +169,32 @@ app captures -> materializes into apps/<name>/   (the inbox; disposable, regener
 
 The app zone is never the only copy of app data (Yjs is); user zones are the only copy of curated stuff. So copying out is safe and moving is unnecessary.
 
+### Authored notes vs publish artifacts
+
+Keep one owner for each fact:
+
+```txt
+authored note status  journal/ pages/ reflections/ technical-notes/entries/
+publish link          publish/**/posts/*/post.md page:
+ship event            publish/**/posts/*/post.md published_at:
+destination           publish/<platform>/<account>/ path
+format                file presence, such as deck.marp.md
+```
+
+Authored notes may write only `status: captured` or `status: refined`.
+`captured` means saved in the vault. `refined` means privately clarified enough
+to keep as a durable vault object.
+
+The conceptual ramp still has four names: `captured`, `refined`, `composing`,
+and `published`. Only the first two are authored frontmatter values. The last
+two are derived views over publish artifacts.
+
+Do not write `status: composing`, `status: published`, `status: draft`, or a
+publish `stage` in hand-authored vault markdown. A page is composing when a
+linked post exists without `published_at`. A page has shipped somewhere when a
+linked post has `published_at`, with `url` recorded when the destination gives a
+permalink.
+
 ## Architecture
 
 The daemon owns everything; every mutation client is stateless and routes through one validated choke point.

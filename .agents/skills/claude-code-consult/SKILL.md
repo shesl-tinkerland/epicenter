@@ -52,6 +52,10 @@ Design the prompt so Claude can answer without taking a tool turn. A max-turn ca
 
 For architecture or API-shape questions, ask Claude to start with one concrete sentence describing the current surface, then look for radical options, asymmetric wins, and clean breaks before suggesting local patches.
 
+When the user explicitly asks to consult Claude, the consult result is part of the deliverable. Do not cancel a live consult merely because first answer text is slow, thinking tokens are high, or the local answer is already good enough. Follow [Blocking Behavior](#blocking-behavior) for polling and cancellation.
+
+If the requested consult is broad, split it before launching rather than sending one omnibus prompt. Prefer two small consults with separate questions over one prompt asking for package placement, API design, commands, tests, naming, migration, and alternatives at once.
+
 Do not paste a template mechanically. Write the prompt a sharp senior engineer would send to another senior engineer.
 
 ## Running The Consult
@@ -90,11 +94,32 @@ bun run claude:consult -- status <job-id>
 bun run claude:consult -- result <job-id>
 ```
 
+Read `status` before deciding whether a running job is stuck. Treat the
+`Recommendation:` line as the action contract and the `Reason:` line as the
+explanation. Startup metadata is progress, not failure. In particular,
+`system:init` followed by `rate_limit_event` means Claude started,
+auth/rate-limit checks ran, and the model may still be waiting before its first
+answer text. For high-effort Opus or 1m-context consults, first answer text can
+take several minutes.
+
+Use the status recommendation as the source of truth:
+
+```txt
+keep-polling       Do not cancel. Poll again later.
+idle-investigate   Check stderr/process state; cancel only if no longer useful.
+finished           Read the stored result.
+failed             Read the error/result file and continue locally if needed.
+```
+
 Use `cancel` when the job is no longer useful:
 
 ```bash
 bun run claude:consult -- cancel <job-id>
 ```
+
+If `status` recommends `keep-polling`, plain `cancel` refuses to stop the job.
+Use `cancel <job-id> --force` only when you intentionally want to override the
+wrapper's liveness guard.
 
 The background runner stores state under `.tmp/claude-consult`, captures
 Claude's `stream-json` result, and records the Claude child PID so cancellation
@@ -221,6 +246,34 @@ Never use `bypassPermissions`, `--dangerously-skip-permissions`, or `--allow-dan
 Repo-wrapper consults must use `start`, then `status`, `result`, or `cancel`. Do not run a foreground wrapper consult and wait for it. They should still be focused and budgeted.
 
 Scouts, workers, and large fan-out runs must not block Codex indefinitely. Use a wall-clock timeout when practical. If Claude hangs, runs out of budget, lacks auth, hits a turn limit, or returns generic output, record that and continue with the best local path.
+
+Do not call a background consult hung just because it has emitted only startup
+metadata. First run `status <job-id>` and inspect the rendered stream summary.
+The wrapper classifies stale streams the same way whether the last event was
+startup, rate-limit, thinking, answer text, or a result frame. For advisory
+consults that the user did not explicitly request, cancel early only when one
+of these is true:
+
+```txt
+explicit auth/error output
+the job is no longer useful
+status recommends idle-investigate
+the wrapper reports timeout, budget exhaustion, or turn-limit failure
+```
+
+When the user explicitly asked for Claude's judgment, slow reasoning is not a hang by itself. Keep waiting while `status` says `keep-polling`, even if no answer text has arrived yet.
+
+For explicit user-requested consults, cancel only when one of these is true:
+
+```txt
+the wrapper reports failure
+status recommends idle-investigate and inspection shows no useful progress
+the user changes direction
+a newer request supersedes the consult
+an auth, permission, network, or process-state blocker appears
+```
+
+If a user-requested consult was too broad and does not produce a result, prefer launching a narrower replacement consult before finishing without Claude.
 
 Only stop the overall task for Claude when the user explicitly made Claude's answer the deliverable.
 

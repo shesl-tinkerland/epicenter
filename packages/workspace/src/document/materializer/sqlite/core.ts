@@ -6,8 +6,10 @@
  * Public callers use `attachBunSqliteMaterializer`, which owns the native
  * client lifecycle and forwards the client here.
  *
- * Teardown is hooked to the ydoc via `ydoc.once('destroy', ...)`. Core closes
- * the underlying native client after queued database work drains.
+ * Teardown is hooked to the ydoc via `ydoc.once('destroy', ...)`. Core drains
+ * pending mirror work (initial full-load, debounced row flush) bounded by
+ * `disposeTimeoutMs`, then closes the underlying native client; the barrier is
+ * surfaced as `whenDisposed`.
  *
  * @internal
  * @module
@@ -21,7 +23,7 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineActions, defineMutation } from '../../../shared/actions.js';
 import type { BaseRow, Table } from '../../table.js';
-import type { AnyTable, TablesRecord } from '../shared.js';
+import { type AnyTable, settledWithin, type TablesRecord } from '../shared.js';
 import { generateDdl, quoteIdentifier } from './ddl.js';
 import { createSqliteFtsLayer } from './fts.js';
 
@@ -50,6 +52,11 @@ const SqliteMaterializerError = defineErrors({
 		message: `[sqlite-materializer] Failed to dispose SQLite materializer: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
+	/** Teardown drain hit its bound; the database closes with work pending. */
+	DrainTimedOut: ({ timeoutMs }: { timeoutMs: number }) => ({
+		message: `[sqlite-materializer] teardown drain did not settle within ${timeoutMs}ms; closing with work pending`,
+		timeoutMs,
+	}),
 });
 
 type RegisteredTable = {
@@ -76,6 +83,7 @@ export function attachSqliteMaterializerCore<
 		fts,
 		debounceMs = 100,
 		waitFor,
+		disposeTimeoutMs = 10_000,
 		log = createLogger('sqlite-materializer'),
 	}: {
 		db: Database;
@@ -99,6 +107,13 @@ export function attachSqliteMaterializerCore<
 		 */
 		waitFor?: Promise<unknown>;
 		/**
+		 * Upper bound on the teardown drain: dispose waits at most this long
+		 * for the initial full-load and the pending row flush to settle before
+		 * closing the database, so a hung statement cannot wedge shutdown.
+		 * Defaults to 10 seconds.
+		 */
+		disposeTimeoutMs?: number;
+		/**
 		 * Logger for background failures (debounced sync flush, FTS query).
 		 * Defaults to a console-backed logger with source `sqlite-materializer`.
 		 */
@@ -120,6 +135,12 @@ export function attachSqliteMaterializerCore<
 	let pendingSync = new Map<string, Set<string>>();
 	let dbQueue = Promise.resolve();
 	let isDisposed = false;
+	// The `waitFor` gate has resolved, so the initial DDL + full-load is
+	// underway (or done) and teardown owes it a drain. Disposing while the
+	// gate is still closed owes nothing: the load never started, and
+	// `initialize` bails when the gate finally opens.
+	let isGateOpen = waitFor === undefined;
+	let isFlushAbandoned = false;
 
 	// ── SQL primitives ───────────────────────────────────────────
 
@@ -189,8 +210,6 @@ export function attachSqliteMaterializerCore<
 	}
 
 	async function flushPendingSync() {
-		if (isDisposed) return;
-
 		const currentPending = pendingSync;
 		pendingSync = new Map<string, Set<string>>();
 
@@ -257,16 +276,41 @@ export function attachSqliteMaterializerCore<
 
 	// ── Disposal ────────────────────────────────────────────────
 
+	const { promise: whenDisposed, resolve: resolveDisposed } =
+		Promise.withResolvers<void>();
+
 	function dispose() {
 		if (isDisposed) return;
 		isDisposed = true;
+		isFlushAbandoned = !isGateOpen;
 		flushAfterDebounce.cancel();
 		for (const entry of registered.values()) entry.unsubscribe?.();
-		void dbQueue
-			.then(() => db.close())
+
+		// Drain pending projection work before closing: the initial DDL +
+		// full-load (unless its gate never opened) and any rows still sitting
+		// in the debounced pending set. Bounded so a hung statement cannot
+		// wedge shutdown; on timeout the database closes with work pending.
+		void (async () => {
+			const drain = (async () => {
+				if (!isFlushAbandoned) await whenFlushed.catch(() => {});
+				await enqueueDbWork(flushPendingSync).catch((cause: unknown) => {
+					log.error(SqliteMaterializerError.SyncFailed({ cause }));
+				});
+			})();
+			const didSettle = await settledWithin(drain, disposeTimeoutMs);
+			if (!didSettle) {
+				log.warn(
+					SqliteMaterializerError.DrainTimedOut({
+						timeoutMs: disposeTimeoutMs,
+					}),
+				);
+			}
+			await db.close();
+		})()
 			.catch((cause: unknown) => {
 				log.error(SqliteMaterializerError.DisposeFailed({ cause }));
-			});
+			})
+			.finally(resolveDisposed);
 	}
 
 	ydoc.once('destroy', dispose);
@@ -278,11 +322,10 @@ export function attachSqliteMaterializerCore<
 		// (e.g. `tables.posts.set(...)`) before the full-load reads
 		// `getAllValid()`.
 		await waitFor;
-		if (isDisposed) return;
+		isGateOpen = true;
+		if (isFlushAbandoned) return;
 
 		await enqueueDbWork(async () => {
-			if (isDisposed) return;
-
 			for (const [tableName, entry] of registered) {
 				await db.run(generateDdl(tableName, entry.table.schema));
 			}
@@ -292,8 +335,6 @@ export function attachSqliteMaterializerCore<
 				// populate `<table>_fts` through the normal INSERT triggers.
 				await ftsLayer.setupForBulkLoad();
 			}
-
-			if (isDisposed) return;
 
 			await db.run('BEGIN');
 			try {
@@ -306,6 +347,8 @@ export function attachSqliteMaterializerCore<
 			}
 		});
 
+		// Disposed mid-load: the writes above are owed (the teardown drain
+		// awaits this whole flush), but no observer may outlive teardown.
 		if (isDisposed) return;
 
 		for (const [tableName, entry] of registered) {
@@ -343,7 +386,18 @@ export function attachSqliteMaterializerCore<
 			})
 		: defineActions({ sqlite_rebuild: rebuildAction });
 
-	return { whenFlushed, actions };
+	return {
+		whenFlushed,
+		/**
+		 * Resolves after `ydoc.destroy()` once pending mirror work (the initial
+		 * full-load and the debounced row flush) has drained and the database
+		 * handle is closed, bounded by `disposeTimeoutMs`. Daemon teardown
+		 * awaits this before process exit so a shutdown cannot drop mirror
+		 * writes mid-flight.
+		 */
+		whenDisposed,
+		actions,
+	};
 }
 
 // ════════════════════════════════════════════════════════════════════════════

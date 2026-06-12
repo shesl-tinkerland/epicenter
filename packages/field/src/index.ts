@@ -12,6 +12,7 @@
  */
 
 export { field, jsonValue } from './builders';
+export { CalendarDateString } from './calendar-date-string';
 export { DateTimeString } from './datetime-string';
 export {
 	compile,
@@ -21,3 +22,4 @@ export {
 	recognize,
 	storageOf,
 } from './field';
+export { InstantString } from './instant-string';

@@ -1,8 +1,8 @@
 /**
  * Source of truth for mount-prefixed daemon action paths.
  *
- * `/list` publishes action keys in this format, and `/invoke` / `/dispatch`
- * accept the same format from clients. Mount validation rejects dots in mount
+ * `/list` publishes action keys in this format, and `/run`
+ * accepts the same format from clients. Mount validation rejects dots in mount
  * names, so the first dot belongs to the mount boundary. Everything after it
  * is the mount-local action key. Valid action keys are snake_case, so
  * additional dots remain part of an invalid key and resolve as ActionNotFound.

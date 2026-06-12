@@ -1,13 +1,38 @@
 /**
- * Shared types for the materializer family (sqlite + markdown). Each
- * materializer is generic over a record of materialized workspace tables;
- * `TablesRecord` is the structural bound those generics share and
- * `AnyTable` is the variance-friendly element shape they both pass around
- * internally.
+ * Shared types and teardown helpers for the materializer family (sqlite +
+ * markdown). Each materializer is generic over a record of materialized
+ * workspace tables; `TablesRecord` is the structural bound those generics
+ * share and `AnyTable` is the variance-friendly element shape they both pass
+ * around internally. `settledWithin` is the bounded wait both families use to
+ * drain pending projection work at dispose.
  */
 
 import type * as Y from 'yjs';
 import type { Table } from '../table.js';
+
+/**
+ * Await `work`, but give up after `timeoutMs` so a hung drain (e.g. a stuck
+ * HTTP body read inside a render) cannot wedge teardown. Returns whether the
+ * work settled in time. A rejection counts as settled: drain callers report
+ * failures through their own logging channels, not through this wait.
+ */
+export async function settledWithin(
+	work: Promise<unknown>,
+	timeoutMs: number,
+): Promise<boolean> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const didSettle = await Promise.race([
+		work.then(
+			() => true,
+			() => true,
+		),
+		new Promise<false>((resolve) => {
+			timer = setTimeout(() => resolve(false), timeoutMs);
+		}),
+	]);
+	clearTimeout(timer);
+	return didSettle;
+}
 
 /**
  * Variance-friendly handle for a single workspace table whose row type the

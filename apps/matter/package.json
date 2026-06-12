@@ -9,7 +9,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"inspect": "bun scripts/inspect.ts",
+		"check": "bun src/cli/check.ts",
 		"tauri": "tauri",
 		"test": "bun test",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
@@ -33,9 +33,12 @@
 	"dependencies": {
 		"@codemirror/commands": "^6.10.3",
 		"@codemirror/lang-markdown": "^6.5.0",
+		"@codemirror/language": "^6.12.3",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.41.0",
 		"@epicenter/field": "workspace:*",
+		"@lezer/common": "^1.5.1",
+		"@lezer/highlight": "^1.2.3",
 		"@tauri-apps/api": "catalog:",
 		"@tauri-apps/plugin-dialog": "^2.3.2",
 		"typebox": "catalog:",

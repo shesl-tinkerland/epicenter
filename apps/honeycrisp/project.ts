@@ -80,6 +80,7 @@ export function honeycrisp(opts: HoneycrispMountOptions = {}) {
 				openWebSocket,
 				onReconnectSignal,
 				actions,
+				materializers: [sqlite, markdown],
 			});
 
 			return defineWorkspace({

@@ -111,6 +111,7 @@ git log main..HEAD --oneline
 git log --oneline --since="1 hour ago"
 ```
 
-For Conductor workspaces, use `GetWorkspaceDiff` to see the full diff.
+If the environment provides a dedicated workspace-diff tool, use it. Otherwise
+use `git diff --stat`, `git diff`, and targeted file reads.
 
 Read key files that were modified to understand the substance of changes, not just the diff stats.

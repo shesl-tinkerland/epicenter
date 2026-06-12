@@ -1,30 +1,25 @@
 /**
- * The wiki vertical slice, end to end. One test walks the eight milestone
- * steps: define a type at runtime, create a page in it, materialize it to
- * `<id>.md`, edit the file, reconcile it back into Yjs, project a per-type
- * SQLite side table, answer a typed query, and prove a rename is metadata-only
- * while an add re-projects. Two focused tests cover the schema-on-read lens and
- * the rename-vs-add DDL distinction.
+ * The wiki vertical slice, end to end. One test defines a type at runtime,
+ * creates a page in it, materializes it to `<id>.md`, projects a per-type SQLite
+ * side table, answers a typed query, and proves a rename is metadata-only while
+ * an add re-projects. Two focused tests cover the schema-on-read lens and the
+ * rename-vs-add DDL distinction.
  *
  * If this loop holds, the architecture is real.
  */
 
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { nullable } from '@epicenter/workspace';
 import { field } from '@epicenter/field';
-import {
-	assembleMarkdown,
-	parseMarkdownFile,
-} from '@epicenter/workspace/markdown';
+import { nullable } from '@epicenter/workspace';
 import { createWiki } from './index';
 import { viewThroughType } from './lens';
 import { attachWikiVault } from './markdown';
 import { projectWiki } from './projection';
-import type { ColumnSpec, Page } from './schema';
+import type { ColumnSpec } from './schema';
 
 const youtubeColumns: ColumnSpec[] = [
 	{ id: 'url', name: 'URL', schema: field.url() },
@@ -35,7 +30,7 @@ const youtubeColumns: ColumnSpec[] = [
 	},
 ];
 
-test('round-trips a typed page Yjs <-> markdown <-> Yjs and answers a typed SQLite query', async () => {
+test('exports a typed page to markdown and answers a typed SQLite query', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'wiki-vault-'));
 	const wiki = createWiki();
 	try {
@@ -74,23 +69,7 @@ test('round-trips a typed page Yjs <-> markdown <-> Yjs and answers a typed SQLi
 		);
 		expect(typeMd).toContain('format: uri'); // field.url()
 
-		// 5. Edit the .md as a text editor would, then reconcile (markdown apply).
-		const parsed = parseMarkdownFile(pageMd)!;
-		(parsed.frontmatter.types as Page['types']).youtube_video!.duration = 999;
-		await writeFile(
-			pagePath,
-			assembleMarkdown(parsed.frontmatter, 'Edited notes.'),
-		);
-
-		const push = await vault.actions.markdown_push();
-		expect(push.errored).toBe(0);
-
-		const after = wiki.actions.pages_get({ id: pageId }).data!;
-		expect(after.types.youtube_video!.duration).toBe(999);
-		expect(after.types.youtube_video!.url).toBe('https://youtu.be/abc');
-		expect(after.body).toBe('Edited notes.');
-
-		// 6 + 7. Project per-type SQLite and answer a typed query.
+		// Project per-type SQLite and answer a typed query.
 		const db = new Database(':memory:');
 		try {
 			projectWiki(db, {
@@ -107,7 +86,7 @@ test('round-trips a typed page Yjs <-> markdown <-> Yjs and answers a typed SQLi
 				.all(500);
 			expect(rows).toHaveLength(1);
 			expect(rows[0]!.title).toBe('Great talk');
-			expect(rows[0]!.d).toBe(999);
+			expect(rows[0]!.d).toBe(1240);
 		} finally {
 			db.close();
 		}

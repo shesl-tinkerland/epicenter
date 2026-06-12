@@ -18,6 +18,7 @@ Read [references/evaluation.md](references/evaluation.md) when tuning trigger de
 Use other skills for their owned domains:
 
 - `writing-voice`: user-facing prose, UI text, errors, docs, and tone.
+- `agent-instruction-hygiene`: deciding whether guidance belongs in `AGENTS.md`, a skill, a reference, or should be deleted.
 - Domain skills such as `workspace-api`, `svelte`, or `auth`: package conventions the new skill must encode.
 - `git`: staging, commits, branch work, and commit messages.
 - `plugin-creator`: Codex plugins, not agent skills.

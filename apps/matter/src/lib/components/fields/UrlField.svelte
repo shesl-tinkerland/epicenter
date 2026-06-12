@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import { isMissing } from '$lib/core/conformance';
 	import { createCellEdit } from './create-cell-edit.svelte';
-	import FieldEmpty from './FieldEmpty.svelte';
+	import FieldMissing from './FieldMissing.svelte';
 	import type { FieldProps } from './field-props';
 
 	// An empty draft reverts: an empty string is not a valid uri, and clearing the
@@ -26,13 +27,13 @@
 		onkeydown={edit.onKeydown}
 		class="w-full rounded border bg-background px-1 py-0.5 text-sm focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
 	/>
-{:else if cell.state === 'NEEDS_VALUE'}
+{:else if isMissing(cell)}
 	<button
 		type="button"
 		onclick={edit.start}
 		class="block w-full cursor-text rounded-sm px-1 py-0.5 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
 	>
-		<FieldEmpty />
+		<FieldMissing {cell} />
 	</button>
 {:else}
 	<!-- The value is a live link; a SEPARATE pencil opens the editor (siblings,

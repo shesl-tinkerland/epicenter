@@ -1,5 +1,5 @@
 /**
- * The SQLite projector: turn a folder's VALID rows into a typed table.
+ * The SQLite projector: turn a classified folder into a typed table.
  *
  * `matter.sqlite` sits next to `matter.json` as a derived, disposable, READ-ONLY
  * mirror so a coding agent (or an in-app SQL console) can run arbitrary SQL over the
@@ -17,20 +17,21 @@
  *     find those drafts ("my carousel posts that still need a publishDate"), so a row
  *     is included whether or not every field is filled. Only unparseable FILES are
  *     absent, they never became a row; their broken text stays in the markdown.
- *   - Field columns are nullable. A missing required cell (NEEDS_VALUE) binds NULL; an
- *     out-of-domain value (INVALID) binds its raw value, which SQLite's flexible typing
- *     stores regardless of the column's declared affinity. So a draft is still
- *     filterable on the fields it does have.
- *   - No CHECK. Validation lives once, at classify time (the grid shows conformance per
- *     cell, amber for empty, red for out-of-domain); the mirror just mirrors, so a SQL
- *     CHECK would only reject the very drafts the filter exists to surface.
+ *   - Field columns are nullable. A missing cell (MISSING_REQUIRED or
+ *     MISSING_OPTIONAL) binds NULL; an out-of-domain value (INVALID) binds its raw
+ *     value, which SQLite's flexible typing stores regardless of the column's declared
+ *     affinity. So a draft is still filterable on the fields it does have.
+ *   - No CHECK. Validation lives once, at classify time (the grid shows conformance
+ *     per cell, amber for missing required, red for out-of-domain); the mirror just
+ *     mirrors, so a SQL CHECK would only reject the very drafts the filter exists to
+ *     surface.
  */
 
+import { type Field, storageOf } from '@epicenter/field';
 import type { RowConformance } from './conformance';
 import type { MatterModel } from './model';
-import { storageOf, type Field } from '@epicenter/field';
 
-/** A SQLite-bindable scalar. A missing (NEEDS_VALUE) cell binds NULL, so values are nullable. */
+/** A SQLite-bindable scalar. Missing cells bind NULL, so values are nullable. */
 export type SqlValue = string | number | null;
 
 /**
@@ -83,9 +84,10 @@ function serializeCell(field: Field, value: unknown): SqlValue {
 		case 'json':
 			return JSON.stringify(value); // an array or arbitrary JSON payload -> JSON TEXT
 		default:
-			// string / url / datetime / select, all TEXT columns. String(v) is identity
-			// for a string and the TEXT form for a numeric/boolean enum value (what a
-			// select holds), which SQLite's TEXT affinity stores and coerces on read.
+			// string / url / date / instant / datetime / select, all TEXT columns.
+			// String(v) is identity for a string and the TEXT form for a numeric/boolean
+			// enum value (what a select holds), which SQLite's TEXT affinity stores and
+			// coerces on read.
 			return String(value);
 	}
 }
@@ -94,8 +96,8 @@ function serializeCell(field: Field, value: unknown): SqlValue {
  * Serialize an out-of-domain (INVALID) cell value by its RUNTIME type, not the field's
  * kind: the value did not match the kind, so a stray float in an integer field stays a
  * real and a string in a tags field stays text. SQLite stores it regardless of the
- * column's affinity, so the draft is still findable on that field. NEEDS_VALUE cells
- * never reach here (they bind NULL directly); the `null` guard is only defensive.
+ * column's affinity, so the draft is still findable on that field. Missing cells never
+ * reach here (they bind NULL directly); the `null` guard is only defensive.
  */
 function serializeInvalid(value: unknown): SqlValue {
 	if (value == null) return null;
@@ -123,9 +125,10 @@ function buildDdl(fields: readonly Field[]): string {
 /**
  * Project a classified folder into the SQLite artifacts. EVERY readable row is included;
  * each cell is serialized by its conformance state (OK by storage class, INVALID by its
- * raw value, NEEDS_VALUE as NULL) and its unmodeled keys are folded into the `_extra`
- * JSON object. The cells are read off `RowConformance.cells`, which classifyRow built in
- * `model.fields` order, so they line up positionally with the columns below.
+ * raw value, MISSING_REQUIRED/MISSING_OPTIONAL as NULL) and its unmodeled keys are
+ * folded into the `_extra` JSON object. The cells are read off
+ * `RowConformance.cells`, which classifyRow built in `model.fields` order, so they
+ * line up positionally with the columns below.
  */
 export function projectToSqlite(
 	model: MatterModel,
@@ -135,7 +138,8 @@ export function projectToSqlite(
 	const rows = conformance.map((c) => {
 		const cells = c.cells.map((cell): SqlValue => {
 			switch (cell.state) {
-				case 'NEEDS_VALUE':
+				case 'MISSING_REQUIRED':
+				case 'MISSING_OPTIONAL':
 					return null;
 				case 'OK':
 					return serializeCell(cell.field, cell.value);

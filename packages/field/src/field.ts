@@ -10,11 +10,13 @@
  * Each kind carries a CLOSED TypeBox object meta-schema (`additionalProperties:
  * false`). Two properties fall out of that closure and they are the whole point:
  *
- *   1. The nine metas are MUTUALLY EXCLUSIVE. A `url` schema carries `format:'uri'`,
- *      which the bare-`string` meta forbids; a `select` schema carries `enum`, which
- *      every scalar meta forbids; a `multiSelect`'s items carry `enum`, which the
- *      `tags` item meta forbids. So at most one meta matches any legal schema, which
- *      means `recognize` needs no priority order and cannot be ambiguous.
+ *   1. The metas are MUTUALLY EXCLUSIVE. A `url` schema carries `format:'uri'`,
+ *      which the bare-`string` meta forbids; an `instant` schema carries the exact
+ *      UTC pattern, which the broad `datetime` meta forbids; a `select` schema
+ *      carries `enum`, which every scalar meta forbids; a `multiSelect`'s items
+ *      carry `enum`, which the `tags` item meta forbids. So at most one meta
+ *      matches any legal schema, which means `recognize` needs no priority order
+ *      and cannot be ambiguous.
  *   2. TYPOS DIE AT THE BOUNDARY. `{type:'strng'}` or `{type:'string', minLgth:1}`
  *      matches no meta, so `recognize` returns null and the field degrades to a raw
  *      column instead of silently rendering as `string`.
@@ -29,7 +31,7 @@
  *                   maximum:5}`, still kind `integer`, still validated, no new kind.
  *   annotations     title / description / default   inert metadata, IDENTICAL on
  *                   every meta. That identity is load-bearing: because the same
- *                   bucket is spread into all nine metas, an annotation can never tip
+ *                   bucket is spread into every meta, an annotation can never tip
  *                   which kind matches, which is exactly why the bucket is safe to
  *                   widen. Held to the standard keywords with a real authoring path
  *                   into a field (`title`/`description` from the field builders,
@@ -58,16 +60,17 @@
  *
  * This module also owns the VALUE side of a field schema through `compile` (the single
  * `Schema.Compile` that turns a stored schema into a per-cell validator). The
- * value-semantic formats it leans on (`uri` for `url`,
- * `date-time` for `datetime`) are TypeBox standard formats, registered for us when
- * `typebox/schema` loads, so `compile` is just the call. So one place answers both
- * readings of a stored schema: "which kind is it" (`recognize`) and "does this value
- * satisfy it" (`compile`).
+ * value-semantic formats it leans on (`uri` for `url`, `date` for `date`,
+ * `date-time` for `datetime` / `instant`) are TypeBox standard formats,
+ * registered for us when `typebox/schema` loads, so `compile` is just the call.
+ * So one place answers both readings of a stored schema: "which kind is it"
+ * (`recognize`) and "does this value satisfy it" (`compile`).
  */
 
 import { type Static, Type } from 'typebox';
 import * as Schema from 'typebox/schema';
 import { Value } from 'typebox/value';
+import { INSTANT_STRING_PATTERN } from './instant-string';
 
 /** Reject any property the meta does not explicitly name. The source of mutual exclusivity. */
 const CLOSED = { additionalProperties: false } as const;
@@ -152,7 +155,10 @@ const LIST_REFINE = {
  * an `Extract`. Each `meta` reads `{ ...discriminators, ...refinements, ...annotations }`.
  */
 const FIELDS = {
-	select: { storage: 'TEXT', meta: Type.Object({ ...enumProps, ...ANNOT }, CLOSED) },
+	select: {
+		storage: 'TEXT',
+		meta: Type.Object({ ...enumProps, ...ANNOT }, CLOSED),
+	},
 	url: {
 		storage: 'TEXT',
 		meta: Type.Object(
@@ -168,6 +174,25 @@ const FIELDS = {
 				format: Type.Literal('date-time'),
 				...ANNOT,
 			},
+			CLOSED,
+		),
+	},
+	instant: {
+		storage: 'TEXT',
+		meta: Type.Object(
+			{
+				type: Type.Literal('string'),
+				format: Type.Literal('date-time'),
+				pattern: Type.Literal(INSTANT_STRING_PATTERN),
+				...ANNOT,
+			},
+			CLOSED,
+		),
+	},
+	date: {
+		storage: 'TEXT',
+		meta: Type.Object(
+			{ type: Type.Literal('string'), format: Type.Literal('date'), ...ANNOT },
 			CLOSED,
 		),
 	},
@@ -288,7 +313,8 @@ export function recognize(schema: unknown): Recognized | null {
 		// two as `Recognized` is honest. This is the cast at the MODEL boundary; the field
 		// pipeline has exactly one more, at the UI-dispatch boundary in the widget registry.
 		// Everything between the two stays cast-free.
-		if (Value.Check(FIELDS[kind].meta, schema)) return { kind, schema } as Recognized;
+		if (Value.Check(FIELDS[kind].meta, schema))
+			return { kind, schema } as Recognized;
 	}
 	return null;
 }
@@ -320,12 +346,14 @@ export const META_BY_KIND = Object.fromEntries(
  * VALUE satisfies it.
  *
  * No format registration here. TypeBox treats an UNREGISTERED format as "always passes",
- * so a CUSTOM format would have to be registered or `url` / `datetime` would accept any
- * string. But `uri` and `date-time` are TypeBox STANDARD formats, registered as a load
- * side effect of `typebox/format` (which `Schema.Compile` imports), so the bare compile
- * already enforces them.
+ * so a CUSTOM format would have to be registered or `url` / `date` / `datetime` would
+ * accept any string. But `uri`, `date`, and `date-time` are TypeBox STANDARD formats,
+ * registered as a load side effect of `typebox/format` (which `Schema.Compile` imports),
+ * so the bare compile already enforces them.
  */
-export function compile(schema: Recognized['schema']): (value: unknown) => boolean {
+export function compile(
+	schema: Recognized['schema'],
+): (value: unknown) => boolean {
 	const validator = Schema.Compile(schema);
 	return (value) => validator.Check(value);
 }

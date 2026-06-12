@@ -24,7 +24,6 @@ import type { StartedMount } from '@epicenter/workspace/daemon';
 import {
 	claimDaemonLease,
 	type DaemonMetadata,
-	DEFAULT_PROJECT_CONFIG_SOURCE,
 	findProjectRoot,
 	openProject,
 	type ProjectConfigError,
@@ -43,7 +42,7 @@ const CLI_VERSION = packageJson.version;
 const upProjectOption = {
 	type: 'string' as const,
 	description:
-		'Project root, directory under a project, or directory where daemon up should create epicenter.config.ts.',
+		'Project root, or any directory under it (discovery walks up to the nearest epicenter.config.ts).',
 	default: () => process.cwd(),
 	defaultDescription: 'current working directory',
 	coerce: (projectDir: string) => projectDir,
@@ -93,8 +92,10 @@ type UpHandle = {
 };
 
 /**
- * Daemon body. Idempotently sets up disk state, opens every configured mount,
- * binds the IPC socket, and returns a handle. The yargs `handler` calls this,
+ * Daemon body. Opens every configured mount (the project must already have an
+ * `epicenter.config.ts`; see `epicenter init`), ensures the `.epicenter`
+ * cache gitignore, binds the IPC socket, and returns a handle. The yargs
+ * `handler` calls this,
  * prints the operator-facing banner, installs SIGINT/SIGTERM, and parks the
  * process; tests call it directly and assert on the returned handle.
  *
@@ -114,7 +115,6 @@ export async function runUp(
 	>
 > {
 	const projectDir = realpathSync(resolveProjectForUp(options.projectDir));
-	provisionProject(projectDir);
 
 	const leaseResult = claimDaemonLease(projectDir);
 	if (leaseResult.error !== null) return leaseResult;
@@ -145,6 +145,7 @@ export async function runUp(
 	const startResult = await openProject({ projectDir, auth });
 	if (startResult.error) return startResult;
 	const mounts = startResult.data;
+	ensureProjectGitignore(projectDir);
 	stack.defer(() =>
 		Promise.allSettled(
 			mounts.map((entry) =>
@@ -201,6 +202,11 @@ export const upCommand = cmd({
 		const { data: handle, error } = await runUp(options);
 		if (error) {
 			process.stderr.write(`${error.message}\n`);
+			if (error.name === 'ProjectConfigNotFound') {
+				process.stderr.write(
+					'run `epicenter init` to scaffold a project here\n',
+				);
+			}
 			process.exit(1);
 		}
 
@@ -239,28 +245,22 @@ function resolveProjectForUp(start: string): string {
 	}
 }
 
-function provisionProject(projectDir: string): void {
-	const projectConfigPath = join(projectDir, 'epicenter.config.ts');
-	if (!existsSync(projectConfigPath)) {
-		writeFileSync(projectConfigPath, DEFAULT_PROJECT_CONFIG_SOURCE, {
-			mode: 0o600,
-		});
-	}
-
+/**
+ * Ensure `.epicenter/` exists (0o700) and is fully gitignored. The attach
+ * primitives (Yjs log, SQLite and markdown materializers) create their own
+ * data dirs on demand, so the daemon's only filesystem provisioning is the
+ * cache-dir ignore rule. `*` ignores everything the runtime ever writes,
+ * including this file, so there is no directory list to keep in sync.
+ * Project creation itself (writing `epicenter.config.ts`) is `epicenter
+ * init`; `daemon up` on a directory without a config fails with a hint
+ * instead of silently scaffolding a project.
+ */
+function ensureProjectGitignore(projectDir: string): void {
 	const projectDataDir = join(projectDir, '.epicenter');
-	mkdirSync(join(projectDataDir, 'sqlite'), { recursive: true, mode: 0o700 });
-	mkdirSync(join(projectDataDir, 'yjs'), { recursive: true, mode: 0o700 });
-	mkdirSync(join(projectDataDir, 'md'), { recursive: true, mode: 0o700 });
-	mkdirSync(join(projectDataDir, 'log'), { recursive: true, mode: 0o700 });
+	mkdirSync(projectDataDir, { recursive: true, mode: 0o700 });
 	const gitignorePath = join(projectDataDir, '.gitignore');
 	if (!existsSync(gitignorePath)) {
-		writeFileSync(
-			gitignorePath,
-			['sqlite/', 'yjs/', 'md/', 'log/', ''].join('\n'),
-			{
-				mode: 0o600,
-			},
-		);
+		writeFileSync(gitignorePath, '*\n', { mode: 0o600 });
 	}
 }
 

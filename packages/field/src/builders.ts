@@ -18,10 +18,10 @@
  * at the type level, so authoring, recognition, and the SQLite mirror all read
  * one shape with no `Type.Unsafe` and no value-to-tuple gymnastics.
  *
- * Branding still rides on `Type.Unsafe` for the two cases that need a brand the
- * wire-form cannot express: `field.string<Brand>()` and `field.datetime()`
- * (`Static = DateTimeString`). `Type.Unsafe` decouples the emitted JSON Schema
- * from the inferred `Static<>`.
+ * Branding still rides on `Type.Unsafe` for the cases that need a brand the
+ * wire-form cannot express: `field.string<Brand>()`, `field.date()`,
+ * `field.instant()`, and `field.datetime()`. `Type.Unsafe` decouples the emitted
+ * JSON Schema from the inferred `Static<>`.
  *
  * NOTE on at-rest vs in-memory: a live TypeBox schema carries a non-enumerable
  * `~kind` tag that the CLOSED metas reject on a direct `recognize`. That tag is
@@ -51,8 +51,10 @@ import {
 } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
 import type { JsonValue } from 'wellcrafted/json';
-import { JSON_SCHEMA_KEYWORD } from './field';
+import type { CalendarDateString } from './calendar-date-string';
 import type { DateTimeString } from './datetime-string';
+import { JSON_SCHEMA_KEYWORD } from './field';
+import { INSTANT_STRING_PATTERN, type InstantString } from './instant-string';
 
 type BrandedString = string & Brand<string>;
 
@@ -93,6 +95,35 @@ const integer = Type.Integer;
 
 /** Pass-through to `Type.Boolean`. */
 const boolean = Type.Boolean;
+
+/**
+ * ISO calendar day, branded as `CalendarDateString`.
+ *
+ * Uses TypeBox v1's built-in `date` format validator. Carries no time, offset,
+ * or time zone meaning. Stored as `YYYY-MM-DD`, which sorts naturally as TEXT.
+ */
+function date(opts?: TSchemaOptions): TUnsafe<CalendarDateString> {
+	return Type.Unsafe<CalendarDateString>(
+		Type.String({ ...opts, format: 'date' }),
+	);
+}
+
+/**
+ * Canonical UTC instant, branded as `InstantString`.
+ *
+ * This is stricter than `field.datetime()`: it requires the exact fixed-width
+ * `YYYY-MM-DDTHH:mm:ss.sssZ` form. The fixed UTC form is why SQLite TEXT order
+ * matches chronological order.
+ */
+function instant(opts?: TSchemaOptions): TUnsafe<InstantString> {
+	return Type.Unsafe<InstantString>(
+		Type.String({
+			...opts,
+			format: 'date-time',
+			pattern: INSTANT_STRING_PATTERN,
+		}),
+	);
+}
 
 /**
  * RFC 3339 / ISO 8601 datetime string, branded as `DateTimeString`.
@@ -198,6 +229,8 @@ export const field = {
 	number,
 	integer,
 	boolean,
+	date,
+	instant,
 	datetime,
 	select,
 	multiSelect,

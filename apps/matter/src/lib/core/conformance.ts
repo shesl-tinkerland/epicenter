@@ -1,15 +1,15 @@
 /**
  * Conformance: classify a folder's rows against its model.
  *
- * Every modeled field is required, so the per-cell split is THREE states:
+ * Modeled fields have row-completeness policy, so the per-cell split is FOUR states:
  *
- *   v == null ? NEEDS_VALUE : check(v) ? OK : INVALID
+ *   v == null ? (required ? MISSING_REQUIRED : MISSING_OPTIONAL) : check(v) ? OK : INVALID
  *
- * NEEDS_VALUE is the only empty state (an absent key OR an explicit null; the nullish
- * contract: a bare `title:` in YAML parses to null and must mean the same as an
- * omitted `title`). There is no EMPTY: a blank required field always needs attention.
- * "Ready to publish" is "every cell OK", which is also "the row projects into the
- * typed table".
+ * MISSING_REQUIRED and MISSING_OPTIONAL are the two missing states. Both cover an
+ * absent key OR an explicit null; the nullish contract says a bare `title:` in YAML
+ * parses to null and must mean the same as an omitted `title`. Missing required cells
+ * need attention. Missing optional cells are valid. "Ready to publish" is "every cell
+ * is OK or MISSING_OPTIONAL", which is also "the row projects into the typed table".
  *
  * The validator is precompiled on the {@link Field} (built once at model load in
  * `validateModel`), so classification never recompiles; it reads `field.check`.
@@ -20,16 +20,16 @@
  */
 
 import type { Field } from '@epicenter/field';
+import type { MatterField } from './model';
 import type { Row } from './parse';
 
 /**
- * A classified cell is one of three states, each a field applied to a row's value. The
+ * A classified cell is one of four states, each a field applied to a row's value. The
  * state IS the verdict, so value-presence cannot disagree with it, and every member
  * carries its {@link Field} (a consumer reads `cell.field`, never an index into a
- * parallel array). {@link Cell} unions the three; a consumer composes the subset it
- * handles from these named members (the typed widgets take `OkCell | NeedsValueCell`;
- * the repair editor takes {@link InvalidCell}) rather than subtracting from the union
- * with `Exclude`.
+ * parallel array). {@link Cell} unions the four; consumers use focused exported
+ * subsets like {@link MissingCell} rather than subtracting from the union with
+ * `Exclude`.
  */
 
 // The field generic `F` is defaulted to the full {@link Field} union but left
@@ -45,17 +45,43 @@ export type OkCell<F = Field> = {
 	value: unknown;
 };
 
-/** An empty required cell of field `F`: the key is absent or null, so no value to carry. */
-export type NeedsValueCell<F = Field> = {
+/** A missing required cell of field `F`: absent or null, so no value to carry. */
+type MissingRequiredCell<F = Field> = {
 	field: F;
-	state: 'NEEDS_VALUE';
+	state: 'MISSING_REQUIRED';
 };
 
-/** A present value out of its field's domain: carries the `raw` value for the repair editor. */
-export type InvalidCell = { field: Field; state: 'INVALID'; raw: unknown };
+/** A missing optional cell of field `F`: absent or null, and valid by model policy. */
+type MissingOptionalCell<F = Field> = {
+	field: F;
+	state: 'MISSING_OPTIONAL';
+};
 
-/** One classified cell: exactly one of the three states. */
-export type Cell = OkCell | NeedsValueCell | InvalidCell;
+/** A missing cell: absent or explicit null, with policy deciding attention. */
+export type MissingCell<F = Field> =
+	| MissingRequiredCell<F>
+	| MissingOptionalCell<F>;
+
+/** A present value out of its field's domain: carries the `raw` value for the repair editor. */
+export type InvalidCell<F = Field> = {
+	field: F;
+	state: 'INVALID';
+	raw: unknown;
+};
+
+/** One classified cell: exactly one of the four states. */
+export type Cell =
+	| OkCell
+	| MissingRequiredCell
+	| MissingOptionalCell
+	| InvalidCell;
+
+/** True for cells with no present value, whether required or optional. */
+export function isMissing<F>(
+	cell: OkCell<F> | MissingCell<F> | InvalidCell<F>,
+): cell is MissingCell<F> {
+	return cell.state === 'MISSING_REQUIRED' || cell.state === 'MISSING_OPTIONAL';
+}
 
 /** A frontmatter key the model does not declare. Never affects validity. */
 export type Extra = {
@@ -68,23 +94,27 @@ export type RowConformance = {
 	row: Row;
 	cells: Cell[];
 	extras: Extra[];
-	/** True iff every cell is OK (the row projects into the typed table). */
+	/** True iff every cell is OK or MISSING_OPTIONAL (the row projects into the typed table). */
 	rowValid: boolean;
 };
 
 /**
  * Classify one cell. `value == null` is the nullish branch: an absent key and an
- * explicit `null` both arrive here, and (everything required) both need a value.
+ * explicit `null` both arrive here, with requiredness deciding the verdict.
  */
-function classifyCell(field: Field, value: unknown): Cell {
-	if (value == null) return { field, state: 'NEEDS_VALUE' };
+function classifyCell(field: MatterField, value: unknown): Cell {
+	if (value == null) {
+		return field.required
+			? { field, state: 'MISSING_REQUIRED' }
+			: { field, state: 'MISSING_OPTIONAL' };
+	}
 	if (field.check(value)) return { field, state: 'OK', value };
 	return { field, state: 'INVALID', raw: value };
 }
 
 /** Classify one row against the precompiled fields. */
 export function classifyRow(
-	fields: readonly Field[],
+	fields: readonly MatterField[],
 	row: Row,
 ): RowConformance {
 	const cells = fields.map((field) =>
@@ -96,7 +126,9 @@ export function classifyRow(
 		.filter(([key]) => !modeled.has(key))
 		.map(([key, value]) => ({ key, value }));
 
-	const rowValid = cells.every((cell) => cell.state === 'OK');
+	const rowValid = cells.every(
+		(cell) => cell.state === 'OK' || cell.state === 'MISSING_OPTIONAL',
+	);
 
 	return { row, cells, extras, rowValid };
 }
@@ -107,7 +139,7 @@ export function classifyRow(
  * threaded in here and never rebuilt per row or per file change.
  */
 export function classifyRows(
-	fields: readonly Field[],
+	fields: readonly MatterField[],
 	rows: readonly Row[],
 ): RowConformance[] {
 	return rows.map((row) => classifyRow(fields, row));

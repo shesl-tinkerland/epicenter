@@ -9,8 +9,8 @@
  * - valid mounts are served over the daemon client
  * - invalid mount declarations fail before binding a socket
  * - close stops the listener, removes the socket file, and can run twice
- * - /invoke executes a real action handler over the Unix socket
- * - /dispatch forwards peer calls over the Unix socket
+ * - /run executes a real action handler over the Unix socket, and
+ *   forwards peer calls when `to` is present
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -150,7 +150,7 @@ describe('startDaemonServer', () => {
 		}
 	});
 
-	test('invoke executes a real action handler over the socket', async () => {
+	test('run executes a real action handler over the socket', async () => {
 		const lease = claimTestLease();
 		const runtime = makeRuntime({
 			actions: {
@@ -165,7 +165,7 @@ describe('startDaemonServer', () => {
 		try {
 			const server = expectOk(serverResult);
 			const data = expectOk(
-				await daemonClient(server.socketPath).invoke({
+				await daemonClient(server.socketPath).run({
 					actionPath: 'demo.echo',
 					input: null,
 				}),
@@ -177,7 +177,7 @@ describe('startDaemonServer', () => {
 		}
 	});
 
-	test('dispatch forwards mount-local action keys over the socket', async () => {
+	test('run with to forwards mount-local action keys over the socket', async () => {
 		const lease = claimTestLease();
 		let invokedAction = '';
 		let invokedTo = '';
@@ -196,11 +196,10 @@ describe('startDaemonServer', () => {
 		try {
 			const server = expectOk(serverResult);
 			const data = expectOk(
-				await daemonClient(server.socketPath).dispatch({
+				await daemonClient(server.socketPath).run({
 					actionPath: 'demo.peer_only_action',
 					input: null,
-					to: 'mac',
-					waitMs: 25,
+					peer: { to: 'mac', waitMs: 25 },
 				}),
 			);
 			expect(data).toBe('remote-ok');
@@ -212,7 +211,7 @@ describe('startDaemonServer', () => {
 		}
 	});
 
-	test('dispatch rejects invalid wait budgets as a domain error', async () => {
+	test('run with to rejects invalid wait budgets as a domain error', async () => {
 		const lease = claimTestLease();
 		const serverResult = await startDaemonServer({
 			lease,
@@ -222,11 +221,10 @@ describe('startDaemonServer', () => {
 		try {
 			const server = expectOk(serverResult);
 			const error = expectErr(
-				await daemonClient(server.socketPath).dispatch({
+				await daemonClient(server.socketPath).run({
 					actionPath: 'demo.peer_only_action',
 					input: null,
-					to: 'mac',
-					waitMs: -1,
+					peer: { to: 'mac', waitMs: -1 },
 				}),
 			);
 			expect(error.name).toBe('UsageError');

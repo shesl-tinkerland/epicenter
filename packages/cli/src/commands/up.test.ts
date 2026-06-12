@@ -34,7 +34,6 @@ import { MachineAuthStorageError } from '@epicenter/auth/node';
 import { asOwnerId } from '@epicenter/identity';
 import {
 	claimDaemonLease,
-	DEFAULT_PROJECT_CONFIG_SOURCE,
 	metadataPathFor,
 	pingDaemon,
 	socketPathFor,
@@ -218,10 +217,8 @@ describe('runUp: failure cleanup', () => {
 		lease.release();
 	});
 
-	test('writes the default config and starts with no mounts when config is missing', async () => {
-		mkdirSync(join(workDir, 'workspaces', 'demo'), { recursive: true });
-
-		const handle = expectOk(
+	test('errors and scaffolds nothing when config is missing', async () => {
+		const error = expectErr(
 			await runUp({
 				projectDir: workDir,
 				quiet: true,
@@ -229,17 +226,12 @@ describe('runUp: failure cleanup', () => {
 			}),
 		);
 
-		try {
-			expect(handle.mounts).toEqual([]);
-			expect(readFileSync(join(workDir, 'epicenter.config.ts'), 'utf8')).toBe(
-				DEFAULT_PROJECT_CONFIG_SOURCE,
-			);
-			expect(
-				readFileSync(join(workDir, '.epicenter', '.gitignore'), 'utf8'),
-			).toBe('sqlite/\nyjs/\nmd/\nlog/\n');
-		} finally {
-			await handle.teardown();
-		}
+		expect(error.name).toBe('ProjectConfigNotFound');
+		expect(existsSync(join(workDir, 'epicenter.config.ts'))).toBe(false);
+		expect(existsSync(join(workDir, '.epicenter'))).toBe(false);
+
+		const lease = expectOk(claimDaemonLease(workDir));
+		lease.release();
 	});
 
 	test('does not overwrite an existing config when provisioning project data', async () => {

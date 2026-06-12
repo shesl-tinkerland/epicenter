@@ -82,7 +82,7 @@ describe('createCLI', () => {
 		try {
 			for (const command of ['up', 'down', 'ps', 'logs']) {
 				await expect(createCLI().run([command])).rejects.toThrow(
-					`Unknown command: ${command}`,
+					`Unknown argument: ${command}`,
 				);
 			}
 		} finally {

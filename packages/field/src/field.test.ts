@@ -7,7 +7,7 @@
  * `field.X(...)` recognizes as kind `X` for every kind.
  *
  * Key behaviors:
- * - Round-trip: recognize(at-rest of field.X(...)) === X, for all nine kinds
+ * - Round-trip: recognize(at-rest of field.X(...)) === X, for every kind
  * - Discrimination invariant: every legal schema matches EXACTLY ONE meta
  * - Cross-discrimination: the shapes that could collide resolve to one kind
  * - Refinements and annotations ride along without changing the kind
@@ -21,7 +21,8 @@ import { describe, expect, test } from 'bun:test';
 import { type TSchema, Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { field, jsonValue } from './builders';
-import { type Kind, KINDS, META_BY_KIND, recognize } from './field';
+import { KINDS, type Kind, META_BY_KIND, recognize } from './field';
+import { INSTANT_STRING_PATTERN } from './instant-string';
 
 /**
  * The at-rest form of a built schema: a live TypeBox schema carries a
@@ -44,7 +45,8 @@ function countMatches(schema: unknown): number {
 }
 
 /** The kind `recognize` assigns, or null when the schema is outside the palette. */
-const kindOf = (schema: unknown): Kind | null => recognize(schema)?.kind ?? null;
+const kindOf = (schema: unknown): Kind | null =>
+	recognize(schema)?.kind ?? null;
 
 // ============================================================================
 // Round-trip: field.* builders are the inverse of recognize
@@ -54,6 +56,8 @@ const kindOf = (schema: unknown): Kind | null => recognize(schema)?.kind ?? null
 const BUILT: Record<Kind, TSchema> = {
 	string: field.string(),
 	url: field.url(),
+	date: field.date(),
+	instant: field.instant(),
 	datetime: field.datetime(),
 	select: field.select(['draft', 'published']),
 	integer: field.integer(),
@@ -106,11 +110,13 @@ describe('round-trip: the native enum wire-form', () => {
 // ============================================================================
 
 describe('the palette catalog', () => {
-	test('exactly the ten kinds, including json', () => {
+	test('exactly the twelve kinds, including date, instant, and json', () => {
 		const expected: Kind[] = [
 			'boolean',
+			'date',
 			'datetime',
 			'integer',
+			'instant',
 			'json',
 			'multiSelect',
 			'number',
@@ -132,6 +138,12 @@ describe('the palette catalog', () => {
 const CANONICAL: Record<Kind, unknown> = {
 	string: { type: 'string' },
 	url: { type: 'string', format: 'uri' },
+	date: { type: 'string', format: 'date' },
+	instant: {
+		type: 'string',
+		format: 'date-time',
+		pattern: INSTANT_STRING_PATTERN,
+	},
 	datetime: { type: 'string', format: 'date-time' },
 	select: { type: 'string', enum: ['draft', 'published'] },
 	integer: { type: 'integer' },
@@ -164,8 +176,25 @@ describe('the cross-discrimination pairs (the shapes that could collide)', () =>
 		expect(Value.Check(META_BY_KIND.string, s)).toBe(false); // string forbids `format`
 	});
 
+	test('a date-format string is date, not string or datetime', () => {
+		const s = { type: 'string', format: 'date' };
+		expect(kindOf(s)).toBe('date');
+		expect(Value.Check(META_BY_KIND.string, s)).toBe(false); // string forbids `format`
+		expect(Value.Check(META_BY_KIND.datetime, s)).toBe(false);
+	});
+
 	test('a date-time string is datetime, not string', () => {
 		expect(kindOf({ type: 'string', format: 'date-time' })).toBe('datetime');
+	});
+
+	test('a fixed UTC date-time schema is instant, not datetime', () => {
+		const s = {
+			type: 'string',
+			format: 'date-time',
+			pattern: INSTANT_STRING_PATTERN,
+		};
+		expect(kindOf(s)).toBe('instant');
+		expect(Value.Check(META_BY_KIND.datetime, s)).toBe(false); // datetime forbids `pattern`
 	});
 
 	test('a string with enum is select, not string', () => {
@@ -234,9 +263,9 @@ describe('json: the marker-discriminated escape kind', () => {
 	test('the marker is what flips a bare object from raw to json', () => {
 		// same shape, no marker -> raw; with marker -> json
 		expect(kindOf({ type: 'object', properties: {} })).toBeNull();
-		expect(kindOf({ type: 'object', properties: {}, 'x-json-schema': true })).toBe(
-			'json',
-		);
+		expect(
+			kindOf({ type: 'object', properties: {}, 'x-json-schema': true }),
+		).toBe('json');
 	});
 
 	test('jsonValue: field.json(Type.Array(jsonValue)) is the any-JSON-list pattern, kind json', () => {
@@ -245,6 +274,23 @@ describe('json: the marker-discriminated escape kind', () => {
 		expect(countMatches(atRest(schema))).toBe(1);
 		expect(Value.Check(schema, [1, 'x', null, { a: 1 }])).toBe(true);
 		expect(Value.Check(schema, 'not-an-array')).toBe(false);
+	});
+});
+
+describe('temporal value validation', () => {
+	test('field.date accepts only calendar-date strings', () => {
+		const schema = field.date();
+		expect(Value.Check(schema, '2026-06-09')).toBe(true);
+		expect(Value.Check(schema, '2026-02-30')).toBe(false);
+		expect(Value.Check(schema, '2026-06-09T00:00:00.000Z')).toBe(false);
+	});
+
+	test('field.instant accepts only fixed millisecond UTC instants', () => {
+		const schema = field.instant();
+		expect(Value.Check(schema, '2026-06-09T14:00:00.000Z')).toBe(true);
+		expect(Value.Check(schema, '2026-06-09T14:00:00Z')).toBe(false);
+		expect(Value.Check(schema, '2026-06-09T14:00:00.000-05:00')).toBe(false);
+		expect(Value.Check(schema, '2026-06-09T14:00:00.000z')).toBe(false);
 	});
 });
 
@@ -273,7 +319,11 @@ describe('refinements and annotations ride along without changing the kind', () 
 	});
 
 	test('a default rides along on a select without tipping the kind', () => {
-		const s = { type: 'string', enum: ['draft', 'published'], default: 'draft' };
+		const s = {
+			type: 'string',
+			enum: ['draft', 'published'],
+			default: 'draft',
+		};
 		expect(kindOf(s)).toBe('select');
 		expect(countMatches(s)).toBe(1);
 	});
@@ -304,6 +354,10 @@ describe('the rejection lane: unsupported shapes match no meta', () => {
 		[
 			'a true multi-branch union',
 			{ anyOf: [{ type: 'string' }, { type: 'integer' }] },
+		],
+		[
+			'a date-or-instant union (input schema, not a column kind)',
+			atRest(Type.Union([field.date(), field.instant()])),
 		],
 		[
 			'an unrecognized format (email is not yet a kind)',

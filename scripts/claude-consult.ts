@@ -6,6 +6,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	statSync,
 	unlinkSync,
 	writeFileSync,
 } from 'node:fs';
@@ -34,6 +35,11 @@ const modeInstructions = {
 type ConsultMode = keyof typeof modeInstructions;
 type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
 type CommandName = 'start' | 'status' | 'result' | 'cancel' | 'run-job';
+type JobRecommendation =
+	| 'keep-polling'
+	| 'idle-investigate'
+	| 'finished'
+	| 'failed';
 
 type ConsultOptions = {
 	mode: ConsultMode;
@@ -57,12 +63,22 @@ type ClaudeStreamMessage = {
 	subtype?: string;
 	is_error?: boolean;
 	result?: unknown;
+	rate_limit_info?: RateLimitInfo;
 	message?: {
 		content?: Array<{ type?: string; text?: string }>;
 	};
 	total_cost_usd?: number;
 	duration_ms?: number;
 	session_id?: string;
+};
+
+type RateLimitInfo = {
+	status?: string;
+	resetsAt?: number;
+	rateLimitType?: string;
+	overageStatus?: string;
+	overageResetsAt?: number;
+	isUsingOverage?: boolean;
 };
 
 type ClaudeRunResult = {
@@ -105,6 +121,21 @@ type StateFile = {
 	jobs: JobRecord[];
 };
 
+type StreamSummary = {
+	eventCount: number;
+	lastEvent: string;
+	lastWriteAt: Date;
+	hasThinking: boolean;
+	hasAssistantText: boolean;
+	hasResult: boolean;
+	rateLimitInfo?: RateLimitInfo;
+};
+
+type ConsultClassification = {
+	recommendation: JobRecommendation;
+	reason: string;
+};
+
 const commandNames = new Set<CommandName>([
 	'start',
 	'status',
@@ -115,6 +146,7 @@ const commandNames = new Set<CommandName>([
 const defaultBudgetUsd = 25;
 const defaultSyncTimeoutMs = 5 * 60 * 1000;
 const defaultJobTimeoutMs = 30 * 60 * 1000;
+const startupIdleMs = 2 * 60 * 1000;
 const stateDirectoryName = '.tmp/claude-consult';
 
 function parseArgs(argv: string[], defaults = {}): ConsultOptions {
@@ -447,12 +479,15 @@ function showResult(argv: string[]) {
 }
 
 function cancelJob(argv: string[]) {
-	const id = argv[0];
-	if (!id) fail('Missing job id.');
+	const { id, force } = parseCancelArgs(argv);
 	const job = findJob(readState(), id);
 	if (job.status !== 'running' && job.status !== 'queued') {
 		console.log(`Claude consult ${id} is already ${job.status}.`);
 		return;
+	}
+	if (!force) {
+		const refusal = cancellationRefusal(job);
+		if (refusal) fail(refusal);
 	}
 	if (job.pid) {
 		try {
@@ -470,6 +505,24 @@ function cancelJob(argv: string[]) {
 		summary: 'Canceled by user.',
 	}));
 	console.log(`Canceled Claude consult ${id}.`);
+}
+
+function parseCancelArgs(argv: string[]) {
+	let id: string | undefined;
+	let force = false;
+	for (const arg of argv) {
+		if (arg === '--force') {
+			force = true;
+			continue;
+		}
+		if (!id) {
+			id = arg;
+			continue;
+		}
+		fail(`Unknown cancel argument: ${arg}`);
+	}
+	if (!id) fail('Missing job id.');
+	return { id, force };
 }
 
 async function main(argv: string[]) {
@@ -872,6 +925,7 @@ function escapeTableCell(value: string) {
 }
 
 function renderJob(job: JobRecord) {
+	const stream = readStreamSummary(job.id);
 	const lines = [
 		`Job: ${job.id}`,
 		`Status: ${job.status}`,
@@ -880,18 +934,231 @@ function renderJob(job: JobRecord) {
 		`Updated: ${job.updatedAt}`,
 		`Question: ${job.question}`,
 	];
-	if (job.pid) lines.push(`PID: ${job.pid}`);
+	if (job.pid) {
+		const pidLabel =
+			job.status === 'running' || job.status === 'queued' ? 'PID' : 'Last PID';
+		lines.push(`${pidLabel}: ${job.pid}`);
+	}
 	if (job.sessionId) lines.push(`Claude session: ${job.sessionId}`);
 	if (job.totalCostUsd !== undefined) lines.push(`Cost: $${job.totalCostUsd}`);
 	if (job.durationMs !== undefined) lines.push(`Duration: ${job.durationMs}ms`);
 	if (job.summary) lines.push(`Summary: ${job.summary}`);
 	if (job.error) lines.push(`Error: ${job.error}`);
+	if (stream) lines.push(...renderStreamSummary(job, stream));
+	else lines.push(...renderNoStreamSummary(job));
 	lines.push(`Stdout: ${resolveJobStdoutFile(job.id)}`);
 	lines.push(`Stderr: ${resolveJobStderrFile(job.id)}`);
 	if (existsSync(resolveJobResultFile(job.id))) {
 		lines.push(`Stored result: ${resolveJobResultFile(job.id)}`);
 	}
 	return lines.join('\n');
+}
+
+function renderNoStreamSummary(job: JobRecord) {
+	if (job.status !== 'running' && job.status !== 'queued') return [];
+	const classification = classifyConsult(job, null);
+	return [
+		'Stream: no events yet',
+		`Recommendation: ${classification.recommendation}`,
+		`Reason: ${classification.reason}`,
+	];
+}
+
+function readStreamSummary(id: string): StreamSummary | null {
+	const stdoutFile = resolveJobStdoutFile(id);
+	if (!existsSync(stdoutFile)) return null;
+	const stats = statSync(stdoutFile);
+	if (stats.size === 0) return null;
+
+	const raw = readFileSync(stdoutFile, 'utf8');
+	const messages = raw
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.flatMap((line) => {
+			try {
+				return [JSON.parse(line) as ClaudeStreamMessage];
+			} catch {
+				return [];
+			}
+		});
+	if (messages.length === 0) return null;
+
+	let hasThinking = false;
+	let hasAssistantText = false;
+	let hasResult = false;
+	let rateLimitInfo: RateLimitInfo | undefined;
+
+	for (const message of messages) {
+		if (isThinkingEvent(message)) hasThinking = true;
+		if (hasTextContent(message)) hasAssistantText = true;
+		if (message.type === 'result') hasResult = true;
+		if (message.type === 'rate_limit_event') {
+			rateLimitInfo = message.rate_limit_info;
+		}
+	}
+
+	return {
+		eventCount: messages.length,
+		lastEvent: formatStreamEvent(messages.at(-1)),
+		lastWriteAt: stats.mtime,
+		hasThinking,
+		hasAssistantText,
+		hasResult,
+		rateLimitInfo,
+	};
+}
+
+function renderStreamSummary(job: JobRecord, stream: StreamSummary) {
+	const classification = classifyConsult(job, stream);
+	const lines = [
+		`Stream: ${stream.lastEvent} (${stream.eventCount} events, last write ${formatDuration(
+			Date.now() - stream.lastWriteAt.getTime(),
+		)} ago)`,
+		`Thinking: ${stream.hasThinking ? 'yes' : 'not yet'}`,
+		`Answer text: ${stream.hasAssistantText ? 'yes' : 'not yet'}`,
+		`Result frame: ${stream.hasResult ? 'yes' : 'not yet'}`,
+		`Recommendation: ${classification.recommendation}`,
+	];
+	if (stream.rateLimitInfo) {
+		lines.push(`Rate limit: ${renderRateLimitInfo(stream.rateLimitInfo)}`);
+	}
+	lines.push(`Reason: ${classification.reason}`);
+	return lines;
+}
+
+function classifyConsult(
+	job: JobRecord,
+	stream: StreamSummary | null,
+): ConsultClassification {
+	if (job.status === 'completed') {
+		return {
+			recommendation: 'finished',
+			reason: 'Stored result is ready.',
+		};
+	}
+	if (job.status === 'failed') {
+		return {
+			recommendation: 'failed',
+			reason: job.error ?? 'Claude consult failed.',
+		};
+	}
+	if (job.status === 'canceled') {
+		return {
+			recommendation: 'failed',
+			reason: 'Claude consult was canceled.',
+		};
+	}
+
+	const idleMs = measureStreamIdleMs(job, stream);
+	if (idleMs > startupIdleMs) {
+		return {
+			recommendation: 'idle-investigate',
+			reason: stream
+				? `No stream event for ${formatDuration(idleMs)} after ${stream.lastEvent}.`
+				: `No stream event for ${formatDuration(idleMs)} after startup.`,
+		};
+	}
+
+	if (!stream) {
+		return {
+			recommendation: 'keep-polling',
+			reason: `Claude has not emitted stdout for ${formatDuration(idleMs)}.`,
+		};
+	}
+	if (stream.hasResult) {
+		return {
+			recommendation: 'keep-polling',
+			reason:
+				'Claude emitted a result frame; the wrapper should store it shortly.',
+		};
+	}
+	if (stream.hasAssistantText) {
+		return {
+			recommendation: 'keep-polling',
+			reason: 'Claude has started answering.',
+		};
+	}
+	if (stream.hasThinking) {
+		return {
+			recommendation: 'keep-polling',
+			reason: 'Claude is thinking.',
+		};
+	}
+	if (stream.lastEvent === 'rate_limit_event') {
+		return {
+			recommendation: 'keep-polling',
+			reason: 'Claude is alive and rate-limit aware.',
+		};
+	}
+	return {
+		recommendation: 'keep-polling',
+		reason: 'Claude has started.',
+	};
+}
+
+function cancellationRefusal(job: JobRecord) {
+	const stream = readStreamSummary(job.id);
+	const classification = classifyConsult(job, stream);
+	if (classification.recommendation !== 'keep-polling') return null;
+	return [
+		`Refusing to cancel Claude consult ${job.id}: recommendation is keep-polling.`,
+		`Reason: ${classification.reason}`,
+		`Run status ${job.id}, wait, or rerun cancel ${job.id} --force if you intentionally want to stop it.`,
+	].join('\n');
+}
+
+function measureStreamIdleMs(job: JobRecord, stream: StreamSummary | null) {
+	if (stream) return Date.now() - stream.lastWriteAt.getTime();
+	const startedAt = Date.parse(job.startedAt ?? job.createdAt);
+	return Date.now() - (Number.isFinite(startedAt) ? startedAt : Date.now());
+}
+
+function formatStreamEvent(message: ClaudeStreamMessage | undefined) {
+	if (!message?.type) return 'unknown';
+	return message.subtype ? `${message.type}:${message.subtype}` : message.type;
+}
+
+function isThinkingEvent(message: ClaudeStreamMessage) {
+	return message.type === 'system' && message.subtype === 'thinking_tokens';
+}
+
+function hasTextContent(message: ClaudeStreamMessage) {
+	return (
+		message.type === 'assistant' &&
+		message.message?.content?.some(
+			(part) => part.type === 'text' && Boolean(part.text?.trim()),
+		) === true
+	);
+}
+
+function renderRateLimitInfo(info: RateLimitInfo) {
+	const parts = [
+		info.status,
+		info.rateLimitType ? `type ${info.rateLimitType}` : null,
+		info.resetsAt ? `reset ${formatUnixSeconds(info.resetsAt)}` : null,
+		info.overageStatus ? `overage ${info.overageStatus}` : null,
+		info.overageResetsAt
+			? `overage reset ${formatUnixSeconds(info.overageResetsAt)}`
+			: null,
+		typeof info.isUsingOverage === 'boolean'
+			? `using overage ${info.isUsingOverage ? 'yes' : 'no'}`
+			: null,
+	].filter((part): part is string => Boolean(part));
+	return parts.join(', ') || 'present';
+}
+
+function formatUnixSeconds(value: number) {
+	return new Date(value * 1000).toISOString();
+}
+
+function formatDuration(ms: number) {
+	const seconds = Math.max(0, Math.round(ms / 1000));
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	const remainingSeconds = seconds % 60;
+	if (remainingSeconds === 0) return `${minutes}m`;
+	return `${minutes}m ${remainingSeconds}s`;
 }
 
 function printHelp() {
@@ -901,7 +1168,7 @@ function printHelp() {
   bun run claude:consult -- start --question "Review this diff"
   bun run claude:consult -- status [job-id]
   bun run claude:consult -- result [job-id]
-  bun run claude:consult -- cancel <job-id>
+  bun run claude:consult -- cancel <job-id> [--force]
 
 Options:
   --question, -q <text>    Required concrete consult question
@@ -912,6 +1179,7 @@ Options:
   --timeout-ms <count>     Kill Claude after this many ms (sync default: ${defaultSyncTimeoutMs}, background default: ${defaultJobTimeoutMs})
   --bare                   Skip ambient Claude Code config. Requires auth that works in bare mode.
   --read-files             Let Claude use Read, Grep, and Glob
+  --force                  With cancel, override the keep-polling guard
 `);
 }
 

@@ -3,15 +3,16 @@
  * exercises every field kind AND every cell state, so the grid can be eyeballed in a
  * browser without a real folder.
  *
- * The model covers all nine palette kinds (string, select, multiSelect, tags,
- * datetime, integer, number, boolean, url), and the rows deliberately spread across
- * OK / NEEDS_VALUE / INVALID, plus unmodeled extras, a nested object, and two
+ * The model covers every palette kind, and the rows deliberately spread across
+ * OK / MISSING_OPTIONAL / MISSING_REQUIRED / INVALID, plus unmodeled extras, a nested object, and two
  * unparseable files (malformed YAML, git conflict markers) so the "Can't read"
  * bucket renders too.
  *
  * Mirrors `examples/matter/sample-vault/drafts`, extended so a single screen shows
  * the full surface.
  */
+
+import { field } from '@epicenter/field';
 
 /** The folder's `matter.json`, as raw text (parsed by `loadModel`, same as on disk). */
 export const DEMO_MODEL_TEXT = JSON.stringify(
@@ -31,12 +32,15 @@ export const DEMO_MODEL_TEXT = JSON.stringify(
 				},
 			},
 			tags: { type: 'array', items: { type: 'string' } },
-			publishDate: { type: 'string', format: 'date-time' },
+			publishDate: field.date(),
+			publishedAt: field.instant(),
+			importedAt: { type: 'string', format: 'date-time' },
 			duration: { type: 'integer', minimum: 0 },
 			readMinutes: { type: 'number' },
 			featured: { type: 'boolean' },
 			url: { type: 'string', format: 'uri' },
 		},
+		optional: ['publishDate', 'publishedAt'],
 	},
 	null,
 	'\t',
@@ -58,7 +62,9 @@ destinations:
 tags:
   - audio
   - gear
-publishDate: 2026-05-30T14:00:00Z
+publishDate: 2026-05-30
+publishedAt: 2026-05-30T14:00:00.000Z
+importedAt: 2026-05-30T14:00:00Z
 duration: 8
 readMinutes: 6.5
 featured: true
@@ -79,7 +85,9 @@ destinations:
   - linkedin
 tags:
   - trends
-publishDate: 2026-06-12T09:00:00Z
+publishDate: 2026-06-12
+publishedAt: 2026-06-12T09:00:00.000Z
+importedAt: 2026-06-12T09:00:00Z
 duration: 3
 readMinutes: 2
 featured: false
@@ -100,7 +108,9 @@ destinations:
 tags:
   - editing
   - workflow
-publishDate: 2026-06-10T17:30:00Z
+publishDate: 2026-06-10
+publishedAt: 2026-06-10T17:30:00.000Z
+importedAt: 2026-06-10T17:30:00Z
 duration: 12
 readMinutes: 9.5
 featured: true
@@ -128,13 +138,16 @@ status: draft
 format: article
 destinations:
   - blog
-publishDate: 2026-06-01
+publishDate: 2026-06-40
+publishedAt: 2026-06-01T00:00:00Z
+importedAt: 2026-06-01T00:00:00Z
 duration: soon
 featured: true
 country: NO
 ---
-The country code NO stays the string "NO" (YAML 1.2). publishDate (date only, not
-RFC 3339) and duration ("soon") are INVALID against the model and route to repair.
+The country code NO stays the string "NO" (YAML 1.2). publishDate (invalid day),
+publishedAt (missing fixed milliseconds), and duration ("soon") are INVALID against
+the model and route to repair.
 `,
 	},
 	{
@@ -143,6 +156,7 @@ RFC 3339) and duration ("soon") are INVALID against the model and route to repai
 title: Imported Note
 status: draft
 format: article
+publishDate:
 legacyId: ABC-123
 mood: optimistic
 metadata:
@@ -179,7 +193,7 @@ Unparseable: git conflict markers. The grid must never write this.
 		fileName: 'raw-note.md',
 		content: `# Raw Note
 
-No frontmatter at all, just markdown. Every modeled field needs a value.
+No frontmatter at all, just markdown. Required modeled fields need values.
 `,
 	},
 ];

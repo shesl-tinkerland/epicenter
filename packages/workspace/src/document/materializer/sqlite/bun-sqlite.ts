@@ -67,6 +67,13 @@ export type AttachBunSqliteMaterializerOptions<
 	waitFor?: Promise<unknown>;
 
 	/**
+	 * Upper bound on the teardown drain: dispose waits at most this long for
+	 * the initial full-load and the pending row flush to settle before closing
+	 * the database. Defaults to 10 seconds.
+	 */
+	disposeTimeoutMs?: number;
+
+	/**
 	 * Logger for background failures (debounced sync flush, FTS query, WAL
 	 * pragma fallbacks). Defaults to a console-backed logger with source
 	 * `attachBunSqliteMaterializer`.
@@ -93,6 +100,7 @@ export function attachBunSqliteMaterializer<
 		fts,
 		debounceMs,
 		waitFor,
+		disposeTimeoutMs,
 		log = createLogger('attachBunSqliteMaterializer'),
 	}: AttachBunSqliteMaterializerOptions<TTables, TFts>,
 ) {
@@ -105,6 +113,7 @@ export function attachBunSqliteMaterializer<
 		fts,
 		debounceMs,
 		waitFor,
+		disposeTimeoutMs,
 		log,
 	});
 

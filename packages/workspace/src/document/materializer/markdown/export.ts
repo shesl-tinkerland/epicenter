@@ -7,7 +7,12 @@ import { assembleMarkdown } from '../../../markdown/assemble-markdown.js';
 import { defineActions, defineMutation } from '../../../shared/actions.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { BaseRow, Table } from '../../table.js';
-import type { AnyTable, MaterializerInput, TablesRecord } from '../shared.js';
+import {
+	type AnyTable,
+	type MaterializerInput,
+	settledWithin,
+	type TablesRecord,
+} from '../shared.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // attachMarkdownExport: the read-only markdown projection
@@ -74,6 +79,7 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 		dir,
 		tables: tablesConfig,
 		waitFor,
+		disposeTimeoutMs = 10_000,
 		log = createLogger('markdown-export'),
 	}: {
 		/** Base output directory. A string or async getter for lazy path resolution. */
@@ -86,6 +92,13 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 		tables?: ExportTablesConfig<TTableHandles>;
 		/** Gate: awaited before the initial filesystem flush. Omit for no gate. */
 		waitFor?: Promise<unknown>;
+		/**
+		 * Upper bound on the teardown drain: dispose waits at most this long for
+		 * the initial flush and in-flight row renders to settle before resolving
+		 * `whenDisposed`, so a hung render (e.g. a stuck HTTP body read) cannot
+		 * wedge shutdown. Defaults to 10 seconds.
+		 */
+		disposeTimeoutMs?: number;
 		/** Logger for background write-observer failures. */
 		log?: Logger;
 	},
@@ -119,34 +132,80 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 		});
 	}
 	let isDisposed = false;
+	// The `waitFor` gate has resolved, so the initial flush is underway (or
+	// done) and teardown owes it a drain. Disposing while the gate is still
+	// closed owes nothing: the flush never started, and `initialize` bails
+	// when the gate finally opens.
+	let isGateOpen = waitFor === undefined;
+	let isFlushAbandoned = false;
+
+	// In-flight observer render batches. Each batch is added when its observer
+	// fires and removed when it settles, so the teardown drain can await
+	// exactly the writes that were mid-flight at dispose time.
+	const pendingWrites = new Set<Promise<void>>();
+	function trackPendingWrite(work: Promise<void>) {
+		pendingWrites.add(work);
+		void work.finally(() => pendingWrites.delete(work));
+	}
 
 	const resolveDir = async () =>
 		typeof dir === 'function' ? await dir() : dir;
 
+	const { promise: whenDisposed, resolve: resolveDisposed } =
+		Promise.withResolvers<void>();
+
 	function dispose() {
 		if (isDisposed) return;
 		isDisposed = true;
+		isFlushAbandoned = !isGateOpen;
 		for (const entry of registered.values()) entry.unsubscribe?.();
+		void drainPendingWork().finally(resolveDisposed);
+	}
+
+	/**
+	 * Drain projection work still in flight at dispose: the initial flush
+	 * (unless its gate never opened) and any observer render batches. Bounded
+	 * by `disposeTimeoutMs` so teardown cannot wedge on a hung render.
+	 */
+	async function drainPendingWork() {
+		const pending: Promise<unknown>[] = isFlushAbandoned
+			? [...pendingWrites]
+			: [whenFlushed, ...pendingWrites];
+		if (pending.length === 0) return;
+		const didSettle = await settledWithin(
+			Promise.allSettled(pending),
+			disposeTimeoutMs,
+		);
+		if (!didSettle) {
+			log.warn(
+				MaterializerWriteError.DrainTimedOut({ timeoutMs: disposeTimeoutMs }),
+			);
+		}
 	}
 
 	ydoc.once('destroy', dispose);
 
 	async function initialize() {
 		await waitFor;
-		if (isDisposed) return;
+		isGateOpen = true;
+		if (isFlushAbandoned) return;
 
 		const baseDir = await resolveDir();
 		await mkdir(baseDir, { recursive: true });
 
 		for (const entry of registered.values()) {
-			if (isDisposed) return;
-			entry.unsubscribe = await materializeTable({
+			const unsubscribe = await materializeTable({
 				table: entry.table,
 				directory: join(baseDir, entry.subdir),
 				render: entry.render,
 				fileState: entry.fileState,
+				track: trackPendingWrite,
 				log,
 			});
+			// Disposed mid-flush: the writes above are owed (the teardown drain
+			// awaits this whole flush), but no observer may outlive teardown.
+			if (isDisposed) unsubscribe();
+			else entry.unsubscribe = unsubscribe;
 		}
 	}
 
@@ -188,6 +247,13 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 
 	return {
 		whenFlushed,
+		/**
+		 * Resolves after `ydoc.destroy()` once pending projection work (the
+		 * initial flush and in-flight row renders) has drained, bounded by
+		 * `disposeTimeoutMs`. Daemon teardown awaits this before process exit
+		 * so a shutdown cannot drop markdown writes mid-flight.
+		 */
+		whenDisposed,
 		actions: defineActions({
 			markdown_rebuild: defineMutation({
 				title: 'Rebuild Markdown Export',
@@ -229,9 +295,9 @@ type RenderRow = (
 type FileState = Map<string, { filename: string; content: string }>;
 
 /**
- * Errors produced by the background write-observer (table row → .md file).
- * These run inside `.catch(...)` of a detached async task, so they ship to the
- * logger, not through a Result to the caller.
+ * Errors produced by the background write-observer (table row → .md file) and
+ * the teardown drain. These run inside `.catch(...)` of a detached async task,
+ * so they ship to the logger, not through a Result to the caller.
  */
 const MaterializerWriteError = defineErrors({
 	TableWriteFailed: ({
@@ -247,6 +313,10 @@ const MaterializerWriteError = defineErrors({
 		tableName,
 		id,
 		cause,
+	}),
+	DrainTimedOut: ({ timeoutMs }: { timeoutMs: number }) => ({
+		message: `[markdown] teardown drain did not settle within ${timeoutMs}ms; abandoning pending writes`,
+		timeoutMs,
 	}),
 });
 
@@ -292,9 +362,11 @@ async function materializeTable(opts: {
 	directory: string;
 	render: RenderRow;
 	fileState: FileState;
+	/** Register an observer batch with the attachment's teardown drain. */
+	track: (work: Promise<void>) => void;
 	log: Logger;
 }): Promise<() => void> {
-	const { table, directory, render, fileState, log } = opts;
+	const { table, directory, render, fileState, track, log } = opts;
 
 	await mkdir(directory, { recursive: true });
 
@@ -331,7 +403,7 @@ async function materializeTable(opts: {
 	// Sequential writes inside the observer avoid rename races; a parallel
 	// approach (Promise.allSettled) could delete a file another write needs.
 	return table.observe((changedIds) => {
-		void (async () => {
+		const batch = (async () => {
 			for (const id of changedIds) {
 				const { data: row, error } = table.get(id);
 
@@ -357,6 +429,7 @@ async function materializeTable(opts: {
 				}),
 			);
 		});
+		track(batch);
 	});
 }
 

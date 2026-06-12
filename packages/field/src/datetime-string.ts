@@ -6,15 +6,12 @@
  * schema is built via `field.datetime()`, which delegates validation to
  * TypeBox v1's built-in `date-time` format validator.
  *
- * **Writing convention.** RFC 3339 accepts both Z (`...Z`) and offset
- * (`...±HH:MM`) forms. App code should always emit the Z form so
- * cross-row lex-sort is chronological: `new Date().toISOString()`,
- * `Temporal.Now.instant().toString()`, and
- * `Temporal.Now.zonedDateTimeISO(zone).toInstant().toString()` all do this.
- * Z is a documented convention, not a hard schema constraint.
+ * RFC 3339 accepts both Z (`...Z`) and offset (`...±HH:MM`) forms. Use
+ * `field.instant()` / `InstantString` when SQLite TEXT ordering must be
+ * chronological by schema, not just by writer convention.
  *
  * For zoned datetimes where the originating IANA zone matters (calendar
- * events, reminders, scheduled actions), pair `field.datetime()` with a
+ * events, reminders, scheduled actions), pair the instant or datetime field with a
  * separate IANA timezone field. See the `<field>` + `<field>Zone` naming
  * convention in the workspace spec.
  */

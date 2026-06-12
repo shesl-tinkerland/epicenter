@@ -131,6 +131,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 				openWebSocket,
 				onReconnectSignal,
 				actions,
+				materializers: [sqlite, markdown],
 			});
 
 			return defineWorkspace({

@@ -94,6 +94,16 @@ The reader should be able to get the current truth in one minute, the model in f
 
 ---
 
+## Spec Placement
+
+All implementation specs live in root `/specs/`. Do not create nested specs under `apps/` or `packages/`.
+
+Name new specs `specs/YYYYMMDDThhmmss-feature-name.md`: local timestamp, kebab-case feature name.
+
+Prompt and handoff artifacts can live beside specs with explicit suffixes like `.prompt.md`, `.handoff.md`, or `.execute.md`. They should link back to the canonical spec and should not be treated as the current implementation plan unless the suffix says so.
+
+---
+
 ## Decision Hygiene
 
 Classify every material decision:

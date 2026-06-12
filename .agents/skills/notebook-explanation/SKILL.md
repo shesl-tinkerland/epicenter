@@ -1,6 +1,6 @@
 ---
 name: notebook-explanation
-description: "Explain technical systems in a notebook style: short working notes, small code blocks, ASCII diagrams, concrete examples, and compressed rules. Use when the user asks to understand architecture, APIs, auth flows, specs, boundaries, code ownership, or design tradeoffs as a newcomer."
+description: "Explain technical systems in a notebook style: short working notes, small code blocks, ASCII diagrams, concrete examples, and compressed rules. Use when the user asks to understand architecture, APIs, auth flows, specs, boundaries, code ownership, design tradeoffs, or says \"zoom out\", \"give me the bigger picture\", \"what does this fit into\", or \"I'm lost in this file\"."
 metadata:
   author: epicenter
   version: '1.0'
@@ -106,6 +106,31 @@ private draft
   -> network API
   -> public record
 ```
+
+## Zoom Out Explanations
+
+When the user asks to zoom out from a file, go up one layer of abstraction before explaining local code. Map:
+
+```txt
+Current file:
+  path
+  role
+
+Surrounding modules:
+  module -> why it exists
+
+Callers:
+  caller -> what it needs from this file
+
+Sibling concepts:
+  nearby concept -> how it differs
+
+Boundary:
+  what this file owns
+  what it must not own
+```
+
+Use the project's domain glossary vocabulary when it exists. The useful answer is not a file tour; it is the mental map that lets the user edit the file without getting lost.
 
 When an architecture explanation will feed an article, the first pass answers four questions:
 

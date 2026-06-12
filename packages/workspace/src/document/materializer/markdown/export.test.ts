@@ -10,8 +10,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createWorkspace, defineTable } from '../../../index.js';
 import { field } from '@epicenter/field';
+import { createWorkspace, defineTable } from '../../../index.js';
 import { attachMarkdownExport } from './export.js';
 
 const postsTable = defineTable({
@@ -118,6 +118,97 @@ describe('attachMarkdownExport', () => {
 		await expect(listDir('posts')).rejects.toThrow();
 
 		workspace[Symbol.dispose]();
+	});
+
+	describe('teardown drain', () => {
+		test('dispose immediately after seeding still writes the initial flush', async () => {
+			const workspace = createWorkspace({
+				id: 'export-drain-initial',
+				tables: tableDefinitions,
+				kv: {},
+			});
+			const exporter = attachMarkdownExport(workspace, {
+				dir: TEST_DIR,
+				tables: { posts: {} },
+			});
+
+			workspace.tables.posts.set({ id: 'a', title: 'alpha', published: true });
+			workspace[Symbol.dispose]();
+
+			await exporter.whenDisposed;
+
+			const files = await listDir('posts');
+			expect(files).toContain('a.md');
+		});
+
+		test('dispose drains an in-flight observer render', async () => {
+			const workspace = createWorkspace({
+				id: 'export-drain-observer',
+				tables: tableDefinitions,
+				kv: {},
+			});
+			const exporter = attachMarkdownExport(workspace, {
+				dir: TEST_DIR,
+				tables: { posts: {} },
+			});
+			await exporter.whenFlushed;
+
+			workspace.tables.posts.set({ id: 'b', title: 'beta', published: false });
+			workspace[Symbol.dispose]();
+
+			await exporter.whenDisposed;
+
+			const files = await listDir('posts');
+			expect(files).toContain('b.md');
+		});
+
+		test('a hung render cannot wedge teardown past the bounded timeout', async () => {
+			const workspace = createWorkspace({
+				id: 'export-drain-hung',
+				tables: tableDefinitions,
+				kv: {},
+			});
+			const exporter = attachMarkdownExport(workspace, {
+				dir: TEST_DIR,
+				disposeTimeoutMs: 50,
+				tables: {
+					posts: { toMarkdown: () => new Promise<never>(() => {}) },
+				},
+			});
+
+			workspace.tables.posts.set({ id: 'c', title: 'gamma', published: true });
+			workspace[Symbol.dispose]();
+
+			// Resolves via the bounded timeout instead of hanging on the render.
+			await exporter.whenDisposed;
+		});
+
+		test('dispose before the waitFor gate opens owes no flush', async () => {
+			const gate = Promise.withResolvers<void>();
+			const workspace = createWorkspace({
+				id: 'export-drain-gated',
+				tables: tableDefinitions,
+				kv: {},
+			});
+			const exporter = attachMarkdownExport(workspace, {
+				dir: TEST_DIR,
+				waitFor: gate.promise,
+				tables: { posts: {} },
+			});
+
+			workspace.tables.posts.set({ id: 'd', title: 'delta', published: true });
+			const start = performance.now();
+			workspace[Symbol.dispose]();
+			await exporter.whenDisposed;
+			// The flush never started, so teardown owes nothing and must not
+			// sit out the bounded timeout waiting on the unopened gate.
+			expect(performance.now() - start).toBeLessThan(1000);
+
+			// The gate opening later must not flush against the disposed doc.
+			gate.resolve();
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			await expect(listDir('posts')).rejects.toThrow();
+		});
 	});
 
 	test('markdown_rebuild removes an orphan and rewrites rows', async () => {

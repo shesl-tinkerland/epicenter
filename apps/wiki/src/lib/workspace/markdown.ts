@@ -1,5 +1,5 @@
 /**
- * Wiki markdown vault: the bidirectional desktop projection.
+ * Wiki markdown export: the read-only desktop projection.
  *
  *   pages/<id>.md   frontmatter IS the page row (core columns + the nested
  *                   `types` cell); the file body IS the page `body` column,
@@ -9,49 +9,31 @@
  *
  * Wiring lives here (filesystem-facing) rather than in the isomorphic factory,
  * mirroring how fuji keeps `index.ts` pure and composes IO in `browser.ts`.
- * The `markdown_push` action is the disk-to-Yjs reconcile ("markdown apply"):
- * it reads the files, parses frontmatter, validates against the table schema,
- * and writes rows back into Yjs.
+ * The generated files are for reading, search, and curation. Wiki data still
+ * mutates through validated workspace actions rather than disk edits.
  */
 
-import { attachMarkdownMaterializer } from '@epicenter/workspace/document/materializer/markdown';
+import { attachMarkdownExport } from '@epicenter/workspace/document/materializer/markdown';
 import type { WikiWorkspace } from './index';
-import { asPageId, isTSchemaObject, type Page, type WikiType } from './schema';
 
 /**
- * Attach the markdown vault to a wiki workspace. Returns the materializer so a
- * caller can `await whenFlushed` and invoke `actions.markdown_push` to reconcile
- * disk edits back into Yjs.
+ * Attach the markdown export to a wiki workspace. Returns the exporter so a
+ * caller can `await whenFlushed` or invoke `actions.markdown_rebuild` to refresh
+ * the read-only files.
  */
 export function attachWikiVault(
 	wiki: WikiWorkspace,
 	{ dir }: { dir: string | (() => string | Promise<string>) },
 ) {
-	return attachMarkdownMaterializer(
+	return attachMarkdownExport(
 		{ ydoc: wiki.ydoc, tables: wiki.tables },
 		{
 			dir,
-			perTable: {
-				types: {
-					// Default frontmatter codec, plus a decode gate: a hand-edited
-					// type file whose column `schema` is not a JSON object is rejected
-					// at import, matching the `types_define` action's own check rather
-					// than silently degrading later in projection/lens.
-					fromMarkdown: (parsed) => {
-						const row = parsed.frontmatter as WikiType;
-						for (const spec of row.columns) {
-							if (!isTSchemaObject(spec.schema)) {
-								throw new Error(
-									`type "${row.id}" column "${spec.id}" schema must be a TSchema object`,
-								);
-							}
-						}
-						return row;
-					},
-				},
+			tables: {
+				types: {},
 				pages: {
 					// `body` is a row column but belongs in the file body, never in
-					// frontmatter; route it across in both directions.
+					// frontmatter; route it into the read-only markdown body.
 					toMarkdown: (page) => ({
 						frontmatter: {
 							id: page.id,
@@ -65,21 +47,6 @@ export function attachWikiVault(
 						},
 						body: page.body.length > 0 ? page.body : undefined,
 					}),
-					fromMarkdown: (parsed) => {
-						const fm = parsed.frontmatter;
-						const page: Page = {
-							id: asPageId(String(fm.id)),
-							title: String(fm.title ?? ''),
-							description: (fm.description ?? null) as Page['description'],
-							tags: (fm.tags ?? []) as string[],
-							source: (fm.source ?? []) as string[],
-							types: (fm.types ?? {}) as Page['types'],
-							body: parsed.body ?? '',
-							createdAt: fm.createdAt as Page['createdAt'],
-							updatedAt: fm.updatedAt as Page['updatedAt'],
-						};
-						return page;
-					},
 				},
 			},
 		},

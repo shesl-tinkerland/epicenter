@@ -19,6 +19,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	utimesSync,
 	writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -51,6 +52,26 @@ const format = formatIndex === -1 ? '' : args[formatIndex + 1];
 const promptIndex = args.indexOf('-p');
 const prompt = promptIndex === -1 ? '' : args[promptIndex + 1];
 if (prompt.includes('WAIT_FOR_CANCEL')) {
+	process.on('SIGTERM', () => {
+		writeFileSync('.fake-claude/terminated', 'yes');
+		process.exit(0);
+	});
+	setInterval(() => {}, 1000);
+	await new Promise(() => {});
+}
+if (prompt.includes('WAIT_AFTER_RATE_LIMIT')) {
+	console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake-session' }));
+	console.log(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', rateLimitType: 'five_hour', resetsAt: 1780951200, overageStatus: 'allowed', isUsingOverage: false }, session_id: 'fake-session' }));
+	process.on('SIGTERM', () => {
+		writeFileSync('.fake-claude/terminated', 'yes');
+		process.exit(0);
+	});
+	setInterval(() => {}, 1000);
+	await new Promise(() => {});
+}
+if (prompt.includes('WAIT_AFTER_THINKING')) {
+	console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake-session' }));
+	console.log(JSON.stringify({ type: 'system', subtype: 'thinking_tokens', session_id: 'fake-session' }));
 	process.on('SIGTERM', () => {
 		writeFileSync('.fake-claude/terminated', 'yes');
 		process.exit(0);
@@ -135,6 +156,17 @@ function waitForPath(filePath: string) {
 	throw new Error(`Timed out waiting for ${filePath}`);
 }
 
+function waitForStatusText(setup: Setup, jobId: string, text: string) {
+	for (let attempt = 0; attempt < 20; attempt += 1) {
+		const status = setup.run(['status', jobId]);
+		expectCommandSuccess(status);
+		const stdout = String(status.stdout);
+		if (stdout.includes(text)) return stdout;
+		Bun.sleepSync(25);
+	}
+	throw new Error(`Timed out waiting for ${jobId} status to include ${text}`);
+}
+
 test('sync consult invokes Claude with read-only safety flags and returns the result', () => {
 	const context = setup();
 	const result = context.run([
@@ -203,12 +235,158 @@ test('cancel terminates the active Claude child and marks the job canceled', () 
 	waitForStatus(context, jobId as string, 'running');
 	waitForPath(path.join(context.cwd, '.fake-claude/args.json'));
 
-	const cancel = context.run(['cancel', jobId as string]);
+	const cancel = context.run(['cancel', jobId as string, '--force']);
 	expectCommandSuccess(cancel);
 	expect(String(cancel.stdout)).toContain(`Canceled Claude consult ${jobId}.`);
 
 	const status = waitForStatus(context, jobId as string, 'canceled');
 	expect(status).toContain('Summary: Canceled by user.');
+	waitForPath(path.join(context.cwd, '.fake-claude/terminated'));
+});
+
+test('running status explains rate-limit startup progress before cancellation', () => {
+	const context = setup();
+	const start = context.run([
+		'start',
+		'--question',
+		'WAIT_AFTER_RATE_LIMIT',
+		'--budget-usd',
+		'5',
+	]);
+
+	expectCommandSuccess(start);
+	const jobId = String(start.stdout).match(/claude-[a-f0-9]+/)?.[0];
+	expect(jobId).toBeTruthy();
+
+	const status = waitForStatusText(
+		context,
+		jobId as string,
+		'Stream: rate_limit_event',
+	);
+	expect(status).toContain('Thinking: not yet');
+	expect(status).toContain('Answer text: not yet');
+	expect(status).toContain('Result frame: not yet');
+	expect(status).toContain('Recommendation: keep-polling');
+	expect(status).toContain('Rate limit: allowed, type five_hour');
+	expect(status).toContain('Reason: Claude is alive and rate-limit aware.');
+
+	const cancel = context.run(['cancel', jobId as string]);
+	expect(cancel.status).not.toBe(0);
+	expect(String(cancel.stderr)).toContain('Refusing to cancel Claude consult');
+	expect(String(cancel.stderr)).toContain('recommendation is keep-polling');
+
+	const forcedCancel = context.run(['cancel', jobId as string, '--force']);
+	expectCommandSuccess(forcedCancel);
+	waitForPath(path.join(context.cwd, '.fake-claude/terminated'));
+});
+
+test('stale rate-limit startup can be canceled without force', () => {
+	const context = setup();
+	const start = context.run([
+		'start',
+		'--question',
+		'WAIT_AFTER_RATE_LIMIT',
+		'--budget-usd',
+		'5',
+	]);
+
+	expectCommandSuccess(start);
+	const jobId = String(start.stdout).match(/claude-[a-f0-9]+/)?.[0];
+	expect(jobId).toBeTruthy();
+	waitForStatusText(context, jobId as string, 'Stream: rate_limit_event');
+
+	const stdoutPath = path.join(
+		context.cwd,
+		'.tmp/claude-consult/jobs',
+		jobId as string,
+		'stdout.jsonl',
+	);
+	const staleDate = new Date(Date.now() - 3 * 60 * 1000);
+	utimesSync(stdoutPath, staleDate, staleDate);
+
+	const status = context.run(['status', jobId as string]);
+	expectCommandSuccess(status);
+	expect(String(status.stdout)).toContain('Recommendation: idle-investigate');
+
+	const cancel = context.run(['cancel', jobId as string]);
+	expectCommandSuccess(cancel);
+	waitForPath(path.join(context.cwd, '.fake-claude/terminated'));
+});
+
+test('stale no-stream startup can be canceled without force', () => {
+	const context = setup();
+	const start = context.run([
+		'start',
+		'--question',
+		'WAIT_FOR_CANCEL',
+		'--budget-usd',
+		'5',
+	]);
+
+	expectCommandSuccess(start);
+	const jobId = String(start.stdout).match(/claude-[a-f0-9]+/)?.[0];
+	expect(jobId).toBeTruthy();
+	waitForStatus(context, jobId as string, 'running');
+	waitForPath(path.join(context.cwd, '.fake-claude/args.json'));
+
+	const statePath = path.join(context.cwd, '.tmp/claude-consult/jobs.json');
+	const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
+		jobs: Array<{ id: string; startedAt?: string; updatedAt: string }>;
+	};
+	const staleDate = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+	const job = state.jobs.find((candidate) => candidate.id === jobId);
+	expect(job).toBeTruthy();
+	if (job) {
+		job.startedAt = staleDate;
+		job.updatedAt = staleDate;
+	}
+	writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+
+	const status = context.run(['status', jobId as string]);
+	expectCommandSuccess(status);
+	expect(String(status.stdout)).toContain('Stream: no events yet');
+	expect(String(status.stdout)).toContain('Recommendation: idle-investigate');
+	expect(String(status.stdout)).toContain('Reason: No stream event for');
+	expect(String(status.stdout)).toContain('after startup.');
+
+	const cancel = context.run(['cancel', jobId as string]);
+	expectCommandSuccess(cancel);
+	waitForPath(path.join(context.cwd, '.fake-claude/terminated'));
+});
+
+test('stale thinking progress can be canceled without force', () => {
+	const context = setup();
+	const start = context.run([
+		'start',
+		'--question',
+		'WAIT_AFTER_THINKING',
+		'--budget-usd',
+		'5',
+	]);
+
+	expectCommandSuccess(start);
+	const jobId = String(start.stdout).match(/claude-[a-f0-9]+/)?.[0];
+	expect(jobId).toBeTruthy();
+	waitForStatusText(context, jobId as string, 'Thinking: yes');
+
+	const stdoutPath = path.join(
+		context.cwd,
+		'.tmp/claude-consult/jobs',
+		jobId as string,
+		'stdout.jsonl',
+	);
+	const staleDate = new Date(Date.now() - 3 * 60 * 1000);
+	utimesSync(stdoutPath, staleDate, staleDate);
+
+	const status = context.run(['status', jobId as string]);
+	expectCommandSuccess(status);
+	const stdout = String(status.stdout);
+	expect(stdout).toContain('Recommendation: idle-investigate');
+	expect(stdout).toContain('Reason: No stream event for');
+	expect(stdout).toContain('after system:thinking_tokens.');
+
+	const cancel = context.run(['cancel', jobId as string]);
+	expectCommandSuccess(cancel);
 	waitForPath(path.join(context.cwd, '.fake-claude/terminated'));
 });
 

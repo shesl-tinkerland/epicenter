@@ -4,10 +4,10 @@ Tauri + Svelte 5 desktop/web app for voice transcription.
 
 ## Key Points
 
-- Three-layer architecture: Service → Query → UI
+- Three-layer architecture: Service -> Query -> UI
 - Services are pure functions returning `Result<T, E>`
-- Build-time platform DI via Node-standard `#platform/*` subpath imports: each seam maps to a `.tauri.ts` and a `.browser.ts` file in `package.json`'s `imports` field. Consumers import the bare specifier (`import { x } from '#platform/<name>'`) with no platform branch at the call site. The Tauri build activates the `tauri` condition in `vite.config.ts` (`resolve.conditions`); the web build falls through to `default` (browser), so the wrong-platform file is physically absent from each bundle
-- Tauri-only capabilities live in `$lib/tauri.tauri.ts`; shared consumers reach them through `import { tauri } from '#platform/tauri'` and check `if (tauri)` (the variable doubles as the platform boolean)
+- Build-time platform seams use `#platform/*` imports. Load `workspace-app-composition` before changing those seams.
+- Tauri-only capabilities live in `$lib/tauri.tauri.ts`; shared consumers go through `#platform/*`.
 - Query layer handles reactivity, caching, and error transformation
 - See `ARCHITECTURE.md` for detailed patterns
 
@@ -19,29 +19,15 @@ Tauri + Svelte 5 desktop/web app for voice transcription.
 
 ## Tauri Commands
 
-Every Tauri command is registered through `make_specta_builder()` in
-`src-tauri/src/lib.rs` and consumed by the frontend through the boundary
-adapter at `src/lib/tauri/commands.ts`. To add a command:
+Load `tauri` before adding or changing Tauri commands, permissions,
+capabilities, generated bindings, or platform filesystem behavior. Load
+`rust-errors` when a command changes Rust error payloads consumed by
+TypeScript.
 
-1. Decorate the Rust function with both attributes:
-   ```rust
-   #[tauri::command]
-   #[specta::specta]
-   pub async fn my_command(...) -> Result<MyOutput, MyError> { ... }
-   ```
-2. Derive `specta::Type` on any custom argument/return types.
-3. Add the function to the `collect_commands!` list in `make_specta_builder`.
-4. Regenerate: `bun run --cwd apps/whispering bindings:tauri`.
-5. Call from TS: `import { commands } from '$lib/tauri/commands'`.
-
-Raw-byte commands (`tauri::ipc::Response::new(bytes)` return) cannot be
-specta-typed; mount them through a separate `generate_handler!` in `lib.rs`
-and hand-roll the JS wrapper in `commands.ts`. Today the only one is
-`encode_recording_for_upload`.
-
-The boundary file is the only place in `src/lib/**` that may import
-`invoke` from `@tauri-apps/api/core` for app commands. Tauri plugin APIs
-(fs, shell, clipboard, etc.) keep their own imports.
+Every command change must keep `make_specta_builder()` in
+`src-tauri/src/lib.rs`, generated bindings, and `src/lib/tauri/commands.ts` in
+sync. The command boundary file is the only place in `src/lib/**` that may
+import `invoke` from `@tauri-apps/api/core` for app commands.
 
 ## Specs and Docs
 

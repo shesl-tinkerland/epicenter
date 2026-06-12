@@ -37,7 +37,11 @@ This skill is _informed_ by the project's domain model. The domain language give
 
 Read the project's domain glossary and any ADRs in the area you're touching first.
 
-Then use the Agent tool with `subagent_type=Explore` to walk the codebase. Don't follow rigid heuristics - explore organically and note where you experience friction:
+Then explore with the available codebase tools. If the runtime permits
+subagents and the user asked for delegated exploration, use a bounded explorer.
+Otherwise inspect locally with `rg`, file reads, and caller searches. Don't
+follow rigid heuristics; explore organically and note where you experience
+friction:
 
 - Where does understanding one concept require bouncing between many small modules?
 - Where are modules **shallow** - interface nearly as complex as the implementation?

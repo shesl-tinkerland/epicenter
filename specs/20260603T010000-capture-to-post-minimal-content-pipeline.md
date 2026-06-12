@@ -5,6 +5,13 @@ is "post videos and content." It is the buildable core of The Ark
 (`20260602T235900`). The per-user platform (`20260602T233000`) is deferred; it does
 not serve this goal.
 
+Note 2026-06-08: the vault disk shape in
+`/Users/braden/Code/vault/specs/20260605T193000-vault-publishing-layout.md`
+supersedes the earlier one-file `status: ready` draft contract for
+hand-authored publish artifacts. In `vault/publish/**`, a post records `page:`
+and optional `published_at` / `url`; composing and published views are inferred
+from linked post existence plus `published_at`.
+
 Date: 2026-06-03
 
 ---
@@ -36,24 +43,43 @@ missing piece, the bottleneck to the goal, is RENDER+POST. Build that.
 
 ---
 
-## The draft contract (one markdown file)
+## The post artifact contract (vault disk shape)
 
 ```markdown
+# pages/why-local-first-wins.md
 ---
 title: why local-first wins
-format: carousel          # carousel | video
-status: ready             # draft | ready
-destinations: [instagram, tiktok]
+status: refined          # captured | refined
+tags: [local-first]
 ---
-# hook slide
-...
----
-# point 1
-...
+The source idea.
 ```
 
-Marp already uses `---` as slide breaks, so the SAME file is the carousel source. The
-markdown (+ its transcript + voice) is the SOURCE OF TRUTH; every format renders FROM it.
+```markdown
+# publish/instagram/bradencodes/posts/why-local-first-wins/post.md
+---
+page: why-local-first-wins
+---
+The platform caption.
+```
+
+The source note owns private editorial status. The publish artifact owns the
+destination because of its folder path and links back with `page:`. Format is
+derived from files in the post folder: `deck.marp.md` present means carousel or
+video storyboard; no deck means text-only. After shipping, record concrete event
+facts on `post.md`:
+
+```yaml
+published_at: 2026-06-08T12:00:00-05:00
+url: https://instagram.com/...
+```
+
+There is no `status: draft` or `stage: ready` in the hand-authored vault shape
+until a real queue, calendar, or automation consumes it.
+
+The conceptual ramp is still captured -> refined -> composing -> published.
+Only captured/refined are written on authored notes. Composing/published are
+derived from linked publish artifacts.
 
 ---
 

@@ -86,6 +86,7 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 				openWebSocket,
 				onReconnectSignal,
 				actions,
+				materializers: [sqlite, markdown],
 			});
 
 			return defineWorkspace({

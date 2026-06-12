@@ -4,8 +4,10 @@
  * `epicenter daemon up` daemon.
  *
  * `input` is JSON: inline positional, `@file.json` (curl convention), or stdin.
- * With `--peer <target>`, the invocation is dispatched over the selected
- * mount's RPC channel to a remote peer instead of running locally.
+ * With `--peer <target>`, the daemon dispatches the run over the selected
+ * mount's RPC channel to a remote peer instead of running locally; both
+ * shapes are one `/run` request (the optional `peer` object selects the
+ * target and carries the wait budget).
  *
  * `epicenter run` requires a running daemon for the discovered project.
  * Without `daemon up`, the handler errors with a hint pointing at
@@ -23,9 +25,8 @@ import type { DispatchError } from '@epicenter/workspace';
 import {
 	type DaemonError,
 	getDaemon,
-	type InvokeError,
-	type PeerDispatchError,
-	type PeerDispatchSyncStatus,
+	type PeerSyncStatus,
+	type RunError,
 } from '@epicenter/workspace/node';
 import { extractErrorMessage } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
@@ -39,8 +40,6 @@ import {
 	output,
 } from '../util/format-output.js';
 import { parseJsonInput, readStdin } from '../util/parse-input.js';
-
-const DEFAULT_PEER_WAIT_MS = 5000;
 
 export const runCommand = cmd({
 	command: 'run <action> [input]',
@@ -64,15 +63,19 @@ export const runCommand = cmd({
 			})
 			.option('wait', {
 				type: 'number',
-				description: `RPC deadline in ms for the peer call; requires --peer (default ${DEFAULT_PEER_WAIT_MS})`,
+				description:
+					'RPC deadline in ms for the peer call; requires --peer (daemon default: 5000)',
 			})
 			.implies('wait', 'peer')
 			.options(formatOptions)
 			.strict(),
 	handler: async (argv) => {
-		const peerTarget =
-			argv.peer && argv.peer.length > 0 ? argv.peer : undefined;
-		const waitMs = argv.wait ?? DEFAULT_PEER_WAIT_MS;
+		if (argv.peer !== undefined && argv.peer.length === 0) {
+			fail(
+				'--peer requires a peer id; run `epicenter peers` to see who is online',
+			);
+			return;
+		}
 		const actionInput = await resolveInput(argv.input);
 
 		const { data: daemon, error: daemonErr } = await getDaemon(argv.C);
@@ -80,29 +83,23 @@ export const runCommand = cmd({
 			fail(daemonErr.message);
 			return;
 		}
-		if (peerTarget === undefined) {
-			renderRunResult(
-				await daemon.invoke({
-					actionPath: argv.action,
-					input: actionInput,
-				}),
-				argv.format,
-			);
-			return;
-		}
 
-		const result = await daemon.dispatch({
+		// A `peer` key with an `undefined` value drops out of the JSON wire
+		// body, so a local run sends no peer fields at all.
+		const result = await daemon.run({
 			actionPath: argv.action,
 			input: actionInput,
-			to: peerTarget,
-			waitMs,
+			peer:
+				argv.peer === undefined
+					? undefined
+					: { to: argv.peer, waitMs: argv.wait },
 		});
 		renderRunResult(result, argv.format);
 	},
 });
 
 function renderRunResult(
-	result: Result<unknown, InvokeError | PeerDispatchError | DaemonError>,
+	result: Result<unknown, RunError | DaemonError>,
 	format: OutputFormat | undefined,
 ): void {
 	if (result.error === null) {
@@ -151,7 +148,7 @@ async function resolveInput(input: string | undefined): Promise<unknown> {
 function emitPeerNotFound(
 	target: string,
 	waitMs: number,
-	syncStatus: PeerDispatchSyncStatus,
+	syncStatus: PeerSyncStatus,
 ): void {
 	const details = [`  reason: ${describePeerMissReason(syncStatus)}`];
 	if (syncStatus.phase === 'connected') {
@@ -201,7 +198,7 @@ export function emitRemoteCallError(
 	}
 }
 
-function describePeerMissReason(status: PeerDispatchSyncStatus): string {
+function describePeerMissReason(status: PeerSyncStatus): string {
 	if (status.phase === 'connected') {
 		return 'connected, but no matching peer was visible';
 	}

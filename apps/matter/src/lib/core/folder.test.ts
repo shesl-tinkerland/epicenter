@@ -7,11 +7,18 @@ describe('readFolder', () => {
 			{ fileName: 'a.md', content: '---\ntitle: A\nrating: 5\n---\nbody' },
 			{ fileName: 'b.md', content: '---\ntitle: B\n---\nbody' },
 			{ fileName: 'broken.md', content: '---\ntitle: [unclosed\n---\nbody' },
-			{ fileName: 'conflict.md', content: '<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> z\n' },
+			{
+				fileName: 'conflict.md',
+				content: '<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> z\n',
+			},
 			{ fileName: 'raw.md', content: '# no frontmatter' },
 		]);
 
-		expect(result.rows.map((r) => r.fileName)).toEqual(['a.md', 'b.md', 'raw.md']);
+		expect(result.rows.map((r) => r.fileName)).toEqual([
+			'a.md',
+			'b.md',
+			'raw.md',
+		]);
 		expect(result.unreadable.map((u) => [u.fileName, u.error.name])).toEqual([
 			['broken.md', 'InvalidYaml'],
 			['conflict.md', 'ConflictMarkers'],
@@ -33,8 +40,11 @@ describe('readFolder', () => {
 		const result = readFolder(
 			[
 				{ fileName: 'a.md', content: '---\ntitle: A\nrating: 5\n---\nbody' },
-				{ fileName: 'b.md', content: '---\ntitle: B\n---\nbody' }, // rating absent -> NEEDS_VALUE
-				{ fileName: 'c.md', content: '---\ntitle: C\nrating: "high"\n---\nbody' }, // INVALID
+				{ fileName: 'b.md', content: '---\ntitle: B\n---\nbody' }, // rating absent -> MISSING_REQUIRED
+				{
+					fileName: 'c.md',
+					content: '---\ntitle: C\nrating: "high"\n---\nbody',
+				}, // INVALID
 			],
 			model,
 		);
@@ -43,6 +53,36 @@ describe('readFolder', () => {
 		if (result.view.mode !== 'modeled') throw new Error('expected modeled');
 		const valid = result.view.conformance.map((c) => c.rowValid);
 		expect(valid).toEqual([true, false, false]);
+	});
+
+	test('optional modeled fields can be absent or null without invalidating a row', () => {
+		const model = JSON.stringify({
+			fields: {
+				title: { type: 'string' },
+				reviewBy: { type: 'string', format: 'date' },
+			},
+			optional: ['reviewBy'],
+		});
+		const result = readFolder(
+			[
+				{ fileName: 'a.md', content: '---\ntitle: A\n---\nbody' },
+				{ fileName: 'b.md', content: '---\ntitle: B\nreviewBy:\n---\nbody' },
+			],
+			model,
+		);
+
+		expect(result.view.mode).toBe('modeled');
+		if (result.view.mode !== 'modeled') throw new Error('expected modeled');
+		expect(result.view.conformance.map((c) => c.rowValid)).toEqual([
+			true,
+			true,
+		]);
+		expect(
+			result.view.conformance.map((c) => c.cells.map((cell) => cell.state)),
+		).toEqual([
+			['OK', 'MISSING_OPTIONAL'],
+			['OK', 'MISSING_OPTIONAL'],
+		]);
 	});
 
 	test('a junk matter.json degrades to the raw view with a diagnostic', () => {

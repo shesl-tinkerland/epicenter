@@ -1,12 +1,13 @@
 /**
  * The shared editing lifecycle for text-input Field components.
  *
- * Five kinds (string, integer, number, url, datetime) and the universal JSON
- * repair editor all edit through a single text input: click to open, type into a
- * local draft, commit on blur/Enter, revert on Escape. That lifecycle, the no-op
- * guard, and the keystroke-buffer "detach while open" invariant are IDENTICAL
- * across them; only the display and the parse differ. This rune helper owns the
- * lifecycle; each Field supplies `display(value) -> text` and `parse(text)`.
+ * Text-like kinds (string, integer, number, url, date, instant, datetime) and
+ * the universal JSON repair editor all edit through a single text input: click
+ * to open, type into a local draft, commit on blur/Enter, and revert on Escape.
+ * That lifecycle, the no-op guard, and the keystroke-buffer "detach while open"
+ * invariant are IDENTICAL across them; only the display and the parse differ.
+ * This rune helper owns the lifecycle; each Field supplies
+ * `display(value) -> text` and `parse(text)`.
  *
  * `parse` returns a DISCRIMINATED result, not a bare value: `value` commits
  * through {@link SaveField}, `cancel` reverts and closes without writing (an empty
@@ -37,8 +38,8 @@ type CreateCellEditOptions = {
 	save: SaveField;
 	/**
 	 * Serialize the committed value into the input's initial text. Defaults to
-	 * `String` (empty for nullish), the plain-text case; only the JSON repair editor
-	 * overrides it (`JSON.stringify`, so a type-confused value shows its quotes).
+	 * `String` (empty for nullish), the plain-text case; the JSON editor overrides it
+	 * (`JSON.stringify`, so a type-confused value shows its quotes).
 	 */
 	display?: (value: unknown) => string;
 	/** Interpret the draft text on commit. */
@@ -82,9 +83,9 @@ export function createCellEdit(options: CreateCellEditOptions) {
 		}
 		editing = false;
 		const value = current();
-		// Opening an empty cell and committing a blank value is not a real edit: don't
+		// Opening a missing cell and committing a blank value is not a real edit: don't
 		// phantom-create an empty-string key on a stray focus/blur. You reach the empty
-		// string by ERASING an existing value; an already-empty cell stays empty. (Only
+		// string by ERASING an existing value; an already-missing cell stays missing. (Only
 		// `string` can produce a `''` value; the other text kinds cancel a blank draft.)
 		if (value == null && result.value === '') return;
 		// No-op guard: re-committing the same scalar must not write (and trigger a

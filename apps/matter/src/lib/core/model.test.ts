@@ -21,7 +21,58 @@ describe('validateModel (the matter.json gate)', () => {
 			['tags', 'tags'],
 			['url', 'url'],
 		]);
+		expect(data.fields.map((c) => [c.name, c.required])).toEqual([
+			['title', true],
+			['status', true],
+			['labels', true],
+			['tags', true],
+			['url', true],
+		]);
 		expect(data.unmodeled).toEqual([]);
+		expect(data.unmatchedOptional).toEqual([]);
+	});
+
+	test('top-level optional marks typed fields as not required', () => {
+		const { data, error } = validateModel({
+			fields: {
+				title: { type: 'string' },
+				publishDate: { type: 'string', format: 'date' },
+			},
+			optional: ['publishDate'],
+		});
+		expect(error).toBeNull();
+		if (error) throw new Error(error.message);
+		expect(data.fields.map((c) => [c.name, c.required])).toEqual([
+			['title', true],
+			['publishDate', false],
+		]);
+		expect(data.unmatchedOptional).toEqual([]);
+	});
+
+	test('rejects optional when it is not an array of field names', () => {
+		expect(validateModel({ fields: {}, optional: 'title' }).error?.name).toBe(
+			'InvalidOptional',
+		);
+		expect(validateModel({ fields: {}, optional: [42] }).error?.name).toBe(
+			'InvalidOptional',
+		);
+	});
+
+	test('reports optional entries that do not match typed fields', () => {
+		const { data, error } = validateModel({
+			fields: {
+				title: { type: 'string' },
+				meta: { type: 'object' },
+			},
+			optional: ['title', 'meta', 'missing'],
+		});
+		expect(error).toBeNull();
+		if (error) throw new Error(error.message);
+		expect(data.fields.map((c) => [c.name, c.required])).toEqual([
+			['title', false],
+		]);
+		expect(data.unmodeled).toEqual(['meta']);
+		expect(data.unmatchedOptional).toEqual(['meta', 'missing']);
 	});
 
 	test('rejects a non-object top level', () => {
@@ -46,6 +97,7 @@ describe('validateModel (the matter.json gate)', () => {
 		if (error) throw new Error(error.message);
 		expect(data.fields.map((c) => c.name)).toEqual(['title']);
 		expect(data.unmodeled).toEqual(['bad']);
+		expect(data.unmatchedOptional).toEqual([]);
 	});
 
 	test('a shape outside the palette is unmodeled; the rest stays typed', () => {
@@ -60,6 +112,7 @@ describe('validateModel (the matter.json gate)', () => {
 		if (error) throw new Error(error.message);
 		expect(data.fields.map((c) => c.name)).toEqual(['title']);
 		expect(data.unmodeled).toEqual(['meta', 'note']);
+		expect(data.unmatchedOptional).toEqual([]);
 	});
 });
 
@@ -71,7 +124,9 @@ describe('parseModel (raw text)', () => {
 	});
 
 	test('parses a valid file', () => {
-		const { data, error } = parseModel('{"fields":{"title":{"type":"string"}}}');
+		const { data, error } = parseModel(
+			'{"fields":{"title":{"type":"string"}}}',
+		);
 		expect(error).toBeNull();
 		expect(data?.fields).toHaveLength(1);
 	});

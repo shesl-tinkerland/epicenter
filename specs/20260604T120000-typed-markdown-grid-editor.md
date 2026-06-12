@@ -49,7 +49,7 @@ matter.json    = model       the contract: each field is a JSON Schema. NEVER ga
 {
   "fields": {                                            // field name -> JSON Schema (the column.* subset)
     "title":  { "type": "string" },                      // required by default (no null in the schema)
-    "status": { "type": "string", "enum": ["draft","published","archived"] },
+    "status": { "type": "string", "enum": ["captured","refined"] },
     "tags":   { "type": "array", "items": { "type": "string" } },
     "url":    { "anyOf": [ { "type": "string", "format": "uri" }, { "type": "null" } ] }  // nullable = null in the schema
   }

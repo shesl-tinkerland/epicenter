@@ -28,7 +28,7 @@ import {
 
 export const listCommand = cmd({
 	command: 'list [path]',
-	describe: 'Tree view of exposed queries and mutations on this device',
+	describe: 'List exposed queries and mutations on this device, by mount',
 	builder: (yargs) =>
 		yargs
 			.positional('path', {
@@ -116,7 +116,7 @@ function renderText(entries: ActionManifest, path: string): void {
 		printActionDetail(path, leaf);
 		return;
 	}
-	printTree(subset, path);
+	printGroupedByMount(subset);
 }
 
 function filterByPath(entries: ActionManifest, path: string): ActionManifest {
@@ -146,48 +146,32 @@ function toActionDescriptor(
 	return desc;
 }
 
-type TreeNode = {
-	name: string;
-	children: Map<string, TreeNode>;
-	action?: ActionManifest[string];
-};
-
-function printTree(entries: ActionManifest, prefix: string): void {
-	const pfx = prefix ? `${prefix}.` : '';
-	const root: TreeNode = { name: '', children: new Map() };
+/**
+ * Action paths are exactly `mount.action_key` (mount names reject dots, action
+ * keys are snake_case), so the manifest is two levels deep by construction.
+ * Render one mount header per group with its actions indented underneath.
+ */
+function printGroupedByMount(entries: ActionManifest): void {
+	const byMount = new Map<string, [string, ActionManifest[string]][]>();
 	for (const [path, action] of Object.entries(entries)) {
-		const rest = prefix ? path.slice(pfx.length) : path;
-		if (!rest) continue;
-		const parts = rest.split('.');
-		let node = root;
-		for (const [idx, seg] of parts.entries()) {
-			let child = node.children.get(seg);
-			if (!child) {
-				child = { name: seg, children: new Map() };
-				node.children.set(seg, child);
-			}
-			node = child;
-			if (idx === parts.length - 1) node.action = action;
+		const dot = path.indexOf('.');
+		const mount = dot === -1 ? path : path.slice(0, dot);
+		const key = dot === -1 ? '' : path.slice(dot + 1);
+		const group = byMount.get(mount);
+		if (group) group.push([key, action]);
+		else byMount.set(mount, [[key, action]]);
+	}
+
+	let first = true;
+	for (const [mount, group] of byMount) {
+		if (!first) console.log('');
+		first = false;
+		console.log(mount);
+		for (const [key, action] of group) {
+			const desc = action.description ? `  ${action.description}` : '';
+			console.log(`  ${key}  (${action.type})${desc}`);
 		}
 	}
-	printChildren(root, '');
-}
-
-function printChildren(node: TreeNode, prefix: string): void {
-	const children = [...node.children.values()];
-	children.forEach((child, idx) => {
-		const isLast = idx === children.length - 1;
-		const branch = isLast ? '└── ' : '├── ';
-		const label = child.action
-			? `${child.name}  (${child.action.type})${
-					child.action.description ? `  ${child.action.description}` : ''
-				}`
-			: child.name;
-		console.log(`${prefix}${branch}${label}`);
-		if (child.children.size > 0) {
-			printChildren(child, prefix + (isLast ? '    ' : '│   '));
-		}
-	});
 }
 
 function printActionDetail(path: string, action: ActionManifest[string]): void {

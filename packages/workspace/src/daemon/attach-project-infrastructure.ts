@@ -5,7 +5,8 @@
  * persist the Y.Doc update log to disk under `yjsPath(projectDir, guid)`, join
  * the cloud room at the partitioned `roomWsUrl({ baseURL, ownerId, guid,
  * deviceId })`, and own the ordered async dispose (destroy first so writes
- * flush before sockets close, then await both `whenDisposed` promises).
+ * flush before sockets close, then await every `whenDisposed` barrier:
+ * collaboration, log, and any registered materializers).
  *
  * A cloud doc is owned by the authenticated `ownerId` and addressed by its
  * `ydoc.guid`. The daemon and browser apps build the same URL with
@@ -49,6 +50,13 @@ export type AttachProjectInfrastructureOptions<
 	actions: TActions;
 	/** Base URL of the sync server (the Epicenter cloud, or a self-hosted hub). */
 	baseURL: string;
+	/**
+	 * Materializer attachments composed around the same ydoc. Their teardown
+	 * drains are awaited alongside collaboration and log teardown, so a daemon
+	 * shutdown cannot drop projection writes mid-flight. Each drain is bounded
+	 * by the materializer's own `disposeTimeoutMs`.
+	 */
+	materializers?: ReadonlyArray<{ whenDisposed: Promise<void> }>;
 };
 
 export function attachProjectInfrastructure<TActions extends ActionRegistry>(
@@ -61,6 +69,7 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 		onReconnectSignal,
 		actions,
 		baseURL,
+		materializers = [],
 	}: AttachProjectInfrastructureOptions<TActions>,
 ) {
 	const yjsLog = attachYjsLog(ydoc, {
@@ -84,10 +93,17 @@ export function attachProjectInfrastructure<TActions extends ActionRegistry>(
 		yjsLog,
 		/** Cloud sync, presence, and dispatch handle for this mount. */
 		collaboration,
-		/** Destroy the Y.Doc, then await collaboration and log teardown. */
+		/**
+		 * Destroy the Y.Doc, then await collaboration, log, and materializer
+		 * teardown (each materializer drains its pending projection writes).
+		 */
 		async [Symbol.asyncDispose]() {
 			ydoc.destroy();
-			await Promise.all([collaboration.whenDisposed, yjsLog.whenDisposed]);
+			await Promise.all([
+				collaboration.whenDisposed,
+				yjsLog.whenDisposed,
+				...materializers.map((materializer) => materializer.whenDisposed),
+			]);
 		},
 	};
 }

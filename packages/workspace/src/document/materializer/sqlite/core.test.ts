@@ -12,11 +12,12 @@
  * - Observer-based sync upserts changed rows and deletes removed rows
  * - FTS5 search returns ranked results with snippets
  * - rebuild() drops and recreates all materialized data
- * - dispose() stops observers and clears timeouts
+ * - dispose() stops observers, drains pending mirror work, then closes the db
  */
 
 import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
+import { field } from '@epicenter/field';
 import {
 	createDisposableCache,
 	createWorkspace,
@@ -24,7 +25,6 @@ import {
 	type Tables,
 } from '../../../index.js';
 import { isAction, isMutation, isQuery } from '../../../shared/actions.js';
-import { field } from '@epicenter/field';
 import { nullable } from '../../nullable.js';
 import { attachSqliteMaterializerCore } from './core.js';
 
@@ -143,8 +143,9 @@ function hasTable(db: Database, tableName: string) {
 
 async function disposeAndYieldForClose(setupResult: ReturnType<typeof setup>) {
 	setupResult.workspace[Symbol.dispose]();
-	// In settled cleanup paths, disposal schedules close on the next microtask.
-	await Promise.resolve();
+	// Disposal drains pending mirror work before closing; await the barrier so
+	// no test leaks an open database or a late close into the next case.
+	await setupResult.workspace.sqlite.whenDisposed;
 }
 
 // ============================================================================
@@ -424,7 +425,7 @@ describe('attachSqliteMaterializerCore', () => {
 	// ============================================================================
 
 	describe('dispose', () => {
-		test('dispose cancels queued sync and ignores later writes', async () => {
+		test('dispose flushes queued sync before closing', async () => {
 			const testSetup = setup();
 			const originalClose = testSetup.db.close.bind(testSetup.db);
 			testSetup.db.close = () => {};
@@ -439,14 +440,36 @@ describe('attachSqliteMaterializerCore', () => {
 				});
 				testSetup.workspace[Symbol.dispose]();
 
-				await waitForSyncCycle();
+				await testSetup.workspace.sqlite.whenDisposed;
 
-				// The ydoc is destroyed, so further writes to tables are no-ops
-				// as far as materialization is concerned; the observer has been
-				// unsubscribed via materializer dispose.
-				await waitForSyncCycle();
+				// The row was still sitting in the debounced pending set at
+				// dispose time; teardown drains it instead of dropping it.
+				expect(getRows(testSetup.db, 'posts')).toEqual([
+					{ id: 'post-1', title: 'Queued row', published: null },
+				]);
+			} finally {
+				originalClose();
+			}
+		});
 
-				expect(getRows(testSetup.db, 'posts')).toEqual([]);
+		test('dispose immediately after seeding drains the initial full load', async () => {
+			const testSetup = setup();
+			const originalClose = testSetup.db.close.bind(testSetup.db);
+			testSetup.db.close = () => {};
+
+			try {
+				testSetup.workspace.tables.posts.set({
+					id: 'post-1',
+					title: 'Seeded row',
+					published: null,
+				});
+				testSetup.workspace[Symbol.dispose]();
+
+				await testSetup.workspace.sqlite.whenDisposed;
+
+				expect(getRows(testSetup.db, 'posts')).toEqual([
+					{ id: 'post-1', title: 'Seeded row', published: null },
+				]);
 			} finally {
 				originalClose();
 			}

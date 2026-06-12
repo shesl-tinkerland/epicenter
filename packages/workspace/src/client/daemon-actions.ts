@@ -1,16 +1,16 @@
 /**
  * `buildDaemonActions`: typed proxy that turns a `DaemonClient` into a flat
  * action-root facade. Local call sites use the same snake_case key the action
- * was authored under (`workspace.tabs_open(...)`); each call invokes the
- * daemon's local action registry over the unix socket via `client.invoke`.
+ * was authored under (`workspace.tabs_open(...)`); each call runs the
+ * daemon's local action registry over the unix socket via `client.run`.
  *
  * The proxy is one level: property access returns a function, calling that
- * function fires `client.invoke` with `${mount}.${path}`. `then` is masked at
+ * function fires `client.run` with `${mount}.${path}`. `then` is masked at
  * the root so accidental `await workspace` does not turn it thenable.
  */
 
 import type { Result } from 'wellcrafted/result';
-import type { InvokeError } from '../daemon/action-errors.js';
+import type { RunError } from '../daemon/action-errors.js';
 import { joinDaemonActionPath } from '../daemon/action-path.js';
 import type { DaemonClient, DaemonError } from '../daemon/client.js';
 import type { Action, ActionRegistry } from '../shared/actions.js';
@@ -25,10 +25,17 @@ type DaemonSuccessOutput<TOutput> =
 		? TData
 		: Awaited<TOutput>;
 
+/**
+ * The facade never sends a `peer` target, so by construction the daemon can
+ * only answer with the local-run error variants; the peer variants
+ * (`PeerNotFound`, `RemoteCallFailed`) are excluded from the surface.
+ */
+type LocalRunError = Extract<RunError, { name: 'UsageError' | 'RuntimeError' }>;
+
 type WrapDaemonAction<F> = F extends (...args: infer Args) => infer R
 	? (
 			...args: WithDaemonOptions<Args>
-		) => Promise<Result<DaemonSuccessOutput<R>, InvokeError | DaemonError>>
+		) => Promise<Result<DaemonSuccessOutput<R>, LocalRunError | DaemonError>>
 	: never;
 
 /**
@@ -59,7 +66,7 @@ export function buildDaemonActions<TActions extends ActionRegistry>(
 			if (typeof prop !== 'string') return undefined;
 			if (prop === 'then') return undefined;
 			return (input?: unknown) =>
-				client.invoke({
+				client.run({
 					actionPath: joinDaemonActionPath(mount, prop),
 					input,
 				});

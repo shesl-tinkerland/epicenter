@@ -7,7 +7,7 @@
  * a flat action proxy backed by a unix-socket `DaemonClient`.
  * `TActions` is type-only: no workspace code runs in the caller process.
  * `DaemonActions<TActions>` rewrites each snake_case action key into the
- * daemon `/invoke` result shape.
+ * daemon `/run` result shape.
  *
  * @example
  * ```ts

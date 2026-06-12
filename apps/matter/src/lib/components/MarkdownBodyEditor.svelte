@@ -8,6 +8,7 @@
 		keymap,
 		placeholder,
 	} from '@codemirror/view';
+	import { markdownLivePreview } from '$lib/editor/markdown-live-preview';
 
 	let {
 		body,
@@ -42,6 +43,7 @@
 					drawSelection(),
 					EditorView.lineWrapping,
 					markdown(),
+					markdownLivePreview(),
 					placeholder('Start writing'),
 					EditorView.updateListener.of((update) => {
 						if (update.docChanged) draft = update.state.doc.toString();
