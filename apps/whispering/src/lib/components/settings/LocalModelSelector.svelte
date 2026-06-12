@@ -19,12 +19,12 @@
 	import { open } from '@tauri-apps/plugin-dialog';
 	import type { Snippet } from 'svelte';
 	import type { LocalModelConfig } from '$lib/constants/local-models';
-	import { createPrebuiltModel } from '$lib/operations/local-models';
 	import {
 		importModelDirectory,
 		importModelFile,
 	} from '$lib/services/transcription/local-model-storage';
 	import { PROVIDERS } from '$lib/services/transcription/providers';
+	import { localModelDownloads } from '$lib/state/local-model-downloads.svelte';
 	import { tauri } from '#platform/tauri';
 	import LocalModelDownloadCard from './LocalModelDownloadCard.svelte';
 
@@ -103,57 +103,12 @@
 	// recommended; falling back to the first entry keeps the primary action
 	// rendering even if the catalog ever loses the flag.
 	const recommended = $derived(models.find((m) => m.recommended) ?? models[0]);
-	const recommendedModel = $derived(createPrebuiltModel(recommended));
+	const recommendedDownload = $derived(localModelDownloads.get(recommended));
 
-	type RecommendedState =
-		| { type: 'not-downloaded' }
-		| { type: 'downloading'; progress: number }
-		| { type: 'ready' }
-		| { type: 'active' };
-
-	let recommendedState = $state<RecommendedState>({ type: 'not-downloaded' });
-
-	// Check the recommended model's status on mount and whenever the engine's
-	// active model path changes (the getter reads deviceConfig, so this effect
-	// tracks it).
-	$effect(() => {
-		void recommendedModel.activeModelPath;
-		refreshRecommendedStatus();
-	});
-
-	async function refreshRecommendedStatus() {
-		const status = await recommendedModel.getStatus();
-		// While downloading, the download handler owns the state machine; a
-		// download may also have started while we were checking the disk.
-		if (recommendedState.type === 'downloading') return;
-		recommendedState = { type: status };
-	}
-
-	async function downloadRecommended() {
-		if (recommendedState.type === 'downloading') return;
-
-		recommendedState = { type: 'downloading', progress: 0 };
-
-		const { data, error } = await recommendedModel.downloadAndActivate({
-			onProgress: (progress) => {
-				recommendedState = { type: 'downloading', progress };
-			},
-		});
-		if (error) {
-			toast.error('Failed to download model', {
-				description: error.message,
-			});
-			recommendedState = { type: 'not-downloaded' };
-			return;
-		}
-
-		recommendedState = { type: 'active' };
-		toast.success(
-			data.outcome === 'already-installed'
-				? 'Model already downloaded and activated'
-				: 'Model downloaded and activated successfully',
-		);
-	}
+	// Aliased so the template narrows the union per branch. Shared with the
+	// catalog row for the same model, so a download started here shows its
+	// progress there too.
+	const recommendedState = $derived(recommendedDownload.state);
 
 	/**
 	 * Open file/folder browser for manual model selection
@@ -275,11 +230,11 @@
 							</span>
 						</div>
 					{:else if recommendedState.type === 'ready'}
-						<Button onclick={downloadRecommended}>
+						<Button onclick={() => recommendedDownload.activate()}>
 							Activate {recommended.name}
 						</Button>
 					{:else}
-						<Button onclick={downloadRecommended}>
+						<Button onclick={() => recommendedDownload.download()}>
 							<Download class="size-4" />
 							Download {recommended.name} ({recommended.size})
 						</Button>
