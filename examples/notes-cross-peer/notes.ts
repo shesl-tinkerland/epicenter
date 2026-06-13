@@ -52,7 +52,7 @@ export function openNotes({
 		notes: {
 			list: defineQuery({
 				description: 'List all notes',
-				handler: () => tables.notes.getAllValid(),
+				handler: () => tables.notes.scan().rows,
 			}),
 			add: defineMutation({
 				description: 'Add a note',
