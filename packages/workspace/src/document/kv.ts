@@ -158,8 +158,7 @@ export function createKv<TKvDefinitions extends KvDefinitions>(
 				}
 			};
 
-			ykv.observe(handler);
-			return () => ykv.unobserve(handler);
+			return ykv.observe(handler);
 		},
 
 		observeAll(
@@ -189,8 +188,7 @@ export function createKv<TKvDefinitions extends KvDefinitions>(
 					);
 				}
 			};
-			ykv.observe(handler);
-			return () => ykv.unobserve(handler);
+			return ykv.observe(handler);
 		},
 
 		getAll(): {

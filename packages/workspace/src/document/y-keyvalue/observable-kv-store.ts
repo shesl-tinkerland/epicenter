@@ -102,13 +102,21 @@ export interface ObservableKvStore<T> {
 	 * Whether an entry is stored under `key`, readable or not: `true` for both
 	 * `present` and `unreadable` reads, `false` only for `absent`. Raw existence,
 	 * so it agrees with `size` (which counts present-but-unreadable entries too).
+	 * Because it counts unreadable entries, `has(k) === true` does **not** imply
+	 * `get(k) !== undefined`: an unreadable entry is `has: true`, `get: undefined`.
+	 * When that distinction matters, switch on `read(k).state` instead.
 	 */
 	has(key: string): boolean;
 	delete(key: string): void;
 	bulkSet(entries: Array<KvEntry<T>>): void;
 	bulkDelete(keys: string[]): void;
-	observe(handler: KvStoreChangeHandler<T>): void;
-	unobserve(handler: KvStoreChangeHandler<T>): void;
+	/**
+	 * Register a change handler and get back the function that removes it. The
+	 * store hands out its own unsubscribe rather than a separate `unobserve(h)`
+	 * the caller has to pair by hand: every consumer wraps observation in a
+	 * disposer, so the disposer is the contract.
+	 */
+	observe(handler: KvStoreChangeHandler<T>): () => void;
 	/**
 	 * Walk every stored entry once, each classified as `present` or `unreadable`
 	 * (never `absent`: iterating storage cannot surface a missing key). The bulk

@@ -865,14 +865,13 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 		}
 	}
 
-	/** Register an observer. Called when keys are added, updated, or deleted. */
-	observe(handler: KvStoreChangeHandler<T>): void {
+	/**
+	 * Register an observer (called when keys are added, updated, or deleted) and
+	 * return the function that removes it.
+	 */
+	observe(handler: KvStoreChangeHandler<T>): () => void {
 		this.changeHandlers.add(handler);
-	}
-
-	/** Unregister an observer. */
-	unobserve(handler: KvStoreChangeHandler<T>): void {
-		this.changeHandlers.delete(handler);
+		return () => this.changeHandlers.delete(handler);
 	}
 
 	/**

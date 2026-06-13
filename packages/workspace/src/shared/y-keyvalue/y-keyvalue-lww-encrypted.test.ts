@@ -215,7 +215,7 @@ describe('createEncryptedYkvLww', () => {
 			expect(events).toEqual([{ key: 'foo', change: { action: 'delete' } }]);
 		});
 
-		test('unobserve stops notifications', () => {
+		test('the disposer returned by observe stops notifications', () => {
 			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
@@ -224,9 +224,9 @@ describe('createEncryptedYkvLww', () => {
 				count++;
 			};
 
-			kv.observe(handler);
+			const unobserve = kv.observe(handler);
 			kv.set('a', '1');
-			kv.unobserve(handler);
+			unobserve();
 			kv.set('b', '2');
 
 			expect(count).toBe(1);

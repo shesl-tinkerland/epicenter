@@ -319,7 +319,8 @@ export function createEncryptedYkvLww<T>(
 		for (const handler of changeHandlers) handler(decryptedChanges, origin);
 	};
 
-	inner.observe(observer);
+	/** Removes the inner observer; called by this wrapper's dispose. */
+	const unobserveInner = inner.observe(observer);
 
 	return {
 		set(key: string, val: T): void {
@@ -370,11 +371,9 @@ export function createEncryptedYkvLww<T>(
 				yield [key, classify(key, stored.val)];
 			}
 		},
-		observe(handler: KvStoreChangeHandler<T>): void {
+		observe(handler: KvStoreChangeHandler<T>): () => void {
 			changeHandlers.add(handler);
-		},
-		unobserve(handler: KvStoreChangeHandler<T>): void {
-			changeHandlers.delete(handler);
+			return () => changeHandlers.delete(handler);
 		},
 		/**
 		 * Activate encryption with a versioned keyring. The highest-version key
@@ -480,7 +479,7 @@ export function createEncryptedYkvLww<T>(
 		 * wrapper is no longer needed but the underlying Y.Array continues to exist.
 		 */
 		[Symbol.dispose](): void {
-			inner.unobserve(observer);
+			unobserveInner();
 			inner[Symbol.dispose]();
 		},
 	};

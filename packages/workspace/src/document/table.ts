@@ -792,8 +792,7 @@ export function createReadonlyTable<
 			const handler: KvStoreChangeHandler<unknown> = (changes, origin) => {
 				callback(new Set(changes.keys()) as ReadonlySet<TRow['id']>, origin);
 			};
-			ykv.observe(handler);
-			return () => ykv.unobserve(handler);
+			return ykv.observe(handler);
 		},
 
 		storedCount(): number {
