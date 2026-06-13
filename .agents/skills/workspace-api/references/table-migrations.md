@@ -104,8 +104,8 @@ deleteConversation(message.id);  // Error: ChatMessageId is not ConversationId
 
 ### Reference Implementations
 
-See `apps/honeycrisp/workspace.ts` and `apps/fuji/src/lib/workspace.ts` for the canonical co-located pattern (brand type + `generate*` / `as*` + table + `InferTableRow` export).
-See `apps/whispering/src/lib/workspace/definition.ts` for a multi-table example including a multi-version migration and `column.json(Type.Union([...]))` for discriminated JSON results.
+See `apps/honeycrisp/honeycrisp.ts` and `apps/fuji/src/lib/workspace/index.ts` for the canonical co-located pattern (brand type + `generate*` / `as*` + table + `InferTableRow` export).
+See `apps/whispering/src/lib/workspace/definition.ts` for a multi-table example including `column.json(Type.Union([...]))` for discriminated JSON results. No first-party app has a multi-version migration yet; for `.migrate()` examples, see the test suites at `packages/workspace/src/document/create-table.test.ts` and `packages/workspace/src/document/define-table.test.ts`.
 
 ### Pattern
 
