@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadProjectConfig } from './load-project-config.js';
+import { loadProjectConfig } from './load-config.js';
 
 let epicenterRoot: string;
 

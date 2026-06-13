@@ -13,10 +13,9 @@
  */
 
 import { Ok, type Result, tryAsync, trySync } from 'wellcrafted/result';
-
+import { validateMountNames } from '../mount/contract.js';
 import { buildDaemonApp } from './app.js';
 import type { DaemonLease } from './lease.js';
-import { validateMountNames } from './mount-validation.js';
 import { unlinkSocketFile } from './runtime-files.js';
 import { StartupError } from './startup-errors.js';
 import type { DaemonServedMount } from './types.js';

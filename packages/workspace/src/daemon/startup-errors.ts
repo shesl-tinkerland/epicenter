@@ -3,7 +3,7 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import type { MountNameIssue } from './mount-validation.js';
+import type { MountNameIssue } from '../mount/contract.js';
 
 /**
  * Tagged-error variants for daemon startup.

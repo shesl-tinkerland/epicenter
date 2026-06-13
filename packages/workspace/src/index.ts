@@ -131,8 +131,8 @@ export {
 // keeping them out of this root barrel stops browser bundles (fuji,
 // whispering, etc.) from traversing `node:*` modules. Daemon runtime and
 // log paths live in `@epicenter/workspace/daemon/paths.ts`.
-export { DEFAULT_PROJECT_CONFIG_SOURCE } from './config/project-config-source.js';
-export { defineMount } from './daemon/define-mount.js';
+export { DEFAULT_PROJECT_CONFIG_SOURCE } from './mount/config-source.js';
+export { defineMount } from './mount/contract.js';
 export type { EpicenterRoot } from './shared/types';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -179,10 +179,10 @@ export { docGuid } from './document/doc-guid.js';
 // `openCollaboration` session.
 export { readRoomOverHttp } from './document/http-room-sync.js';
 export type { SyncStatus } from './document/internal/sync-supervisor.js';
-export {
-	type InferKvValue,
-	type Kv,
-	type KvDefinitions,
+export type {
+	InferKvValue,
+	Kv,
+	KvDefinitions,
 } from './document/kv.js';
 export { onLocalUpdate } from './document/on-local-update.js';
 export {

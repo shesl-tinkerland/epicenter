@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { PROJECT_CONFIG_FILENAME } from '../config/project-config-source.js';
+import { PROJECT_CONFIG_FILENAME } from '../mount/config-source.js';
 import type { EpicenterRoot } from '../shared/types.js';
 
 export function findEpicenterRoot(

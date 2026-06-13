@@ -32,10 +32,9 @@ import {
 } from 'wellcrafted/error';
 import { Err, Ok, type Result, tryAsync } from 'wellcrafted/result';
 
-import type { Mount } from '../daemon/define-mount.js';
-import { isValidMountName } from '../daemon/mount-validation.js';
 import type { EpicenterRoot } from '../shared/types.js';
-import { PROJECT_CONFIG_FILENAME } from './project-config-source.js';
+import { PROJECT_CONFIG_FILENAME } from './config-source.js';
+import { isMount, isValidMountName, type Mount } from './contract.js';
 
 export const ProjectConfigError = defineErrors({
 	ProjectConfigNotFound: ({
@@ -117,15 +116,4 @@ export async function loadProjectConfig(
 		detail:
 			'the default export must be a Mount (a value with a string `name` and an `open` function)',
 	});
-}
-
-function isMount(value: unknown): value is Mount {
-	return (
-		typeof value === 'object' &&
-		value !== null &&
-		'name' in value &&
-		typeof (value as { name: unknown }).name === 'string' &&
-		'open' in value &&
-		typeof (value as { open: unknown }).open === 'function'
-	);
 }

@@ -11,7 +11,7 @@
  * - a signed-out auth refuses before the mount opens
  *
  * Config-shape validation (array -> single, malformed export, syntax errors)
- * is pinned separately in `config/load-project-config.test.ts`.
+ * is pinned separately in `mount/load-config.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -23,7 +23,7 @@ import { asOwnerId } from '@epicenter/identity';
 import { expectErr, expectOk } from 'wellcrafted/testing';
 
 import type { WorkspaceAuthClient } from './auth-client.js';
-import { openProject } from './open-project.js';
+import { openProject } from './open.js';
 
 let epicenterRoot: string;
 

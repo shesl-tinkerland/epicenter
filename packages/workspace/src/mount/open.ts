@@ -24,17 +24,13 @@ import type { Keyring } from '@epicenter/encryption';
 import type { OwnerId } from '@epicenter/identity';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 
-import {
-	loadProjectConfig,
-	type ProjectConfigError,
-} from '../config/load-project-config.js';
-import type { Mount, MountContext } from '../daemon/define-mount.js';
-import type { StartedMount } from '../daemon/types.js';
 import { asDeviceId } from '../document/device-id.js';
 import { hashYDocClientId } from '../shared/client-id.js';
 import type { EpicenterRoot } from '../shared/types.js';
 import type { WorkspaceAuthClient } from './auth-client.js';
-import { WorkspaceAppError } from './errors.js';
+import type { Mount, MountContext, StartedMount } from './contract.js';
+import { loadProjectConfig, type ProjectConfigError } from './load-config.js';
+import { WorkspaceAppError } from './open-errors.js';
 
 export type OpenProjectOptions = {
 	epicenterRoot: EpicenterRoot | string;

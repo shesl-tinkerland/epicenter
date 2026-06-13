@@ -9,8 +9,6 @@ export { connectDaemonActions } from './client/connect-daemon-actions.js';
 export type { DaemonActions } from './client/daemon-actions.js';
 export { buildDaemonActions } from './client/daemon-actions.js';
 export { findEpicenterRoot } from './client/find-project-root.js';
-export { ProjectConfigError } from './config/load-project-config.js';
-export { DEFAULT_PROJECT_CONFIG_SOURCE } from './config/project-config-source.js';
 export {
 	type PeerSyncStatus,
 	RunError,
@@ -28,11 +26,6 @@ export {
 	getDaemon,
 	pingDaemon,
 } from './daemon/client.js';
-export {
-	defineMount,
-	type Mount,
-	type MountContext,
-} from './daemon/define-mount.js';
 export {
 	claimDaemonLease,
 	type DaemonLease,
@@ -59,10 +52,6 @@ export {
 	startDaemonServer,
 } from './daemon/server.js';
 export { StartupError } from './daemon/startup-errors.js';
-export type {
-	DaemonRuntime,
-	StartedMount,
-} from './daemon/types.js';
 export {
 	attachYjsLog,
 	type YjsLogAttachment,
@@ -83,10 +72,21 @@ export {
 	sqlitePath,
 	yjsPath,
 } from './document/workspace-paths.js';
-export { hashYDocClientId } from './shared/client-id.js';
-export type { WorkspaceAuthClient } from './workspace-apps/auth-client.js';
-export { WorkspaceAppError } from './workspace-apps/errors.js';
+export type { WorkspaceAuthClient } from './mount/auth-client.js';
+export { DEFAULT_PROJECT_CONFIG_SOURCE } from './mount/config-source.js';
+export type {
+	DaemonRuntime,
+	StartedMount,
+} from './mount/contract.js';
+export {
+	defineMount,
+	type Mount,
+	type MountContext,
+} from './mount/contract.js';
+export { ProjectConfigError } from './mount/load-config.js';
 export {
 	type OpenProjectOptions,
 	openProject,
-} from './workspace-apps/open-project.js';
+} from './mount/open.js';
+export { WorkspaceAppError } from './mount/open-errors.js';
+export { hashYDocClientId } from './shared/client-id.js';
