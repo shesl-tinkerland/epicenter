@@ -3,6 +3,8 @@
  */
 
 import { expect, test } from 'bun:test';
+import { type EncryptedBlob, isEncryptedBlob } from '@epicenter/encryption';
+import { randomBytes } from '@noble/ciphers/utils.js';
 import { Type } from 'typebox';
 import * as Y from 'yjs';
 import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
@@ -14,6 +16,18 @@ const themeSchema = Type.Object({
 	mode: Type.Enum(['light', 'dark']),
 });
 const themeDefault = () => ({ mode: 'light' as const });
+
+/** Mint a blob encrypted under `key` so another keyring reads it as unreadable. */
+function lockedBlob<T>(value: T, key: Uint8Array): EncryptedBlob {
+	const helper = createEncryptedYkvLww<T>(new Y.Doc({ guid: 'helper' }), 'h');
+	helper.activateEncryption(new Map([[1, key]]));
+	helper.set('k', value);
+	const entry = helper.yarray.toArray()[0];
+	if (!entry || !isEncryptedBlob(entry.val)) {
+		throw new Error('Expected helper entry to be encrypted');
+	}
+	return entry.val;
+}
 
 test('set stores a value that get returns', () => {
 	const ydoc = new Y.Doc();
@@ -61,6 +75,40 @@ test('get returns defaultValue for invalid stored data', () => {
 	ykv.yarray.push([{ key: 'count', val: 'not-a-number', ts: 0 }]);
 
 	expect(kv.get('count')).toBe(0);
+});
+
+test('get reads an unreadable value as the default', () => {
+	const ydoc = new Y.Doc();
+	const ykv = createEncryptedYkvLww<unknown>(ydoc, KV_KEY);
+	// This binary holds only key version 2; a value encrypted under version 1
+	// cannot be decrypted, so it reads as the default like an absent key.
+	ykv.activateEncryption(new Map([[2, randomBytes(32)]]));
+	ykv.yarray.push([
+		{ key: 'theme', val: lockedBlob({ mode: 'dark' }, randomBytes(32)), ts: 1 },
+	]);
+
+	const kv = createKv(ykv, { theme: defineKv(themeSchema, themeDefault) });
+
+	expect(kv.get('theme')).toEqual({ mode: 'light' });
+});
+
+test('set refuses to overwrite an unreadable value, preserving the ciphertext', () => {
+	const ydoc = new Y.Doc();
+	const ykv = createEncryptedYkvLww<unknown>(ydoc, KV_KEY);
+	ykv.activateEncryption(new Map([[2, randomBytes(32)]]));
+	const blob = lockedBlob({ mode: 'dark' }, randomBytes(32));
+	ykv.yarray.push([{ key: 'theme', val: blob, ts: 1 }]);
+
+	const kv = createKv(ykv, { theme: defineKv(themeSchema, themeDefault) });
+
+	// A write must not clobber a value this binary cannot read.
+	kv.set('theme', { mode: 'light' });
+
+	// The intact ciphertext is still there, untouched, ready to heal on sync.
+	const stored = ykv.yarray.toArray().filter((e) => e.key === 'theme');
+	expect(stored).toHaveLength(1);
+	expect(isEncryptedBlob(stored[0]!.val)).toBe(true);
+	expect(stored[0]!.val).toEqual(blob);
 });
 
 test('observeAll fires for set changes with correct key and value', () => {

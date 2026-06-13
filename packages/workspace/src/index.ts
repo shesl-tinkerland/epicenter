@@ -183,7 +183,6 @@ export {
 	type InferKvValue,
 	type Kv,
 	type KvDefinitions,
-	KvError,
 } from './document/kv.js';
 export { onLocalUpdate } from './document/on-local-update.js';
 export {

@@ -3,18 +3,23 @@
  * `./workspace.ts`) consumes these to mount the KV slot onto a workspace
  * root, applying encryption when a keyring is provided.
  *
- * KV uses validate-or-default semantics: invalid or missing values return
- * the result of the definition's `defaultValue()` factory.
+ * Read is a hopeful projection: `get()` returns the stored value when it is
+ * present and valid, otherwise the definition's `defaultValue()`. Absent,
+ * invalid, and unreadable (encrypted under a key this binary lacks) all read
+ * as the default. The read never persists that default; the stored bytes are
+ * left untouched, so a later read returns the real value once a newer schema
+ * can parse it or the missing key syncs in. No write happens during that
+ * recovery; the same ciphertext simply becomes decryptable.
  *
- * `createKv` accepts an optional `{ logger? }`: when provided, validation
- * failures emit `logger.warn(KvError.ValidationFailed({ key, raw }))` without
- * changing the return contract. When omitted, behavior is silent.
+ * Write preserves what it cannot read: `set()` refuses to overwrite a value
+ * that reads as unreadable, because clobbering intact ciphertext would destroy
+ * a value that is only waiting for its key. This is the KV form of the table
+ * write guard. Invalid (parseable but wrong-shaped) values stay overwritable,
+ * since replacing genuinely corrupt config is the recovery.
  */
 
 import { type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { defineErrors, type InferErrors } from 'wellcrafted/error';
-import type { Logger } from 'wellcrafted/logger';
 import { type KvStoreChange, type ObservableKvStore } from './y-keyvalue/index';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -25,20 +30,6 @@ import { type KvStoreChange, type ObservableKvStore } from './y-keyvalue/index';
 export type KvChange<TValue> =
 	| { type: 'set'; value: TValue }
 	| { type: 'delete' };
-
-/**
- * Errors emitted to the optional logger. The default value is still returned
- * (the silent-by-default contract), but consumers that provide a logger see
- * a structured `ValidationFailed` event.
- */
-export const KvError = defineErrors({
-	ValidationFailed: ({ key, raw }: { key: string; raw: unknown }) => ({
-		message: `[kv] Stored value for "${key}" failed schema validation; returning default`,
-		key,
-		raw,
-	}),
-});
-export type KvError = InferErrors<typeof KvError>;
 
 // ════════════════════════════════════════════════════════════════════════════
 // KV DEFINITION TYPES
@@ -66,16 +57,6 @@ export type KvDefinitions = Record<
 	KvDefinition<any>
 >;
 
-/** Optional knobs for `createKv`. */
-export type KvOptions = {
-	/**
-	 * Logger that captures validation failures via
-	 * `logger.warn(KvError.ValidationFailed({ key, raw }))`. Omit for silent
-	 * behavior; no module-level default logger is installed.
-	 */
-	logger?: Logger;
-};
-
 /**
  * Dictionary-style typed handle over a KV store.
  */
@@ -90,22 +71,18 @@ export type Kv<TKvDefinitions extends KvDefinitions> = ReturnType<
 export function createKv<TKvDefinitions extends KvDefinitions>(
 	ykv: ObservableKvStore<unknown>,
 	definitions: TKvDefinitions,
-	opts?: KvOptions,
 ) {
-	const logger = opts?.logger;
 	return {
 		get<K extends keyof TKvDefinitions & string>(
 			key: K,
 		): InferKvValue<TKvDefinitions[K]> {
 			const definition = definitions[key]!;
 			const raw = ykv.get(key);
-			if (raw === undefined) {
-				return definition.defaultValue() as InferKvValue<TKvDefinitions[K]>;
-			}
-			if (Value.Check(definition.schema, raw)) {
+			if (raw !== undefined && Value.Check(definition.schema, raw)) {
 				return raw as InferKvValue<TKvDefinitions[K]>;
 			}
-			logger?.warn(KvError.ValidationFailed({ key, raw }));
+			// Absent, invalid, and unreadable all read as the default. The stored
+			// bytes are left intact so a later read recovers the real value.
 			return definition.defaultValue() as InferKvValue<TKvDefinitions[K]>;
 		},
 
@@ -113,6 +90,11 @@ export function createKv<TKvDefinitions extends KvDefinitions>(
 			key: K,
 			value: InferKvValue<TKvDefinitions[K]>,
 		): void {
+			// Preserve a value this binary cannot read: overwriting intact
+			// ciphertext would destroy a value that becomes readable once its key
+			// syncs in. Plaintext stores never report unreadable, so this is a
+			// no-op there.
+			if (ykv.read(key).state === 'unreadable') return;
 			ykv.set(key, value);
 		},
 
