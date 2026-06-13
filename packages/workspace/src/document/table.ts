@@ -78,6 +78,41 @@ export const TableParseError = defineErrors({
 export type TableParseError = InferErrors<typeof TableParseError>;
 
 // ════════════════════════════════════════════════════════════════════════════
+// TABLE WRITE ERROR
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Errors produced when a write is refused before touching storage.
+ *
+ * Surfaced by `set()`. Whole-row writes stamp this binary's latest `_v` and
+ * always win local LWW (the monotonic clock guarantees a fresh timestamp), so
+ * a stale binary writing over a newer-schema row would silently destroy
+ * newer-only columns on every synced device. The guard refuses instead.
+ *
+ * `bulkSet()` and `clear()` report the same refusals as `{ refused: string[] }`
+ * rather than an error: partial success is their expected outcome, not a
+ * failure of the operation.
+ */
+export const TableWriteError = defineErrors({
+	/** The stored row's `_v` exceeds this binary's latest known version. */
+	NewerWriterRefusal: ({
+		id,
+		storedVersion,
+		latestVersion,
+	}: {
+		id: string;
+		storedVersion: number;
+		latestVersion: number;
+	}) => ({
+		message: `Row '${id}' was written by a newer version of this app (schema version ${storedVersion}, this app knows ${latestVersion}). Update the app to edit it.`,
+		id,
+		storedVersion,
+		latestVersion,
+	}),
+});
+export type TableWriteError = InferErrors<typeof TableWriteError>;
+
+// ════════════════════════════════════════════════════════════════════════════
 // ROW TYPE
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -298,18 +333,34 @@ export type Table<
 	TRow extends BaseRow,
 	TVersions extends readonly VersionedColumns[] = readonly VersionedColumns[],
 > = ReadonlyTable<TRow, TVersions> & {
-	set(row: TRow): void;
+	/**
+	 * Whole-row write. Stamps this binary's latest `_v` and replaces the
+	 * stored row. Refuses with `NewerWriterRefusal` when the stored row was
+	 * stamped by a newer schema version than this binary knows; the stored
+	 * row is left untouched and the caller should prompt for an app update.
+	 */
+	set(row: TRow): Result<void, TableWriteError>;
+	/**
+	 * Chunked whole-row import. Rows stamped by a newer schema version are
+	 * skipped per chunk at write time and reported in `refused`; everything
+	 * else is written. `onProgress` percent runs over the input length,
+	 * including refused rows.
+	 */
 	bulkSet(
 		rows: TRow[],
 		options?: {
 			chunkSize?: number;
 			onProgress?: (percent: number) => void;
 		},
-	): Promise<void>;
+	): Promise<{ refused: string[] }>;
 	update(
 		id: string,
 		partial: Partial<Omit<TRow, 'id'>>,
 	): Result<TRow | null, TableParseError>;
+	/**
+	 * Delete one row by id. Deliberately unguarded: deletion intent is
+	 * shape-independent, so newer-stamped rows are deletable too.
+	 */
 	delete(id: string): void;
 	bulkDelete(
 		ids: string[],
@@ -318,7 +369,13 @@ export type Table<
 			onProgress?: (percent: number) => void;
 		},
 	): Promise<void>;
-	clear(): void;
+	/**
+	 * Delete every row this binary can claim to understand. Rows stamped by
+	 * a newer schema version are skipped and reported in `refused`: `clear()`
+	 * is bulk-blind, and a stale binary must not mass-destroy rows it cannot
+	 * read. Use `delete(id)` to remove a specific newer-stamped row.
+	 */
+	clear(): { refused: string[] };
 };
 
 /** Map keyed by table name to Table for that table's row type. */
@@ -511,11 +568,39 @@ export function createTable<
 		_v: latestVersion,
 	});
 
+	/**
+	 * The stored value's `_v` when it was stamped by a newer schema version
+	 * than this binary knows, else undefined. Reads the raw stored value
+	 * without parsing: corrupt values (non-object, missing or non-numeric
+	 * `_v`) return undefined so the write proceeds and repairs them.
+	 *
+	 * The guard is local-knowledge only: it can only refuse over rows that
+	 * are locally visible, and on encrypted stores an undecryptable entry
+	 * reads as absent. Both residuals are recorded in the schema-conformance
+	 * spec.
+	 */
+	const newerStoredVersion = (val: unknown): number | undefined => {
+		if (typeof val !== 'object' || val === null) return undefined;
+		const version = (val as Record<string, unknown>)._v;
+		return typeof version === 'number' && version > latestVersion
+			? version
+			: undefined;
+	};
+
 	return {
 		...readonly,
 
-		set(row: TRow): void {
+		set(row: TRow): Result<void, TableWriteError> {
+			const storedVersion = newerStoredVersion(ykv.get(row.id));
+			if (storedVersion !== undefined) {
+				return TableWriteError.NewerWriterRefusal({
+					id: row.id,
+					storedVersion,
+					latestVersion,
+				});
+			}
 			ykv.set(row.id, stamp(row));
+			return Ok(undefined);
 		},
 
 		async bulkSet(
@@ -527,14 +612,31 @@ export function createTable<
 				chunkSize?: number;
 				onProgress?: (percent: number) => void;
 			} = {},
-		): Promise<void> {
+		): Promise<{ refused: string[] }> {
+			const refused: string[] = [];
 			const total = rows.length;
 			for (let i = 0; i < total; i += chunkSize) {
 				const chunk = rows.slice(i, i + chunkSize);
-				ykv.bulkSet(chunk.map((row) => ({ key: row.id, val: stamp(row) })));
+				// Guard per chunk at write time, not once up front: the awaited
+				// yield below lets a remote sync land a newer-stamped row for a
+				// later chunk's id mid-import.
+				const writable: TRow[] = [];
+				for (const row of chunk) {
+					if (newerStoredVersion(ykv.get(row.id)) !== undefined) {
+						refused.push(row.id);
+					} else {
+						writable.push(row);
+					}
+				}
+				if (writable.length > 0) {
+					ykv.bulkSet(
+						writable.map((row) => ({ key: row.id, val: stamp(row) })),
+					);
+				}
 				onProgress?.(Math.min((i + chunkSize) / total, 1));
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			}
+			return { refused };
 		},
 
 		update(
@@ -586,9 +688,18 @@ export function createTable<
 			}
 		},
 
-		clear(): void {
-			const keys = Array.from(ykv.entries()).map(([k]) => k);
-			ykv.bulkDelete(keys);
+		clear(): { refused: string[] } {
+			const refused: string[] = [];
+			const toDelete: string[] = [];
+			for (const [key, entry] of ykv.entries()) {
+				if (newerStoredVersion(entry.val) !== undefined) {
+					refused.push(key);
+				} else {
+					toDelete.push(key);
+				}
+			}
+			ykv.bulkDelete(toDelete);
+			return { refused };
 		},
 	};
 }

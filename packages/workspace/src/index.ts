@@ -200,6 +200,7 @@ export {
 	type Table,
 	TableParseError,
 	type Tables,
+	TableWriteError,
 } from './document/table.js';
 // Transport URL builder.
 //
