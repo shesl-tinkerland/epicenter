@@ -19,6 +19,7 @@
 		disabled = false,
 		hideLabel = false,
 		description,
+		recommendedServiceId = tauri ? 'parakeet' : 'OpenAI',
 	}: {
 		id?: string;
 		label?: string;
@@ -27,6 +28,7 @@
 		disabled?: boolean;
 		hideLabel?: boolean;
 		description?: string | Snippet;
+		recommendedServiceId?: TranscriptionServiceId | null;
 	} = $props();
 
 	const localServices = $derived(
@@ -50,7 +52,6 @@
 			(service) => service.id === selected,
 		),
 	);
-
 </script>
 
 {#snippet renderServiceIcon(service: TranscriptionProviderEntry)}
@@ -92,6 +93,11 @@
 									<div class="flex items-center gap-2">
 										<span class="font-medium">{service.label}</span>
 										<Badge variant="secondary" class="text-xs">Local</Badge>
+										{#if service.id === recommendedServiceId}
+											<Badge variant="outline" class="text-xs"
+												>Recommended</Badge
+											>
+										{/if}
 									</div>
 									{#if service.description}
 										<div class="text-xs text-muted-foreground mt-1">
@@ -119,6 +125,11 @@
 									<div class="flex items-center gap-2">
 										<span class="font-medium">{service.label}</span>
 										<Badge variant="outline" class="text-xs">API</Badge>
+										{#if service.id === recommendedServiceId}
+											<Badge variant="outline" class="text-xs"
+												>Recommended</Badge
+											>
+										{/if}
 									</div>
 									{#if service.description}
 										<div class="text-xs text-muted-foreground mt-1">
