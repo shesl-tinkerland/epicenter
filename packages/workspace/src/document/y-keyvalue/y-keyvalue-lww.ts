@@ -721,8 +721,8 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 *
 	 * Removes from `pending` immediately and triggers Y.Array deletion.
 	 * The observer will update `map` when the deletion is processed.
-	 * Adds the key to `pendingDeletes` so that `get()`, `has()`, and
-	 * `entries()` return correct results before the observer fires.
+	 * Adds the key to `pendingDeletes` so that `read()`, `get()`, `has()`, and
+	 * `reads()` return correct results before the observer fires.
 	 */
 	delete(key: string): void {
 		// Remove from pending if present. If it was pending, the entry is in the
@@ -798,10 +798,11 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 * Resolve a key into `absent` or `present`. O(1) via in-memory Map.
 	 *
 	 * A plaintext store has no encryption layer, so it never returns
-	 * `unreadable`: every stored entry yields its value. Checks `pending` first
-	 * (values written by `set()` but not yet processed by the observer), then
-	 * `pendingDeletes` (deletions not yet processed), then `map` (the
-	 * authoritative cache). `get()` and `has()` derive from this.
+	 * `unreadable`: every stored entry yields its value. Checks `pendingDeletes`
+	 * first (a key deleted but not yet observed reads `absent`, even if a stale
+	 * write still sits in `pending`), then `pending` (values written by `set()`
+	 * but not yet processed by the observer), then `map` (the authoritative
+	 * cache). `get()` and `has()` derive from this.
 	 */
 	read(key: string): KvRead<T> {
 		// Deleted but observer hasn't fired yet.
