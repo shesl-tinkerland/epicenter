@@ -58,19 +58,27 @@ jobs:
         include:
           # macOS Apple Silicon (M1, M2, M3, etc.)
           - platform: 'blacksmith-6vcpu-macos-15'
-            args: '--target aarch64-apple-darwin'
+            os: 'macos'
+            tauriArgs: '--target aarch64-apple-darwin'
+            rustTargets: 'aarch64-apple-darwin'
 
           # macOS Intel-based
           - platform: 'blacksmith-6vcpu-macos-15'
-            args: '--target x86_64-apple-darwin'
+            os: 'macos'
+            tauriArgs: '--target x86_64-apple-darwin'
+            rustTargets: 'x86_64-apple-darwin'
 
           # Linux (Ubuntu)
           - platform: 'ubuntu-22.04'
-            args: ''  # No specific target needed for Linux
+            os: 'linux'
+            tauriArgs: ''  # No specific target needed for Linux
+            rustTargets: ''
 
           # Windows
           - platform: 'windows-latest'
-            args: ''  # No specific target needed for Windows
+            os: 'windows'
+            tauriArgs: ''  # No specific target needed for Windows
+            rustTargets: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -80,12 +88,12 @@ jobs:
 
       # macOS specific: Install create-dmg for DMG bundling
       - name: Install create-dmg (macOS only)
-        if: matrix.platform == 'macos-latest'
+        if: ${{ matrix.os == 'macos' }}
         run: brew install create-dmg
 
       # Ubuntu/Linux specific: Install system dependencies required by Tauri
       - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: ${{ matrix.os == 'linux' }}
         run: |
           sudo apt-get update
           # Dependencies explanation:
@@ -102,9 +110,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev
 
       # Linux Vulkan SDK installation (required for whisper-cpp GPU acceleration on Linux)
-      # Note: Windows whisper-cpp is disabled due to MSVC runtime conflicts, so no Vulkan needed there
       - name: Install Vulkan SDK (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: ${{ matrix.os == 'linux' }}
         run: |
           # Add official Vulkan SDK repository
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
@@ -112,6 +119,18 @@ jobs:
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.290-jammy.list https://packages.lunarg.com/vulkan/1.3.290/lunarg-vulkan-1.3.290-jammy.list
           sudo apt update
           sudo apt install -y vulkan-sdk mesa-vulkan-drivers
+
+      - name: Install Vulkan SDK (Windows)
+        if: ${{ matrix.os == 'windows' }}
+        shell: pwsh
+        env:
+          VULKAN_SDK_VERSION: 1.3.290.0
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "VulkanSDK-$env:VULKAN_SDK_VERSION.exe"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/VulkanSDK-$env:VULKAN_SDK_VERSION-Installer.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+          "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION" >> $env:GITHUB_ENV
+          "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\Bin" >> $env:GITHUB_PATH
 
       # Setup Bun package manager
       - name: setup bun
@@ -129,9 +148,9 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # For macOS: specify both Intel and ARM targets
+          # macOS rows specify the target they build.
           # For other platforms: empty string (uses default target)
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rustTargets }}
 
       # Cache Rust dependencies for faster builds
       - name: Rust cache
@@ -186,6 +205,9 @@ jobs:
           # Aptabase analytics key
           APTABASE_KEY: ${{ secrets.APTABASE_KEY }}
 
+          # Allows vendored native projects with old CMake policy floors to configure on CMake 4.
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
           # Tauri code signing (optional but recommended)
           # These enable automatic updates without security warnings
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -221,11 +243,11 @@ jobs:
           prerelease: false
 
           # Platform-specific build arguments (e.g., --target for macOS)
-          args: ${{ matrix.args }}
+          args: ${{ matrix.tauriArgs }}
 
       # Install FUSE for AppImage processing
       - name: Install FUSE for AppImage processing
-        if: matrix.platform == 'ubuntu-22.04'
+        if: ${{ matrix.os == 'linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y fuse libfuse2
@@ -233,7 +255,7 @@ jobs:
       # Remove libwayland-client.so from AppImage for better compatibility
       # This fixes EGL_BAD_PARAMETER errors on Wayland systems (Issues #114, #121)
       - name: Remove libwayland-client.so from AppImage
-        if: matrix.platform == 'ubuntu-22.04'
+        if: ${{ matrix.os == 'linux' }}
         run: |
           # Find the AppImage file
           APPIMAGE_PATH=$(find apps/whispering/src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -1)
