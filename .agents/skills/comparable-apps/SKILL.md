@@ -1,6 +1,6 @@
 ---
 name: comparable-apps
-description: List 3-5 comparable apps when planning a UX surface to find asymmetric wins. Use for "what do other apps do", identity, sync state, local-first design.
+description: List 3-5 comparable apps when planning a UX surface to find asymmetric wins. Use for "what do other apps do", identity, sync state, local-first design, or selection-based text transformation UX (capture selected text, pick among candidate outputs, paste back).
 metadata:
   author: epicenter
   version: '1.0'
@@ -99,6 +99,18 @@ Question: where do we show the signed-in user's email, and should it persist on 
 Implication: Epicenter is local-first; the closest references (Obsidian, Logseq) keep email out of chrome entirely. The tool-with-identity row (Linear/Notion/Cursor) puts an avatar in chrome and reveals email on click. Either is defensible. Gmail's "email everywhere, cached everywhere" pattern is wrong for the category.
 
 Asymmetric win surfaced: refusing the feature of "email in chrome" lets the runtime state stop carrying email at all. Email becomes a fetched query at the one surface that wants to display it. See `specs/20260514T210000-profile-as-application-data.md` for the resulting design.
+
+## Worked example: text transformation candidates
+
+Not every question maps to the identity taxonomy; the core move still applies. Question: Whispering is growing a "select text anywhere, run transformation pipelines, pick among multiple candidate outputs" surface. Which apps already own each leg of that flow?
+
+| App | Invocation | Candidates | Delivery |
+| --- | --- | --- | --- |
+| Apple Writing Tools | System-wide, from any app's text selection | Rewrite, proofread, and summarize candidates presented inline | Accept/replace flow swaps the selection in place |
+| Raycast AI Commands | Global shortcut launcher | User-defined prompt commands run on selected text or clipboard; commands are a user-editable library | Output pasted back or copied |
+| Grammarly | Inline, while writing | Suggestion cards diffed against the original text, multiple alternatives for one span | Accept/dismiss per card |
+
+Implication: these three are the reference set for the surface's three legs. Apple Writing Tools owns selection capture (any app, OS-level, inline accept/replace). Grammarly owns candidate-card picking (diff against the original, decide per card). Raycast owns paste-back delivery plus the user-editable command library. A Whispering design that diverges from any leg should name the reason.
 
 ## Other questions this lens answers well
 
