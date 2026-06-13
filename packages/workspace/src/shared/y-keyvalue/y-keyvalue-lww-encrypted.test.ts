@@ -456,6 +456,65 @@ describe('createEncryptedYkvLww', () => {
 		});
 	});
 
+	describe('read() tri-state point read', () => {
+		test('present: a readable entry reports state present with its value', () => {
+			const key = randomBytes(32);
+			const { kv } = setup(new Map([[1, key]]));
+
+			kv.set('k', 'v');
+
+			expect(kv.read('k')).toEqual({ state: 'present', val: 'v' });
+		});
+
+		test('absent: a missing key reports state absent', () => {
+			const key = randomBytes(32);
+			const { kv } = setup(new Map([[1, key]]));
+
+			expect(kv.read('missing')).toEqual({ state: 'absent' });
+		});
+
+		test('unreadable: a blob whose key version is absent reports state unreadable with the reason', () => {
+			const ydoc = new Y.Doc();
+			const key1 = randomBytes(32);
+			const key2 = randomBytes(32);
+			const kv = createEncryptedYkvLww<string>(ydoc, 'data');
+			// The store can only decrypt key version 2; a version-1 blob is locked out.
+			kv.activateEncryption(new Map([[2, key2]]));
+
+			const lockedBlob = createEncryptedBlob('secret', key1, 'locked');
+			kv.yarray.push([{ key: 'locked', val: lockedBlob, ts: 100 }]);
+
+			expect(kv.read('locked')).toEqual({
+				state: 'unreadable',
+				reason: 'keyVersion=1 not in keyring [2]',
+			});
+		});
+
+		test('has() means raw existence and agrees with size across present and unreadable rows', () => {
+			const ydoc = new Y.Doc();
+			const key1 = randomBytes(32);
+			const key2 = randomBytes(32);
+			const kv = createEncryptedYkvLww<string>(ydoc, 'data');
+			kv.activateEncryption(new Map([[2, key2]]));
+
+			kv.set('readable', 'ok');
+			const lockedBlob = createEncryptedBlob('secret', key1, 'locked');
+			kv.yarray.push([{ key: 'locked', val: lockedBlob, ts: 100 }]);
+
+			// has() is now raw existence: true for the readable row AND the
+			// undecryptable one, so it agrees with size (which counts both).
+			expect(kv.has('readable')).toBe(true);
+			expect(kv.has('locked')).toBe(true);
+			expect(kv.has('missing')).toBe(false);
+
+			const existing = ['readable', 'locked', 'missing'].filter((k) =>
+				kv.has(k),
+			).length;
+			expect(kv.size).toBe(2);
+			expect(existing).toBe(kv.size);
+		});
+	});
+
 	describe('Key transition (activateEncryption)', () => {
 		test('key rotation upgrades old-version ciphertext to the new current version', () => {
 			const key1 = randomBytes(32);

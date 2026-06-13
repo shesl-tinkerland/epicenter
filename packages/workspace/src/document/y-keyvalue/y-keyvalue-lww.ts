@@ -151,6 +151,7 @@
 import type * as Y from 'yjs';
 import { lazy } from './lazy.js';
 import type {
+	KvRead,
 	KvStoreChange,
 	KvStoreChangeHandler,
 	KvUnreadableEntry,
@@ -795,31 +796,41 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	}
 
 	/**
-	 * Get value by key. O(1) via in-memory Map.
+	 * Resolve a key into `absent` or `present`. O(1) via in-memory Map.
 	 *
-	 * Checks `pending` first (for values written but not yet processed by observer),
-	 * then falls back to `map` (authoritative cache updated by observer).
+	 * A plaintext store has no encryption layer, so it never returns
+	 * `unreadable`: every stored entry yields its value. Checks `pending` first
+	 * (values written by `set()` but not yet processed by the observer), then
+	 * `pendingDeletes` (deletions not yet processed), then `map` (the
+	 * authoritative cache). `get()` and `has()` derive from this.
 	 */
-	get(key: string): T | undefined {
-		// Check pending deletes first (deleted but observer hasn't fired yet)
-		if (this.pendingDeletes.has(key)) return undefined;
+	read(key: string): KvRead<T> {
+		// Deleted but observer hasn't fired yet.
+		if (this.pendingDeletes.has(key)) return { state: 'absent' };
 
-		// Check pending first (written by set() but observer hasn't fired yet)
+		// Written by set() but observer hasn't fired yet.
 		const pending = this.pending.get(key);
-		if (pending) return pending.val;
+		if (pending) return { state: 'present', val: pending.val };
 
-		return this._map.get(key)?.val;
+		const entry = this._map.get(key);
+		if (entry) return { state: 'present', val: entry.val };
+
+		return { state: 'absent' };
+	}
+
+	/** Get value by key. O(1). The `present` value of {@link read}, else `undefined`. */
+	get(key: string): T | undefined {
+		const read = this.read(key);
+		return read.state === 'present' ? read.val : undefined;
 	}
 
 	/**
-	 * Check if key exists. O(1) via in-memory Map.
-	 *
-	 * Checks both `pending` and `map` to handle values written but not yet
-	 * processed by the observer.
+	 * Whether a key is stored. O(1). Raw existence: "not `absent`" per
+	 * {@link read}. Plaintext stores have no `unreadable` state, so this is
+	 * simply "present," and it agrees with `size`.
 	 */
 	has(key: string): boolean {
-		if (this.pendingDeletes.has(key)) return false;
-		return this.pending.has(key) || this._map.has(key);
+		return this.read(key).state !== 'absent';
 	}
 
 	/**
@@ -861,13 +872,6 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	// biome-ignore lint/correctness/useYield: an always-empty generator has nothing to yield
 	*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
 		return;
-	}
-
-	/**
-	 * Plaintext stores have no encryption layer, so no key is ever unreadable.
-	 */
-	unreadableReason(_key: string): string | undefined {
-		return undefined;
 	}
 
 	/** Register an observer. Called when keys are added, updated, or deleted. */

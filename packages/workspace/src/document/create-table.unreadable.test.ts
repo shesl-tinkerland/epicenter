@@ -123,6 +123,12 @@ describe('unreadable bucket', () => {
 				newerWriter.length +
 				unreadable.length,
 		);
+
+		// has() means raw existence, so it agrees with storedCount across every
+		// read state, including the undecryptable row that get() reports absent.
+		const ids = ['good', 'bad', 'future', 'locked'];
+		expect(ids.filter((id) => table.has(id)).length).toBe(table.storedCount());
+		expect(table.has('locked')).toBe(true);
 	});
 });
 

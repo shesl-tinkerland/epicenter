@@ -81,6 +81,7 @@ import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import {
 	type KvEntry,
+	type KvRead,
 	type KvStoreChange,
 	type KvStoreChangeHandler,
 	type KvUnreadableEntry,
@@ -221,8 +222,8 @@ export function createEncryptedYkvLww<T>(
 	 * Human-readable reason a blob did not decrypt: either its key version is
 	 * missing from the keyring, or the key is present but the bytes are wrong
 	 * (corruption or a tampered blob). The one place this string is formatted,
-	 * shared by the observer warning, `unreadableEntries()`, and
-	 * `unreadableReason()` so all three describe the same failure identically.
+	 * shared by the observer warning, the `read()` point read, and
+	 * `unreadableEntries()` so all three describe the same failure identically.
 	 */
 	const decryptFailureReason = (
 		keyring: ReadonlyWorkspaceKeyring,
@@ -237,8 +238,9 @@ export function createEncryptedYkvLww<T>(
 	/**
 	 * If `stored` (the raw value at `key`) is an encrypted blob this binary
 	 * cannot decrypt, the human-readable reason; otherwise `undefined`
-	 * (plaintext passthrough, readable, or passthrough mode). Shared by the
-	 * `unreadableEntries()` enumeration and the `unreadableReason()` point probe.
+	 * (plaintext passthrough, readable, or passthrough mode). Drives the
+	 * `unreadableEntries()` enumeration over the inner map; the per-key `read()`
+	 * point read computes the same reason directly from one decrypt attempt.
 	 */
 	const blobUnreadableReason = (
 		key: string,
@@ -249,6 +251,37 @@ export function createEncryptedYkvLww<T>(
 		if (decrypt(stored, textEncoder.encode(key)) !== undefined)
 			return undefined;
 		return decryptFailureReason(encryption.keyring, stored);
+	};
+
+	/**
+	 * Resolve a key into `absent`, `present`, or `unreadable` with one inner
+	 * read and one decrypt attempt. This is the single classified point read the
+	 * tri-state contract promises: a blob that did not decrypt comes back
+	 * `unreadable` (with its reason) rather than masquerading as `absent`, so a
+	 * caller never has to read the value and then probe again for the reason.
+	 *
+	 * - Inner store empty → `absent`.
+	 * - Plaintext passthrough value (not a blob) → `present`.
+	 * - Blob but no key active (passthrough mode) → `absent`. Passthrough treats
+	 *   stored ciphertext as not-yet-readable rather than a hard failure, matching
+	 *   what `get()` and `unreadableEntries()` reported here before.
+	 * - Blob that decrypts → `present`.
+	 * - Blob that does not decrypt → `unreadable` with the shared reason string.
+	 *
+	 * Reads `inner.get` (which sees pending writes) so a guard inside an open
+	 * transaction classifies the same view it writes.
+	 */
+	const read = (key: string): KvRead<T> => {
+		const stored = inner.get(key);
+		if (stored === undefined) return { state: 'absent' };
+		if (!isEncryptedBlob(stored)) return { state: 'present', val: stored as T };
+		if (!encryption) return { state: 'absent' };
+		const val = decrypt(stored, textEncoder.encode(key));
+		if (val !== undefined) return { state: 'present', val };
+		return {
+			state: 'unreadable',
+			reason: decryptFailureReason(encryption.keyring, stored),
+		};
 	};
 
 	/**
@@ -296,16 +329,27 @@ export function createEncryptedYkvLww<T>(
 			);
 		},
 		/**
-		 * Get a decrypted value by key. Reads from the inner store and decrypts
-		 * on the fly (~0.01ms for XChaCha20-Poly1305 on a small JSON blob).
+		 * Classify a key in one inner read and one decrypt attempt. The primitive
+		 * point read; `get()` and `has()` derive from it. See {@link read}.
+		 */
+		read,
+		/**
+		 * Get a decrypted value by key. The `present` value of {@link read}, else
+		 * `undefined`. Decrypts on the fly (~0.01ms for XChaCha20-Poly1305 on a
+		 * small JSON blob); there is no plaintext cache.
 		 */
 		get(key: string): T | undefined {
-			const stored = inner.get(key);
-			if (stored === undefined) return undefined;
-			return decrypt(stored, textEncoder.encode(key));
+			const result = read(key);
+			return result.state === 'present' ? result.val : undefined;
 		},
+		/**
+		 * Whether an entry is stored under `key`, readable or not. Raw existence:
+		 * `true` for both `present` and `unreadable` reads, so it agrees with
+		 * `size`, which counts present-but-unreadable blobs. A blob this device
+		 * cannot decrypt still exists; `has()` says so.
+		 */
 		has(key: string): boolean {
-			return this.get(key) !== undefined;
+			return read(key).state !== 'absent';
 		},
 		delete(key: string): void {
 			inner.delete(key);
@@ -426,17 +470,6 @@ export function createEncryptedYkvLww<T>(
 				const reason = blobUnreadableReason(key, entry.val);
 				if (reason !== undefined) yield { key, reason };
 			}
-		},
-		/**
-		 * O(1) point probe: the per-key form of `unreadableEntries()`. Returns the
-		 * reason a present entry did not decrypt, or `undefined` when the key is
-		 * absent or readable. Reads `inner.get` (which sees pending writes) so a
-		 * write guard inside an open transaction probes the same view it writes.
-		 */
-		unreadableReason(key: string): string | undefined {
-			const stored = inner.get(key);
-			if (stored === undefined) return undefined;
-			return blobUnreadableReason(key, stored);
 		},
 		/**
 		 * Number of stored entries after conflict resolution, **including**

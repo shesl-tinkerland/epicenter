@@ -57,10 +57,10 @@ import {
  */
 export const TableParseError = defineErrors({
 	/**
-	 * The row's `_v` is a corrupt or non-numeric stamp, or a numeric stamp at
-	 * or below the latest known version that matches no registered schema. A
-	 * `_v` strictly above the latest known version is a
-	 * {@link TableNewerWriterError} instead.
+	 * The row's `_v` is no schema this binary has: a non-numeric, fractional,
+	 * zero, or negative stamp, or a whole number at or below the latest known
+	 * version that matches no registered schema. A whole number strictly above
+	 * the latest known version is a {@link TableNewerWriterError} instead.
 	 */
 	UnknownVersion: ({
 		id,
@@ -116,8 +116,8 @@ export type TableParseError = InferErrors<typeof TableParseError>;
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * A row a newer binary owns: its `_v` is a number strictly above this binary's
- * latest known schema version.
+ * A row a newer binary owns: its `_v` is a whole number strictly above this
+ * binary's latest known schema version.
  *
  * This is not a data-integrity failure; the row is presumably fine, this binary
  * is just too old to read it. It is not repairable here (the user needs an app
@@ -129,7 +129,7 @@ export type TableParseError = InferErrors<typeof TableParseError>;
  * knows), and the raw `row` so a UI can report exactly how far ahead it is.
  */
 export const TableNewerWriterError = defineErrors({
-	/** The row's `_v` is a number strictly above this binary's latest version. */
+	/** The row's `_v` is a whole number strictly above this binary's latest. */
 	NewerWriter: ({
 		id,
 		version,
@@ -603,6 +603,33 @@ export function attachTable<
 // createTable / createReadonlyTable
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Whether a stored `_v` is a newer-writer stamp: a row a future binary owns.
+ *
+ * A legitimate stamp is a whole number; `stamp()` writes `latestVersion` and
+ * every schema pins `_v: Literal(N)` with an integer `N`, so no binary, present
+ * or future, ever writes a fractional `_v`. A newer writer is therefore an
+ * integer strictly above this binary's latest. Everything else (fractional,
+ * zero, negative, non-number) is corruption: a repairable nonconforming row,
+ * not a "your binary is stale" signal.
+ *
+ * This is the single owner of the newer-writer rule. The read path
+ * ({@link createReadonlyTable}'s `parseRow`) and the write guard
+ * (`newerStoredVersion`, feeding `set`/`bulkSet`/`clear`) both route through it,
+ * so `scan()` and the write refusals can never disagree about what is repairable
+ * versus newer-owned.
+ */
+function isNewerWriterStamp(
+	version: unknown,
+	latestVersion: number,
+): version is number {
+	return (
+		typeof version === 'number' &&
+		Number.isInteger(version) &&
+		version > latestVersion
+	);
+}
+
 export function createReadonlyTable<
 	// biome-ignore lint/suspicious/noExplicitAny: variance-friendly
 	TTableDefinition extends TableDefinition<any>,
@@ -635,10 +662,10 @@ export function createReadonlyTable<
 	 * `_v` to the matching schema, validates, runs migrate, returns the
 	 * user-facing row (no `_v`).
 	 *
-	 * Classifies the failure where the version set is in scope: a `_v` strictly
-	 * above the latest known version is a {@link TableNewerWriterError} (this
-	 * binary is stale); everything else this binary should understand but
-	 * cannot is a {@link TableParseError}. It never produces a
+	 * Classifies the failure where the version set is in scope: a whole-number
+	 * `_v` strictly above the latest known version is a
+	 * {@link TableNewerWriterError} (this binary is stale); everything else this
+	 * binary should understand but cannot is a {@link TableParseError}. It never produces a
 	 * {@link TableUnreadableError}: that state comes from the store (a row that
 	 * never decrypted), not from parsing a decrypted value, so the parse walk's
 	 * error is the narrower union that `scan()` switches over exhaustively.
@@ -652,7 +679,7 @@ export function createReadonlyTable<
 			id,
 		};
 		const version = stored._v;
-		if (typeof version === 'number' && version > versions.length) {
+		if (isNewerWriterStamp(version, versions.length)) {
 			return TableNewerWriterError.NewerWriter({
 				id,
 				version,
@@ -692,18 +719,19 @@ export function createReadonlyTable<
 		schema: definition.schema,
 
 		get(id: string): Result<TRow | null, TableReadError> {
-			const raw = ykv.get(id);
-			if (raw !== undefined) return parseRow(id, raw);
-			// `raw` is undefined for two different reasons: the slot is truly
-			// absent, or it holds an entry this binary could not decrypt. Probe to
-			// tell them apart so an unreadable row is reported as `UnreadableRow`,
-			// not silently treated as absent. This runs only on the cold path, so a
-			// readable get pays a single decrypt.
-			const reason = ykv.unreadableReason(id);
-			if (reason !== undefined) {
-				return TableUnreadableError.UnreadableRow({ id, reason });
+			// One classified read resolves all three outcomes: a present value to
+			// parse, a truly-absent slot (Ok(null)), or an entry this binary could
+			// not decrypt (UnreadableRow). No probe-then-read: a readable get pays a
+			// single decrypt, and "absent" never masquerades as "unreadable."
+			const read = ykv.read(id);
+			switch (read.state) {
+				case 'present':
+					return parseRow(id, read.val);
+				case 'absent':
+					return Ok(null);
+				case 'unreadable':
+					return TableUnreadableError.UnreadableRow({ id, reason: read.reason });
 			}
-			return Ok(null);
 		},
 
 		scan(): TableScan<TRow> {
@@ -790,20 +818,20 @@ export function createTable<
 	/**
 	 * The stored value's `_v` when it was stamped by a newer schema version
 	 * than this binary knows, else undefined. Reads the raw stored value
-	 * without parsing: corrupt values (non-object, missing or non-numeric
-	 * `_v`) return undefined so the write proceeds and repairs them.
+	 * without parsing: corrupt values (non-object, missing, or any `_v` that is
+	 * not a whole number above the latest, including a fractional stamp) return
+	 * undefined so the write proceeds and repairs them. Shares the newer-writer
+	 * rule with the read path via {@link isNewerWriterStamp}, so the write guard
+	 * and `scan()` agree on what is repairable.
 	 *
-	 * This covers only the newer-writer half of the guard. On encrypted stores
-	 * an undecryptable entry reads back as `undefined` here, indistinguishable
-	 * from absent; the undecryptable case is caught separately by
-	 * `ykv.unreadableReason` in {@link writeRefusal}.
+	 * This covers only the newer-writer half of the guard. The undecryptable
+	 * half is the `unreadable` state of the store's `read()`, handled directly
+	 * in {@link writeRefusal}; this helper only ever sees a present value.
 	 */
 	const newerStoredVersion = (val: unknown): number | undefined => {
 		if (typeof val !== 'object' || val === null) return undefined;
 		const version = (val as Record<string, unknown>)._v;
-		return typeof version === 'number' && version > latestVersion
-			? version
-			: undefined;
+		return isNewerWriterStamp(version, latestVersion) ? version : undefined;
 	};
 
 	/**
@@ -813,24 +841,29 @@ export function createTable<
 	 * this binary cannot read: a newer-stamped row (`NewerWriterRefusal`) and an
 	 * undecryptable blob (`UnreadableRefusal`).
 	 *
-	 * Reads the stored value first: a row that decrypts is checked for a newer
-	 * `_v`, and only when the read comes back `undefined` (absent, or present
-	 * but undecryptable) do we probe `unreadableReason` to tell those apart. So
-	 * a write over a readable slot pays a single decrypt.
+	 * One classified read decides it: `absent` is safe, `unreadable` refuses with
+	 * the decrypt reason, and a `present` value is checked for a newer `_v`. No
+	 * probe-then-read reorder; a write over a readable slot pays a single decrypt.
 	 */
 	const writeRefusal = (id: string): TableWriteError | undefined => {
-		const stored = ykv.get(id);
-		if (stored === undefined) {
-			const reason = ykv.unreadableReason(id);
-			return reason !== undefined
-				? TableWriteError.UnreadableRefusal({ id, reason }).error
-				: undefined;
+		const read = ykv.read(id);
+		switch (read.state) {
+			case 'absent':
+				return undefined;
+			case 'unreadable':
+				return TableWriteError.UnreadableRefusal({ id, reason: read.reason })
+					.error;
+			case 'present': {
+				const storedVersion = newerStoredVersion(read.val);
+				return storedVersion !== undefined
+					? TableWriteError.NewerWriterRefusal({
+							id,
+							storedVersion,
+							latestVersion,
+						}).error
+					: undefined;
+			}
 		}
-		const storedVersion = newerStoredVersion(stored);
-		return storedVersion !== undefined
-			? TableWriteError.NewerWriterRefusal({ id, storedVersion, latestVersion })
-					.error
-			: undefined;
 	};
 
 	return {

@@ -18,6 +18,7 @@ export {
 } from './_reference/y-keyvalue.js';
 export type {
 	KvEntry,
+	KvRead,
 	KvStoreChange,
 	KvStoreChangeHandler,
 	KvUnreadableEntry,

@@ -68,6 +68,20 @@ describe('YKeyValueLww', () => {
 			expect(kv.get('foo')).toBe('bar');
 		});
 
+		test('read() reports present or absent and never unreadable', () => {
+			const { kv } = setupKv();
+
+			kv.set('foo', 'bar');
+
+			// A plaintext store has no encryption layer: every stored entry yields
+			// its value, so read() only ever returns present or absent.
+			expect(kv.read('foo')).toEqual({ state: 'present', val: 'bar' });
+			expect(kv.read('missing')).toEqual({ state: 'absent' });
+
+			kv.delete('foo');
+			expect(kv.read('foo')).toEqual({ state: 'absent' });
+		});
+
 		test('set overwrites existing value', () => {
 			const { kv } = setupKv();
 

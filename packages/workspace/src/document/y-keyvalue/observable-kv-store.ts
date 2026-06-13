@@ -35,6 +35,28 @@ export type KvEntry<T> = { key: string; val: T };
  */
 export type KvUnreadableEntry = { key: string; reason: string };
 
+/**
+ * The result of a single point read. Exactly one of three mutually exclusive
+ * states, so one `read()` answers every question a caller has about a key
+ * without a second probe:
+ *
+ * - `absent`: no entry is stored under this key.
+ * - `present`: an entry is stored and this store surfaced its value.
+ * - `unreadable`: an entry is stored but this store cannot surface its value
+ *   (an encrypted blob with no usable key). `reason` is the same
+ *   human-readable diagnostic `unreadableEntries()` yields for the key.
+ *
+ * `get()` and `has()` derive from this: `get()` is the value of the `present`
+ * state, `has()` is "not `absent`" (raw existence, so it agrees with `size`).
+ * The encrypted wrapper resolves the whole tri-state with one inner read and
+ * one decrypt attempt, instead of decrypting once to get the value and again
+ * to recover the failure reason.
+ */
+export type KvRead<T> =
+	| { state: 'absent' }
+	| { state: 'present'; val: T }
+	| { state: 'unreadable'; reason: string };
+
 /** Change event emitted by the store's observer. */
 export type KvStoreChange<T> =
 	| { action: 'add'; newValue: T }
@@ -55,8 +77,23 @@ export type KvStoreChangeHandler<T> = (
  * so they can wrap either backend without branching.
  */
 export interface ObservableKvStore<T> {
+	/**
+	 * Resolve a key into one of three states in a single read: `absent`,
+	 * `present` (with the value), or `unreadable` (with the reason). This is the
+	 * primitive point read; `get()` and `has()` derive from it. The encrypted
+	 * wrapper implements it with one inner read and one decrypt attempt, so a
+	 * caller that needs to tell "absent" from "present but unreadable" pays a
+	 * single decrypt instead of probing twice. See {@link KvRead}.
+	 */
+	read(key: string): KvRead<T>;
+	/** The value stored under `key`, or `undefined` when it is absent or unreadable. The `present` value of {@link read}. */
 	get(key: string): T | undefined;
 	set(key: string, val: T): void;
+	/**
+	 * Whether an entry is stored under `key`, readable or not: `true` for both
+	 * `present` and `unreadable` reads, `false` only for `absent`. Raw existence,
+	 * so it agrees with `size` (which counts present-but-unreadable entries too).
+	 */
 	has(key: string): boolean;
 	delete(key: string): void;
 	bulkSet(entries: Array<KvEntry<T>>): void;
@@ -72,15 +109,6 @@ export interface ObservableKvStore<T> {
 	 * `size` counts, which is what lets a stored count reconcile against reads.
 	 */
 	unreadableEntries(): IterableIterator<KvUnreadableEntry>;
-	/**
-	 * If `key` is present in storage but did not yield a value (an encrypted
-	 * blob with no usable key), the human-readable reason; otherwise `undefined`
-	 * (the key is absent, or readable). O(1) point probe: the per-key form of
-	 * `unreadableEntries()`. Plaintext stores always return `undefined`. A write
-	 * guard uses this to tell "absent" (safe to overwrite) from "present but
-	 * unreadable" (refuse, lest it clobber a row it cannot read).
-	 */
-	unreadableReason(key: string): string | undefined;
 	/**
 	 * Number of stored entries after conflict resolution, **including**
 	 * present-but-unreadable entries. The sum of the readable entries and
