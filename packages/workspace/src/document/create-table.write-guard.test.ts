@@ -9,18 +9,23 @@
  *
  * Key behaviors:
  * - set() over a newer-stamped row returns Err(NewerWriterRefusal); the row survives
+ * - set() over an unreadable (undecryptable) row returns Err(UnreadableRefusal); it survives
  * - set() over same-version, corrupt, or absent rows writes as before
  * - the guard reads the pending view inside an open transaction
- * - bulkSet() skips refused rows per chunk and reports them; onProgress unchanged
- * - clear() skips newer-stamped rows and reports them; delete(id) stays unguarded
+ * - bulkSet() skips refused rows per chunk and reports them as TableWriteError; onProgress unchanged
+ * - clear() skips newer-stamped and unreadable rows and reports them; delete(id) stays unguarded
  * - update() over a newer-stamped row refuses via NewerWriter (pinned)
+ * - get() over an unreadable row reports UnreadableRow instead of absent
  *
  * See also:
  * - `create-table.test.ts` for core CRUD and migration behavior
+ * - `create-table.unreadable.test.ts` for the read-side unreadable bucket
  */
 
 import { describe, expect, test } from 'bun:test';
+import { type EncryptedBlob, isEncryptedBlob } from '@epicenter/encryption';
 import { field } from '@epicenter/field';
+import { randomBytes } from '@noble/ciphers/utils.js';
 import { expectErr, expectOk } from 'wellcrafted/testing';
 import * as Y from 'yjs';
 import { createEncryptedYkvLww } from '../shared/y-keyvalue/y-keyvalue-lww-encrypted.js';
@@ -31,6 +36,43 @@ const v1Columns = {
 	id: field.string(),
 	title: field.string(),
 };
+
+/** Encrypt a value into a standalone blob at key version 1 under `key`. */
+function createEncryptedBlob(
+	value: unknown,
+	key: Uint8Array,
+	entryKey: string,
+): EncryptedBlob {
+	const helperDoc = new Y.Doc({ guid: 'helper-blob' });
+	const helperKv = createEncryptedYkvLww<unknown>(helperDoc, 'helper-data');
+	helperKv.activateEncryption(new Map([[1, key]]));
+	helperKv.set(entryKey, value);
+	const entry = helperKv.yarray.toArray()[0];
+	if (!entry || !isEncryptedBlob(entry.val))
+		throw new Error('Expected encrypted helper entry');
+	return entry.val;
+}
+
+/**
+ * An encrypted v1 table holding one undecryptable row: the store's keyring has
+ * only key version 2, but `locked` is a blob encrypted under version 1, so it
+ * is present in storage yet this binary cannot read it.
+ */
+function setupWithLockedRow() {
+	const ydoc = new Y.Doc();
+	const key1 = randomBytes(32);
+	const key2 = randomBytes(32);
+	const ykv = createEncryptedYkvLww<unknown>(ydoc, 'test-table');
+	ykv.activateEncryption(new Map([[2, key2]]));
+	const table = createTable(ykv, defineTable(v1Columns), 'test');
+	const lockedBlob = createEncryptedBlob(
+		{ id: 'locked', title: 'secret', _v: 1 },
+		key1,
+		'locked',
+	);
+	ykv.yarray.push([{ key: 'locked', val: lockedBlob, ts: 100 }]);
+	return { ydoc, ykv, table };
+}
 
 const v2Definition = defineTable(v1Columns, {
 	id: field.string(),
@@ -80,6 +122,8 @@ describe('set write guard', () => {
 
 		const error = expectErr(oldTable.set({ id: '1', title: 'Stale clobber' }));
 		expect(error.name).toBe('NewerWriterRefusal');
+		if (error.name !== 'NewerWriterRefusal')
+			throw new Error('Expected NewerWriterRefusal');
 		expect(error.id).toBe('1');
 		expect(error.storedVersion).toBe(2);
 		expect(error.latestVersion).toBe(1);
@@ -146,7 +190,9 @@ describe('bulkSet write guard', () => {
 			{ chunkSize: 2, onProgress: (percent) => progress.push(percent) },
 		);
 
-		expect(refused).toEqual(['2']);
+		expect(refused.map((r) => ({ name: r.name, id: r.id }))).toEqual([
+			{ name: 'NewerWriterRefusal', id: '2' },
+		]);
 		expect(progress).toEqual([0.4, 0.8, 1]);
 		expect(
 			oldTable
@@ -175,7 +221,9 @@ describe('destructive ops', () => {
 
 		const { refused } = oldTable.clear();
 
-		expect(refused).toEqual(['keep']);
+		expect(refused.map((r) => ({ name: r.name, id: r.id }))).toEqual([
+			{ name: 'NewerWriterRefusal', id: 'keep' },
+		]);
 		expect(oldTable.storedCount()).toBe(1);
 		sync(oldDoc, newDoc);
 		expect(expectOk(newTable.get('keep'))).toEqual({
@@ -211,5 +259,77 @@ describe('update against newer-stamped rows', () => {
 		if (error.name !== 'NewerWriter') throw new Error('Expected NewerWriter');
 		expect(error.version).toBe(2);
 		expect(error.latestVersion).toBe(1);
+	});
+});
+
+describe('unreadable row guard', () => {
+	test('set over an unreadable row refuses and leaves the row intact', () => {
+		const { ykv, table } = setupWithLockedRow();
+
+		const error = expectErr(table.set({ id: 'locked', title: 'clobber' }));
+		expect(error.name).toBe('UnreadableRefusal');
+		if (error.name !== 'UnreadableRefusal')
+			throw new Error('Expected UnreadableRefusal');
+		expect(error.id).toBe('locked');
+		expect(error.reason).toBe('keyVersion=1 not in keyring [2]');
+
+		// The undecryptable blob is still in storage: the write was refused, not
+		// silently overwritten.
+		expect(table.scan().unreadable).toHaveLength(1);
+		expect(ykv.get('locked')).toBeUndefined();
+	});
+
+	test('get over an unreadable row reports UnreadableRow, not absent', () => {
+		const { table } = setupWithLockedRow();
+
+		const { data, error } = table.get('locked');
+
+		expect(data).toBeNull();
+		expect(error).not.toBeNull();
+		if (!error) throw new Error('Expected an error');
+		expect(error.name).toBe('UnreadableRow');
+		if (error.name !== 'UnreadableRow')
+			throw new Error('Expected UnreadableRow');
+		expect(error.id).toBe('locked');
+		expect(error.reason).toBe('keyVersion=1 not in keyring [2]');
+	});
+
+	test('bulkSet refuses the unreadable row and writes the rest', async () => {
+		const { table } = setupWithLockedRow();
+
+		const { refused } = await table.bulkSet([
+			{ id: 'locked', title: 'clobber attempt' },
+			{ id: 'fresh', title: 'ok' },
+		]);
+
+		expect(refused.map((r) => ({ name: r.name, id: r.id }))).toEqual([
+			{ name: 'UnreadableRefusal', id: 'locked' },
+		]);
+		expect(table.scan().rows.map((r) => r.id)).toEqual(['fresh']);
+		expect(table.scan().unreadable).toHaveLength(1);
+	});
+
+	test('clear skips the unreadable row and reports it', () => {
+		const { table } = setupWithLockedRow();
+		expectOk(table.set({ id: 'gone', title: 'a' }));
+
+		const { refused } = table.clear();
+
+		expect(refused.map((r) => ({ name: r.name, id: r.id }))).toEqual([
+			{ name: 'UnreadableRefusal', id: 'locked' },
+		]);
+		expect(table.scan().rows).toEqual([]);
+		// The undecryptable blob survives clear().
+		expect(table.scan().unreadable).toHaveLength(1);
+	});
+
+	test('delete removes an unreadable row (deletion intent is key-independent)', () => {
+		const { table } = setupWithLockedRow();
+		expect(table.scan().unreadable).toHaveLength(1);
+
+		table.delete('locked');
+
+		expect(table.scan().unreadable).toEqual([]);
+		expect(table.storedCount()).toBe(0);
 	});
 });

@@ -218,6 +218,28 @@ export function createEncryptedYkvLww<T>(
 	};
 
 	/**
+	 * If `stored` (the raw value at `key`) is an encrypted blob this binary
+	 * cannot decrypt, the human-readable reason; otherwise `undefined`
+	 * (plaintext passthrough, readable, or passthrough mode). Shared by the
+	 * `unreadableEntries()` enumeration and the `unreadableReason()` point probe
+	 * so both classify undecryptable blobs identically (and match the warning
+	 * the observer logs).
+	 */
+	const blobUnreadableReason = (
+		key: string,
+		stored: EncryptedBlob | T,
+	): string | undefined => {
+		if (!encryption) return undefined;
+		if (!isEncryptedBlob(stored)) return undefined;
+		if (decrypt(stored, textEncoder.encode(key)) !== undefined)
+			return undefined;
+		const blobVersion = getKeyVersion(stored);
+		return encryption.keyring.has(blobVersion)
+			? 'wrong key material or corrupted blob'
+			: `keyVersion=${blobVersion} not in keyring [${[...encryption.keyring.keys()].join(', ')}]`;
+	};
+
+	/**
 	 * Inner observer. When entries change in the CRDT, decrypt and forward
 	 * plaintext change events to registered handlers. Skips REENCRYPT_ORIGIN
 	 * writes (those are internal re-encryption during activation, not user
@@ -391,16 +413,21 @@ export function createEncryptedYkvLww<T>(
 		 * every entry as readable plaintext).
 		 */
 		*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
-			if (!encryption) return;
 			for (const [key, entry] of inner.map) {
-				if (!isEncryptedBlob(entry.val)) continue;
-				if (decrypt(entry.val, textEncoder.encode(key)) !== undefined) continue;
-				const blobVersion = getKeyVersion(entry.val);
-				const reason = encryption.keyring.has(blobVersion)
-					? 'wrong key material or corrupted blob'
-					: `keyVersion=${blobVersion} not in keyring [${[...encryption.keyring.keys()].join(', ')}]`;
-				yield { key, reason };
+				const reason = blobUnreadableReason(key, entry.val);
+				if (reason !== undefined) yield { key, reason };
 			}
+		},
+		/**
+		 * O(1) point probe: the per-key form of `unreadableEntries()`. Returns the
+		 * reason a present entry did not decrypt, or `undefined` when the key is
+		 * absent or readable. Reads `inner.get` (which sees pending writes) so a
+		 * write guard inside an open transaction probes the same view it writes.
+		 */
+		unreadableReason(key: string): string | undefined {
+			const stored = inner.get(key);
+			if (stored === undefined) return undefined;
+			return blobUnreadableReason(key, stored);
 		},
 		/**
 		 * Number of stored entries after conflict resolution, **including**

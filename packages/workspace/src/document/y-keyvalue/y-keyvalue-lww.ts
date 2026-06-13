@@ -863,6 +863,13 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 		return;
 	}
 
+	/**
+	 * Plaintext stores have no encryption layer, so no key is ever unreadable.
+	 */
+	unreadableReason(_key: string): string | undefined {
+		return undefined;
+	}
+
 	/** Register an observer. Called when keys are added, updated, or deleted. */
 	observe(handler: KvStoreChangeHandler<T>): void {
 		this.changeHandlers.add(handler);

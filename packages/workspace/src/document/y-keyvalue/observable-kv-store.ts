@@ -73,6 +73,15 @@ export interface ObservableKvStore<T> {
 	 */
 	unreadableEntries(): IterableIterator<KvUnreadableEntry>;
 	/**
+	 * If `key` is present in storage but did not yield a value (an encrypted
+	 * blob with no usable key), the human-readable reason; otherwise `undefined`
+	 * (the key is absent, or readable). O(1) point probe: the per-key form of
+	 * `unreadableEntries()`. Plaintext stores always return `undefined`. A write
+	 * guard uses this to tell "absent" (safe to overwrite) from "present but
+	 * unreadable" (refuse, lest it clobber a row it cannot read).
+	 */
+	unreadableReason(key: string): string | undefined;
+	/**
 	 * Number of stored entries after conflict resolution, **including**
 	 * present-but-unreadable entries. The sum of the readable entries and
 	 * `unreadableEntries()`. Encrypted stores count undecryptable blobs here so
