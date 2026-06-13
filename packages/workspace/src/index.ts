@@ -197,6 +197,7 @@ export type { PresenceDevice } from './document/presence-protocol.js';
 export {
 	type BaseRow,
 	type InferTableRow,
+	type ReadonlyTable,
 	type Table,
 	type TableConformance,
 	TableParseError,

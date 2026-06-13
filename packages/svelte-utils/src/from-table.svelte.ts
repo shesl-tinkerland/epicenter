@@ -1,4 +1,9 @@
-import type { BaseRow, Table } from '@epicenter/workspace';
+import type {
+	BaseRow,
+	ReadonlyTable,
+	Table,
+	TableConformance,
+} from '@epicenter/workspace';
 import { SvelteMap } from 'svelte/reactivity';
 
 /**
@@ -74,4 +79,59 @@ export function fromTable<TRow extends BaseRow>(table: Table<TRow>) {
 
 export type ReactiveTableMap<TRow extends BaseRow> = ReturnType<
 	typeof fromTable<TRow>
+>;
+
+/**
+ * Create a reactive binding to a table's conformance snapshot.
+ *
+ * `table.conformance()` is a full scan plus validation (same cost as
+ * `getAllValid()`), so this helper recomputes on the table's `observe()`
+ * signal with a debounce instead of on every render.
+ *
+ * Works against the readonly surface: read-only consumers can render the
+ * queue even though repair (`set()` / `delete()`) needs a writable table.
+ *
+ * The returned binding is disposable; call `[Symbol.dispose]()` on
+ * component teardown, workspace switching, HMR, or tests.
+ *
+ * @example
+ * ```typescript
+ * const conformance = fromTableConformance(workspace.tables.entries);
+ *
+ * // Reactive reads:
+ * conformance.current.valid;
+ * conformance.current.nonconforming.length;
+ * conformance.current.newerWriter.length;
+ *
+ * // Teardown:
+ * conformance[Symbol.dispose]();
+ * ```
+ */
+export function fromTableConformance<TRow extends BaseRow>(
+	table: ReadonlyTable<TRow>,
+	{ debounceMs = 100 }: { debounceMs?: number } = {},
+) {
+	let current = $state.raw<TableConformance>(table.conformance());
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	const unobserve = table.observe(() => {
+		clearTimeout(timer);
+		timer = setTimeout(() => {
+			current = table.conformance();
+		}, debounceMs);
+	});
+
+	return {
+		get current() {
+			return current;
+		},
+		[Symbol.dispose]() {
+			clearTimeout(timer);
+			unobserve();
+		},
+	};
+}
+
+export type ReactiveTableConformance = ReturnType<
+	typeof fromTableConformance
 >;

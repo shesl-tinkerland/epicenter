@@ -5,6 +5,7 @@
 	import HashIcon from '@lucide/svelte/icons/hash';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import { format, isToday, isYesterday } from 'date-fns';
 	import { VList } from 'virtua/svelte';
 	import { goto } from '$app/navigation';
@@ -15,6 +16,12 @@
 
 	const fuji = requireFuji();
 	const isSearching = $derived(viewState.searchQuery.trim().length > 0);
+
+	/** Rows hidden from every list: schema mismatches plus newer-writer rows. */
+	const queuedCount = $derived(
+		fuji.entries.conformance.nonconforming.length +
+			fuji.entries.conformance.newerWriter.length,
+	);
 
 	/** Entries matching the search query across title, subtitle, tags, and type. */
 	const searchResults = $derived.by(() => {
@@ -107,6 +114,20 @@
 							{/if}
 						</Sidebar.MenuButton>
 					</Sidebar.MenuItem>
+					{#if queuedCount > 0}
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton
+								isActive={page.url.pathname === '/conformance'}
+								onclick={() => goto('/conformance')}
+							>
+								<TriangleAlertIcon class="size-4 text-amber-600" />
+								<span>Needs Attention</span>
+								<span class="ml-auto text-xs text-muted-foreground">
+									{queuedCount}
+								</span>
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					{/if}
 				</Sidebar.Menu>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
