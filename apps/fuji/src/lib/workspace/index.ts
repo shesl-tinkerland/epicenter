@@ -329,8 +329,8 @@ export function createFuji(opts: { keyring: () => Keyring }) {
 						createdAt: now,
 						updatedAt: now,
 					}));
-					await tables.entries.bulkSet(rows);
-					return { count: rows.length };
+					const { refused } = await tables.entries.bulkSet(rows);
+					return { written: rows.length - refused.length, refused };
 				},
 			}),
 		}),
