@@ -730,7 +730,10 @@ export function createReadonlyTable<
 				case 'absent':
 					return Ok(null);
 				case 'unreadable':
-					return TableUnreadableError.UnreadableRow({ id, reason: read.reason });
+					return TableUnreadableError.UnreadableRow({
+						id,
+						reason: read.reason,
+					});
 			}
 		},
 
