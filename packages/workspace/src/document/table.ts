@@ -113,6 +113,34 @@ export const TableWriteError = defineErrors({
 export type TableWriteError = InferErrors<typeof TableWriteError>;
 
 // ════════════════════════════════════════════════════════════════════════════
+// TABLE CONFORMANCE
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Per-table conformance snapshot: every stored row classified by what the
+ * read path already computes in `parseRow`. Nothing here is new information;
+ * `getAllValid()` silently skips exactly the rows the two queues surface.
+ *
+ * Two causes, two queues:
+ * - `nonconforming`: rows this binary should understand but cannot parse
+ *   (failed validation, failed migration, or a corrupt `_v` stamp at or
+ *   below the latest known version). The repair tool's input: app code
+ *   iterates `getAllInvalid()` and fixes via `set()` or discards via
+ *   `delete()`.
+ * - `newerWriter`: rows stamped by a schema version above this binary's
+ *   latest. Not repairable here; the user needs an app update. `set()`
+ *   refuses these rows for the same reason (see {@link TableWriteError}).
+ */
+export type TableConformance = {
+	/** Count of rows that parse to the latest schema. */
+	valid: number;
+	/** Rows this binary should understand but cannot parse. */
+	nonconforming: TableParseError[];
+	/** Rows stamped by a newer schema version than this binary knows. */
+	newerWriter: TableParseError[];
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // ROW TYPE
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -325,6 +353,19 @@ export type ReadonlyTable<
 	observe(
 		callback: (changedIds: ReadonlySet<TRow['id']>, origin?: unknown) => void,
 	): () => void;
+	/**
+	 * Classify every stored row: a full scan plus validation, same cost as
+	 * `getAllValid()`. Pull-based; recompute on the `observe()` signal.
+	 * See {@link TableConformance} for the two queues and their meaning.
+	 */
+	conformance(): TableConformance;
+	/**
+	 * Number of observer-confirmed stored entries. O(1). Includes
+	 * nonconforming rows that `getAllValid()` hides, may lag writes made
+	 * inside an open transaction, and encrypted stores subtract
+	 * undecryptable entries. For an "N items" badge next to a filtered
+	 * list, use `conformance().valid` instead.
+	 */
 	count(): number;
 	has(id: string): boolean;
 };
@@ -538,6 +579,29 @@ export function createReadonlyTable<
 			};
 			ykv.observe(handler);
 			return () => ykv.unobserve(handler);
+		},
+
+		conformance(): TableConformance {
+			let valid = 0;
+			const nonconforming: TableParseError[] = [];
+			const newerWriter: TableParseError[] = [];
+			for (const [key, entry] of ykv.entries()) {
+				const { error } = parseRow(key, entry.val);
+				if (!error) {
+					valid++;
+				} else if (
+					error.name === 'UnknownVersion' &&
+					typeof error.version === 'number' &&
+					error.version > versions.length
+				) {
+					newerWriter.push(error);
+				} else {
+					// ValidationFailed, MigrationFailed, and corrupt stamps
+					// (UnknownVersion at or below the latest known version).
+					nonconforming.push(error);
+				}
+			}
+			return { valid, nonconforming, newerWriter };
 		},
 
 		count(): number {

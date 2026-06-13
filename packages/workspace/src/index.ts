@@ -198,6 +198,7 @@ export {
 	type BaseRow,
 	type InferTableRow,
 	type Table,
+	type TableConformance,
 	TableParseError,
 	type Tables,
 	TableWriteError,
