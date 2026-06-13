@@ -2,11 +2,11 @@
 import { Font } from 'astro:assets';
 import { VERSION } from '@epicenter/constants/versions';
 import {
-	Calendar as CalendarIcon,
+	FileText as FileTextIcon,
 	Folder as FolderIcon,
-	Image as ImageIcon,
-	MessageCircle as MessageCircleIcon,
-	Music as MusicIcon,
+	Mic as MicIcon,
+	NotebookPen as NotebookPenIcon,
+	StickyNote as StickyNoteIcon,
 } from '@lucide/astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
@@ -17,8 +17,8 @@ const discordUrl = 'https://go.epicenter.so/discord';
 ---
 
 <BaseLayout
-	title="Epicenter: Apps come and go. Your files shouldn't."
-	description="Epicenter apps save everything you make as ordinary files in a folder on your computer, so what matters to you outlives every app that made it. Start with Whispering, a free speech-to-text app for macOS, Windows, and Linux."
+	title="Epicenter: say it once, keep it forever"
+	description="Whispering is a free speech-to-text app that types wherever your cursor is and saves every capture as a plain Markdown file in a folder you own. macOS, Windows, and Linux."
 >
 	<Fragment slot="head">
 		<Font cssVariable="--font-fraunces" preload />
@@ -38,142 +38,213 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			</div>
 		</nav>
 
-		<!-- Screen 1: The superpower -->
+		<!-- Hero: speak, and the words become a file you own -->
 		<header
-			class="mx-auto flex min-h-[92svh] max-w-4xl flex-col items-center justify-center px-6 pb-24 pt-10 text-center"
+			class="mx-auto flex min-h-[90svh] max-w-5xl flex-col items-center justify-center px-6 pb-20 pt-8 text-center"
 		>
-			<h1 class="font-display hero-step text-balance" style="--step: 0">
-				Talk instead of type.
+			<p class="eyebrow hero-step" style="--step: 0">Speak it. Keep it.</p>
+			<h1 class="font-display hero-step text-balance" style="--step: 1">
+				Say it once. Keep it forever.
 			</h1>
-			<p class="hero-step sub mx-auto mt-7 max-w-2xl" style="--step: 1">
-				Whispering is a free speech-to-text app for your computer. Hold a key,
-				say it, and the words land wherever your cursor is: email, doc, chat,
-				anything.
+			<p class="sub hero-step mx-auto mt-7 max-w-2xl" style="--step: 2">
+				Whispering turns your voice into text wherever your cursor is, and saves
+				every capture as a plain Markdown file in a folder you own. Free, and
+				ready tonight.
 			</p>
 			<div
 				class="hero-step mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
-				style="--step: 2"
+				style="--step: 3"
 			>
-				<a class="cta cta-solid" data-download href={releasesUrl}>
-					Download Whispering, free
-				</a>
-				<a class="cta cta-quiet" href="#demo">Watch it work (20 seconds)</a>
+				<a class="cta cta-solid" data-download href={releasesUrl}
+					>Download Whispering, free</a
+				>
+				<a class="cta cta-quiet" href="#anywhere">See how it works</a>
 			</div>
-			<p class="hero-step fineprint mt-5" style="--step: 3">
-				Free and open source.
-				<a class="quiet-link" href={releasesUrl}>macOS, Windows, and Linux.</a>
-				<a class="quiet-link" href="/whispering">More about Whispering</a>
+			<p class="fineprint hero-step mt-5" style="--step: 4">
+				Free and open source. macOS, Windows, and Linux.
 			</p>
 
-			<!-- The demo: a simulated screen built from shipped behavior only -->
-			<figure
-				id="demo"
-				class="hero-step mt-14 w-full max-w-xl text-left"
-				style="--step: 4"
-			>
-				<div class="demo-window">
-					<div class="demo-titlebar">
-						<span class="demo-dot"></span>
-						<span class="demo-dot"></span>
-						<span class="demo-dot"></span>
-						<span class="demo-title">New Message</span>
-					</div>
-					<div class="demo-field"><span>To:</span> Sam</div>
-					<div class="demo-field"><span>Subject:</span> Running late</div>
-					<p class="demo-body" data-typed>
+			<!-- The capture demo: speak on the left, a file lands on the right -->
+			<figure class="cap hero-step mt-14 w-full max-w-3xl" style="--step: 5">
+				<div class="cap-panel cap-mic">
+					<div class="cap-rec"><span class="cap-dot"></span> Listening</div>
+					<p class="cap-text" data-typed>
 						Just left the office, traffic is slow on the bridge. I should be
-						there by seven. Want me to grab dinner on the way?
+						there by seven.
 					</p>
-					<div class="demo-hint">
-						<span class="demo-mic"></span>
-						<span
-							>Hold your shortcut and talk. Release, and the words type
-							themselves.</span
-						>
+				</div>
+				<div class="cap-arrow" aria-hidden="true">&#8594;</div>
+				<div class="cap-panel demo-window">
+					<div class="demo-titlebar">
+						<span class="demo-dot"></span><span class="demo-dot"></span
+						><span class="demo-dot"></span>
+						<span class="demo-title">my-brain</span>
+					</div>
+					<div class="ns-tree bare">
+						<div class="ns-row"><FolderIcon /> apps/</div>
+						<div class="ns-row i1"><FolderIcon /> whispering/</div>
+						<div class="ns-row i2 ns-file cap-file">
+							<FileTextIcon />
+							standup.md
+						</div>
 					</div>
 				</div>
-				<figcaption class="fineprint mt-3 text-center">
-					Simulated screen. The real flow is the same: hold the shortcut, talk,
-					release.
-				</figcaption>
 			</figure>
+			<p class="cap-caption hero-step mono-caption mt-6" style="--step: 6">
+				Hold your shortcut and speak.
+			</p>
 		</header>
 
-		<!-- Screen 2: The gag -->
+		<!-- It works in every app: words land at your cursor -->
+		<section id="anywhere">
+			<div class="mx-auto max-w-4xl px-6 py-28 text-center md:py-36">
+				<p class="eyebrow reveal">Works where you already work</p>
+				<h2 class="font-display reveal mt-4 text-balance">
+					It types into whatever app you're in.
+				</h2>
+				<p class="sub reveal mx-auto mt-6 max-w-2xl">
+					No special window, no copy-paste. Hold your shortcut, talk, and the
+					words land at your cursor: email, docs, chat, your editor.
+				</p>
+				<figure class="reveal mx-auto mt-12 w-full max-w-xl text-left">
+					<div class="demo-window">
+						<div class="demo-titlebar">
+							<span class="demo-dot"></span><span class="demo-dot"></span
+							><span class="demo-dot"></span>
+							<span class="demo-title">New Message</span>
+						</div>
+						<div class="demo-field"><span>To:</span> Sam</div>
+						<div class="demo-field"><span>Subject:</span> Running late</div>
+						<p class="demo-body" data-typed>
+							Just left the office, traffic is slow on the bridge. I should be
+							there by seven. Want me to grab dinner on the way?
+						</p>
+						<div class="demo-hint">
+							<span class="demo-mic"></span>
+							<span
+								>Hold your shortcut and talk. Release, and the words type
+								themselves.</span
+							>
+						</div>
+					</div>
+					<figcaption class="fineprint mt-3 text-center">
+						Simulated. It works the same in any text field.
+					</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<!-- The gag: nothing to export, it was always yours -->
 		<section class="band">
 			<div class="mx-auto max-w-3xl px-6 py-28 text-center md:py-36">
 				<div class="reveal">
-					<button id="export-button" type="button" class="gag-btn font-display">
+					<button type="button" class="gag-btn font-display">
 						Export your data
 					</button>
 					<p class="gag-fallback font-display">Already done.</p>
 				</div>
 				<p class="sub reveal mx-auto mt-8 max-w-xl">
 					Other apps make you beg for your own data. Epicenter apps keep it as
-					ordinary files on your computer from day one, so there is nothing to
+					ordinary files in your folder from day one, so there is nothing to
 					export because nothing was held.
 				</p>
 			</div>
 		</section>
 
-		<!-- Screen 3: The guarantee -->
-		<section>
-			<div class="mx-auto max-w-4xl px-6 py-28 text-center md:py-36">
+		<!-- Zoom out: one folder, every app -->
+		<section id="how">
+			<div class="mx-auto max-w-2xl px-6 py-28 text-center md:py-36">
+				<p class="eyebrow reveal">Zoom out</p>
+				<h2 class="font-display reveal mt-4 text-balance">
+					One folder, every app.
+				</h2>
+				<p class="sub reveal mx-auto mt-6 max-w-xl">
+					Drop an epicenter.config.ts into any folder and Epicenter manages it.
+					Whispering writes here today. Fuji, Honeycrisp, and every app you add
+					write alongside it as Markdown you own.
+				</p>
+				<div class="ns reveal mt-12 w-full text-left">
+					<div class="ns-apps">
+						<span class="ns-chip" data-step="3"><MicIcon /> Whispering</span>
+						<span class="ns-chip" data-step="4"><NotebookPenIcon /> Fuji</span>
+						<span class="ns-chip" data-step="5"
+							><StickyNoteIcon />
+							Honeycrisp</span
+						>
+					</div>
+					<div class="demo-window">
+						<div class="demo-titlebar">
+							<span class="demo-dot"></span><span class="demo-dot"></span
+							><span class="demo-dot"></span>
+							<span class="demo-title">my-brain</span>
+						</div>
+						<div class="ns-tree bare">
+							<div class="ns-row"><FolderIcon /> my-brain/</div>
+							<div class="ns-row i1"><FolderIcon /> journal/</div>
+							<div class="ns-row i1"><FolderIcon /> ideas/</div>
+							<div class="ns-row i1 ns-reserved" data-step="1">
+								<FolderIcon />
+								apps/<span class="ns-tag" data-step="2">Epicenter-managed</span>
+							</div>
+							<div class="ns-row i2 ns-config" data-step="2">
+								<FileTextIcon />
+								epicenter.config.ts
+							</div>
+							<div class="ns-row i2 ns-machine" data-step="2">
+								<FolderIcon />
+								.epicenter/<span class="ns-note">machine state, ignore it</span>
+							</div>
+							<div class="ns-row i2" data-step="3">
+								<FolderIcon />
+								whispering/
+							</div>
+							<div class="ns-row i3 ns-file" data-step="3">
+								<FileTextIcon />
+								standup.md
+							</div>
+							<div class="ns-row i2" data-step="4"><FolderIcon /> fuji/</div>
+							<div class="ns-row i3 ns-file" data-step="4">
+								<FileTextIcon />
+								trip-japan.md
+							</div>
+							<div class="ns-row i2" data-step="5">
+								<FolderIcon />
+								honeycrisp/
+							</div>
+							<div class="ns-row i3 ns-file" data-step="5">
+								<FileTextIcon />
+								meeting-notes.md
+							</div>
+						</div>
+					</div>
+					<p class="ns-caption mono-caption mt-4 text-center">
+						Your own folder of Markdown.
+					</p>
+				</div>
+			</div>
+		</section>
+
+		<!-- The guarantee -->
+		<section class="band">
+			<div class="mx-auto max-w-3xl px-6 py-28 text-center md:py-36">
 				<h2 class="font-display reveal text-balance">
 					Apps come and go. Your files shouldn't.
 				</h2>
 				<p class="sub reveal mx-auto mt-6 max-w-2xl">
-					Epicenter apps save everything you make as ordinary files in a folder
-					on your computer. Readable now, readable in twenty years, no account
-					required.
-				</p>
-				<div
-					class="folder-row mt-14 flex items-end justify-center gap-4 sm:gap-6"
-				>
-					<div class="app-tile" style="--i: 0"><MessageCircleIcon /></div>
-					<div class="app-tile" style="--i: 1"><ImageIcon /></div>
-					<div class="folder-tile"><FolderIcon /></div>
-					<div class="app-tile" style="--i: 2"><MusicIcon /></div>
-					<div class="app-tile" style="--i: 3"><CalendarIcon /></div>
-				</div>
-				<p class="mono-caption mt-6">
-					this folder is on your computer, not ours
+					Readable now, readable in twenty years, no account required.
 				</p>
 			</div>
 		</section>
 
-		<!-- Screen 4: The vision, staged as vision -->
-		<section class="band">
-			<div class="mx-auto max-w-4xl px-6 py-28 text-center md:py-36">
-				<p class="eyebrow reveal">Where this is going</p>
-				<h2 class="font-display reveal mt-4 text-balance">
-					Everything you make, in one folder you keep.
-				</h2>
-				<p class="sub reveal mx-auto mt-6 max-w-2xl">
-					That's what we're building: small apps for speaking, saving, and
-					writing that all put their work into ordinary files on your computer.
-					The first one, Whispering, is ready today.
-				</p>
-				<div
-					class="reveal mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
-				>
-					<a class="cta cta-solid" data-download href={releasesUrl}>
-						Start with Whispering
-					</a>
-					<a class="cta cta-outline" href={githubUrl}>Follow the build</a>
-				</div>
-			</div>
-		</section>
-
-		<!-- Screen 5: The letter -->
+		<!-- The letter -->
 		<section>
 			<div class="mx-auto max-w-2xl px-6 py-28 md:py-36">
 				<p class="eyebrow reveal text-center">A note from the founder</p>
 				<!--
 					Owner-written copy goes here. Placeholder typesetting only; do not
-					ship the final page without Braden's own five lines. See the spec's
-					Open Question 1. The "if we disappeared tomorrow, your files
-					wouldn't notice" beat belongs in this letter and nowhere else.
+					ship the final page without Braden's own five lines. The "if we
+					disappeared tomorrow, your files wouldn't notice" beat belongs in this
+					letter and nowhere else.
 				-->
 				<div class="letter reveal mt-10">
 					<p>[Line one: why I built Whispering, in Braden's own words.]</p>
@@ -187,9 +258,9 @@ const discordUrl = 'https://go.epicenter.so/discord';
 					<p class="letter-sign">Braden</p>
 				</div>
 				<div class="reveal mt-12 flex flex-col items-center gap-4">
-					<a class="cta cta-solid" data-download href={releasesUrl}>
-						Download Whispering, free
-					</a>
+					<a class="cta cta-solid" data-download href={releasesUrl}
+						>Download Whispering, free</a
+					>
 					<p class="fineprint">Free. macOS, Windows, and Linux.</p>
 				</div>
 			</div>
@@ -215,6 +286,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 
 <script is:inline define:vars={{ version: VERSION }}>
 	document.documentElement.classList.add('js');
+	const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 	// OS-detected download. The static href already points at the releases
 	// page, so this only ever upgrades the link.
@@ -222,80 +294,156 @@ const discordUrl = 'https://go.epicenter.so/discord';
 	const asset = (file) =>
 		`https://github.com/EpicenterHQ/epicenter/releases/download/v${version}/${file}`;
 	let downloadHref = null;
-	if (ua.includes('mac')) {
+	if (ua.includes('mac'))
 		downloadHref = asset(`Whispering_${version}_aarch64.dmg`);
-	} else if (ua.includes('win')) {
+	else if (ua.includes('win'))
 		downloadHref = asset(`Whispering_${version}_x64_en-US.msi`);
-	}
 	if (downloadHref) {
-		for (const a of document.querySelectorAll('a[data-download]')) {
+		for (const a of document.querySelectorAll('a[data-download]'))
 			a.href = downloadHref;
-		}
 	}
 
 	// The export gag: one state change.
-	const exportButton = document.getElementById('export-button');
-	exportButton?.addEventListener('click', () => {
-		if (exportButton.classList.contains('done')) return;
-		exportButton.classList.add('done');
-		exportButton.textContent = 'Already done.';
-	});
+	for (const btn of document.querySelectorAll('.gag-btn')) {
+		btn.addEventListener('click', () => {
+			if (btn.classList.contains('done')) return;
+			btn.classList.add('done');
+			btn.textContent = 'Already done.';
+		});
+	}
 
-	// Scroll reveals and the icons-fade visual share one observer.
-	const observer = new IntersectionObserver(
+	// Scroll reveals.
+	const revealObserver = new IntersectionObserver(
 		(entries) => {
 			for (const entry of entries) {
 				if (!entry.isIntersecting) continue;
 				entry.target.classList.add('in');
-				observer.unobserve(entry.target);
+				revealObserver.unobserve(entry.target);
 			}
 		},
-		{ threshold: 0.25 },
+		{ threshold: 0.2 },
 	);
-	for (const el of document.querySelectorAll('.reveal, .folder-row')) {
-		observer.observe(el);
-	}
+	for (const el of document.querySelectorAll('.reveal'))
+		revealObserver.observe(el);
 
-	// Typing simulation for the demo card. Without JS the full sentence is
-	// already in the markup; with reduced motion we leave it alone.
-	const typed = document.querySelector('[data-typed]');
-	const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-	if (typed && !reduceMotion) {
-		const sentence = typed.textContent.trim().replace(/\s+/g, ' ');
-		let timer;
-		const run = () => {
-			clearTimeout(timer);
-			typed.classList.add('typing');
-			let i = 0;
-			const tick = () => {
-				typed.textContent = sentence.slice(0, i);
-				if (i < sentence.length) {
-					i += 1;
-					timer = setTimeout(tick, 36 + Math.random() * 44);
-				} else {
-					typed.classList.remove('typing');
-					timer = setTimeout(run, 7000);
-				}
-			};
-			tick();
-		};
-		const demoObserver = new IntersectionObserver(
+	// Run a callback once, the first time an element scrolls into view.
+	const onInView = (el, fn, threshold = 0.35) => {
+		if (!el) return;
+		const io = new IntersectionObserver(
 			(entries) => {
 				if (entries.some((entry) => entry.isIntersecting)) {
-					demoObserver.disconnect();
-					run();
+					io.disconnect();
+					fn();
 				}
 			},
-			{ threshold: 0.4 },
+			{ threshold },
 		);
-		demoObserver.observe(typed);
-		for (const a of document.querySelectorAll('a[href="#demo"]')) {
-			a.addEventListener('click', () => {
-				demoObserver.disconnect();
-				run();
-			});
-		}
+		io.observe(el);
+	};
+
+	const textOf = (el) =>
+		el.getAttribute('data-text') || el.textContent.trim().replace(/\s+/g, ' ');
+
+	function typeInto(typed, sentence, onDone, loopMs) {
+		typed.classList.add('typing');
+		typed.textContent = '';
+		let i = 0;
+		const tick = () => {
+			typed.textContent = sentence.slice(0, i);
+			if (i < sentence.length) {
+				i += 1;
+				setTimeout(tick, 36 + Math.random() * 44);
+			} else {
+				typed.classList.remove('typing');
+				onDone && onDone();
+				if (loopMs)
+					setTimeout(() => typeInto(typed, sentence, onDone, loopMs), loopMs);
+			}
+		};
+		tick();
 	}
+
+	// Hero: speak, and the words become a file you own.
+	(function heroCapture() {
+		const typed = document.querySelector('.cap-text[data-typed]');
+		const file = document.querySelector('.cap-file');
+		const rec = document.querySelector('.cap-rec');
+		const caption = document.querySelector('.cap-caption');
+		if (!typed) return;
+		const sentence = textOf(typed);
+		typed.setAttribute('data-text', sentence);
+		if (reduceMotion) {
+			typed.textContent = sentence;
+			file && file.classList.add('in');
+			return;
+		}
+		const play = () => {
+			file && file.classList.remove('in');
+			rec && rec.classList.add('on');
+			if (caption) caption.textContent = 'Hold your shortcut and speak.';
+			typeInto(typed, sentence, () => {
+				rec && rec.classList.remove('on');
+				if (caption)
+					caption.textContent = 'Release. The words become a file you own.';
+				setTimeout(() => file && file.classList.add('in'), 500);
+				setTimeout(play, 5200);
+			});
+		};
+		play();
+	})();
+
+	// Anywhere section: the words type themselves into the email.
+	(function emailDemo() {
+		const typed = document.querySelector('.demo-body[data-typed]');
+		if (!typed) return;
+		const sentence = textOf(typed);
+		typed.setAttribute('data-text', sentence);
+		if (reduceMotion) {
+			typed.textContent = sentence;
+			return;
+		}
+		onInView(typed, () => typeInto(typed, sentence, null, 6000), 0.4);
+	})();
+
+	// Zoom-out section: config makes the folder managed, mounts appear as siblings.
+	(function managedFolder() {
+		const tree = document.querySelector(
+			'.ns-tree:not(.bare), .ns .ns-tree.bare',
+		);
+		const rows = [...document.querySelectorAll('.ns .ns-tree [data-step]')];
+		const chips = [...document.querySelectorAll('.ns-chip')];
+		const caption = document.querySelector('.ns-caption');
+		if (!rows.length) return;
+		const captions = {
+			1: 'Pick any folder in your vault, named whatever you like.',
+			2: 'Drop in epicenter.config.ts. Now the folder is Epicenter-managed.',
+			3: 'Each app generates a sibling folder of Markdown you own.',
+			5: 'Curate, grep, keep. The files are yours.',
+		};
+		if (reduceMotion) {
+			rows.forEach((r) => r.classList.add('in'));
+			chips.forEach((c) => c.classList.add('lit'));
+			return;
+		}
+		const play = () => {
+			rows.forEach((r) => r.classList.remove('in'));
+			chips.forEach((c) => c.classList.remove('lit'));
+			if (caption) caption.textContent = 'Your own folder of Markdown.';
+			let step = 0;
+			const advance = () => {
+				step += 1;
+				for (const r of rows)
+					if (Number(r.dataset.step) === step) r.classList.add('in');
+				for (const c of chips)
+					if (Number(c.dataset.step) === step) c.classList.add('lit');
+				if (caption && captions[step]) caption.textContent = captions[step];
+				if (step < 5) setTimeout(advance, step <= 2 ? 1100 : 850);
+				else setTimeout(play, 3400);
+			};
+			setTimeout(advance, 700);
+		};
+		onInView(rows[0], play, 0.3);
+	})();
 </script>
 
 <style>
@@ -375,22 +523,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		color: var(--ink);
 	}
 
-	.quiet-link {
-		color: inherit;
-		text-decoration: underline;
-		text-underline-offset: 3px;
-		text-decoration-color: var(--line);
-		transition: text-decoration-color 150ms ease;
-	}
-
-	.quiet-link:hover {
-		text-decoration-color: var(--accent);
-	}
-
-	.quiet-link + .quiet-link {
-		margin-left: 1rem;
-	}
-
 	/* CTAs */
 	.cta {
 		display: inline-flex;
@@ -425,16 +557,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		box-shadow: none;
 	}
 
-	.cta-outline {
-		border: 1.5px solid var(--ink);
-		color: var(--ink);
-	}
-
-	.cta-outline:hover {
-		background: var(--ink);
-		color: var(--paper);
-	}
-
 	.cta-quiet {
 		color: var(--ink);
 		text-decoration: underline;
@@ -464,7 +586,7 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		}
 	}
 
-	/* Demo card */
+	/* Demo / Finder window */
 	.demo-window {
 		background: #fffdf8;
 		border: 1px solid var(--line);
@@ -514,7 +636,8 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		line-height: 1.6;
 	}
 
-	.demo-body.typing::after {
+	.demo-body.typing::after,
+	.cap-text.typing::after {
 		content: "";
 		display: inline-block;
 		width: 2px;
@@ -613,56 +736,212 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		visibility: hidden;
 	}
 
-	/* Apps fade, the folder stays */
-	.app-tile,
-	.folder-tile {
-		display: flex;
+	/* Capture demo (hero): speak on the left, a file lands on the right */
+	.cap {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		gap: clamp(0.8rem, 3vw, 2rem);
 		align-items: center;
-		justify-content: center;
-		width: clamp(3.4rem, 9vw, 5rem);
-		height: clamp(3.4rem, 9vw, 5rem);
-		border-radius: 22%;
-		border: 1px solid var(--line);
+	}
+
+	.cap-panel {
 		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 14px;
 	}
 
-	.app-tile :global(svg),
-	.folder-tile :global(svg) {
-		width: 45%;
-		height: 45%;
+	.cap-mic {
+		padding: 1.2rem 1.3rem;
+		box-shadow: 0 12px 32px rgb(38 34 26 / 8%);
+		text-align: left;
 	}
 
-	/* Static reading (and no-JS): the apps are already gone, the folder
-	   remains. JS replays the decay when the row scrolls into view. */
-	.app-tile {
-		opacity: 0.3;
+	.cap-rec {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.78rem;
+		color: var(--ink-soft);
+		margin-bottom: 0.7rem;
+	}
+
+	.cap-dot {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--line);
+	}
+
+	.cap-rec.on .cap-dot {
+		background: var(--accent);
+		animation: pulse 1.4s ease-in-out infinite;
+	}
+
+	.cap-text {
+		font-size: 1rem;
+		line-height: 1.6;
+		min-height: 5rem;
+	}
+
+	.cap-arrow {
+		font-size: 1.7rem;
+		color: var(--ink-soft);
+	}
+
+	/* No-JS: the file is simply present. With JS it slides in after the type. */
+	:global(html.js) .cap-file {
+		opacity: 0;
+		transform: translateX(-16px);
+		transition:
+			opacity 0.5s ease,
+			transform 0.5s ease;
+	}
+
+	.cap-file.in {
+		opacity: 1;
+		transform: none;
+		background: rgb(188 63 29 / 7%);
+		border-radius: 5px;
+	}
+
+	/* Managed-folder tree */
+	.ns-apps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.ns-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.8rem;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: #fffdf8;
+		font-size: 0.85rem;
+		transition: all 0.45s ease;
+	}
+
+	.ns-chip :global(svg) {
+		width: 1em;
+		height: 1em;
+	}
+
+	/* No-JS: chips read as present. With JS they dim until their app appears. */
+	:global(html.js) .ns-chip {
+		opacity: 0.4;
 		filter: grayscale(1);
 	}
 
-	.folder-tile {
-		width: clamp(4.2rem, 11vw, 6rem);
-		height: clamp(4.2rem, 11vw, 6rem);
-		background: var(--ink);
-		border-color: var(--ink);
-		color: var(--paper);
-		box-shadow: 0 10px 24px rgb(38 34 26 / 18%);
-	}
-
-	:global(html.js) .folder-row .app-tile {
+	.ns-chip.lit {
 		opacity: 1;
 		filter: none;
+		border-color: var(--accent);
 	}
 
-	:global(html.js) .folder-row.in .app-tile {
-		animation: fade-away 2.2s ease forwards;
-		animation-delay: calc(0.5s + var(--i) * 0.35s);
+	.ns-tree {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 1.1rem 1.2rem;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.85rem;
 	}
 
-	@keyframes fade-away {
-		to {
-			opacity: 0.3;
-			filter: grayscale(1);
-		}
+	.ns-tree.bare {
+		border: none;
+		border-radius: 0;
+		background: transparent;
+	}
+
+	.ns-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.18rem 0;
+		color: var(--ink);
+	}
+
+	.ns-row :global(svg) {
+		width: 1em;
+		height: 1em;
+		color: var(--ink-soft);
+		flex: none;
+	}
+
+	.i1 {
+		padding-left: 1.3rem;
+	}
+
+	.i2 {
+		padding-left: 2.6rem;
+	}
+
+	.i3 {
+		padding-left: 3.9rem;
+	}
+
+	/* No-JS: the whole tree is visible. With JS the steps reveal in sequence. */
+	:global(html.js) .ns-tree [data-step] {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition:
+			opacity 0.5s ease,
+			transform 0.5s ease;
+	}
+
+	.ns-tree [data-step].in {
+		opacity: 1;
+		transform: none;
+	}
+
+	.ns-config {
+		color: var(--accent-deep);
+		font-weight: 600;
+	}
+
+	.ns-config :global(svg) {
+		color: var(--accent);
+	}
+
+	.ns-reserved {
+		color: var(--accent-deep);
+		font-weight: 600;
+	}
+
+	.ns-reserved :global(svg) {
+		color: var(--accent);
+	}
+
+	.ns-tag {
+		font-size: 0.72rem;
+		color: var(--ink-soft);
+		font-weight: 400;
+		margin-left: 0.5rem;
+		padding: 0.05rem 0.4rem;
+		border: 1px dashed var(--line);
+		border-radius: 4px;
+	}
+
+	.ns-file {
+		color: var(--ink-soft);
+	}
+
+	.ns-machine {
+		color: var(--ink-soft);
+		opacity: 0.65;
+	}
+
+	.ns-note {
+		font-size: 0.72rem;
+		color: var(--ink-soft);
+		margin-left: 0.4rem;
+	}
+
+	.ns-caption {
+		min-height: 1.2em;
 	}
 
 	/* Scroll reveals: only when JS is present, never blocking static reads */
@@ -697,6 +976,17 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		margin-top: 1.6rem;
 	}
 
+	@media (max-width: 640px) {
+		.cap {
+			grid-template-columns: 1fr;
+		}
+
+		.cap-arrow {
+			transform: rotate(90deg);
+			justify-self: center;
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.hero-step {
 			animation: none;
@@ -709,20 +999,19 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			transition: none;
 		}
 
-		:global(html.js) .folder-row .app-tile {
-			opacity: 0.3;
-			filter: grayscale(1);
+		:global(html.js) .cap-file,
+		:global(html.js) .ns-tree [data-step] {
+			opacity: 1;
+			transform: none;
 		}
 
-		:global(html.js) .folder-row.in .app-tile {
-			animation: none;
+		:global(html.js) .ns-chip {
+			opacity: 1;
+			filter: none;
 		}
 
-		.gag-btn.done {
-			animation: none;
-		}
-
-		.demo-mic {
+		.demo-mic,
+		.cap-rec.on .cap-dot {
 			animation: none;
 		}
 	}
