@@ -226,8 +226,7 @@ function purgeRequests(requestsTable) {
 	const RETENTION = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
 
-	for (const result of requestsTable.getAllValid()) {
-		const req = result.row;
+	for (const req of requestsTable.scan().rows) {
 		if (req.respondedAt !== null && now - req.respondedAt > RETENTION) {
 			requestsTable.delete({ id: req.id });
 		}

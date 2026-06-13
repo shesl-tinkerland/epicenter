@@ -124,7 +124,7 @@ That example uses the current public API end to end:
 - a direct `openBlog()` builder function that calls `createWorkspace(...)` and returns the bundle
 - `createWorkspace` + `attachIndexedDb` composed inline
 - direct property access via `blog.tables.posts`
-- `set`, `get`, `update`, `delete`, `getAllValid`, and `observe`
+- `set`, `get`, `update`, `delete`, `scan`, and `observe`
 
 The quick start is local-first: it persists to IndexedDB and works offline.
 Sync is one more line in the builder: add `openCollaboration`. See [Sync](#sync).
@@ -707,7 +707,7 @@ export const fileContentDocs = createDisposableCache((fileId: string) => {
 
 export async function clearFileContentLocalData() {
 	await Promise.all(
-		workspace.tables.files.getAllValid().map((file) =>
+		workspace.tables.files.scan().rows.map((file) =>
 			clearDocument(fileContentDocGuid(file.id)),
 		),
 	);
@@ -786,14 +786,11 @@ if (error) {
 
 | Method | Return type | Notes |
 | --- | --- | --- |
-| `get(id)` | `Result<TRow \| null, TableParseError>` | `data: null` for "not found"; `error` for parse/validation failures |
-| `getAll()` | `Array<Result<TRow, TableParseError>>` | One Result per stored row |
-| `getAllValid()` | `TRow[]` | Skips invalid rows |
-| `getAllInvalid()` | `TableParseError[]` | Debug schema drift or corrupt data |
-| `filter(predicate)` | `TRow[]` | Runs only on valid rows |
-| `find(predicate)` | `TRow \| undefined` | First valid match |
+| `get(id)` | `Result<TRow \| null, TableReadError>` | `data: null` for "not found"; `error` for a parse failure, a newer-writer row, or an unreadable (undecryptable) row |
+| `scan()` | `TableScan<TRow>` | Classified read: `{ rows, nonconforming, newerWriter, unreadable }`; the four buckets sum to `storedCount()` |
+| `findValid(predicate)` | `TRow \| undefined` | First valid match |
 | `has(id)` | `boolean` | Existence only |
-| `count()` | `number` | Counts every stored row |
+| `storedCount()` | `number` | Counts every stored row |
 
 ```typescript
 const { data: row, error } = workspace.tables.posts.get('1');
@@ -803,12 +800,12 @@ if (error) {
 	console.log(row.title);
 }
 
-const all = workspace.tables.posts.getAll();
-const valid = workspace.tables.posts.getAllValid();
-const published = workspace.tables.posts.filter((row) => row.published);
-const firstPublished = workspace.tables.posts.find((row) => row.published);
+const { rows, nonconforming, newerWriter, unreadable } =
+	workspace.tables.posts.scan();
+const published = rows.filter((row) => row.published);
+const firstPublished = workspace.tables.posts.findValid((row) => row.published);
 const hasPostTwo = workspace.tables.posts.has('2');
-const count = workspace.tables.posts.count();
+const count = workspace.tables.posts.storedCount();
 ```
 
 ### Delete operations
@@ -1168,7 +1165,7 @@ function openPosts() {
 			posts_list: defineQuery({
 				title: 'List Posts',
 				description: 'List all posts.',
-				handler: () => workspace.tables.posts.getAllValid(),
+				handler: () => workspace.tables.posts.scan().rows,
 			}),
 			posts_get_by_id: defineQuery({
 				title: 'Get Post',
@@ -1391,7 +1388,7 @@ export const fileContentDocs = createDisposableCache((fileId: string) => {
 
 export async function clearFileContentLocalData() {
 	await Promise.all(
-		workspace.tables.files.getAllValid().map((file) =>
+		workspace.tables.files.scan().rows.map((file) =>
 			clearDocument(fileContentDocGuid(file.id)),
 		),
 	);
@@ -1569,6 +1566,7 @@ import {
 	type Table,
 	type TableDefinition,
 	TableParseError,
+	type TableScan,
 	type Tables,
 } from '@epicenter/workspace';
 ```
@@ -1579,15 +1577,12 @@ Public table methods:
 - `set(row)`
 - `update(id, partial)`
 - `get(id)`
-- `getAll()`
-- `getAllValid()`
-- `getAllInvalid()`
-- `filter(predicate)`
-- `find(predicate)`
+- `scan()` (returns the four classified buckets)
+- `findValid(predicate)`
 - `delete(id)`
 - `clear()`
 - `observe(callback)`
-- `count()`
+- `storedCount()`
 - `has(id)`
 
 ### KV operations

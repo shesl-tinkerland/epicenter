@@ -1,7 +1,7 @@
 # Table read surface: one classified scan
 
 **Date**: 2026-06-12
-**Status**: Draft
+**Status**: Implemented
 **Owner**: braden
 **Builds on**: `specs/20260612T182447-workspace-schema-conformance.md` (the write guard and the first conformance pass, both already committed on this branch)
 **Handoff**: `specs/20260612T193000-table-read-surface.handoff.md`
@@ -279,3 +279,52 @@ Claim: `docs(workspace): document the classified read surface and the four state
 - `packages/workspace/src/shared/y-keyvalue/y-keyvalue-lww-encrypted.ts`: where `unreadableEntryCount` becomes an id-yielding enumeration.
 - `apps/matter/src/lib/core/conformance.ts`: prior art for classification-not-gating and the `nonconforming` vocabulary.
 - `packages/svelte-utils/src/from-table.svelte.ts`: the binding merged in wave 5.
+
+## Review
+
+**Completed**: 2026-06-12
+**Branch**: greenfield-table-scan (on `lechuguilla-talus`)
+
+### What Landed
+
+All six waves shipped as standalone commits, each green on `bun test`
+(workspace) plus `bun run typecheck` (all packages). The read surface is now one
+classified `scan()` over four buckets (`rows`, `nonconforming`, `newerWriter`,
+`unreadable`) whose lengths sum to `storedCount()`; the valid-only family
+(`getAll`, `getAllValid`, `getAllInvalid`, `conformance`, `filter`) and the
+misleading `count` are gone, with every in-repo caller migrated. The encrypted
+store enumerates undecryptable entries and counts them, the write guard refuses
+unreadable rows alongside newer-writer rows, and the Fuji binding plus repair
+queue surface all three issue states from one subscription. The decisions are
+recorded in `docs/adr/0001-classified-scan-read-surface.md`,
+`docs/adr/0002-four-visible-read-states.md`, the workspace document README, and
+the `workspace-api` skill.
+
+### Deviations and Discoveries
+
+- **Confirmed naming up front.** `scan()` (over `read()`) and `nonconforming`
+  (over `broken`), per the Open Questions, before wave 3 renamed callers.
+- **Wave 5 keeps the map as the primary surface.** The spec example wrote
+  `entries.rows`, which would have changed roughly sixteen `fromTable` consumers
+  across eight apps that only want reactive rows. Instead the returned value
+  stays the rows `SvelteMap` and the three issue buckets are attached as
+  debounced properties. Same single subscription, zero breakage to the row-only
+  consumers; only the conformance view reads the buckets. Recorded as the
+  asymmetric win it is.
+- **Wave 4 added an O(1) point probe.** Wave 2 delivered the enumeration the
+  spec scoped (`unreadableEntries()`); the write guard then needed a per-key
+  check, so the contract grew `unreadableReason(key)` (O(1), the per-key form of
+  the enumeration). `get()`/`update()` use it too, so they report `UnreadableRow`
+  instead of a silent `Ok(null)`. `parseRow` keeps the narrower
+  parse-or-newer-writer union so `scan()` switches over it exhaustively, while
+  `TableReadError` (the point-read channel) carries all three non-row states.
+
+### Follow-up Work
+
+- A lazy `*scanEntries()` iterator stays deferred until a streaming caller
+  appears (a large export that must process entries in storage order without
+  materializing all four buckets). Trigger recorded in Considered Alternatives.
+- The narrative articles under `docs/articles/` still show `getAllValid()` in
+  point-in-time code snippets. Left as published history, the same as the dated
+  specs under `specs/`; the canonical teaching surfaces (package README,
+  document README, `workspace-api` skill) were updated.

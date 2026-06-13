@@ -63,7 +63,7 @@ const instructionsDocs = createDisposableCache(
 
 async function clearInstructionsLocalData() {
 	await Promise.all(
-		doc.tables.skills.getAllValid().map((skill) =>
+		doc.tables.skills.scan().rows.map((skill) =>
 			clearDocument(
 				skillInstructionsDocGuid({
 					workspaceId: doc.ydoc.guid,

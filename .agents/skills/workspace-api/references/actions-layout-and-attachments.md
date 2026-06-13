@@ -180,7 +180,7 @@ export function createMyAppWorkspace() {
       devices_list: defineQuery({
         title: 'List Devices',
         description: 'List all synced devices.',
-        handler: () => ({ devices: tables.devices.getAllValid() }),
+        handler: () => ({ devices: tables.devices.scan().rows }),
       }),
     }),
     [Symbol.dispose]() {
@@ -265,7 +265,7 @@ import { createFujiWorkspace } from '@epicenter/fuji/workspace';
 const workspace = await connectWorkspace(createFujiWorkspace);
 // Ready. Authenticated. Syncing. Full doc downloaded from server.
 
-const entries = workspace.tables.entries.getAllValid();
+const entries = workspace.tables.entries.scan().rows;
 await workspace.dispose();
 ```
 

@@ -1,0 +1,27 @@
+# Stored entries reconcile to four visible states (the unreadable bucket)
+
+Every stored table entry resolves to exactly one of four states (conforming,
+nonconforming, newer-writer, unreadable), and `storedCount()` equals the sum of
+the four `scan()` buckets. The fourth state, `unreadable`, is the load-bearing
+one: most Epicenter apps run encrypted tables, and a row whose key version is
+missing from the keyring decrypts to nothing. That row used to be invisible
+everywhere (`entries()` skipped it, `size` subtracted it, only a bare count
+recorded it), which is the encrypted twin of the schema-edit silent drop. We
+taught the shared `ObservableKvStore` contract to enumerate present-but-
+unreadable entries (`unreadableEntries()`, plus an O(1) `unreadableReason(key)`
+point probe) and redefined the raw count to include them, so no row can sit in
+storage and be invisible to every read.
+
+## Consequences
+
+The write guard tightened. A `set()` over an undecryptable row used to see
+`get()` return undefined, treat the slot as empty, and overwrite a row it could
+not read. Now `set()`/`bulkSet()`/`clear()` refuse unreadable rows with
+`UnreadableRefusal` alongside the existing newer-writer refusal, and `get()` /
+`update()` report `UnreadableRow` instead of a silent `Ok(null)`. `delete()`
+stays unguarded: removing a row you cannot read is a legitimate, key-independent
+intent.
+
+For plaintext tables the `unreadable` bucket is always empty and the sum
+identity still holds. The point of the identity is not that callers compute it;
+it is that the model has no gap.

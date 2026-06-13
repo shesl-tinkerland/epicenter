@@ -252,9 +252,8 @@ export type TableWriteError = InferErrors<typeof TableWriteError>;
  * The bucket lengths sum to `storedCount()`, so no read can silently drop data.
  *
  * - `rows`: entries that parse and validate to the latest schema. The payload
- *   almost every caller wants; `scan().rows` replaces the old `getAllValid()`,
- *   but now the three issue buckets ride along in the same return value instead
- *   of being silently skipped.
+ *   almost every caller wants, with the three issue buckets riding along in the
+ *   same return value instead of being silently skipped.
  * - `nonconforming`: entries this binary should understand but cannot parse
  *   (failed validation, failed migration, or a corrupt `_v` stamp at or below
  *   the latest known version), classified as {@link TableParseError}. Each

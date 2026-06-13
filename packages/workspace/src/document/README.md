@@ -179,6 +179,10 @@ See `apps/fuji/src/lib/workspace/browser.ts` and
 
 **No field-level observation.** Observe entire tables or KV keys. Let your UI framework handle field reactivity.
 
+**One classified read, no valid-only default.** Tables expose a single bulk read, `scan()`, that resolves every stored entry into one of four buckets (`rows`, `nonconforming`, `newerWriter`, `unreadable`) and returns them grouped. There is no `getAllValid()` that hands back only the conforming rows: a valid-only default is the silent-drop footgun, since the default call path then hides the other three states. `scan().rows` keeps the conforming payload one property access away while putting the dropped buckets at the same call site, where a caller can log, surface, or deliberately ignore them. `findValid(p)` survives the cut because it short-circuits; point reads (`get`, `has`) stay separate as O(1) probes. See `docs/adr/0001-classified-scan-read-surface.md`.
+
+**Stored entries reconcile to four visible states.** Every stored entry is exactly one of conforming, nonconforming, newer-writer, or unreadable, and `storedCount()` equals the sum of the four `scan()` buckets. The fourth state is the load-bearing one: on an encrypted table a row whose key version is missing from the keyring decrypts to nothing, and it used to be invisible everywhere (`entries()` skipped it, `size` subtracted it). The store now enumerates those entries (`unreadableEntries()`) and counts them, so no row can sit in storage and be invisible to every read. A write over an unreadable or newer-writer row is refused, because a binary must not clobber a row it cannot read. See `docs/adr/0002-four-visible-read-states.md`.
+
 **Why `_v` instead of `v`.** The library-managed version field uses a framework metadata prefix, the same convention as `_id` in MongoDB. Users never declare or read `_v`; the library stamps it on every write and strips it on every read. The underscore makes the reserved key visually distinct in storage dumps.
 
 ## Testing

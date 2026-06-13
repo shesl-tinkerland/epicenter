@@ -70,10 +70,10 @@ export type Note = InferTableRow<typeof notesTable>;
 
 ```typescript
 // Bad: goes through the runtime Table instance
-type Note = ReturnType<typeof workspace.tables.notes.getAllValid>[number];
+type Note = ReturnType<typeof workspace.tables.notes.scan>['rows'][number];
 
-// Bad: same smell with different method
-type Note = ReturnType<typeof workspace.tables.notes.getAll>[number];
+// Bad: same smell, plucking the row type out of a point read
+type Note = NonNullable<ReturnType<typeof workspace.tables.notes.get>['data']>;
 ```
 
 Why `InferTableRow` is better:

@@ -29,24 +29,47 @@ if (note === null) {
 Full surface:
 
 ```typescript
-table.get(id)                       // Result<TRow | null, TableParseError>
-table.getAll()                      // Array<Result<TRow, TableParseError>>
-table.getAllValid()                 // TRow[]              : drops invalid rows
-table.getAllInvalid()               // TableParseError[]   : only the failures
-table.filter(predicate)             // TRow[]              : predicate over valid rows
-table.find(predicate)               // TRow | undefined    : first valid match
-table.has(id)                       // boolean
-table.count()                       // number
+table.get(id)                       // Result<TRow | null, TableReadError>  : Ok(null) = absent
+table.scan()                        // TableScan<TRow>     : the one classified bulk read
+table.findValid(predicate)          // TRow | undefined    : first conforming match, short-circuits
+table.has(id)                       // boolean             : a stored entry exists (any of the four states)
+table.storedCount()                 // number              : count of every stored entry, O(1)
 
-table.set(row)                      // upsert full row (replaces entire row)
-table.bulkSet(rows, { chunkSize?, onProgress? })   // Promise<void>
-table.update(id, partial)           // Result<TRow | null, TableParseError>
-table.delete(id)                    // remove row
+table.set(row)                      // Result<void, TableWriteError>  : upsert, refuses unreadable rows
+table.bulkSet(rows, { chunkSize?, onProgress? })   // Promise<{ refused: TableWriteError[] }>
+table.update(id, partial)           // Result<TRow | null, TableReadError>
+table.delete(id)                    // remove row (unguarded)
 table.bulkDelete(ids, { chunkSize?, onProgress? }) // Promise<void>
-table.clear()                       // remove every row
+table.clear()                       // { refused: TableWriteError[] }  : skips rows it cannot read
 ```
 
 `set` and `update` accept the user-facing row shape: no `_v`. The library stamps the current version onto storage. `update`'s partial may not contain `id`.
+
+### The classified scan
+
+There is one bulk read, and it never silently drops data. `scan()` walks every
+stored entry and resolves each into exactly one of four buckets whose lengths
+sum to `storedCount()`:
+
+```typescript
+const { rows, nonconforming, newerWriter, unreadable } = table.scan();
+
+rows           // TRow[]                    : parse and validate to the latest schema
+nonconforming  // TableParseError[]         : this binary should parse them but cannot
+newerWriter    // TableNewerWriterError[]   : a newer binary wrote them (update the app)
+unreadable     // TableUnreadableError[]    : encrypted with a key this device lacks
+
+// storedCount() === rows.length + nonconforming.length
+//                 + newerWriter.length + unreadable.length
+```
+
+`scan().rows` is the conforming payload almost every caller wants; the three
+issue buckets ride along so a caller can log, surface, or deliberately ignore
+them rather than hiding them by default. For "the first row matching p" without
+building all four buckets, use `findValid(p)` (it short-circuits). For an
+"N items" count, read `scan().rows.length`, not `storedCount()` (which counts
+the issue buckets too). There is no valid-only bulk read: that was the
+silent-drop footgun, and it is gone.
 
 ### KV CRUD
 
