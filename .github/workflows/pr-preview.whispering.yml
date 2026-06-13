@@ -101,6 +101,12 @@ jobs:
           "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION" >> $env:GITHUB_ENV
           "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\Bin" >> $env:GITHUB_PATH
 
+      - name: Setup MSVC developer command prompt (Windows)
+        if: ${{ matrix.os == 'windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: setup bun
         uses: oven-sh/setup-bun@v2
         with:
