@@ -21,6 +21,10 @@ tsconfig.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+
+# Agent / benchmark scratch (machine-local, never commit)
+bench-oneshot.ts
 
 # ENV files
 .env

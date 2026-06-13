@@ -7,7 +7,7 @@
 
 ## One Sentence
 
-An Epicenter vault is a folder where `apps/` is a read-only, one-way markdown projection of app data owned by Yjs, `.epicenter/` is hidden machine state, and everything else is the user's own plain markdown; the only way to mutate app data, for humans and coding agents alike, is through validated actions reached via the CLI (and an optional MCP adapter later), never by editing the materialized files.
+An Epicenter vault is a folder where `apps/` is a visible, read-only markdown projection of app data owned by Yjs, `.epicenter/` is hidden machine state, and everything else is the user's own plain markdown; the projection is mechanically fenced by manifest-scoped deletion and read-only files, while app data mutates only through validated actions reached via the CLI (and an optional MCP adapter later), never by editing the materialized files.
 
 ## How to read this spec
 
@@ -15,6 +15,7 @@ An Epicenter vault is a folder where `apps/` is a read-only, one-way markdown pr
 Read first:
   One Sentence
   The Vault Layout
+  Projection Safety Layers
   The Config Decision
   Verification
 
@@ -35,10 +36,11 @@ The vault holds three kinds of content with three different owners:
 | --- | --- | --- | --- | --- |
 | `epicenter.config.ts` | you (declares mounts) | you | root, like `package.json` | tracked |
 | `apps/**.md` | the daemon (materializer) | **your eyes** (read/curate) | `apps/`, visible, like `dist/` | gitignored |
-| sqlite / yjs / socket / manifest | the daemon | nobody (machine reads it) | `.epicenter/`, hidden, like `node_modules/` | gitignored |
+| `apps/AGENTS.md` | the daemon (rule at the danger point) | humans and agents | `apps/`, visible | gitignored |
+| sqlite / yjs / socket / projection manifest | the daemon | nobody (machine reads it) | `.epicenter/`, hidden, like `node_modules/` | gitignored |
 | `journal/`, `ideas/`, anything else | you | you | root | tracked |
 
-Mutating app data happens only through validated actions, surfaced to coding agents through the existing CLI. This refuses collaborative editing of materialized files, which deletes the entire bidirectional disk to Yjs reconcile subsystem.
+Mutating app data happens only through validated actions, surfaced to coding agents through the existing CLI. The visible projection is for reading, copying, quoting, and search. This refuses collaborative editing of materialized files, which deletes the entire bidirectional disk to Yjs reconcile subsystem.
 
 ## The Vault Layout
 
@@ -48,6 +50,7 @@ vault/
 ├── AGENTS.md  CLAUDE.md     YOURS. the read-only rule + CLI discover/mutate recipe.
 ├── .gitignore              ignores  .epicenter/  and  apps/
 ├── apps/                    MACHINE, VISIBLE. read-only projection of Yjs. gitignored.
+│   ├── AGENTS.md            daemon-written rule + CLI discover/mutate recipe
 │   ├── fuji/
 │   │   └── entries/         one .md per entry
 │   └── tab-manager/
@@ -56,7 +59,8 @@ vault/
 │   ├── sqlite/             per-app relational mirrors (queried, not read as text)
 │   ├── yjs/                local CRDT persistence
 │   ├── sockets/            daemon unix socket
-│   └── manifest.json       daemon-published mount manifest
+│   ├── manifest.json       daemon-published mount manifest
+│   └── projection-manifest.json  paths the materializer owns and may delete
 ├── journal/                YOURS. plain markdown. Epicenter is blind to it.
 └── ideas/                  YOURS.
 ```
@@ -73,7 +77,7 @@ journal/  ideas/     ≈  src/             (yours, authored, tracked)
 ### The one rule (humans and agents)
 
 ```txt
-Read apps/** freely. Never hand-edit it: it is regenerated; mutate via `epicenter run`.
+Read apps/** freely. Never create or edit files there: it is regenerated; mutate via `epicenter run`.
 Ignore .epicenter/.
 Everything else in the vault is yours; edit it freely.
 ```
@@ -89,6 +93,74 @@ apps/**.md        a human READS it (triage, curate, grep, diff)   → VISIBLE
 ```
 
 Both markdown and sqlite are read-only projections of the same Yjs data. They split on readability, not on "is it generated." Markdown is output *for human eyes*, so it must be visible (Obsidian and Finder hide dotfolders; even where a tool like VS Code shows them, the dot-prefix *signals* "infra you ignore," which is the wrong signal for content you browse). SQLite is output *for machine queries*, so it belongs with the hidden state. That single axis is why the layout is two prefixes, not one.
+
+## Projection Safety Layers
+
+`apps/` is the browse name, not the safety boundary. The boundary must live in the materializer, because humans may never open `apps/AGENTS.md` and agents may land directly on one matched file from `rg`.
+
+```txt
+1. WRITE FENCE
+   Vault app factories derive markdown paths from appsMarkdownPath(projectDir, mount).
+   No mount config may accept a projection path string.
+
+2. DELETE SCOPE
+   Rebuild may delete or overwrite only paths recorded in the projection manifest.
+   A foreign file under apps/ is user property, even if it is in the wrong place.
+   Warn about it; do not delete it and do not adopt it.
+
+3. READ-ONLY FILES
+   Materialized files are written read-only. A direct save fails at the moment
+   of the mistake instead of silently seeming to work.
+
+4. NO READBACK
+   No code path parses apps/**/*.md back into Yjs. A file edit can never mutate
+   app data.
+```
+
+Implementation note: file mode `444` blocks ordinary writes, not deletion (directory permissions govern deletion). The materializer should write a temp file, then atomically rename it over the target and leave the result read-only. Rebuild still needs manifest-scoped deletion.
+
+### Why `apps/`, not `generated/` or `app-projections/`
+
+`apps/` wins as the visible root once the safety layers carry the risk. It names the owner a human cares about (`apps/fuji/entries`) and keeps the projection browsable in Obsidian, Finder, VS Code, and agent grep. `generated/` is a stronger warning label, but it says "ignore this," which is the wrong daily behavior. `app-projections/` is more precise for engineers but leaks internal vocabulary into a folder humans browse every day. If the safety layers do not ship, `apps/` is too friendly; in that weaker world, `generated/` is the more honest name. This spec chooses the stronger mechanism, not the scarier label.
+
+### Per-file marker
+
+Every materialized markdown file gets one small marker injected by the materializer, before app row fields:
+
+```yaml
+---
+epicenter: generated
+id: 01J...
+title: ...
+---
+```
+
+`epicenter` is a reserved projection key. If a table row tries to emit an `epicenter` frontmatter field, the materializer should fail that row or rename the projection marker before writing. Do not let app data silently overwrite the marker.
+
+Do not put a full `epicenter run ...` command in every file. Action names differ by app, can be renamed, and are discoverable from the live daemon with `epicenter list --format json`. A copied file would carry stale instructions into a user-owned folder. The file marker only says "this is generated"; the fresh mutation recipe lives in `apps/AGENTS.md` and the root `AGENTS.md`.
+
+Do not use a body HTML comment for v1. It is noisy in agent reads, invisible in many rendered previews, and pollutes copied prose. A YAML comment above the marker would be nice later, but the current `assembleMarkdown` path serializes a plain frontmatter object with `Bun.YAML.stringify`, so the reliable v1 contract is the reserved key. If the serializer later gains comment support, keep it to one line and do not include per-row commands.
+
+### Daemon-written `apps/AGENTS.md`
+
+The daemon writes `apps/AGENTS.md` and records it in the projection manifest. This file is not the guard; it is the rule at the point of danger.
+
+```md
+# Generated by Epicenter. Do not edit anything in this folder.
+
+Every file under `apps/` is a read-only projection of app data (source of
+truth: Yjs). Files are written read-only and may be rewritten on rebuild.
+Read, grep, and quote them freely; copy anything worth keeping into a folder
+you own.
+
+To change app data:
+  epicenter list --format json
+  epicenter run <mount>.<action> <json>
+
+Mounts in this vault: fuji, tab-manager
+```
+
+Per-mount `apps/<mount>/AGENTS.md` files are deferred. They add sync churn and duplicate the same rule. Add one later only if a mount needs a genuinely different mutation recipe.
 
 ## The Config Decision (collapse the knobs, hardcode the layout)
 
@@ -127,6 +199,8 @@ export default [ fuji(), tabManager() ];
 
 The daemon writes `apps/fuji`, `apps/tab-manager`, `.epicenter/sqlite/fuji.db`, etc. Zero path config. Mount name (`'fuji'`) is the key, not `ydoc.guid`, so the folder is `apps/fuji`, not `apps/epicenter-fuji`.
 
+Behavior options may stay on mount factories when they do not change ownership boundaries. `fuji({ git })` is fine because it changes autosave behavior for the projection. `fuji({ markdownDir })`, `fuji({ projectionRoot })`, and `fuji({ visibility })` are not fine because they move the danger zone. If "pristine root" becomes a real user demand, add only a closed enum such as `projectionVisibility: 'visible' | 'hidden'` that selects between constants; do not add a path string.
+
 ### Why hardcode, not "freeform path + convention"
 
 An earlier draft kept the freeform `markdownDir` and just pointed it at `apps/fuji` by convention. **That is a data-loss foot-gun.** The export seam's rebuild action (`markdown_export_rebuild` in `export.ts:190`) does `readdir + unlink every .md` in the target dir, then rewrites (`shared.ts:208` `rebuildTable`). A freeform `markdownDir: '../journal'` or `markdownDir: 'notes'` turns a routine rebuild into deletion of hand-authored markdown, exactly the data loss this spec refuses. A convention does not encode the invariant; a constant does. (Surfaced in Codex grilling.)
@@ -149,7 +223,8 @@ Refusal:   data-loss via rebuild (above); the override's only purpose is to poin
            Removing it is a COLLAPSE (fewer options), not an addition.
 
 Trigger to add a knob back: untrusted third parties author mount configs, or multi-tenant
-hosting where one mount escaping the root corrupts another's data.
+hosting where one mount escaping the root corrupts another's data. Even then, prefer closed
+choices over arbitrary paths.
 ```
 
 ### Where flexibility still lives (the blog-export case)
@@ -385,6 +460,15 @@ The dependency chain forces migrate-then-delete: the apps depend on `vault.ts` t
 - [x] **2.5** Rename `markdown_export_rebuild` -> `markdown_rebuild` in `export.ts` (vault's same-named action is gone, so the disambiguation is no longer needed); update the `cli.ts` comment and any doc references.
 - [x] **2.6** Gate: `bun test` in `packages/workspace` (494 pass, 0 fail; export/git/materialize green; vault/apply gone).
 
+### Phase 2b: Harden the read-only projection (Safety)
+
+- [ ] **2b.1** Add a projection manifest under `.epicenter/` recording every path the markdown materializer wrote, keyed by mount, table, and row id.
+- [ ] **2b.2** Change `markdown_rebuild` so it deletes only manifest-recorded paths. Foreign `.md` files under `apps/` should warn or quarantine, never be deleted and never be adopted.
+- [ ] **2b.3** Write projected markdown atomically and leave files read-only. A direct editor save should fail clearly instead of appearing to work.
+- [ ] **2b.4** Inject the reserved frontmatter marker (`epicenter: generated`) in the materializer write loop, not in per-app `toMarkdown`, so all app projections carry the same signal.
+- [ ] **2b.5** Generate `apps/AGENTS.md` from the daemon, include the live mount list, and record that file in the projection manifest.
+- [ ] **2b.6** Gate: a temp-project test proves a foreign file under `apps/<mount>/` survives `markdown_rebuild`, a materialized file is read-only, and no projected file is read back into Yjs.
+
 ### Phase 3: Vault restructure (in `~/Code/vault`)
 
 > **Blocked**: the vault imports `fuji`/`tabManager` and the CLI from the sibling `../epicenter` checkout (= `/Users/braden/Code/epicenter`, main), not from this worktree. The `apps/` layout and the visible projection only appear once this PR's code is live there. Running 3.1b (deleting generated dirs) and the Phase 4 smoke test against the old code would mutate the real vault into an inconsistent state. Do after merge, or after pointing the vault at this worktree.
@@ -393,13 +477,15 @@ The dependency chain forces migrate-then-delete: the apps depend on `vault.ts` t
 - [ ] **3.1b** Delete stale generated dirs so nothing looks authoritative after the re-key: any old `.epicenter/md/<guid>/` left by the hidden default, and the old `.epicenter/sqlite/fuji.db` / `tab-manager.db` (the new guid-keyed mirrors regenerate). These are all gitignored/regenerable; the daemon rebuilds `apps/` and `.epicenter/sqlite/` on next start. Do NOT touch `.epicenter/yjs/` (source of truth).
 - [ ] **3.2** Simplify config to `export default [ fuji(), tabManager() ]` (paths are now hardcoded).
 - [ ] **3.3** `.gitignore`: ignore `.epicenter/` and `apps/`.
-- [ ] **3.4** Rewrite `AGENTS.md` (+ `CLAUDE.md` shim) with the one rule, the layout tree, and the CLI discover/mutate recipe; drop the soft-delete-by-hand guidance that referenced apply.
+- [ ] **3.4** Rewrite root `AGENTS.md` (+ `CLAUDE.md` shim) with the one rule, the layout tree, and the CLI discover/mutate recipe; drop the soft-delete-by-hand guidance that referenced apply.
+- [ ] **3.5** Confirm the daemon-generated `apps/AGENTS.md` appears after startup and names the configured mounts.
 
 ### Phase 4: Prove end-to-end (the gate before merge)
 
 - [ ] **4.1** Start the daemon against the vault; `epicenter list --format json` discovers actions.
 - [ ] **4.2** `epicenter run fuji.<update>` -> the `apps/fuji/*.md` file refreshes.
-- [ ] **4.3** Hand-edit an `apps/fuji/*.md` file -> the next materialize overwrites it cleanly; nothing breaks; Yjs is unchanged.
+- [ ] **4.3** Hand-edit an `apps/fuji/*.md` file -> the save fails because the file is read-only; Yjs is unchanged.
+- [ ] **4.4** Create a foreign `apps/fuji/entries/not-from-epicenter.md`, run `markdown_rebuild`, and prove the foreign file is warned about but not deleted.
 
 ### Phase 5: Straggler sweep
 
@@ -415,9 +501,14 @@ The dependency chain forces migrate-then-delete: the apps depend on `vault.ts` t
 ## Edge Cases
 
 ### Agent edits a materialized file anyway
-1. Agent writes `apps/fuji/x.md` directly.
-2. The edit is not routed through an action, so Yjs is unchanged.
-3. Next materialize overwrites it. No corruption. (`apps/` is gitignored, so it does not even show as a tracked diff.)
+1. Agent tries to write `apps/fuji/x.md` directly.
+2. The file is read-only, so the write fails at save time.
+3. If the agent bypasses the mode bit, the edit is still not routed through an action, so Yjs is unchanged; the next materialize may rewrite only the daemon-owned path.
+
+### Agent creates a new file under `apps/`
+1. Agent writes `apps/fuji/entries/not-from-epicenter.md`.
+2. The path is not in the projection manifest.
+3. `markdown_rebuild` warns or quarantines it but does not delete it. The file is still in the wrong place and still gitignored, so the user should move it into a user-owned folder.
 
 ### Graduating a captured item
 1. User copies `apps/fuji/idea.md` into `ideas/idea.md`.
@@ -442,6 +533,9 @@ The dependency chain forces migrate-then-delete: the apps depend on `vault.ts` t
 
 - [ ] `apps/` is the only visible path Epicenter writes; `.epicenter/` holds hidden state; user zones are untouched.
 - [ ] App data mutates only through actions; a coding agent can discover (`list --format json`) and invoke (`run`) without editing files.
+- [ ] Projected markdown files carry a tiny marker (`epicenter: generated`), are written read-only, and never contain per-row `epicenter run ...` instructions.
+- [ ] `markdown_rebuild` deletes only manifest-recorded paths; a foreign `.md` under `apps/` is not deleted.
+- [ ] The daemon writes `apps/AGENTS.md` with the read-only rule and the CLI discover/mutate recipe.
 - [ ] All three apps use `attachMarkdownExport`; `vault.ts` and the apply/push/pull subsystem are deleted; `shared.ts` keeps only the one-way path.
 - [ ] `bun typecheck` and `bun test` pass; the daemon smoke test (Phase 4) passes.
 - [ ] `vault/AGENTS.md` (+ `CLAUDE.md` shim) states the one rule and the CLI recipe.
@@ -453,6 +547,10 @@ The dependency chain forces migrate-then-delete: the apps depend on `vault.ts` t
   Revisit when: you want a pristine root (only authored files visible), which would tuck `apps/` under `.epicenter/apps/` via a config string, accepting it disappears in Obsidian/Finder.
 - **Hardcoded layout, collapsed knobs.** `export default [ fuji(), tabManager() ]`; mount factories always write `apps/<mount>` + `.epicenter/sqlite/<mount>.db`. Refused BOTH a `projectionRoot` object (overclaims) AND freeform `markdownDir`/`sqliteFile` (data-loss via `markdown_rebuild`). Flexibility stays on the `attachMarkdownExport` primitive for non-vault exports. (Reversed an earlier "keep freeform + convention" draft after Codex surfaced the rebuild data-loss path.)
   Revisit when: untrusted third parties author mount configs, or multi-tenant hosting makes one mount escaping the root a real corruption risk.
+- **`apps/` remains the visible root.** `generated/` is a better warning label but a worse browse surface; `app-projections/` is precise but internal. The safety load belongs to the manifest, read-only file mode, and no-readback invariant, not the folder name.
+  Revisit when: users consistently treat `apps/` as editable app source despite the mechanical guardrails.
+- **Per-file marker is a reserved frontmatter key, not a command block.** Use `epicenter: generated` as the tiny signal that travels with `rg` hits and excerpts. Do not put per-row `epicenter run ...` commands in generated files; action names can change, the live schema is available from `epicenter list --format json`, and copied files would carry stale instructions into user-owned zones.
+  Revisit when: the markdown serializer supports one-line YAML comments without giving up structured frontmatter assembly.
 - **CLI is the only shipped mutation surface** (defer MCP).
   Revisit when: an MCP-capable workflow makes native in-context discovery worth a second adapter.
 - **Projection is gitignored.**

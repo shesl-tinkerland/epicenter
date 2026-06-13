@@ -183,6 +183,10 @@ packages/cli/src/cli.ts
   .command(matterCommand)
 ```
 
+This command file is an adapter only. It must consume the extracted Matter core
+package and must not contain or duplicate folder, model, conformance, or report
+logic.
+
 Do not add this to any `package.json`:
 
 ```json
