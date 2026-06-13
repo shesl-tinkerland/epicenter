@@ -190,10 +190,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 								<FileTextIcon />
 								epicenter.config.ts
 							</div>
-							<div class="ns-row i2 ns-machine" data-step="2">
-								<FolderIcon />
-								.epicenter/<span class="ns-note">machine state, ignore it</span>
-							</div>
 							<div class="ns-row i2" data-step="3">
 								<FolderIcon />
 								whispering/
@@ -407,18 +403,17 @@ const discordUrl = 'https://go.epicenter.so/discord';
 
 	// Zoom-out section: config makes the folder managed, mounts appear as siblings.
 	(function managedFolder() {
-		const tree = document.querySelector(
-			'.ns-tree:not(.bare), .ns .ns-tree.bare',
-		);
+		const section = document.querySelector('.ns');
 		const rows = [...document.querySelectorAll('.ns .ns-tree [data-step]')];
 		const chips = [...document.querySelectorAll('.ns-chip')];
 		const caption = document.querySelector('.ns-caption');
-		if (!rows.length) return;
+		if (!section || !rows.length) return;
 		const captions = {
 			1: 'Pick any folder in your vault, named whatever you like.',
 			2: 'Drop in epicenter.config.ts. Now the folder is Epicenter-managed.',
-			3: 'Each app generates a sibling folder of Markdown you own.',
-			5: 'Curate, grep, keep. The files are yours.',
+			3: 'Whispering writes its transcripts here.',
+			4: 'Fuji writes its entries here.',
+			5: 'Honeycrisp writes its notes here. Every app you add does the same.',
 		};
 		if (reduceMotion) {
 			rows.forEach((r) => r.classList.add('in'));
@@ -437,12 +432,12 @@ const discordUrl = 'https://go.epicenter.so/discord';
 				for (const c of chips)
 					if (Number(c.dataset.step) === step) c.classList.add('lit');
 				if (caption && captions[step]) caption.textContent = captions[step];
-				if (step < 5) setTimeout(advance, step <= 2 ? 1100 : 850);
-				else setTimeout(play, 3400);
+				if (step < 5) setTimeout(advance, 1200);
+				else setTimeout(play, 5200);
 			};
-			setTimeout(advance, 700);
+			setTimeout(advance, 900);
 		};
-		onInView(rows[0], play, 0.3);
+		onInView(section, play, 0.25);
 	})();
 </script>
 
@@ -927,17 +922,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 
 	.ns-file {
 		color: var(--ink-soft);
-	}
-
-	.ns-machine {
-		color: var(--ink-soft);
-		opacity: 0.65;
-	}
-
-	.ns-note {
-		font-size: 0.72rem;
-		color: var(--ink-soft);
-		margin-left: 0.4rem;
 	}
 
 	.ns-caption {
