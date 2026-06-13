@@ -102,7 +102,7 @@ describe('YKeyValueLww', () => {
 			expect(kv.get('foo')).toBe('bar');
 			expect(kv.get('baz')).toBe('qux');
 			expect(kv.get('zap')).toBe('zip');
-			expect(Array.from(kv.entries())).toHaveLength(3);
+			expect(Array.from(kv.reads())).toHaveLength(3);
 		});
 
 		test('bulkSet updates existing entries', () => {
@@ -117,7 +117,7 @@ describe('YKeyValueLww', () => {
 			expect(kv.get('foo')).toBe('second');
 			expect(kv.get('bar')).toBe('third');
 			expect(
-				Array.from(kv.entries())
+				Array.from(kv.reads())
 					.map(([key]) => key)
 					.sort(),
 			).toEqual(['bar', 'foo']);
@@ -151,7 +151,7 @@ describe('YKeyValueLww', () => {
 			expect(kv.get('foo')).toBeUndefined();
 			expect(kv.get('zap')).toBeUndefined();
 			expect(kv.get('baz')).toBe('qux');
-			expect(Array.from(kv.entries()).map(([key]) => key)).toEqual(['baz']);
+			expect(Array.from(kv.reads()).map(([key]) => key)).toEqual(['baz']);
 		});
 
 		test('bulkDelete is a no-op for missing keys', () => {
@@ -325,7 +325,7 @@ describe('YKeyValueLww', () => {
 		 * - set() writes to `pending` and Y.Array, but NOT to `map`
 		 * - Observer is the sole writer to `map` and clears `pending` after processing
 		 * - get()/has() check `pending` first, then `map`
-		 * - entries() yields from both pending and map
+		 * - reads() yields from both pending and map
 		 */
 
 		describe('Batch operations with nested reads', () => {
@@ -462,8 +462,8 @@ describe('YKeyValueLww', () => {
 			});
 		});
 
-		describe('entries() iterator', () => {
-			test('entries() yields pending values during batch', () => {
+		describe('reads() iterator', () => {
+			test('reads() yields pending values during batch', () => {
 				const ydoc = new Y.Doc({ guid: 'test' });
 				const yarray = ydoc.getArray<YKeyValueLwwEntry<string>>('data');
 				const kv = new YKeyValueLww(yarray);
@@ -475,7 +475,7 @@ describe('YKeyValueLww', () => {
 					kv.set('b', '2');
 					kv.set('c', '3');
 
-					for (const [key] of kv.entries()) {
+					for (const [key] of kv.reads()) {
 						keysInBatch.push(key);
 					}
 				});
@@ -483,7 +483,7 @@ describe('YKeyValueLww', () => {
 				expect(keysInBatch.sort()).toEqual(['a', 'b', 'c']);
 			});
 
-			test('entries() yields both pending and map values', () => {
+			test('reads() yields both pending and map values', () => {
 				const ydoc = new Y.Doc({ guid: 'test' });
 				const yarray = ydoc.getArray<YKeyValueLwwEntry<string>>('data');
 				const kv = new YKeyValueLww(yarray);
@@ -496,8 +496,8 @@ describe('YKeyValueLww', () => {
 				ydoc.transact(() => {
 					kv.set('new', 'value');
 
-					for (const [key, entry] of kv.entries()) {
-						entriesInBatch.push([key, entry.val]);
+					for (const [key, read] of kv.reads()) {
+						entriesInBatch.push([key, read.val]);
 					}
 				});
 
@@ -505,7 +505,7 @@ describe('YKeyValueLww', () => {
 				expect(entriesInBatch).toContainEqual(['new', 'value']);
 			});
 
-			test('entries() prefers pending over map for same key', () => {
+			test('reads() prefers pending over map for same key', () => {
 				const ydoc = new Y.Doc({ guid: 'test' });
 				const yarray = ydoc.getArray<YKeyValueLwwEntry<string>>('data');
 				const kv = new YKeyValueLww(yarray);
@@ -517,15 +517,15 @@ describe('YKeyValueLww', () => {
 				ydoc.transact(() => {
 					kv.set('foo', 'new');
 
-					for (const [key, entry] of kv.entries()) {
-						if (key === 'foo') valueInBatch = entry.val;
+					for (const [key, read] of kv.reads()) {
+						if (key === 'foo') valueInBatch = read.val;
 					}
 				});
 
 				expect(valueInBatch).toBe('new');
 			});
 
-			test('entries() does not yield duplicates', () => {
+			test('reads() does not yield duplicates', () => {
 				const ydoc = new Y.Doc({ guid: 'test' });
 				const yarray = ydoc.getArray<YKeyValueLwwEntry<string>>('data');
 				const kv = new YKeyValueLww(yarray);
@@ -537,7 +537,7 @@ describe('YKeyValueLww', () => {
 				ydoc.transact(() => {
 					kv.set('foo', 'new');
 
-					for (const [key] of kv.entries()) {
+					for (const [key] of kv.reads()) {
 						if (key === 'foo') fooCount++;
 					}
 				});
@@ -817,7 +817,7 @@ describe('YKeyValueLww', () => {
 
 				ydoc.transact(() => {
 					kv.delete('b');
-					keysDuringBatch = Array.from(kv.entries()).map(([key]) => key);
+					keysDuringBatch = Array.from(kv.reads()).map(([key]) => key);
 				});
 
 				expect(keysDuringBatch).not.toContain('b');

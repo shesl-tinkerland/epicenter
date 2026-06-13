@@ -117,7 +117,7 @@ describe('createEncryptedYkvLww', () => {
 			expect(kv.has('k')).toBe(false);
 		});
 
-		test('entries returns decrypted values', () => {
+		test('reads returns decrypted values', () => {
 			const key = randomBytes(32);
 			const { kv } = setup(new Map([[1, key]]));
 
@@ -126,8 +126,8 @@ describe('createEncryptedYkvLww', () => {
 			kv.set('c', '3');
 
 			const values = new Map<string, string>();
-			for (const [entryKey, entry] of kv.entries())
-				values.set(entryKey, entry.val);
+			for (const [entryKey, read] of kv.reads())
+				if (read.state === 'present') values.set(entryKey, read.val);
 
 			expect(values.get('a')).toBe('1');
 			expect(values.get('b')).toBe('2');
@@ -395,7 +395,7 @@ describe('createEncryptedYkvLww', () => {
 				kv.set('b', '2');
 				kv.set('c', '3');
 
-				for (const [entryKey] of kv.entries()) keysInBatch.push(entryKey);
+				for (const [entryKey] of kv.reads()) keysInBatch.push(entryKey);
 			});
 
 			expect(keysInBatch.sort()).toEqual(['a', 'b', 'c']);
@@ -426,7 +426,10 @@ describe('createEncryptedYkvLww', () => {
 			expect(kv.get('corrupt')).toBeUndefined();
 			expect(kv.get('good-1')).toBe('value-1');
 			expect(kv.get('good-2')).toBe('value-2');
-			expect([...kv.unreadableEntries()].length).toBe(1);
+			expect(
+				[...kv.reads()].filter(([, read]) => read.state === 'unreadable')
+					.length,
+			).toBe(1);
 		});
 
 		test('observation continues after decrypt failure', () => {
@@ -452,7 +455,10 @@ describe('createEncryptedYkvLww', () => {
 			expect(kv.get('good')).toBe('still-works');
 			expect(kv.get('new-good')).toBe('appears-after-failure');
 			expect(kv.get('corrupt')).toBeUndefined();
-			expect([...kv.unreadableEntries()].length).toBe(1);
+			expect(
+				[...kv.reads()].filter(([, read]) => read.state === 'unreadable')
+					.length,
+			).toBe(1);
 		});
 	});
 
@@ -538,7 +544,10 @@ describe('createEncryptedYkvLww', () => {
 					[1, key1],
 				]),
 			);
-			expect([...kv.unreadableEntries()].length).toBe(0);
+			expect(
+				[...kv.reads()].filter(([, read]) => read.state === 'unreadable')
+					.length,
+			).toBe(0);
 			expect(kv.get('a')).toBe('alpha');
 			expect(kv.get('b')).toBe('beta');
 
@@ -603,7 +612,10 @@ describe('createEncryptedYkvLww', () => {
 
 			expect(kv.get('a')).toBe('alpha');
 			expect(kv.get('b')).toBe('beta');
-			expect([...kv.unreadableEntries()].length).toBe(0);
+			expect(
+				[...kv.reads()].filter(([, read]) => read.state === 'unreadable')
+					.length,
+			).toBe(0);
 
 			// Every blob is now v2.
 			for (const entry of yarray.toArray()) {

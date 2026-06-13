@@ -154,7 +154,6 @@ import type {
 	KvRead,
 	KvStoreChange,
 	KvStoreChangeHandler,
-	KvUnreadableEntry,
 	ObservableKvStore,
 } from './observable-kv-store.js';
 
@@ -164,8 +163,8 @@ import type {
  * Field names are intentionally short (`val`, `ts`) to minimize serialized storage size -
  * these entries are persisted and synced.
  *
- * Storage-only type: `ts` is internal. The public `ObservableKvStore.entries()`
- * surfaces the narrower `KvEntry<T> = { key, val }` instead.
+ * Storage-only type: `ts` is internal. The public `ObservableKvStore.reads()`
+ * surfaces only `val` (wrapped in a `present` read), never `ts`.
  */
 export type YKeyValueLwwEntry<T> = { key: string; val: T; ts: number };
 
@@ -834,44 +833,36 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	}
 
 	/**
-	 * Iterate over all entries (both pending and confirmed).
-	 *
-	 * Yields entries from both `pending` and `map`, with pending taking
-	 * precedence for keys that exist in both. This is necessary for code
-	 * that needs to iterate over all current values inside a batch.
+	 * Walk every stored entry (both pending and confirmed), each `present`. A
+	 * plaintext store has no encryption layer, so it never yields `unreadable`;
+	 * the return type narrows to `present` only, which the encrypted wrapper
+	 * relies on when it composes over this store (every inner value is a value,
+	 * never a missing key). `pending` takes precedence over `map` for keys in
+	 * both, so reads inside an open transaction see just-written values.
 	 *
 	 * @example
 	 * ```typescript
-	 * for (const [key, entry] of kv.entries()) {
-	 *   console.log(key, entry.val);
+	 * for (const [key, read] of kv.reads()) {
+	 *   console.log(key, read.val);
 	 * }
 	 * ```
 	 */
-	*entries(): IterableIterator<[string, YKeyValueLwwEntry<T>]> {
+	*reads(): IterableIterator<[string, { state: 'present'; val: T }]> {
 		// Track keys we've already yielded from pending
 		const yieldedKeys = new Set<string>();
 
 		// Yield pending entries first (they take precedence)
 		for (const [key, entry] of this.pending) {
 			yieldedKeys.add(key);
-			yield [key, entry];
+			yield [key, { state: 'present', val: entry.val }];
 		}
 
 		// Yield map entries that weren't in pending and aren't pending delete
 		for (const [key, entry] of this._map) {
 			if (!yieldedKeys.has(key) && !this.pendingDeletes.has(key)) {
-				yield [key, entry];
+				yield [key, { state: 'present', val: entry.val }];
 			}
 		}
-	}
-
-	/**
-	 * Plaintext stores have no encryption layer, so every stored entry is
-	 * readable. There is never an unreadable entry to enumerate.
-	 */
-	// biome-ignore lint/correctness/useYield: an always-empty generator has nothing to yield
-	*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
-		return;
 	}
 
 	/** Register an observer. Called when keys are added, updated, or deleted. */

@@ -165,8 +165,8 @@ export type TableNewerWriterError = InferErrors<typeof TableNewerWriterError>;
  * here (the user needs the key), and `set()` refuses to clobber it for the
  * same reason it refuses a {@link TableNewerWriterError}.
  *
- * Surfaced in `scan().unreadable`, built from the store's
- * `unreadableEntries()` enumeration.
+ * Surfaced in `scan().unreadable`, built from the `unreadable` reads in the
+ * store's `reads()` enumeration.
  */
 export const TableUnreadableError = defineErrors({
 	/** A stored encrypted entry that did not decrypt under the active keyring. */
@@ -738,8 +738,21 @@ export function createReadonlyTable<
 			const rows: TRow[] = [];
 			const nonconforming: TableParseError[] = [];
 			const newerWriter: TableNewerWriterError[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const { data, error } = parseRow(key, entry.val);
+			const unreadable: TableUnreadableError[] = [];
+			// One pass over the store's classified reads. Each stored entry lands in
+			// exactly one of the four buckets, so the four-bucket sum equals
+			// storedCount() by construction: an `unreadable` read never decrypted
+			// and goes straight to that bucket; a `present` read is parsed and its
+			// outcome routes the other three. No second pass, no second decrypt.
+			for (const [key, read] of ykv.reads()) {
+				if (read.state === 'unreadable') {
+					unreadable.push(
+						TableUnreadableError.UnreadableRow({ id: key, reason: read.reason })
+							.error,
+					);
+					continue;
+				}
+				const { data, error } = parseRow(key, read.val);
 				if (!error) {
 					rows.push(data);
 					continue;
@@ -758,20 +771,13 @@ export function createReadonlyTable<
 						error satisfies never;
 				}
 			}
-			// The fourth bucket comes from the store, not the parse walk: encrypted
-			// entries `entries()` skipped because they never decrypted.
-			const unreadable: TableUnreadableError[] = [];
-			for (const { key, reason } of ykv.unreadableEntries()) {
-				unreadable.push(
-					TableUnreadableError.UnreadableRow({ id: key, reason }).error,
-				);
-			}
 			return { rows, nonconforming, newerWriter, unreadable };
 		},
 
 		findValid(predicate: (row: TRow) => boolean): TRow | undefined {
-			for (const [key, entry] of ykv.entries()) {
-				const { data, error } = parseRow(key, entry.val);
+			for (const [key, read] of ykv.reads()) {
+				if (read.state !== 'present') continue;
+				const { data, error } = parseRow(key, read.val);
 				if (!error && predicate(data)) return data;
 			}
 			return undefined;
@@ -965,8 +971,19 @@ export function createTable<
 		clear(): { refused: TableWriteError[] } {
 			const refused: TableWriteError[] = [];
 			const toDelete: string[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const storedVersion = newerStoredVersion(entry.val);
+			// One pass over every stored entry: an undecryptable read is refused
+			// (a keyless binary must not mass-destroy rows it cannot read), a
+			// newer-stamped present read is refused, everything else is deletable.
+			// Walking reads() means no stored entry is silently left behind.
+			for (const [key, read] of ykv.reads()) {
+				if (read.state === 'unreadable') {
+					refused.push(
+						TableWriteError.UnreadableRefusal({ id: key, reason: read.reason })
+							.error,
+					);
+					continue;
+				}
+				const storedVersion = newerStoredVersion(read.val);
 				if (storedVersion !== undefined) {
 					refused.push(
 						TableWriteError.NewerWriterRefusal({
@@ -978,14 +995,6 @@ export function createTable<
 				} else {
 					toDelete.push(key);
 				}
-			}
-			// Undecryptable entries never appear in `entries()`, so the loop above
-			// neither deletes nor reports them. Surface them as refusals so clear()
-			// leaves no stored entry silently behind.
-			for (const { key, reason } of ykv.unreadableEntries()) {
-				refused.push(
-					TableWriteError.UnreadableRefusal({ id: key, reason }).error,
-				);
 			}
 			ykv.bulkDelete(toDelete);
 			return { refused };

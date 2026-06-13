@@ -51,8 +51,8 @@
  *
  * The observer wraps decrypt with try/catch. A failed decrypt skips the entry
  * and logs a warning instead of throwing. This prevents one bad blob from
- * crashing all observation. `unreadableEntries()` enumerates the skipped
- * entries (key plus reason) so they stay visible to reads and the count.
+ * crashing all observation. `reads()` yields the skipped entries as
+ * `unreadable` (key plus reason) so they stay visible to reads and the count.
  *
  * ## Related Modules
  *
@@ -84,7 +84,7 @@ import {
 	type KvRead,
 	type KvStoreChange,
 	type KvStoreChangeHandler,
-	type KvUnreadableEntry,
+	type KvStoredRead,
 	YKeyValueLww,
 	type YKeyValueLwwEntry,
 } from '../../document/y-keyvalue/index.js';
@@ -116,8 +116,8 @@ type EncryptionState = {
 /**
  * Return type of `createEncryptedYkvLww`.
  *
- * IS-A `ObservableKvStore<T>` (the shared contract, including
- * `unreadableEntries()`) plus encryption lifecycle (`activateEncryption`),
+ * IS-A `ObservableKvStore<T>` (the shared contract, including the classified
+ * `read()` / `reads()`) plus encryption lifecycle (`activateEncryption`),
  * disposal, and direct access to the underlying `yarray` / `doc` for sync
  * providers.
  *
@@ -219,11 +219,11 @@ export function createEncryptedYkvLww<T>(
 	};
 
 	/**
-	 * Human-readable reason a blob did not decrypt: either its key version is
-	 * missing from the keyring, or the key is present but the bytes are wrong
-	 * (corruption or a tampered blob). The one place this string is formatted,
-	 * shared by the observer warning, the `read()` point read, and
-	 * `unreadableEntries()` so all three describe the same failure identically.
+	 * Human-readable reason a blob did not decrypt under an active keyring:
+	 * either its key version is missing from the keyring, or the key is present
+	 * but the bytes are wrong (corruption or a tampered blob). The one place this
+	 * string is formatted, shared by the observer warning and `classify()` so
+	 * both describe the same failure identically.
 	 */
 	const decryptFailureReason = (
 		keyring: ReadonlyWorkspaceKeyring,
@@ -236,37 +236,46 @@ export function createEncryptedYkvLww<T>(
 	};
 
 	/**
-	 * If `stored` (the raw value at `key`) is an encrypted blob this binary
-	 * cannot decrypt, the human-readable reason; otherwise `undefined`
-	 * (plaintext passthrough, readable, or passthrough mode). Drives the
-	 * `unreadableEntries()` enumeration over the inner map; the per-key `read()`
-	 * point read computes the same reason directly from one decrypt attempt.
+	 * Classify an already-fetched stored value into `present` or `unreadable`.
+	 * The single owner of readability: `read()` calls it after one `inner.get`,
+	 * `reads()` calls it once per inner entry, so point and bulk reads agree and
+	 * each entry is decrypted exactly once.
+	 *
+	 * - Plaintext passthrough value (not a blob) → `present`.
+	 * - Blob that decrypts under the active keyring → `present`.
+	 * - Blob that does not decrypt → `unreadable` with the reason.
+	 * - Blob in passthrough mode (no key active) → `unreadable`: the ciphertext
+	 *   is stored but unreadable here, so it stays counted rather than vanishing
+	 *   from reads while `size` still counts it.
+	 *
+	 * Never returns `absent`: the caller already holds a stored value. `read()`
+	 * adds `absent` for the missing-key case before delegating here.
 	 */
-	const blobUnreadableReason = (
+	const classify = (
 		key: string,
 		stored: EncryptedBlob | T,
-	): string | undefined => {
-		if (!encryption) return undefined;
-		if (!isEncryptedBlob(stored)) return undefined;
-		if (decrypt(stored, textEncoder.encode(key)) !== undefined)
-			return undefined;
-		return decryptFailureReason(encryption.keyring, stored);
+	): KvStoredRead<T> => {
+		if (!isEncryptedBlob(stored)) return { state: 'present', val: stored as T };
+		if (encryption) {
+			const val = decrypt(stored, textEncoder.encode(key));
+			if (val !== undefined) return { state: 'present', val };
+			return {
+				state: 'unreadable',
+				reason: decryptFailureReason(encryption.keyring, stored),
+			};
+		}
+		return {
+			state: 'unreadable',
+			reason: `keyVersion=${getKeyVersion(stored)}, encryption not active`,
+		};
 	};
 
 	/**
-	 * Resolve a key into `absent`, `present`, or `unreadable` with one inner
-	 * read and one decrypt attempt. This is the single classified point read the
-	 * tri-state contract promises: a blob that did not decrypt comes back
-	 * `unreadable` (with its reason) rather than masquerading as `absent`, so a
-	 * caller never has to read the value and then probe again for the reason.
-	 *
-	 * - Inner store empty → `absent`.
-	 * - Plaintext passthrough value (not a blob) → `present`.
-	 * - Blob but no key active (passthrough mode) → `absent`. Passthrough treats
-	 *   stored ciphertext as not-yet-readable rather than a hard failure, matching
-	 *   what `get()` and `unreadableEntries()` reported here before.
-	 * - Blob that decrypts → `present`.
-	 * - Blob that does not decrypt → `unreadable` with the shared reason string.
+	 * Resolve a key into `absent`, `present`, or `unreadable` with one inner read
+	 * and one decrypt attempt. The primitive point read the tri-state contract
+	 * promises: a stored blob that did not decrypt comes back `unreadable` (with
+	 * its reason) rather than masquerading as `absent`, so a caller never reads
+	 * the value and then probes again for the reason.
 	 *
 	 * Reads `inner.get` (which sees pending writes) so a guard inside an open
 	 * transaction classifies the same view it writes.
@@ -274,14 +283,7 @@ export function createEncryptedYkvLww<T>(
 	const read = (key: string): KvRead<T> => {
 		const stored = inner.get(key);
 		if (stored === undefined) return { state: 'absent' };
-		if (!isEncryptedBlob(stored)) return { state: 'present', val: stored as T };
-		if (!encryption) return { state: 'absent' };
-		const val = decrypt(stored, textEncoder.encode(key));
-		if (val !== undefined) return { state: 'present', val };
-		return {
-			state: 'unreadable',
-			reason: decryptFailureReason(encryption.keyring, stored),
-		};
+		return classify(key, stored);
 	};
 
 	/**
@@ -357,10 +359,15 @@ export function createEncryptedYkvLww<T>(
 		bulkDelete(keys: string[]): void {
 			inner.bulkDelete(keys);
 		},
-		*entries(): IterableIterator<[string, KvEntry<T>]> {
-			for (const [key, entry] of inner.entries()) {
-				const val = decrypt(entry.val, textEncoder.encode(key));
-				if (val !== undefined) yield [key, { ...entry, val }];
+		/**
+		 * Walk every stored entry once, classified. The inner store is plaintext-
+		 * typed, so each inner read is `present` with the raw stored value (blob or
+		 * passthrough plaintext); `classify` turns that into the outward `present`
+		 * or `unreadable`. One decrypt per entry, the bulk twin of `read()`.
+		 */
+		*reads(): IterableIterator<[string, KvStoredRead<T>]> {
+			for (const [key, stored] of inner.reads()) {
+				yield [key, classify(key, stored.val)];
 			}
 		},
 		observe(handler: KvStoreChangeHandler<T>): void {
@@ -457,27 +464,11 @@ export function createEncryptedYkvLww<T>(
 				handler(syntheticChanges, undefined);
 		},
 		/**
-		 * Entries in the inner store that exist but did not decrypt: an
-		 * encrypted blob whose key version is missing from the keyring, or a
-		 * corrupted blob. Each yields its key and a human-readable `reason`
-		 * matching the warning the observer logs.
-		 *
-		 * When no key is active, this yields nothing (passthrough mode treats
-		 * every entry as readable plaintext).
-		 */
-		*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
-			for (const [key, entry] of inner.map) {
-				const reason = blobUnreadableReason(key, entry.val);
-				if (reason !== undefined) yield { key, reason };
-			}
-		},
-		/**
 		 * Number of stored entries after conflict resolution, **including**
 		 * undecryptable blobs. This previously subtracted them, which made the
 		 * count silently disagree with what storage held (the encrypted twin of
-		 * the schema-edit silent drop). They are now visible via
-		 * `unreadableEntries()` and counted here, so the count reconciles
-		 * against the read buckets.
+		 * the schema-edit silent drop). They are now visible via `reads()` and
+		 * counted here, so the count equals what `reads()` yields.
 		 */
 		get size() {
 			return inner.map.size;

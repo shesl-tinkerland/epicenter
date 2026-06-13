@@ -21,7 +21,7 @@ export type {
 	KvRead,
 	KvStoreChange,
 	KvStoreChangeHandler,
-	KvUnreadableEntry,
+	KvStoredRead,
 	ObservableKvStore,
 } from './observable-kv-store.js';
 export { YKeyValueLww, type YKeyValueLwwEntry } from './y-keyvalue-lww.js';
