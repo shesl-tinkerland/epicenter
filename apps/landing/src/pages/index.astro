@@ -22,6 +22,9 @@ const discordUrl = 'https://go.epicenter.so/discord';
 >
 	<Fragment slot="head">
 		<Font cssVariable="--font-fraunces" preload />
+		<script is:inline>
+			document.documentElement.classList.add('js');
+		</script>
 	</Fragment>
 
 	<main class="page">
@@ -281,8 +284,9 @@ const discordUrl = 'https://go.epicenter.so/discord';
 </BaseLayout>
 
 <script is:inline define:vars={{ version: VERSION }}>
-	document.documentElement.classList.add('js');
-	const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const motionOK = matchMedia(
+		'(prefers-reduced-motion: no-preference)',
+	).matches;
 
 	// OS-detected download. The static href already points at the releases
 	// page, so this only ever upgrades the link.
@@ -308,26 +312,12 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		});
 	}
 
-	// Scroll reveals.
-	const revealObserver = new IntersectionObserver(
-		(entries) => {
-			for (const entry of entries) {
-				if (!entry.isIntersecting) continue;
-				entry.target.classList.add('in');
-				revealObserver.unobserve(entry.target);
-			}
-		},
-		{ threshold: 0.2 },
-	);
-	for (const el of document.querySelectorAll('.reveal'))
-		revealObserver.observe(el);
-
-	// Run a callback once, the first time an element scrolls into view.
-	const onInView = (el, fn, threshold = 0.35) => {
+	// CSS hides animated elements; JS reveals them. Run fn once, when el is seen.
+	const inView = (el, fn, threshold = 0.25) => {
 		if (!el) return;
 		const io = new IntersectionObserver(
 			(entries) => {
-				if (entries.some((entry) => entry.isIntersecting)) {
+				if (entries.some((e) => e.isIntersecting)) {
 					io.disconnect();
 					fn();
 				}
@@ -337,77 +327,76 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		io.observe(el);
 	};
 
-	const textOf = (el) =>
-		el.getAttribute('data-text') || el.textContent.trim().replace(/\s+/g, ' ');
+	// Animate from a hidden keyframe to the element's natural state. The forwards
+	// fill keeps the end state and outranks the CSS hidden rule, so there is no
+	// revealed-state rule to keep in sync.
+	const reveal = (el, from, ms = 600) =>
+		el.animate([from, { opacity: 1, filter: 'none', transform: 'none' }], {
+			duration: ms,
+			easing: 'cubic-bezier(0.2, 0.6, 0.2, 1)',
+			fill: 'forwards',
+		});
 
-	function typeInto(typed, sentence, onDone, loopMs) {
-		typed.classList.add('typing');
-		typed.textContent = '';
+	// Type a sentence into el, character by character.
+	const type = (el, done) => {
+		const text =
+			el.getAttribute('data-text') ||
+			el.textContent.trim().replace(/\s+/g, ' ');
+		el.setAttribute('data-text', text);
+		if (!motionOK) {
+			el.textContent = text;
+			done && done();
+			return;
+		}
+		el.classList.add('typing');
+		el.textContent = '';
 		let i = 0;
 		const tick = () => {
-			typed.textContent = sentence.slice(0, i);
-			if (i < sentence.length) {
-				i += 1;
-				setTimeout(tick, 36 + Math.random() * 44);
-			} else {
-				typed.classList.remove('typing');
-				onDone && onDone();
-				if (loopMs)
-					setTimeout(() => typeInto(typed, sentence, onDone, loopMs), loopMs);
+			el.textContent = text.slice(0, (i += 1));
+			if (i < text.length) setTimeout(tick, 36 + Math.random() * 44);
+			else {
+				el.classList.remove('typing');
+				done && done();
 			}
 		};
 		tick();
-	}
+	};
+
+	// Scroll reveals.
+	for (const el of document.querySelectorAll('.reveal'))
+		inView(
+			el,
+			() =>
+				motionOK && reveal(el, { opacity: 0, transform: 'translateY(16px)' }),
+			0.15,
+		);
 
 	// Hero: speak, and the words become a file you own.
-	(function heroCapture() {
-		const typed = document.querySelector('.cap-text[data-typed]');
+	const capText = document.querySelector('.cap-text[data-typed]');
+	if (capText) {
 		const file = document.querySelector('.cap-file');
 		const rec = document.querySelector('.cap-rec');
 		const caption = document.querySelector('.cap-caption');
-		if (!typed) return;
-		const sentence = textOf(typed);
-		typed.setAttribute('data-text', sentence);
-		if (reduceMotion) {
-			typed.textContent = sentence;
-			file && file.classList.add('in');
-			return;
-		}
-		const play = () => {
-			file && file.classList.remove('in');
-			rec && rec.classList.add('on');
-			if (caption) caption.textContent = 'Hold your shortcut and speak.';
-			typeInto(typed, sentence, () => {
-				rec && rec.classList.remove('on');
-				if (caption)
-					caption.textContent = 'Release. The words become a file you own.';
-				setTimeout(() => file && file.classList.add('in'), 500);
-				setTimeout(play, 5200);
-			});
-		};
-		play();
-	})();
+		if (motionOK && rec) rec.classList.add('on');
+		type(capText, () => {
+			rec && rec.classList.remove('on');
+			if (caption)
+				caption.textContent = 'Release. The words become a file you own.';
+			if (file && motionOK)
+				reveal(file, { opacity: 0, transform: 'translateX(-16px)' });
+		});
+	}
 
-	// Anywhere section: the words type themselves into the email.
-	(function emailDemo() {
-		const typed = document.querySelector('.demo-body[data-typed]');
-		if (!typed) return;
-		const sentence = textOf(typed);
-		typed.setAttribute('data-text', sentence);
-		if (reduceMotion) {
-			typed.textContent = sentence;
-			return;
-		}
-		onInView(typed, () => typeInto(typed, sentence, null, 6000), 0.4);
-	})();
+	// Anywhere section: the email types itself when scrolled into view.
+	const email = document.querySelector('.demo-body[data-typed]');
+	if (email) inView(email, () => type(email), 0.4);
 
-	// Zoom-out section: config makes the folder managed, mounts appear as siblings.
-	(function managedFolder() {
-		const section = document.querySelector('.ns');
-		const rows = [...document.querySelectorAll('.ns .ns-tree [data-step]')];
-		const chips = [...document.querySelectorAll('.ns-chip')];
-		const caption = document.querySelector('.ns-caption');
-		if (!section || !rows.length) return;
+	// Zoom out: apps/ folder, then config, then each app, one frame at a time.
+	const ns = document.querySelector('.ns');
+	if (ns && motionOK) {
+		const rows = [...ns.querySelectorAll('.ns-tree [data-step]')];
+		const chips = [...ns.querySelectorAll('.ns-chip')];
+		const caption = ns.querySelector('.ns-caption');
 		const captions = {
 			1: 'Pick any folder in your vault, named whatever you like.',
 			2: 'Drop in epicenter.config.ts. Now the folder is Epicenter-managed.',
@@ -415,30 +404,26 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			4: 'Fuji writes its entries here.',
 			5: 'Honeycrisp writes its notes here. Every app you add does the same.',
 		};
-		if (reduceMotion) {
-			rows.forEach((r) => r.classList.add('in'));
-			chips.forEach((c) => c.classList.add('lit'));
-			return;
-		}
-		const play = () => {
-			rows.forEach((r) => r.classList.remove('in'));
-			chips.forEach((c) => c.classList.remove('lit'));
-			if (caption) caption.textContent = 'Your own folder of Markdown.';
-			let step = 0;
-			const advance = () => {
-				step += 1;
-				for (const r of rows)
-					if (Number(r.dataset.step) === step) r.classList.add('in');
-				for (const c of chips)
-					if (Number(c.dataset.step) === step) c.classList.add('lit');
-				if (caption && captions[step]) caption.textContent = captions[step];
-				if (step < 5) setTimeout(advance, 1200);
-				else setTimeout(play, 5200);
-			};
-			setTimeout(advance, 900);
-		};
-		onInView(section, play, 0.25);
-	})();
+		inView(
+			ns,
+			() => {
+				let step = 0;
+				const advance = () => {
+					step += 1;
+					for (const r of rows)
+						if (+r.dataset.step === step)
+							reveal(r, { opacity: 0, transform: 'translateY(-4px)' });
+					for (const c of chips)
+						if (+c.dataset.step === step)
+							reveal(c, { opacity: 0.4, filter: 'grayscale(1)' });
+					if (caption && captions[step]) caption.textContent = captions[step];
+					if (step < 5) setTimeout(advance, 1100);
+				};
+				advance();
+			},
+			0.2,
+		);
+	}
 </script>
 
 <style>
@@ -783,18 +768,8 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		color: var(--ink-soft);
 	}
 
-	/* No-JS: the file is simply present. With JS it slides in after the type. */
-	:global(html.js) .cap-file {
-		opacity: 0;
-		transform: translateX(-16px);
-		transition:
-			opacity 0.5s ease,
-			transform 0.5s ease;
-	}
-
-	:global(html.js) .cap-file.in {
-		opacity: 1;
-		transform: none;
+	/* The created file keeps a faint highlight; it is hidden until JS reveals it. */
+	.cap-file {
 		background: rgb(188 63 29 / 7%);
 		border-radius: 5px;
 	}
@@ -816,24 +791,11 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		border-radius: 999px;
 		background: #fffdf8;
 		font-size: 0.85rem;
-		transition: all 0.45s ease;
 	}
 
 	.ns-chip :global(svg) {
 		width: 1em;
 		height: 1em;
-	}
-
-	/* No-JS: chips read as present. With JS they dim until their app appears. */
-	:global(html.js) .ns-chip {
-		opacity: 0.4;
-		filter: grayscale(1);
-	}
-
-	:global(html.js) .ns-chip.lit {
-		opacity: 1;
-		filter: none;
-		border-color: var(--accent);
 	}
 
 	.ns-tree {
@@ -878,20 +840,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		padding-left: 3.9rem;
 	}
 
-	/* No-JS: the whole tree is visible. With JS the steps reveal in sequence. */
-	:global(html.js) .ns-tree [data-step] {
-		opacity: 0;
-		transform: translateY(-4px);
-		transition:
-			opacity 0.5s ease,
-			transform 0.5s ease;
-	}
-
-	:global(html.js) .ns-tree [data-step].in {
-		opacity: 1;
-		transform: none;
-	}
-
 	.ns-config {
 		color: var(--accent-deep);
 		font-weight: 600;
@@ -928,18 +876,21 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		min-height: 1.2em;
 	}
 
-	/* Scroll reveals: only when JS is present, never blocking static reads */
-	:global(html.js) .reveal {
-		opacity: 0;
-		transform: translateY(16px);
-		transition:
-			opacity 0.7s ease,
-			transform 0.7s ease;
-	}
+	/* Animated elements start hidden only when JS can reveal them and motion is
+	   allowed. JS reveals each with the Web Animations API, whose forwards fill
+	   outranks these rules, so there is no revealed-state rule to keep in sync.
+	   Without JS, or with reduced motion, everything is simply visible. */
+	@media (prefers-reduced-motion: no-preference) {
+		:global(html.js) .reveal,
+		:global(html.js) .cap-file,
+		:global(html.js) .ns-tree [data-step] {
+			opacity: 0;
+		}
 
-	:global(html.js) .reveal.in {
-		opacity: 1;
-		transform: none;
+		:global(html.js) .ns-chip {
+			opacity: 0.4;
+			filter: grayscale(1);
+		}
 	}
 
 	/* The letter */
@@ -975,23 +926,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 		.hero-step {
 			animation: none;
 			opacity: 1;
-		}
-
-		:global(html.js) .reveal {
-			opacity: 1;
-			transform: none;
-			transition: none;
-		}
-
-		:global(html.js) .cap-file,
-		:global(html.js) .ns-tree [data-step] {
-			opacity: 1;
-			transform: none;
-		}
-
-		:global(html.js) .ns-chip {
-			opacity: 1;
-			filter: none;
 		}
 
 		.demo-mic,
