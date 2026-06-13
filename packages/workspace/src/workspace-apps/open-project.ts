@@ -6,12 +6,11 @@
  * startup path:
  *
  *   1. `loadProjectConfig(epicenterRoot)` imports `epicenter.config.ts` and
- *      validates that its default export is a `Mount[]`.
+ *      validates that its default export is a single `Mount`.
  *   2. Refuse to start when machine auth is signed out, then validate the
- *      configured mount names.
- *   3. Build a per-mount `MountContext` and run every `open(ctx)` in parallel.
- *      If any open fails, dispose the successfully opened runtimes before
- *      returning the first failure as a structured error.
+ *      configured mount name.
+ *   3. Build the `MountContext` and run `open(ctx)`, returning the started
+ *      mount or a structured error.
  *
  * The host owns auth lifecycle. Each `MountContext` carries the lazy `keyring`
  * reader (with a sign-out guard) plus the auth-derived function refs
@@ -44,20 +43,22 @@ export type OpenProjectOptions = {
 };
 
 /**
- * Bring a project's daemon online: import its config, then open every mount it
- * declares. Returns the started mounts or the first config/startup error.
+ * Bring a project's daemon online: import its config, then open the one mount
+ * it declares. Returns the started mount or a config/startup error.
  *
- * Opens run in parallel because each mount owns its own resources. If any open
- * fails, every successfully opened runtime is disposed before returning the
- * first failure.
+ * One `epicenter.config.ts` is one mount, so there is no sibling to open in
+ * parallel or to dispose on partial failure: if the mount's `open(ctx)` throws,
+ * the error is the whole result. The daemon serves a set of started mounts and
+ * routes IPC by name; today that set is this one mount (the host assembles it
+ * in `runUp`).
  */
 export async function openProject(
 	options: OpenProjectOptions,
-): Promise<Result<StartedMount[], ProjectConfigError | WorkspaceAppError>> {
+): Promise<Result<StartedMount, ProjectConfigError | WorkspaceAppError>> {
 	const { auth } = options;
 	const epicenterRoot = resolve(options.epicenterRoot) as EpicenterRoot;
 
-	const { data: mounts, error: configError } =
+	const { data: mount, error: configError } =
 		await loadProjectConfig(epicenterRoot);
 	if (configError !== null) return Err(configError);
 
@@ -65,49 +66,17 @@ export async function openProject(
 		return WorkspaceAppError.WorkspaceAuthSignedOut();
 	}
 
-	const issue = validateMountNames(mounts.map((mount) => mount.name));
+	const issue = validateMountNames([mount.name]);
 	if (issue !== null) {
 		return WorkspaceAppError.MountRejected(issue);
 	}
 
 	// Sign-out is guarded above, so `auth.state.ownerId` is stable here. Pin it
-	// to each mount's context so mounts build URLs without re-reading auth
+	// to the mount's context so the mount builds URLs without re-reading auth
 	// state.
 	const ownerId = auth.state.ownerId;
 
-	const settled = await Promise.allSettled(
-		mounts.map((mount) =>
-			openOneMount({ mount, epicenterRoot, auth, ownerId }),
-		),
-	);
-
-	const opened: StartedMount[] = [];
-	let firstError: WorkspaceAppError | null = null;
-
-	for (const result of settled) {
-		if (result.status !== 'fulfilled') {
-			if (firstError === null) {
-				firstError = WorkspaceAppError.MountOpenFailed({
-					mount: '<unknown>',
-					cause: result.reason,
-				}).error;
-			}
-			continue;
-		}
-		const value = result.value;
-		if (value.error) {
-			if (firstError === null) firstError = value.error;
-			continue;
-		}
-		opened.push(value.data);
-	}
-
-	if (firstError !== null) {
-		await disposeOpenedRuntimes(opened);
-		return Err(firstError);
-	}
-
-	return Ok(opened);
+	return openOneMount({ mount, epicenterRoot, auth, ownerId });
 }
 
 async function openOneMount({
@@ -165,14 +134,4 @@ function createMountKeyringReader({
 		}
 		return auth.state.keyring;
 	};
-}
-
-async function disposeOpenedRuntimes(
-	runtimes: readonly StartedMount[],
-): Promise<void> {
-	await Promise.allSettled(
-		runtimes.map((entry) =>
-			Promise.resolve(entry.runtime[Symbol.asyncDispose]()),
-		),
-	);
 }

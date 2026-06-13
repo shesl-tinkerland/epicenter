@@ -1,10 +1,11 @@
 /**
- * Load a project's `epicenter.config.ts` and return its mount list.
+ * Load a project's `epicenter.config.ts` and return its mount.
  *
- * The config default-exports a `Mount[]`. One app is a list of one:
+ * The config default-exports a single `Mount`: one Epicenter folder is one app
+ * is one mount.
  *
- *   `export default [fuji()];`
- *   `export default [fuji(), notes()];`
+ *   `export default fuji();`
+ *   `export default notes;`
  *
  * `epicenter.config.ts` is dynamically imported, so its default export crosses
  * a runtime boundary where TypeScript types are erased and nothing typechecks
@@ -68,7 +69,7 @@ export type ProjectConfigError = InferErrors<typeof ProjectConfigError>;
 
 export async function loadProjectConfig(
 	epicenterRoot: EpicenterRoot | string,
-): Promise<Result<Mount[], ProjectConfigError>> {
+): Promise<Result<Mount, ProjectConfigError>> {
 	const projectConfigPath = join(
 		resolve(epicenterRoot),
 		PROJECT_CONFIG_FILENAME,
@@ -91,18 +92,18 @@ export async function loadProjectConfig(
 	if (importError !== null) return Err(importError);
 
 	const value = module.default;
-	if (Array.isArray(value) && value.every(isMount)) return Ok(value);
-	if (isMount(value)) {
+	if (isMount(value)) return Ok(value);
+	if (Array.isArray(value)) {
 		return ProjectConfigError.ProjectConfigInvalid({
 			projectConfigPath,
 			detail:
-				'the default export is a single Mount; wrap it in an array, for example `export default [fuji()]`',
+				'the default export is an array; export the mount directly, for example `export default fuji()`',
 		});
 	}
 	return ProjectConfigError.ProjectConfigInvalid({
 		projectConfigPath,
 		detail:
-			'the default export must be a Mount[] (each entry needs a string `name` and an `open` function)',
+			'the default export must be a Mount (a value with a string `name` and an `open` function)',
 	});
 }
 

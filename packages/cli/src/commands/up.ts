@@ -1,14 +1,13 @@
 /**
  * `epicenter daemon up`: start the long-lived foreground daemon for one project.
  *
- * Loads every mount declared in `epicenter.config.ts`, opens each one in
- * parallel, and exposes a Unix-socket IPC channel for that project. `peers`,
- * `list`, and `run` dispatch to this daemon over IPC; without `daemon up`
- * they error with a hint pointing back here.
+ * Loads the mount declared in `epicenter.config.ts`, opens it, and exposes a
+ * Unix-socket IPC channel for that project. `peers`, `list`, and `run` dispatch
+ * to this daemon over IPC; without `daemon up` they error with a hint pointing
+ * back here.
  *
- * One daemon per project; that daemon serves every configured mount.
- * Resource isolation between mounts is expressed by splitting them into
- * different projects, not by a flag.
+ * One Epicenter folder is one mount, and one daemon serves it. Running more
+ * than one app means more than one Epicenter folder, each with its own daemon.
  *
  * Foreground by design; backgrounding is the user's job.
  */
@@ -76,8 +75,8 @@ type UpOptions = {
  * startup, exercise the IPC handler in-process, and call `teardown()` to
  * release resources without spawning a child.
  *
- * - `mounts` is every started mount runtime the project declares; the daemon
- *   serves them all and routes IPC requests by mount name.
+ * - `mounts` is the started mount set the daemon serves and routes IPC by name;
+ *   one Epicenter folder declares one mount, so the set holds one today.
  * - `metadata` is what was written to disk.
  * - `teardown()` closes the server, asyncDisposes the runtimes, releases the
  *   lease, and unlinks metadata + socket. Idempotent.
@@ -89,15 +88,15 @@ type UpHandle = {
 };
 
 /**
- * Daemon body. Opens every configured mount (the project must already have an
+ * Daemon body. Opens the configured mount (the project must already have an
  * `epicenter.config.ts`; see `epicenter init`), ensures the `.epicenter`
  * cache gitignore, binds the IPC socket, and returns a handle. The yargs
  * `handler` calls this,
  * prints the operator-facing banner, installs SIGINT/SIGTERM, and parks the
  * process; tests call it directly and assert on the returned handle.
  *
- * A SQLite daemon lease claims ownership before any mount opens. After that,
- * `openProject` imports `epicenter.config.ts` and opens every configured
+ * A SQLite daemon lease claims ownership before the mount opens. After that,
+ * `openProject` imports `epicenter.config.ts` and opens the configured
  * mount, and `startDaemonServer` binds the socket.
  */
 export async function runUp(
@@ -141,7 +140,10 @@ export async function runUp(
 
 	const startResult = await openProject({ epicenterRoot, auth });
 	if (startResult.error) return startResult;
-	const mounts = startResult.data;
+	// One config contributes one mount. The daemon still serves a SET of mounts
+	// and routes IPC by name (the durable shape), so wrap the single started
+	// mount into the list the server and the operator loops consume.
+	const mounts = [startResult.data];
 	ensureProjectGitignore(epicenterRoot);
 	stack.defer(async () => {
 		await Promise.allSettled(
@@ -178,7 +180,7 @@ export async function runUp(
 export const upCommand = cmd({
 	command: 'up',
 	describe:
-		'Open every mount in epicenter.config.ts and serve them on the daemon socket (foreground).',
+		'Open the mount in epicenter.config.ts and serve it on the daemon socket (foreground).',
 	builder: {
 		C: projectOption,
 		quiet: {

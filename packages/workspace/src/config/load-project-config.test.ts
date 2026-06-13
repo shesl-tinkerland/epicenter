@@ -2,7 +2,7 @@
  * Project config loading tests.
  *
  * Verifies that `epicenter.config.ts` is discovered, imported, and runtime
- * validated before daemon startup consumes the mount list.
+ * validated before daemon startup consumes the mount.
  *
  * Invariant under test: `loadProjectConfig` is total. Every failure mode
  * (missing file, import/syntax error, wrong-shaped export) comes back as a
@@ -41,25 +41,15 @@ describe('loadProjectConfig', () => {
 		});
 	});
 
-	test('passes through a Mount[] default export', async () => {
-		writeConfig(
-			"export default [{ name: 'a', open() {} }, { name: 'b', open() {} }];\n",
-		);
+	test('passes through a single Mount default export', async () => {
+		writeConfig("export default { name: 'demo', open() {} };\n");
 
 		const { data, error } = await loadProjectConfig(epicenterRoot);
 		if (error !== null) throw new Error(error.message);
-		expect(data.map((mount) => mount.name)).toEqual(['a', 'b']);
+		expect(data.name).toBe('demo');
 	});
 
-	test('passes through an empty Mount[] default export', async () => {
-		writeConfig('export default [];\n');
-
-		const { data, error } = await loadProjectConfig(epicenterRoot);
-		if (error !== null) throw new Error(error.message);
-		expect(data).toEqual([]);
-	});
-
-	test('rejects a non-array default export', async () => {
+	test('rejects a non-Mount default export', async () => {
 		writeConfig('export default { notAMount: true };\n');
 
 		const { error } = await loadProjectConfig(epicenterRoot);
@@ -69,22 +59,15 @@ describe('loadProjectConfig', () => {
 		});
 	});
 
-	test('rejects a bare Mount that is not wrapped in an array', async () => {
-		writeConfig("export default { name: 'demo', open() {} };\n");
+	test('rejects an array default export', async () => {
+		writeConfig("export default [{ name: 'demo', open() {} }];\n");
 
 		const { error } = await loadProjectConfig(epicenterRoot);
 		expect(error).toMatchObject({
 			name: 'ProjectConfigInvalid',
 			detail:
-				'the default export is a single Mount; wrap it in an array, for example `export default [fuji()]`',
+				'the default export is an array; export the mount directly, for example `export default fuji()`',
 		});
-	});
-
-	test('rejects a Mount[] containing a non-Mount value', async () => {
-		writeConfig("export default [{ name: 'demo', open() {} }, { open: 1 }];\n");
-
-		const { error } = await loadProjectConfig(epicenterRoot);
-		expect(error?.name).toBe('ProjectConfigInvalid');
 	});
 
 	test('rejects a config with no default export', async () => {

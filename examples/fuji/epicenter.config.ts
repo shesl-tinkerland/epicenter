@@ -1,5 +1,5 @@
 /**
- * Canonical Epicenter folder: one mount in a list, declared at the root.
+ * Canonical Epicenter folder: one mount, declared at the root.
  *
  * Layout (per specs/20260612T000201-epicenter-namespace-root-layout.md):
  *   epicenter.config.ts            this file: marker + mount factory call
@@ -16,4 +16,4 @@
 
 import { fuji } from '@epicenter/fuji/project';
 
-export default [fuji()];
+export default fuji();

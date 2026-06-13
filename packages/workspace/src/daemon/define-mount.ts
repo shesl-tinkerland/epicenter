@@ -1,8 +1,8 @@
 /**
  * `defineMount`: typed entry contract for an app mount inside a project daemon.
  *
- * `epicenter.config.ts` default-exports a `Mount[]`. Each mount carries its own
- * canonical `name`, which
+ * `epicenter.config.ts` default-exports a single `Mount`. The mount carries its
+ * own canonical `name`, which
  * becomes the CLI action prefix (`<name>.<action_key>`) and is propagated into
  * `MountContext` so handlers can use it for logging.
  *

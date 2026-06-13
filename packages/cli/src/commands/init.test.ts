@@ -28,7 +28,7 @@ test('init scaffolds the default config', async () => {
 });
 
 test('init leaves an existing config untouched', async () => {
-	const original = 'export default []; // keep me\n';
+	const original = 'export default app; // keep me\n';
 	writeFileSync(join(workDir, 'epicenter.config.ts'), original);
 
 	await createCLI().run(['init', workDir]);
