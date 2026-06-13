@@ -12,6 +12,7 @@
 	} from '@epicenter/workspace';
 	import ArrowUpCircleIcon from '@lucide/svelte/icons/arrow-up-circle';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import LockIcon from '@lucide/svelte/icons/lock';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -20,7 +21,7 @@
 
 	const fuji = requireFuji();
 
-	const conformance = $derived(fuji.entries.conformance);
+	const entries = $derived(fuji.entries);
 
 	const causeLabel = {
 		ValidationFailed: 'Does not match the schema',
@@ -78,29 +79,29 @@
 	<div class="flex items-center justify-between border-b px-4 py-2">
 		<h2 class="text-sm font-semibold">Needs Attention</h2>
 		<span class="text-xs text-muted-foreground">
-			{conformance.rows.length} entries match the current schema
+			{entries.conforming} entries match the current schema
 		</span>
 	</div>
 
-	{#if conformance.nonconforming.length === 0 && conformance.newerWriter.length === 0}
+	{#if entries.nonconforming.length === 0 && entries.newerWriter.length === 0 && entries.unreadable.length === 0}
 		<Empty.Root class="flex-1">
 			<Empty.Media>
 				<CircleCheckIcon class="size-8 text-muted-foreground" />
 			</Empty.Media>
 			<Empty.Title>Every entry matches the schema</Empty.Title>
 			<Empty.Description>
-				Entries that fail the schema or come from a newer Fuji will appear
-				here.
+				Entries that fail the schema, come from a newer Fuji, or are encrypted
+				with a key this device does not have will appear here.
 			</Empty.Description>
 		</Empty.Root>
 	{:else}
 		<div class="flex-1 space-y-4 overflow-auto p-4">
-			{#if conformance.newerWriter.length > 0}
+			{#if entries.newerWriter.length > 0}
 				<Alert.Root variant="warning">
 					<ArrowUpCircleIcon class="size-4" />
 					<Alert.Title>
-						{conformance.newerWriter.length}
-						{conformance.newerWriter.length === 1 ? 'entry was' : 'entries were'}
+						{entries.newerWriter.length}
+						{entries.newerWriter.length === 1 ? 'entry was' : 'entries were'}
 						written by a newer version of Fuji
 					</Alert.Title>
 					<Alert.Description>
@@ -110,12 +111,46 @@
 				</Alert.Root>
 			{/if}
 
-			{#if conformance.nonconforming.length > 0}
+			{#if entries.unreadable.length > 0}
+				<Alert.Root variant="warning">
+					<LockIcon class="size-4" />
+					<Alert.Title>
+						{entries.unreadable.length}
+						{entries.unreadable.length === 1 ? 'entry is' : 'entries are'}
+						encrypted with a key this device does not have
+					</Alert.Title>
+					<Alert.Description>
+						Another device wrote them after a key change. Open Fuji where the
+						key lives to read them. They stay synced and untouched.
+					</Alert.Description>
+				</Alert.Root>
+
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>Entry</Table.Head>
+							<Table.Head>Reason</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each entries.unreadable as error (error.id)}
+							<Table.Row>
+								<Table.Cell class="font-mono text-xs">{error.id}</Table.Cell>
+								<Table.Cell class="text-muted-foreground">
+									{error.reason}
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+			{/if}
+
+			{#if entries.nonconforming.length > 0}
 				<Alert.Root variant="warning">
 					<TriangleAlertIcon class="size-4" />
 					<Alert.Title>
-						{conformance.nonconforming.length}
-						{conformance.nonconforming.length === 1
+						{entries.nonconforming.length}
+						{entries.nonconforming.length === 1
 							? 'entry does'
 							: 'entries do'}
 						not match the current schema
@@ -137,7 +172,7 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each conformance.nonconforming as error (error.id)}
+						{#each entries.nonconforming as error (error.id)}
 							<Table.Row>
 								<Table.Cell class="font-mono text-xs">{error.id}</Table.Cell>
 								<Table.Cell>{causeLabel[error.name]}</Table.Cell>
@@ -175,7 +210,7 @@
 				</Table.Root>
 			{/if}
 
-			{#if conformance.newerWriter.length > 0}
+			{#if entries.newerWriter.length > 0}
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
@@ -184,7 +219,7 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each conformance.newerWriter as error (error.id)}
+						{#each entries.newerWriter as error (error.id)}
 							<Table.Row>
 								<Table.Cell class="font-mono text-xs">{error.id}</Table.Cell>
 								<Table.Cell class="text-muted-foreground">

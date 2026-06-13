@@ -17,10 +17,14 @@
 	const fuji = requireFuji();
 	const isSearching = $derived(viewState.searchQuery.trim().length > 0);
 
-	/** Rows hidden from every list: schema mismatches plus newer-writer rows. */
+	/**
+	 * Rows hidden from every list: schema mismatches, newer-writer rows, and
+	 * rows encrypted with a key this device does not have.
+	 */
 	const queuedCount = $derived(
-		fuji.entries.conformance.nonconforming.length +
-			fuji.entries.conformance.newerWriter.length,
+		fuji.entries.nonconforming.length +
+			fuji.entries.newerWriter.length +
+			fuji.entries.unreadable.length,
 	);
 
 	/** Entries matching the search query across title, subtitle, tags, and type. */
