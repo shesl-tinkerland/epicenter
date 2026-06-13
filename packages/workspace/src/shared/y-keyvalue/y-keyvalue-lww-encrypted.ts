@@ -51,7 +51,8 @@
  *
  * The observer wraps decrypt with try/catch. A failed decrypt skips the entry
  * and logs a warning instead of throwing. This prevents one bad blob from
- * crashing all observation. `unreadableEntryCount` exposes the count.
+ * crashing all observation. `unreadableEntries()` enumerates the skipped
+ * entries (key plus reason) so they stay visible to reads and the count.
  *
  * ## Related Modules
  *
@@ -82,6 +83,7 @@ import {
 	type KvEntry,
 	type KvStoreChange,
 	type KvStoreChangeHandler,
+	type KvUnreadableEntry,
 	YKeyValueLww,
 	type YKeyValueLwwEntry,
 } from '../../document/y-keyvalue/index.js';
@@ -113,9 +115,10 @@ type EncryptionState = {
 /**
  * Return type of `createEncryptedYkvLww`.
  *
- * IS-A `ObservableKvStore<T>` (the shared contract) plus encryption lifecycle
- * (`activateEncryption`, `unreadableEntryCount`), disposal, and direct access
- * to the underlying `yarray` / `doc` for sync providers.
+ * IS-A `ObservableKvStore<T>` (the shared contract, including
+ * `unreadableEntries()`) plus encryption lifecycle (`activateEncryption`),
+ * disposal, and direct access to the underlying `yarray` / `doc` for sync
+ * providers.
  *
  * All values exposed through the `ObservableKvStore` surface are **plaintext**.
  * Encryption is transparent to consumers.
@@ -379,22 +382,36 @@ export function createEncryptedYkvLww<T>(
 				handler(syntheticChanges, undefined);
 		},
 		/**
-		 * Number of entries in the inner store that cannot be decrypted.
+		 * Entries in the inner store that exist but did not decrypt: an
+		 * encrypted blob whose key version is missing from the keyring, or a
+		 * corrupted blob. Each yields its key and a human-readable `reason`
+		 * matching the warning the observer logs.
 		 *
-		 * When a key is active, this counts entries that failed to decrypt
-		 * (corrupted blobs, wrong key version not in keyring). When no key
-		 * is active, this is always 0 (passthrough mode treats every entry
-		 * as readable plaintext).
+		 * When no key is active, this yields nothing (passthrough mode treats
+		 * every entry as readable plaintext).
 		 */
-		get unreadableEntryCount() {
-			if (!encryption) return 0;
-			let count = 0;
-			for (const [key, entry] of inner.map)
-				if (decrypt(entry.val, textEncoder.encode(key)) === undefined) count++;
-			return count;
+		*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
+			if (!encryption) return;
+			for (const [key, entry] of inner.map) {
+				if (!isEncryptedBlob(entry.val)) continue;
+				if (decrypt(entry.val, textEncoder.encode(key)) !== undefined) continue;
+				const blobVersion = getKeyVersion(entry.val);
+				const reason = encryption.keyring.has(blobVersion)
+					? 'wrong key material or corrupted blob'
+					: `keyVersion=${blobVersion} not in keyring [${[...encryption.keyring.keys()].join(', ')}]`;
+				yield { key, reason };
+			}
 		},
+		/**
+		 * Number of stored entries after conflict resolution, **including**
+		 * undecryptable blobs. This previously subtracted them, which made the
+		 * count silently disagree with what storage held (the encrypted twin of
+		 * the schema-edit silent drop). They are now visible via
+		 * `unreadableEntries()` and counted here, so the count reconciles
+		 * against the read buckets.
+		 */
 		get size() {
-			return inner.map.size - this.unreadableEntryCount;
+			return inner.map.size;
 		},
 		/** The underlying Y.Array. Contains **ciphertext** when a key is active. */
 		yarray: inner.yarray,

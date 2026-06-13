@@ -426,7 +426,7 @@ describe('createEncryptedYkvLww', () => {
 			expect(kv.get('corrupt')).toBeUndefined();
 			expect(kv.get('good-1')).toBe('value-1');
 			expect(kv.get('good-2')).toBe('value-2');
-			expect(kv.unreadableEntryCount).toBe(1);
+			expect([...kv.unreadableEntries()].length).toBe(1);
 		});
 
 		test('observation continues after decrypt failure', () => {
@@ -452,7 +452,7 @@ describe('createEncryptedYkvLww', () => {
 			expect(kv.get('good')).toBe('still-works');
 			expect(kv.get('new-good')).toBe('appears-after-failure');
 			expect(kv.get('corrupt')).toBeUndefined();
-			expect(kv.unreadableEntryCount).toBe(1);
+			expect([...kv.unreadableEntries()].length).toBe(1);
 		});
 	});
 
@@ -479,7 +479,7 @@ describe('createEncryptedYkvLww', () => {
 					[1, key1],
 				]),
 			);
-			expect(kv.unreadableEntryCount).toBe(0);
+			expect([...kv.unreadableEntries()].length).toBe(0);
 			expect(kv.get('a')).toBe('alpha');
 			expect(kv.get('b')).toBe('beta');
 
@@ -544,7 +544,7 @@ describe('createEncryptedYkvLww', () => {
 
 			expect(kv.get('a')).toBe('alpha');
 			expect(kv.get('b')).toBe('beta');
-			expect(kv.unreadableEntryCount).toBe(0);
+			expect([...kv.unreadableEntries()].length).toBe(0);
 
 			// Every blob is now v2.
 			for (const entry of yarray.toArray()) {

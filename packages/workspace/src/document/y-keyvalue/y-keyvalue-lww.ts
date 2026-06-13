@@ -153,6 +153,7 @@ import { lazy } from './lazy.js';
 import type {
 	KvStoreChange,
 	KvStoreChangeHandler,
+	KvUnreadableEntry,
 	ObservableKvStore,
 } from './observable-kv-store.js';
 
@@ -851,6 +852,15 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 				yield [key, entry];
 			}
 		}
+	}
+
+	/**
+	 * Plaintext stores have no encryption layer, so every stored entry is
+	 * readable. There is never an unreadable entry to enumerate.
+	 */
+	// biome-ignore lint/correctness/useYield: an always-empty generator has nothing to yield
+	*unreadableEntries(): IterableIterator<KvUnreadableEntry> {
+		return;
 	}
 
 	/** Register an observer. Called when keys are added, updated, or deleted. */

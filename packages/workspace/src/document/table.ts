@@ -449,11 +449,14 @@ export type ReadonlyTable<
 	 */
 	conformance(): TableConformance;
 	/**
-	 * Number of observer-confirmed stored entries. O(1). Includes
-	 * nonconforming rows that `getAllValid()` hides, may lag writes made
-	 * inside an open transaction, and encrypted stores subtract
-	 * undecryptable entries. For an "N items" badge next to a filtered
-	 * list, use `conformance().valid` instead.
+	 * Number of observer-confirmed stored entries. O(1). Includes every stored
+	 * entry: conforming rows, nonconforming rows that `getAllValid()` hides,
+	 * newer-writer rows, and (on encrypted stores) undecryptable entries. May
+	 * lag writes made inside an open transaction. Because it counts all four
+	 * read states, it reconciles exactly:
+	 * `count() === conformance().valid + conformance().nonconforming.length +
+	 * conformance().newerWriter.length + unreadable entries`. For an "N items"
+	 * badge next to a filtered list, use `conformance().valid` instead.
 	 */
 	count(): number;
 	has(id: string): boolean;

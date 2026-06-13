@@ -24,6 +24,17 @@
 /** Public entry shape surfaced by `entries()`. */
 export type KvEntry<T> = { key: string; val: T };
 
+/**
+ * An entry that exists in storage but whose value this store cannot surface:
+ * an encrypted blob with no usable key in the keyring. `entries()` skips it and
+ * `get()` reports it absent, but `size` counts it and `unreadableEntries()`
+ * yields it, so it is never invisible to every read.
+ *
+ * `reason` is a human-readable diagnostic (for example
+ * `keyVersion=3 not in keyring [1, 2]`), not a stable machine code.
+ */
+export type KvUnreadableEntry = { key: string; reason: string };
+
 /** Change event emitted by the store's observer. */
 export type KvStoreChange<T> =
 	| { action: 'add'; newValue: T }
@@ -53,5 +64,19 @@ export interface ObservableKvStore<T> {
 	observe(handler: KvStoreChangeHandler<T>): void;
 	unobserve(handler: KvStoreChangeHandler<T>): void;
 	entries(): IterableIterator<[string, KvEntry<T>]>;
+	/**
+	 * Entries that exist in storage but did not yield a value (encrypted blobs
+	 * with no usable key). Plaintext stores always yield nothing. The encrypted
+	 * wrapper yields the set its `get()` reports absent and its `entries()`
+	 * skips. Together with `entries()` this partitions the stored entries that
+	 * `size` counts, which is what lets a stored count reconcile against reads.
+	 */
+	unreadableEntries(): IterableIterator<KvUnreadableEntry>;
+	/**
+	 * Number of stored entries after conflict resolution, **including**
+	 * present-but-unreadable entries. The sum of the readable entries and
+	 * `unreadableEntries()`. Encrypted stores count undecryptable blobs here so
+	 * the count never disagrees with what storage holds.
+	 */
 	readonly size: number;
 }
