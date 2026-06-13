@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as Alert from '@epicenter/ui/alert';
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
@@ -42,12 +43,21 @@
 	 * cloud section below renders entirely from this entry (models, docs
 	 * link, config fields), so cloud providers need no per-provider branch.
 	 */
-	const cloudProvider = $derived.by(() => {
-		const entry = TRANSCRIPTION_PROVIDERS.find(
+	const selectedTranscriptionProvider = $derived(
+		TRANSCRIPTION_PROVIDERS.find(
 			(provider) => provider.id === settings.get('transcription.service'),
-		);
-		return entry?.location === 'cloud' ? entry : null;
-	});
+		),
+	);
+
+	const cloudProvider = $derived(
+		selectedTranscriptionProvider?.location === 'cloud'
+			? selectedTranscriptionProvider
+			: null,
+	);
+
+	const isSelectedServiceUnavailable = $derived(
+		!tauri && selectedTranscriptionProvider?.location === 'local',
+	);
 
 	const spokenLanguageLabel = $derived(
 		SUPPORTED_LANGUAGES_OPTIONS.find(
@@ -56,7 +66,8 @@
 	);
 
 	const isLocalEngine = $derived(
-		PROVIDERS[settings.get('transcription.service')].location === 'local',
+		Boolean(tauri) &&
+			PROVIDERS[settings.get('transcription.service')].location === 'local',
 	);
 
 	const unloadPolicyLabel = $derived(
@@ -85,7 +96,15 @@
 					settings.set('transcription.service', selected)}
 		/>
 
-		{#if cloudProvider}
+		{#if isSelectedServiceUnavailable && selectedTranscriptionProvider}
+			<Alert.Root variant="warning">
+				<Alert.Title>Desktop-only service selected</Alert.Title>
+				<Alert.Description>
+					{selectedTranscriptionProvider.label} runs in the desktop app.
+					Choose a cloud or self-hosted service to transcribe on web.
+				</Alert.Description>
+			</Alert.Root>
+		{:else if cloudProvider}
 			{@const cloud = cloudProvider}
 			{@const modelItems = cloud.models.map((model) => ({
 				value: model.name,
@@ -382,92 +401,94 @@
 			</div>
 		{/if}
 
-		{#if isLocalEngine}
+		{#if !isSelectedServiceUnavailable}
+			{#if isLocalEngine}
+				<Field.Field>
+					<Field.Label for="local-model-unload-policy">
+						Unload Model When Idle
+					</Field.Label>
+					<Select.Root
+						type="single"
+						bind:value={
+							() => deviceConfig.get('transcription.localModelUnloadPolicy'),
+							(v) =>
+								deviceConfig.set(
+									'transcription.localModelUnloadPolicy',
+									v as LocalModelUnloadPolicy,
+								)
+						}
+					>
+						<Select.Trigger id="local-model-unload-policy" class="w-full">
+							{unloadPolicyLabel ?? 'Select a policy'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each LOCAL_MODEL_UNLOAD_POLICY_OPTIONS as option}
+								<Select.Item value={option.value} label={option.label}>
+									<div class="flex flex-col gap-1 py-1">
+										<div class="font-medium">{option.label}</div>
+										<div class="text-sm text-muted-foreground">
+											{option.description}
+										</div>
+									</div>
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+					<Field.Description>
+						Controls when Whispering drops the loaded transcription model from
+						memory. Lower memory means a fresh load on the next transcription.
+					</Field.Description>
+				</Field.Field>
+			{/if}
+
 			<Field.Field>
-				<Field.Label for="local-model-unload-policy">
-					Unload Model When Idle
-				</Field.Label>
+				<Field.Label for="spoken-language">Spoken Language</Field.Label>
 				<Select.Root
 					type="single"
-					bind:value={
-						() => deviceConfig.get('transcription.localModelUnloadPolicy'),
-						(v) =>
-							deviceConfig.set(
-								'transcription.localModelUnloadPolicy',
-								v as LocalModelUnloadPolicy,
-							)
-					}
+					bind:value={() => settings.get('transcription.language'),
+						(v) => settings.set('transcription.language', v)}
+					disabled={!currentServiceCapabilities.supportsLanguage}
 				>
-					<Select.Trigger id="local-model-unload-policy" class="w-full">
-						{unloadPolicyLabel ?? 'Select a policy'}
+					<Select.Trigger id="spoken-language" class="w-full">
+						{spokenLanguageLabel ?? 'Select a spoken language'}
 					</Select.Trigger>
 					<Select.Content>
-						{#each LOCAL_MODEL_UNLOAD_POLICY_OPTIONS as option}
-							<Select.Item value={option.value} label={option.label}>
-								<div class="flex flex-col gap-1 py-1">
-									<div class="font-medium">{option.label}</div>
-									<div class="text-sm text-muted-foreground">
-										{option.description}
-									</div>
-								</div>
-							</Select.Item>
+						{#each SUPPORTED_LANGUAGES_OPTIONS as item}
+							<Select.Item value={item.value} label={item.label} />
 						{/each}
 					</Select.Content>
 				</Select.Root>
+				{#if !currentServiceCapabilities.supportsLanguage}
+					<Field.Description>
+						{settings.get('transcription.service') ===
+						'moonshine'
+							? 'Moonshine uses English-only models.'
+							: 'Parakeet detects the spoken language automatically.'}
+					</Field.Description>
+				{:else}
+					<Field.Description>
+						Auto lets the provider detect the spoken language. Pick a language
+						only when you want to send a specific hint.
+					</Field.Description>
+				{/if}
+			</Field.Field>
+
+			<Field.Field>
+				<Field.Label for="transcription-prompt">System Prompt</Field.Label>
+				<Textarea
+					id="transcription-prompt"
+					placeholder="e.g., This is an academic lecture about quantum physics with technical terms like 'eigenvalue' and 'Schrödinger'"
+					disabled={!currentServiceCapabilities.supportsPrompt}
+					bind:value={() => settings.get('transcription.prompt'),
+						(value) => settings.set('transcription.prompt', value)}
+				/>
 				<Field.Description>
-					Controls when Whispering drops the loaded transcription model from
-					memory. Lower memory means a fresh load on the next transcription.
+					{currentServiceCapabilities.supportsPrompt
+						? 'Helps services that support prompts recognize specific terms, names, or context during transcription. For rewriting or translation, use Transformations.'
+						: 'This transcription service does not support prompts.'}
 				</Field.Description>
 			</Field.Field>
 		{/if}
-
-		<Field.Field>
-			<Field.Label for="spoken-language">Spoken Language</Field.Label>
-			<Select.Root
-				type="single"
-				bind:value={() => settings.get('transcription.language'),
-					(v) => settings.set('transcription.language', v)}
-				disabled={!currentServiceCapabilities.supportsLanguage}
-			>
-				<Select.Trigger id="spoken-language" class="w-full">
-					{spokenLanguageLabel ?? 'Select a spoken language'}
-				</Select.Trigger>
-				<Select.Content>
-					{#each SUPPORTED_LANGUAGES_OPTIONS as item}
-						<Select.Item value={item.value} label={item.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-			{#if !currentServiceCapabilities.supportsLanguage}
-				<Field.Description>
-					{settings.get('transcription.service') ===
-					'moonshine'
-						? 'Moonshine uses English-only models.'
-						: 'Parakeet detects the spoken language automatically.'}
-				</Field.Description>
-			{:else}
-				<Field.Description>
-					Auto lets the provider detect the spoken language. Pick a language
-					only when you want to send a specific hint.
-				</Field.Description>
-			{/if}
-		</Field.Field>
-
-		<Field.Field>
-			<Field.Label for="transcription-prompt">System Prompt</Field.Label>
-			<Textarea
-				id="transcription-prompt"
-				placeholder="e.g., This is an academic lecture about quantum physics with technical terms like 'eigenvalue' and 'Schrödinger'"
-				disabled={!currentServiceCapabilities.supportsPrompt}
-				bind:value={() => settings.get('transcription.prompt'),
-					(value) => settings.set('transcription.prompt', value)}
-			/>
-			<Field.Description>
-				{currentServiceCapabilities.supportsPrompt
-					? 'Helps services that support prompts recognize specific terms, names, or context during transcription. For rewriting or translation, use Transformations.'
-					: 'This transcription service does not support prompts.'}
-			</Field.Description>
-		</Field.Field>
 	</Field.Group>
 </Field.Set>
 

@@ -29,7 +29,7 @@ export const ElevenLabsTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			apiKey: string;
 			modelName: string;
 		},
@@ -52,8 +52,8 @@ export const ElevenLabsTranscriptionServiceLive = {
 					file: audioBlob,
 					model_id: options.modelName,
 					language_code:
-						options.outputLanguage !== 'auto'
-							? options.outputLanguage
+						options.spokenLanguage !== 'auto'
+							? options.spokenLanguage
 							: undefined,
 					tag_audio_events: false,
 					diarize: true,

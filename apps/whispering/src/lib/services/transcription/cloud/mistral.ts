@@ -72,7 +72,7 @@ export const MistralTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			apiKey: string;
 			modelName: string;
 		},
@@ -105,8 +105,8 @@ export const MistralTranscriptionServiceLive = {
 					file,
 					model: options.modelName,
 					language:
-						options.outputLanguage !== 'auto'
-							? options.outputLanguage
+						options.spokenLanguage !== 'auto'
+							? options.spokenLanguage
 							: undefined,
 				}),
 			catch: (error) => {

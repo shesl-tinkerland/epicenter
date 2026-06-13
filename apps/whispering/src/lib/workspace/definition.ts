@@ -19,6 +19,7 @@ import { TRANSFORMATION_STEP_TYPES } from '$lib/constants/transformations';
 import {
 	PROVIDERS,
 	TRANSCRIPTION_SERVICE_IDS,
+	type TranscriptionServiceId,
 } from '$lib/services/transcription/providers';
 
 /**
@@ -273,34 +274,38 @@ const recording = {
  *
  * @see {@link https://github.com/EpicenterHQ/epicenter/blob/main/specs/20260312T170000-whispering-workspace-polish-and-migration.md | Spec Decision 2}
  */
-const transcription = {
-	'transcription.service': defineKv(
-		field.select(TRANSCRIPTION_SERVICE_IDS),
-		() => 'parakeet' as const,
-	),
-	'transcription.openai.model': defineKv(
-		field.string(),
-		() => PROVIDERS.OpenAI.defaultModel as string,
-	),
-	'transcription.groq.model': defineKv(
-		field.string(),
-		() => PROVIDERS.Groq.defaultModel as string,
-	),
-	'transcription.elevenlabs.model': defineKv(
-		field.string(),
-		() => PROVIDERS.ElevenLabs.defaultModel as string,
-	),
-	'transcription.deepgram.model': defineKv(
-		field.string(),
-		() => PROVIDERS.Deepgram.defaultModel as string,
-	),
-	'transcription.mistral.model': defineKv(
-		field.string(),
-		() => PROVIDERS.Mistral.defaultModel as string,
-	),
-	'transcription.language': defineKv(field.string(), () => 'auto'),
-	'transcription.prompt': defineKv(field.string(), () => ''),
-} as const;
+function defineTranscriptionSettings(
+	defaultTranscriptionService: TranscriptionServiceId,
+) {
+	return {
+		'transcription.service': defineKv(
+			field.select(TRANSCRIPTION_SERVICE_IDS),
+			() => defaultTranscriptionService,
+		),
+		'transcription.openai.model': defineKv(
+			field.string(),
+			() => PROVIDERS.OpenAI.defaultModel as string,
+		),
+		'transcription.groq.model': defineKv(
+			field.string(),
+			() => PROVIDERS.Groq.defaultModel as string,
+		),
+		'transcription.elevenlabs.model': defineKv(
+			field.string(),
+			() => PROVIDERS.ElevenLabs.defaultModel as string,
+		),
+		'transcription.deepgram.model': defineKv(
+			field.string(),
+			() => PROVIDERS.Deepgram.defaultModel as string,
+		),
+		'transcription.mistral.model': defineKv(
+			field.string(),
+			() => PROVIDERS.Mistral.defaultModel as string,
+		),
+		'transcription.language': defineKv(field.string(), () => 'auto'),
+		'transcription.prompt': defineKv(field.string(), () => ''),
+	} as const;
+}
 
 /**
  * Currently active transformation pipeline.
@@ -355,7 +360,13 @@ const shortcuts = {
 	),
 } as const;
 
-export function createWhispering() {
+type CreateWhisperingOptions = {
+	defaultTranscriptionService?: TranscriptionServiceId;
+};
+
+export function createWhispering({
+	defaultTranscriptionService = 'parakeet',
+}: CreateWhisperingOptions = {}) {
 	/**
 	 * Whispering KV schemas: ~40 entries for synced preferences. Defined locally
 	 * so the raw schema map is not a module-level export. Callers reach the
@@ -368,7 +379,7 @@ export function createWhispering() {
 		...ui,
 		...dataRetention,
 		...recording,
-		...transcription,
+		...defineTranscriptionSettings(defaultTranscriptionService),
 		...transformation,
 		...analytics,
 		...shortcuts,

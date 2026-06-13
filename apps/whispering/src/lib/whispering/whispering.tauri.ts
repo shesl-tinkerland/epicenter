@@ -44,7 +44,9 @@ type RecordingMarkdownExportResult =
 	  };
 
 export function openWhispering() {
-	const workspace = createWhispering();
+	const workspace = createWhispering({
+		defaultTranscriptionService: 'parakeet',
+	});
 
 	const idb = attachIndexedDb(workspace.ydoc);
 	attachBroadcastChannel(workspace.ydoc);

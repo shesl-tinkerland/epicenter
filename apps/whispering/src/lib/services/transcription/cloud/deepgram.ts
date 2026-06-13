@@ -88,7 +88,7 @@ export const DeepgramTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			apiKey: string;
 			modelName: string;
 		},
@@ -107,8 +107,8 @@ export const DeepgramTranscriptionServiceLive = {
 			paragraphs: 'true',
 		});
 
-		if (options.outputLanguage !== 'auto') {
-			params.append('language', options.outputLanguage);
+		if (options.spokenLanguage !== 'auto') {
+			params.append('language', options.spokenLanguage);
 		}
 
 		if (options.prompt) {

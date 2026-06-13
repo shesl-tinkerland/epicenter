@@ -81,7 +81,7 @@ export const SpeachesTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			modelId: string;
 			baseUrl: string;
 		},
@@ -94,8 +94,8 @@ export const SpeachesTranscriptionServiceLive = {
 			}),
 		);
 		formData.append('model', options.modelId);
-		if (options.outputLanguage !== 'auto') {
-			formData.append('language', options.outputLanguage);
+		if (options.spokenLanguage !== 'auto') {
+			formData.append('language', options.spokenLanguage);
 		}
 		if (options.prompt) formData.append('prompt', options.prompt);
 

@@ -38,7 +38,9 @@ type RecordingMarkdownExportResult =
 	  };
 
 export function openWhispering() {
-	const workspace = createWhispering();
+	const workspace = createWhispering({
+		defaultTranscriptionService: 'OpenAI',
+	});
 
 	const idb = attachIndexedDb(workspace.ydoc);
 	attachBroadcastChannel(workspace.ydoc);

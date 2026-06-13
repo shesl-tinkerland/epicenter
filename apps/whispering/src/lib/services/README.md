@@ -11,7 +11,7 @@ case 'OpenAI': {
 	const { data, error } = await services.transcriptions.openai.transcribe(
 		audio,
 		{
-			outputLanguage,
+			spokenLanguage,
 			prompt,
 			apiKey: deviceConfig.get('providers.openai.apiKey'),
 			modelName: settings.get('transcription.openai.model'),

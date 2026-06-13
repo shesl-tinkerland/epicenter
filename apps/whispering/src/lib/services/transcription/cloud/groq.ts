@@ -79,7 +79,7 @@ export const GroqTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			apiKey: string;
 			modelName: string;
 			baseURL?: string;
@@ -122,9 +122,9 @@ export const GroqTranscriptionServiceLive = {
 					file,
 					model: options.modelName,
 					language:
-						options.outputLanguage === 'auto'
+						options.spokenLanguage === 'auto'
 							? undefined
-							: options.outputLanguage,
+							: options.spokenLanguage,
 					prompt: options.prompt ? options.prompt : undefined,
 				});
 				return transcription.text.trim();

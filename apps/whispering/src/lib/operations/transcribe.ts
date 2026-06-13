@@ -71,7 +71,7 @@ type CloudTranscribe = (
 	audio: Blob,
 	options: {
 		prompt: string;
-		outputLanguage: string;
+		spokenLanguage: SupportedLanguage;
 		apiKey: string;
 		modelName: string;
 		baseURL?: string;
@@ -100,7 +100,7 @@ function isCloudProviderId(id: TranscriptionServiceId): id is CloudProviderId {
 	return id in CLOUD_TRANSCRIBERS;
 }
 
-function getOutputLanguage(): SupportedLanguage {
+function getSpokenLanguage(): SupportedLanguage {
 	const language = settings.get('transcription.language');
 	for (const supportedLanguage of SUPPORTED_LANGUAGES) {
 		if (supportedLanguage === language) {
@@ -289,13 +289,13 @@ async function dispatchUploadTranscription(
 		await loadForCloudUpload(recordingId);
 	if (loadError) return Err(loadError);
 
-	const outputLanguage = getOutputLanguage();
+	const spokenLanguage = getSpokenLanguage();
 	const prompt = settings.get('transcription.prompt');
 	const provider = PROVIDERS[selectedService];
 
 	if (provider.location === 'self-hosted') {
 		return SpeachesTranscriptionServiceLive.transcribe(audio, {
-			outputLanguage,
+			spokenLanguage,
 			prompt,
 			modelId: deviceConfig.get(provider.modelIdConfigKey),
 			baseUrl: deviceConfig.get(provider.endpointConfigKey),
@@ -304,7 +304,7 @@ async function dispatchUploadTranscription(
 
 	if (provider.location === 'cloud' && isCloudProviderId(selectedService)) {
 		return CLOUD_TRANSCRIBERS[selectedService](audio, {
-			outputLanguage,
+			spokenLanguage,
 			prompt,
 			apiKey: deviceConfig.get(provider.apiKeyConfigKey),
 			modelName: settings.get(provider.modelSettingKey),

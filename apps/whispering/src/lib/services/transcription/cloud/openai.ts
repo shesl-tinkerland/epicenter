@@ -87,7 +87,7 @@ export const OpenaiTranscriptionServiceLive = {
 		audioBlob: Blob,
 		options: {
 			prompt: string;
-			outputLanguage: string;
+			spokenLanguage: string;
 			apiKey: string;
 			modelName: string;
 			baseURL?: string;
@@ -132,8 +132,8 @@ export const OpenaiTranscriptionServiceLive = {
 					file,
 					model: options.modelName,
 					language:
-						options.outputLanguage !== 'auto'
-							? options.outputLanguage
+						options.spokenLanguage !== 'auto'
+							? options.spokenLanguage
 							: undefined,
 					prompt: options.prompt || undefined,
 				});
