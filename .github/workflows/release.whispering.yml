@@ -132,6 +132,14 @@ jobs:
         with:
           arch: x64
 
+      - name: Configure CMake for MSVC Ninja (Windows)
+        if: ${{ matrix.os == 'windows' }}
+        shell: pwsh
+        run: |
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CC=cl" >> $env:GITHUB_ENV
+          "CXX=cl" >> $env:GITHUB_ENV
+
       # Setup Bun package manager
       - name: setup bun
         uses: oven-sh/setup-bun@v2
