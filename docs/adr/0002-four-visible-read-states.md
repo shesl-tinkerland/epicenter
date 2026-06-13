@@ -5,12 +5,12 @@ nonconforming, newer-writer, unreadable), and `storedCount()` equals the sum of
 the four `scan()` buckets. The fourth state, `unreadable`, is the load-bearing
 one: most Epicenter apps run encrypted tables, and a row whose key version is
 missing from the keyring decrypts to nothing. That row used to be invisible
-everywhere (`entries()` skipped it, `size` subtracted it, only a bare count
-recorded it), which is the encrypted twin of the schema-edit silent drop. We
-taught the shared `ObservableKvStore` contract to enumerate present-but-
-unreadable entries (`unreadableEntries()`, plus an O(1) `unreadableReason(key)`
-point probe) and redefined the raw count to include them, so no row can sit in
-storage and be invisible to every read.
+everywhere (a readable-only iterator skipped it, `size` subtracted it, only a
+bare count recorded it), which is the encrypted twin of the schema-edit silent
+drop. We taught the shared `ObservableKvStore` contract to surface every stored
+entry as `present` or `unreadable` in one classified pass (`reads()`, with a
+`read(key)` point form) and redefined the raw count to include the unreadable
+ones, so no row can sit in storage and be invisible to every read.
 
 ## Consequences
 

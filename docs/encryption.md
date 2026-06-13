@@ -290,7 +290,7 @@ What it does not get is plaintext application values.
 ## Error handling and unreadable data
 Decryption failures do not take down the whole observer stream.
 The wrapper catches failures, logs a warning, skips the unreadable entry, and keeps going.
-It also exposes `unreadableEntries()`, which enumerates the skipped entries (each with a reason), and counts them in `size` alongside the readable ones.
+It also exposes `reads()`, which walks every stored entry classified as `present` or `unreadable` (each unreadable one carrying a reason), and counts the unreadable ones in `size` alongside the readable ones.
 That makes corruption or missing key versions visible without forcing a hard crash on every read.
 
 ## What this means for a security review
