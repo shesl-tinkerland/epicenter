@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
-const ACTIVE_ROOTS = ['apps', 'examples', 'packages', 'playground'];
+const ACTIVE_ROOTS = ['apps', 'examples', 'packages'];
 const IGNORED_DIRS = new Set([
 	'.git',
 	'.svelte-kit',
