@@ -78,8 +78,10 @@ const { error } = workspace.tables.entries.set(row);
 // Err(NewerWriterRefusal) when stored _v > this binary's latest version.
 
 // Repair is app code, not API: fix or discard queued rows deliberately.
-for (const err of table.getAllInvalid()) {
-  if (isFixable(err)) table.set(fix(err.row));
+// Every parse error carries `row` (the raw stored value), so all three
+// nonconforming causes repair from it.
+for (const err of table.conformance().nonconforming) {
+  table.set(rebuildFrom(err.row)); // refusal surfaces at this call site
 }
 ```
 
@@ -128,6 +130,26 @@ Each loses to a named invariant, not to taste. Do not reopen without new facts.
 | Jazz-style drain | Whole-row LWW makes write-back either clobber-prone (fresh ts) or invariant-breaking (preserved ts). Safe for Jazz's field-level CRDTs only. |
 | Field-level CRDT rows (Y.Map per row) | Kills versioned-row model and the measured `YKeyValueLww` storage wins; the write guard buys the load-bearing 10 percent for 1 percent of the cost. |
 | Per-user Durable Object SQLite + intent updates | Deletes the local-first substrate (daemon, materializers, offline); the offline outbox rebuilds a worse sync engine. Server-side SQLite as a read-only projection inside the existing room DO remains a future option. |
+
+## Grill round 2: read-surface consolidation (2026-06-12, post-wave-3)
+
+A second adversarial pass (Codex + the implementer, after waves 1 to 3 landed) asked whether `conformance()` earns a separate method at all. The honest answer is that from scratch it would not: `get`, `getAll`, `getAllValid`, `getAllInvalid`, `filter`, `find`, and `conformance` all walk the same `ykv.entries() -> parseRow` boundary, and a list-plus-banner view now scans twice (`fromTable` reads `getAllValid`, `fromTableConformance` reads `conformance`). The ideal shape is a single classified scan:
+
+```ts
+table.scan(): { rows: TRow[]; nonconforming: TableParseError[]; newerWriter: TableParseError[]; storedCount: number }
+```
+
+with `getAll`, `getAllValid`, `getAllInvalid`, and `conformance` deleted, `filter`/`find` kept only if their short-circuit (find) or one-pass-predicate (filter) earns it, and `count`/`has` renamed to `storedCount`/`hasStored` to stop implying a parsed read.
+
+**Why this is NOT folded into this spec's waves**: `@epicenter/workspace` is a published package (v0.2.0, not private) and `getAllValid()` / `getAllInvalid()` are documented in `packages/workspace/README.md`. `getAllValid()` alone has ~26 production callers across 8 apps plus the materializers and daemon. Collapsing the read surface is a deliberate semver-major migration of a published contract, a different product decision from "make nonconforming rows visible." Bundling it would turn a focused, already-clean visibility fix into a 30-plus-caller breaking sweep. It belongs in its own spec and its own build-prove-remove wave sequence (see `cohesive-clean-breaks` wave ordering).
+
+**What round 2 DID change here (cheap, additive, in-scope)**:
+- Every `TableParseError` variant now carries `row` (the raw stored value including `_v`), not just `ValidationFailed`. Before this, the repair UI could only repair one of three nonconforming causes; now all three (failed validation, failed migration, corrupt stamp) repair from the same raw value. Committed as `feat(workspace): carry the raw stored value on every table parse error`.
+
+**Recorded for the follow-up spec** (do not silently drift toward it):
+- Collapse the bulk read surface into `table.scan()`; delete `getAll`/`getAllValid`/`getAllInvalid`/`conformance`; migrate the 26+ `getAllValid()` callers; delete `fromTableConformance` (the single scan feeds `fromTable` directly).
+- Rename `count()`/`has()` to `storedCount()`/`hasStored()`.
+- Consider `bulkSet`/`clear` returning `{ refused: TableWriteError[] }` (carrying `storedVersion`) instead of `string[]`, so import banners can show the version skew.
 
 ## Architecture
 
