@@ -159,6 +159,27 @@ describe('scan', () => {
 		expect(nonconforming.every((e) => e.name === 'UnknownVersion')).toBe(true);
 	});
 
+	test('a fractional version above the latest lands in nonconforming, not newerWriter', () => {
+		const { yarray, table } = setup();
+		// A non-integer `_v` is never a real schema stamp: a newer binary stamps
+		// whole versions. A corrupt fractional stamp above the latest is a
+		// repairable nonconforming row, not a "your binary is stale" signal.
+		yarray.push([
+			{ key: '1', val: { id: '1', title: 'corrupt', _v: 3.5 }, ts: 0 },
+		]);
+
+		const { rows, nonconforming, newerWriter } = table.scan();
+
+		expect(rows).toEqual([]);
+		expect(newerWriter).toEqual([]);
+		expect(nonconforming).toHaveLength(1);
+		const error = nonconforming[0]!;
+		expect(error.name).toBe('UnknownVersion');
+		if (error.name !== 'UnknownVersion')
+			throw new Error('Expected UnknownVersion');
+		expect(error.version).toBe(3.5);
+	});
+
 	test('scan is available on the readonly surface', () => {
 		const { ykv, yarray, definition } = setup();
 		const readonly = createReadonlyTable(ykv, definition, 'test');

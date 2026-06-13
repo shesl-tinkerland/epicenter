@@ -11,6 +11,8 @@
  * - set() over a newer-stamped row returns Err(NewerWriterRefusal); the row survives
  * - set() over an unreadable (undecryptable) row returns Err(UnreadableRefusal); it survives
  * - set() over same-version, corrupt, or absent rows writes as before
+ * - set()/clear() over a fractional `_v` above the latest repair it (a fraction
+ *   is corruption, not a newer writer); read and write share one newer rule
  * - the guard reads the pending view inside an open transaction
  * - bulkSet() skips refused rows per chunk and reports them as TableWriteError; onProgress unchanged
  * - clear() skips newer-stamped and unreadable rows and reports them; delete(id) stays unguarded
@@ -153,6 +155,35 @@ describe('set write guard', () => {
 		expectOk(table.set({ id: '1', title: 'repaired' }));
 		expectOk(table.set({ id: '2', title: 'also repaired' }));
 		expect(table.scan().nonconforming).toHaveLength(0);
+	});
+
+	test('set over a fractional-stamped row repairs it instead of refusing as newer', () => {
+		const { yarray, table } = setup();
+
+		// A fractional `_v` above the latest is corruption, never a newer writer:
+		// no binary stamps a fraction. scan() classifies it as nonconforming, so
+		// the write guard must let the overwrite through to repair it rather than
+		// refuse it as NewerWriter. Read and write share one newer-writer rule.
+		yarray.push([
+			{ key: '1', val: { id: '1', title: 'corrupt', _v: 3.5 }, ts: 0 },
+		]);
+
+		expectOk(table.set({ id: '1', title: 'repaired' }));
+
+		expect(expectOk(table.get('1'))).toEqual({ id: '1', title: 'repaired' });
+		expect(table.scan().nonconforming).toHaveLength(0);
+	});
+
+	test('clear deletes a fractional-stamped row instead of refusing it as newer', () => {
+		const { yarray, table } = setup();
+		yarray.push([
+			{ key: '1', val: { id: '1', title: 'corrupt', _v: 3.5 }, ts: 0 },
+		]);
+
+		const { refused } = table.clear();
+
+		expect(refused).toEqual([]);
+		expect(table.storedCount()).toBe(0);
 	});
 
 	test('guard reads the pending view inside an open transaction', () => {
