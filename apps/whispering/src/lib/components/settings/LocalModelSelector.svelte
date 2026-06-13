@@ -214,9 +214,10 @@
 				<Empty.Media variant="icon">
 					<HardDriveDownload class="size-5" />
 				</Empty.Media>
-				<Empty.Title>No model installed</Empty.Title>
+				<Empty.Title>No local model installed</Empty.Title>
 				<Empty.Description>
-					Download the recommended model to start transcribing on this device.
+					Download the recommended model to start local transcription on this
+					device.
 				</Empty.Description>
 				<Empty.Content>
 					{#if recommendedState.type === 'downloading'}

@@ -26,19 +26,19 @@ export function registerOnboarding() {
 	}
 
 	if (!isTranscriptionServiceConfigured(selectedService)) {
-		const missingConfig = (
+		const description = (
 			{
-				cloud: `${selectedService.label} API key`,
-				'self-hosted': `${selectedService.label} server URL`,
-				local: `${selectedService.label} model file`,
+				cloud: `Please add your ${selectedService.label} API key to get started.`,
+				'self-hosted': `Please set your ${selectedService.label} server URL to get started.`,
+				local: `Please download or select a ${selectedService.label} model to get started.`,
 			} as const
 		)[selectedService.location];
 
 		report.info({
 			title: 'Welcome to Whispering!',
-			description: `Please configure your ${missingConfig} to get started.`,
+			description,
 			action: {
-				label: 'Configure',
+				label: 'Set up',
 				onClick: () => goto('/settings/transcription'),
 			},
 		});

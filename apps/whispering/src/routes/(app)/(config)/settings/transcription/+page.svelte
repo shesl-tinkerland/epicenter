@@ -49,7 +49,7 @@
 		return entry?.location === 'cloud' ? entry : null;
 	});
 
-	const outputLanguageLabel = $derived(
+	const spokenLanguageLabel = $derived(
 		SUPPORTED_LANGUAGES_OPTIONS.find(
 			(i) => i.value === settings.get('transcription.language'),
 		)?.label,
@@ -72,7 +72,8 @@
 <Field.Set>
 	<Field.Legend>Transcription</Field.Legend>
 	<Field.Description>
-		Configure your Whispering transcription preferences.
+		Choose where transcription runs, which model to use, and how language
+		hints work.
 	</Field.Description>
 	<Field.Separator />
 	<Field.Group>
@@ -315,7 +316,7 @@
 					<LocalModelSelector
 						models={PARAKEET_MODELS}
 						title="Parakeet Model"
-						description="Parakeet is an NVIDIA NeMo model optimized for fast local transcription. It automatically detects the language and doesn't support manual language selection."
+						description="Parakeet is the recommended fast local model. It runs on this device, downloads once, and automatically detects supported spoken languages."
 						bind:value={() => deviceConfig.get('transcription.parakeet.model'),
 						(v) => deviceConfig.set('transcription.parakeet.model', v)}
 					>
@@ -421,15 +422,15 @@
 		{/if}
 
 		<Field.Field>
-			<Field.Label for="output-language">Output Language</Field.Label>
+			<Field.Label for="spoken-language">Spoken Language</Field.Label>
 			<Select.Root
 				type="single"
 				bind:value={() => settings.get('transcription.language'),
 					(v) => settings.set('transcription.language', v)}
 				disabled={!currentServiceCapabilities.supportsLanguage}
 			>
-				<Select.Trigger id="output-language" class="w-full">
-					{outputLanguageLabel ?? 'Select a language'}
+				<Select.Trigger id="spoken-language" class="w-full">
+					{spokenLanguageLabel ?? 'Select a spoken language'}
 				</Select.Trigger>
 				<Select.Content>
 					{#each SUPPORTED_LANGUAGES_OPTIONS as item}
@@ -441,8 +442,13 @@
 				<Field.Description>
 					{settings.get('transcription.service') ===
 					'moonshine'
-						? 'Moonshine is English-only'
-						: 'Parakeet automatically detects the language'}
+						? 'Moonshine uses English-only models.'
+						: 'Parakeet detects the spoken language automatically.'}
+				</Field.Description>
+			{:else}
+				<Field.Description>
+					Auto lets the provider detect the spoken language. Pick a language
+					only when you want to send a specific hint.
 				</Field.Description>
 			{/if}
 		</Field.Field>
@@ -458,8 +464,8 @@
 			/>
 			<Field.Description>
 				{currentServiceCapabilities.supportsPrompt
-					? 'Helps transcription service (e.g., Whisper) better recognize specific terms, names, or context during initial transcription. Not for text transformations - use the Transformations tab for post-processing rules.'
-					: 'System prompt is not supported for local models (Parakeet, Moonshine)'}
+					? 'Helps services that support prompts recognize specific terms, names, or context during transcription. For rewriting or translation, use Transformations.'
+					: 'This transcription service does not support prompts.'}
 			</Field.Description>
 		</Field.Field>
 	</Field.Group>

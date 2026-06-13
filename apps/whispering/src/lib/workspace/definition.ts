@@ -276,7 +276,7 @@ const recording = {
 const transcription = {
 	'transcription.service': defineKv(
 		field.select(TRANSCRIPTION_SERVICE_IDS),
-		() => 'moonshine' as const,
+		() => 'parakeet' as const,
 	),
 	'transcription.openai.model': defineKv(
 		field.string(),

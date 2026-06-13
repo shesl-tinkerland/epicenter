@@ -253,7 +253,8 @@ export const PROVIDERS = {
 	parakeet: {
 		location: 'local',
 		label: 'Parakeet',
-		description: 'NVIDIA NeMo model for fast local transcription',
+		description:
+			'Recommended fast local transcription with automatic language detection',
 		capabilities: { supportsPrompt: false, supportsLanguage: false },
 		modelConfigKey: 'transcription.parakeet.model',
 		modelKind: 'directory',
@@ -261,7 +262,7 @@ export const PROVIDERS = {
 	moonshine: {
 		location: 'local',
 		label: 'Moonshine',
-		description: 'Efficient ONNX model by UsefulSensors',
+		description: 'Small English-only local transcription',
 		capabilities: { supportsPrompt: false, supportsLanguage: false },
 		modelConfigKey: 'transcription.moonshine.model',
 		modelKind: 'directory',

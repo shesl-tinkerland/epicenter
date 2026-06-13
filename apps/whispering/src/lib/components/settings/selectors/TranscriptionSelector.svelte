@@ -57,6 +57,15 @@
 			: [],
 	);
 
+	const localServiceSearchKeywords = {
+		whispercpp: 'whisper cpp ggml gguf local offline',
+		parakeet: 'nvidia nemo onnx parakeet local offline',
+		moonshine: 'usefulsensors onnx moonshine local offline',
+	} satisfies Record<
+		Extract<TranscriptionProviderEntry, { location: 'local' }>['id'],
+		string
+	>;
+
 	const combobox = useCombobox();
 
 	// Track which services are expanded
@@ -144,7 +153,9 @@
 							{@const modelName = getSelectedModelNameOrUrl(service)}
 
 							<Command.Item
-								value={`${service.id} ${service.label} whisper cpp ggml local offline`}
+								value={`${service.id} ${service.label} ${service.description} ${
+									localServiceSearchKeywords[service.id]
+								}`}
 								onSelect={() => {
 									settings.set('transcription.service', service.id);
 									combobox.closeAndFocusTrigger();
@@ -164,7 +175,7 @@
 											{modelName}
 										</div>
 									{:else if !isConfigured}
-										<span class="text-xs text-warning">Model required</span>
+										<span class="text-xs text-warning">Model needed</span>
 									{/if}
 								</div>
 							</Command.Item>
