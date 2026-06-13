@@ -87,7 +87,7 @@ describe('openProject', () => {
 		});
 	});
 
-	test('rejects an invalid mount name before opening the mount', async () => {
+	test('surfaces the loader name rejection and never opens the mount', async () => {
 		writeConfig(
 			`import { writeFileSync } from 'node:fs';
 			import { join } from 'node:path';
@@ -101,11 +101,7 @@ describe('openProject', () => {
 		);
 
 		const result = await openProject({ epicenterRoot, auth: stubAuthClient() });
-		expect(expectErr(result)).toMatchObject({
-			name: 'MountRejected',
-			mount: '__proto__',
-			reason: 'invalid',
-		});
+		expect(expectErr(result).name).toBe('ProjectConfigInvalid');
 		expect(await Bun.file(join(epicenterRoot, 'opened')).exists()).toBe(false);
 	});
 

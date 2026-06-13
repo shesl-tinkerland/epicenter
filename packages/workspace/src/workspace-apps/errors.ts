@@ -1,9 +1,10 @@
 /**
- * Structured errors for mount registration and startup.
+ * Structured errors for bringing a project's mount online.
  *
- * Mount-name validation surfaces `MountRejected` before any mount opens.
- * Startup wraps any throw from a mount's `open(ctx)` in `MountOpenFailed` so
- * callers can dispose siblings on failure.
+ * Startup refuses to open at all when machine auth is signed out, and wraps any
+ * throw from the mount's `open(ctx)` in `MountOpenFailed`. Mount-name validity
+ * is owned elsewhere: format at load (`ProjectConfigError`) and uniqueness over
+ * the served set at bind (`StartupError`).
  */
 
 import {
@@ -11,17 +12,8 @@ import {
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
-import type { MountNameIssue } from '../daemon/mount-validation.js';
 
 export const WorkspaceAppError = defineErrors({
-	MountRejected: ({ mount, reason }: MountNameIssue) => ({
-		message:
-			reason === 'duplicate'
-				? `Duplicate mount "${mount}" in epicenter.config.ts.`
-				: `Invalid mount name "${mount}" in epicenter.config.ts: use letters, numbers, "_" or "-", and avoid reserved object keys.`,
-		mount,
-		reason,
-	}),
 	WorkspaceAuthSignedOut: () => ({
 		message:
 			'Cannot open mounts while machine auth is signed out. Run `epicenter auth login` first.',

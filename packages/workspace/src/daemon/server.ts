@@ -62,7 +62,9 @@ export type DaemonServer = ReturnType<typeof createDaemonServer>;
 /**
  * Start a daemon server for already-started mounts. The caller must claim the
  * daemon lease before mount startup; this function owns only mount-name
- * validation and socket binding.
+ * uniqueness over the served set and socket binding. (Per-name format is
+ * validated upstream at config load; the served set is the only place two
+ * mounts can collide, since one config can never collide with itself.)
  *
  * The lease (`lease.ts`) is the sole ownership primitive: holding it means no
  * other daemon is live, so any leftover socket file is stale and `Bun.serve`

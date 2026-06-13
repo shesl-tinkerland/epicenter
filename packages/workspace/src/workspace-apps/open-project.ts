@@ -7,8 +7,8 @@
  *
  *   1. `loadProjectConfig(epicenterRoot)` imports `epicenter.config.ts` and
  *      validates that its default export is a single `Mount`.
- *   2. Refuse to start when machine auth is signed out, then validate the
- *      configured mount name.
+ *   2. Refuse to start when machine auth is signed out. (The mount name was
+ *      already format-validated at load time, in `loadProjectConfig`.)
  *   3. Build the `MountContext` and run `open(ctx)`, returning the started
  *      mount or a structured error.
  *
@@ -29,7 +29,6 @@ import {
 	type ProjectConfigError,
 } from '../config/load-project-config.js';
 import type { Mount, MountContext } from '../daemon/define-mount.js';
-import { validateMountNames } from '../daemon/mount-validation.js';
 import type { StartedMount } from '../daemon/types.js';
 import { asDeviceId } from '../document/device-id.js';
 import { hashYDocClientId } from '../shared/client-id.js';
@@ -66,14 +65,10 @@ export async function openProject(
 		return WorkspaceAppError.WorkspaceAuthSignedOut();
 	}
 
-	const issue = validateMountNames([mount.name]);
-	if (issue !== null) {
-		return WorkspaceAppError.MountRejected(issue);
-	}
-
-	// Sign-out is guarded above, so `auth.state.ownerId` is stable here. Pin it
-	// to the mount's context so the mount builds URLs without re-reading auth
-	// state.
+	// The mount name was format-validated at load time (`loadProjectConfig`), so
+	// it is well-formed here. Sign-out is guarded above, so `auth.state.ownerId`
+	// is stable: pin it to the mount's context so the mount builds URLs without
+	// re-reading auth state.
 	const ownerId = auth.state.ownerId;
 
 	return openOneMount({ mount, epicenterRoot, auth, ownerId });

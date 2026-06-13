@@ -49,6 +49,16 @@ describe('loadProjectConfig', () => {
 		expect(data.name).toBe('demo');
 	});
 
+	test('rejects a Mount whose name fails the format rule', async () => {
+		writeConfig("export default { name: '__proto__', open() {} };\n");
+
+		const { error } = await loadProjectConfig(epicenterRoot);
+		expect(error).toMatchObject({
+			name: 'ProjectConfigInvalid',
+			detail: expect.stringContaining('"__proto__" is invalid'),
+		});
+	});
+
 	test('rejects a non-Mount default export', async () => {
 		writeConfig('export default { notAMount: true };\n');
 
