@@ -8,7 +8,8 @@
  * Key behaviors:
  * - valid rows count into `valid`; nothing lands in the queues
  * - ValidationFailed and MigrationFailed rows land in `nonconforming`
- * - UnknownVersion above the binary's latest version lands in `newerWriter`
+ * - a `_v` above the binary's latest version lands in `newerWriter` as a
+ *   distinct `NewerWriter` error carrying version and latestVersion
  * - UnknownVersion at or below the latest version (corrupt stamp) lands in `nonconforming`
  * - conformance() exists on the readonly surface (read-only consumers report too)
  * - count() includes nonconforming rows; conformance().valid is the filtered count
@@ -104,12 +105,31 @@ describe('conformance', () => {
 		expect(nonconforming).toEqual([]);
 		expect(newerWriter).toHaveLength(1);
 		const error = newerWriter[0]!;
-		expect(error.name).toBe('UnknownVersion');
-		if (error.name !== 'UnknownVersion')
-			throw new Error('Expected UnknownVersion');
+		expect(error.name).toBe('NewerWriter');
+		if (error.name !== 'NewerWriter')
+			throw new Error('Expected NewerWriter');
 		expect(error.version).toBe(2);
+		expect(error.latestVersion).toBe(1);
 		// The raw stored value is carried even though this binary cannot parse it.
 		expect(error.row).toEqual({ id: '1', title: 'future', extra: true, _v: 2 });
+	});
+
+	test('get reports a newer-stamped row as NewerWriter, not UnknownVersion', () => {
+		const { yarray, table } = setup();
+		yarray.push([
+			{ key: '1', val: { id: '1', title: 'future', _v: 2 }, ts: 0 },
+		]);
+
+		const { data, error } = table.get('1');
+
+		expect(data).toBeNull();
+		expect(error).not.toBeNull();
+		if (!error) throw new Error('Expected an error');
+		expect(error.name).toBe('NewerWriter');
+		if (error.name !== 'NewerWriter') throw new Error('Expected NewerWriter');
+		expect(error.id).toBe('1');
+		expect(error.version).toBe(2);
+		expect(error.latestVersion).toBe(1);
 	});
 
 	test('corrupt version stamps land in nonconforming, not newerWriter', () => {

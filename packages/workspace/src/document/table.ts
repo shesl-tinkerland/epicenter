@@ -37,22 +37,31 @@ import {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Errors produced when parsing stored rows against a table's schema.
+ * Errors produced when this binary should understand a stored row but cannot
+ * parse it against the table's schema: a corrupt or unknown `_v` stamp at or
+ * below the latest known version, failed validation, or a failed migration.
  *
- * Surfaced by `get()`, `getAll()`, `getAllValid()`, `getAllInvalid()`,
- * `filter()`, `find()`, `conformance()`, and `update()`. "Not found" on
- * `get()` / `update()` is *not* an error: it's a legitimate absence and is
- * returned as `data: null` instead.
+ * Surfaced (alongside {@link TableNewerWriterError}) by `get()`, `getAll()`,
+ * `getAllValid()`, `getAllInvalid()`, `filter()`, `find()`, `conformance()`,
+ * and `update()`. "Not found" on `get()` / `update()` is *not* an error: it's
+ * a legitimate absence and is returned as `data: null` instead.
  *
  * Every variant carries `row`: the raw stored value as it sits in the CRDT,
  * including the library-managed `_v` stamp. The conformance repair flow reads
  * it to rebuild a conforming row (coerce the fields that still fit, default
- * the rest) and write it back with `set()`. The one cause it cannot repair is
- * a `newerWriter` row (an `UnknownVersion` stamped above this binary's latest
- * version): that needs an app update, and `set()` refuses it anyway.
+ * the rest) and write it back with `set()`.
+ *
+ * A row stamped *above* this binary's latest known version is not a parse
+ * error: it is a {@link TableNewerWriterError}, a staleness signal that needs
+ * an app update rather than a repair, and `set()` refuses it.
  */
 export const TableParseError = defineErrors({
-	/** The row's `_v` did not match any registered schema version. */
+	/**
+	 * The row's `_v` is a corrupt or non-numeric stamp, or a numeric stamp at
+	 * or below the latest known version that matches no registered schema. A
+	 * `_v` strictly above the latest known version is a
+	 * {@link TableNewerWriterError} instead.
+	 */
 	UnknownVersion: ({
 		id,
 		version,
@@ -101,6 +110,60 @@ export const TableParseError = defineErrors({
 	}),
 });
 export type TableParseError = InferErrors<typeof TableParseError>;
+
+// ════════════════════════════════════════════════════════════════════════════
+// TABLE NEWER-WRITER ERROR
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A row a newer binary owns: its `_v` is a number strictly above this binary's
+ * latest known schema version.
+ *
+ * This is not a data-integrity failure; the row is presumably fine, this binary
+ * is just too old to read it. It is not repairable here (the user needs an app
+ * update), and `set()` refuses to clobber it for the same reason. Kept distinct
+ * from {@link TableParseError} so the "this binary is stale" case is a type fact
+ * every consumer can switch on, not a runtime comparison each caller re-derives.
+ *
+ * Carries `version` (the stored stamp), `latestVersion` (what this binary
+ * knows), and the raw `row` so a UI can report exactly how far ahead it is.
+ */
+export const TableNewerWriterError = defineErrors({
+	/** The row's `_v` is a number strictly above this binary's latest version. */
+	NewerWriter: ({
+		id,
+		version,
+		latestVersion,
+		row,
+	}: {
+		id: string;
+		version: number;
+		latestVersion: number;
+		row: unknown;
+	}) => ({
+		message: `Row '${id}' was written by a newer version of this app (schema version ${version}, this app knows ${latestVersion}). Update the app to read it.`,
+		id,
+		version,
+		latestVersion,
+		row,
+	}),
+});
+export type TableNewerWriterError = InferErrors<typeof TableNewerWriterError>;
+
+// ════════════════════════════════════════════════════════════════════════════
+// TABLE READ ERROR
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Every reason a read cannot resolve a stored entry to a conforming row: a
+ * parse failure this binary should understand ({@link TableParseError}) or a
+ * row a newer binary owns ({@link TableNewerWriterError}).
+ *
+ * Surfaced by `get()` and `update()`. A later wave adds the encrypted
+ * `UnreadableRow` case (an entry present in storage that this binary holds no
+ * key for), at which point this union grows a third member.
+ */
+export type TableReadError = TableParseError | TableNewerWriterError;
 
 // ════════════════════════════════════════════════════════════════════════════
 // TABLE WRITE ERROR
@@ -153,8 +216,9 @@ export type TableWriteError = InferErrors<typeof TableWriteError>;
  *   iterates `getAllInvalid()` and fixes via `set()` or discards via
  *   `delete()`.
  * - `newerWriter`: rows stamped by a schema version above this binary's
- *   latest. Not repairable here; the user needs an app update. `set()`
- *   refuses these rows for the same reason (see {@link TableWriteError}).
+ *   latest, classified as {@link TableNewerWriterError}. Not repairable here;
+ *   the user needs an app update. `set()` refuses these rows for the same
+ *   reason (see {@link TableWriteError}).
  */
 export type TableConformance = {
 	/** Count of rows that parse to the latest schema. */
@@ -162,7 +226,7 @@ export type TableConformance = {
 	/** Rows this binary should understand but cannot parse. */
 	nonconforming: TableParseError[];
 	/** Rows stamped by a newer schema version than this binary knows. */
-	newerWriter: TableParseError[];
+	newerWriter: TableNewerWriterError[];
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -369,10 +433,10 @@ export type ReadonlyTable<
 	 */
 	schema: TObject<LastVersion<TVersions>>;
 
-	get(id: string): Result<TRow | null, TableParseError>;
-	getAll(): Array<Result<TRow, TableParseError>>;
+	get(id: string): Result<TRow | null, TableReadError>;
+	getAll(): Array<Result<TRow, TableReadError>>;
 	getAllValid(): TRow[];
-	getAllInvalid(): TableParseError[];
+	getAllInvalid(): TableReadError[];
 	filter(predicate: (row: TRow) => boolean): TRow[];
 	find(predicate: (row: TRow) => boolean): TRow | undefined;
 	observe(
@@ -422,7 +486,7 @@ export type Table<
 	update(
 		id: string,
 		partial: Partial<Omit<TRow, 'id'>>,
-	): Result<TRow | null, TableParseError>;
+	): Result<TRow | null, TableReadError>;
 	/**
 	 * Delete one row by id. Deliberately unguarded: deletion intent is
 	 * shape-independent, so newer-stamped rows are deletable too.
@@ -509,13 +573,26 @@ export function createReadonlyTable<
 	 * Parse a stored row value. Injects `id` into the input, routes by stored
 	 * `_v` to the matching schema, validates, runs migrate, returns the
 	 * user-facing row (no `_v`).
+	 *
+	 * Classifies the failure where the version set is in scope: a `_v` strictly
+	 * above the latest known version is a {@link TableNewerWriterError} (this
+	 * binary is stale); everything else this binary should understand but
+	 * cannot is a {@link TableParseError}.
 	 */
-	function parseRow(id: string, input: unknown): Result<TRow, TableParseError> {
+	function parseRow(id: string, input: unknown): Result<TRow, TableReadError> {
 		const stored: Record<string, unknown> = {
 			...(input as Record<string, unknown>),
 			id,
 		};
 		const version = stored._v;
+		if (typeof version === 'number' && version > versions.length) {
+			return TableNewerWriterError.NewerWriter({
+				id,
+				version,
+				latestVersion: versions.length,
+				row: stored,
+			});
+		}
 		const schema =
 			typeof version === 'number' ? versionSchemas.get(version) : undefined;
 		if (!schema) {
@@ -547,14 +624,14 @@ export function createReadonlyTable<
 		definition,
 		schema: definition.schema,
 
-		get(id: string): Result<TRow | null, TableParseError> {
+		get(id: string): Result<TRow | null, TableReadError> {
 			const raw = ykv.get(id);
 			if (raw === undefined) return Ok(null);
 			return parseRow(id, raw);
 		},
 
-		getAll(): Array<Result<TRow, TableParseError>> {
-			const results: Array<Result<TRow, TableParseError>> = [];
+		getAll(): Array<Result<TRow, TableReadError>> {
+			const results: Array<Result<TRow, TableReadError>> = [];
 			for (const [key, entry] of ykv.entries()) {
 				results.push(parseRow(key, entry.val));
 			}
@@ -570,8 +647,8 @@ export function createReadonlyTable<
 			return rows;
 		},
 
-		getAllInvalid(): TableParseError[] {
-			const invalid: TableParseError[] = [];
+		getAllInvalid(): TableReadError[] {
+			const invalid: TableReadError[] = [];
 			for (const [key, entry] of ykv.entries()) {
 				const { error } = parseRow(key, entry.val);
 				if (error) invalid.push(error);
@@ -609,21 +686,25 @@ export function createReadonlyTable<
 		conformance(): TableConformance {
 			let valid = 0;
 			const nonconforming: TableParseError[] = [];
-			const newerWriter: TableParseError[] = [];
+			const newerWriter: TableNewerWriterError[] = [];
 			for (const [key, entry] of ykv.entries()) {
 				const { error } = parseRow(key, entry.val);
 				if (!error) {
 					valid++;
-				} else if (
-					error.name === 'UnknownVersion' &&
-					typeof error.version === 'number' &&
-					error.version > versions.length
-				) {
-					newerWriter.push(error);
-				} else {
-					// ValidationFailed, MigrationFailed, and corrupt stamps
-					// (UnknownVersion at or below the latest known version).
-					nonconforming.push(error);
+					continue;
+				}
+				// parseRow already classified the failure; group by name.
+				switch (error.name) {
+					case 'NewerWriter':
+						newerWriter.push(error);
+						break;
+					case 'UnknownVersion':
+					case 'ValidationFailed':
+					case 'MigrationFailed':
+						nonconforming.push(error);
+						break;
+					default:
+						error satisfies never;
 				}
 			}
 			return { valid, nonconforming, newerWriter };
@@ -731,7 +812,7 @@ export function createTable<
 		update(
 			id: string,
 			partial: Partial<Omit<TRow, 'id'>>,
-		): Result<TRow | null, TableParseError> {
+		): Result<TRow | null, TableReadError> {
 			const { data: current, error } = readonly.get(id);
 			if (error) return Err(error);
 			if (current === null) return Ok(null);

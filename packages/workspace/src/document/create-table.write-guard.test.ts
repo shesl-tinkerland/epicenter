@@ -13,7 +13,7 @@
  * - the guard reads the pending view inside an open transaction
  * - bulkSet() skips refused rows per chunk and reports them; onProgress unchanged
  * - clear() skips newer-stamped rows and reports them; delete(id) stays unguarded
- * - update() over a newer-stamped row already refuses via UnknownVersion (pinned)
+ * - update() over a newer-stamped row refuses via NewerWriter (pinned)
  *
  * See also:
  * - `create-table.test.ts` for core CRUD and migration behavior
@@ -200,16 +200,17 @@ describe('destructive ops', () => {
 });
 
 describe('update against newer-stamped rows', () => {
-	test('update refuses with UnknownVersion carrying the stored version', () => {
+	test('update refuses with NewerWriter carrying the stored version', () => {
 		const { oldDoc, newDoc, oldTable, newTable, sync } = setupTwoBinaries();
 
 		newTable.set({ id: '1', title: 'v2 row', rating: 2 });
 		sync(newDoc, oldDoc);
 
 		const error = expectErr(oldTable.update('1', { title: 'stale edit' }));
-		expect(error.name).toBe('UnknownVersion');
-		if (error.name !== 'UnknownVersion')
-			throw new Error('Expected UnknownVersion');
+		expect(error.name).toBe('NewerWriter');
+		if (error.name !== 'NewerWriter')
+			throw new Error('Expected NewerWriter');
 		expect(error.version).toBe(2);
+		expect(error.latestVersion).toBe(1);
 	});
 });

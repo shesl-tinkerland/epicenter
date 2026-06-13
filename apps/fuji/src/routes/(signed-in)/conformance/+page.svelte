@@ -188,11 +188,7 @@
 							<Table.Row>
 								<Table.Cell class="font-mono text-xs">{error.id}</Table.Cell>
 								<Table.Cell class="text-muted-foreground">
-									{#if error.name === 'UnknownVersion'}
-										Schema version {error.version}
-									{:else}
-										A newer version of Fuji
-									{/if}
+									Schema version {error.version}
 								</Table.Cell>
 							</Table.Row>
 						{/each}

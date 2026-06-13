@@ -200,7 +200,9 @@ export {
 	type ReadonlyTable,
 	type Table,
 	type TableConformance,
+	TableNewerWriterError,
 	TableParseError,
+	type TableReadError,
 	type Tables,
 	TableWriteError,
 } from './document/table.js';
