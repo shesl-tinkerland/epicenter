@@ -108,7 +108,7 @@ describe('set write guard', () => {
 
 		expectOk(table.set({ id: '1', title: 'repaired' }));
 		expectOk(table.set({ id: '2', title: 'also repaired' }));
-		expect(table.getAllInvalid()).toHaveLength(0);
+		expect(table.scan().nonconforming).toHaveLength(0);
 	});
 
 	test('guard reads the pending view inside an open transaction', () => {
@@ -148,12 +148,12 @@ describe('bulkSet write guard', () => {
 
 		expect(refused).toEqual(['2']);
 		expect(progress).toEqual([0.4, 0.8, 1]);
-		expect(oldTable.getAllValid().map((r) => r.id).sort()).toEqual([
-			'1',
-			'3',
-			'4',
-			'5',
-		]);
+		expect(
+			oldTable
+				.scan()
+				.rows.map((r) => r.id)
+				.sort(),
+		).toEqual(['1', '3', '4', '5']);
 
 		sync(oldDoc, newDoc);
 		expect(expectOk(newTable.get('2'))).toEqual({
@@ -176,7 +176,7 @@ describe('destructive ops', () => {
 		const { refused } = oldTable.clear();
 
 		expect(refused).toEqual(['keep']);
-		expect(oldTable.count()).toBe(1);
+		expect(oldTable.storedCount()).toBe(1);
 		sync(oldDoc, newDoc);
 		expect(expectOk(newTable.get('keep'))).toEqual({
 			id: 'keep',
@@ -208,8 +208,7 @@ describe('update against newer-stamped rows', () => {
 
 		const error = expectErr(oldTable.update('1', { title: 'stale edit' }));
 		expect(error.name).toBe('NewerWriter');
-		if (error.name !== 'NewerWriter')
-			throw new Error('Expected NewerWriter');
+		if (error.name !== 'NewerWriter') throw new Error('Expected NewerWriter');
 		expect(error.version).toBe(2);
 		expect(error.latestVersion).toBe(1);
 	});

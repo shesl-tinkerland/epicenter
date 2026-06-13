@@ -222,6 +222,7 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 				directory: join(baseDir, entry.subdir),
 				render: entry.render,
 				fileState: entry.fileState,
+				log,
 			});
 		}
 
@@ -318,7 +319,61 @@ const MaterializerWriteError = defineErrors({
 		message: `[markdown] teardown drain did not settle within ${timeoutMs}ms; abandoning pending writes`,
 		timeoutMs,
 	}),
+	/**
+	 * A `scan()` over a table surfaced entries that will not materialize: rows
+	 * the binary cannot parse, rows from a newer writer, or undecryptable rows.
+	 * The export projects only `scan().rows`; this records what it skipped so the
+	 * gap is in the log rather than silent.
+	 */
+	NonconformingRowsSkipped: ({
+		tableName,
+		nonconforming,
+		newerWriter,
+		unreadable,
+	}: {
+		tableName: string;
+		nonconforming: number;
+		newerWriter: number;
+		unreadable: number;
+	}) => ({
+		message: `[markdown] "${tableName}" skipped rows that did not materialize: ${nonconforming} nonconforming, ${newerWriter} from a newer writer, ${unreadable} unreadable`,
+		tableName,
+		nonconforming,
+		newerWriter,
+		unreadable,
+	}),
 });
+
+/**
+ * Log the issue buckets a `scan()` surfaced, if any. The markdown export only
+ * writes `scan().rows`; this makes the skipped buckets visible instead of a
+ * silent drop.
+ */
+function logSkippedRows(
+	log: Logger,
+	tableName: string,
+	scan: {
+		nonconforming: readonly unknown[];
+		newerWriter: readonly unknown[];
+		unreadable: readonly unknown[];
+	},
+): void {
+	if (
+		scan.nonconforming.length === 0 &&
+		scan.newerWriter.length === 0 &&
+		scan.unreadable.length === 0
+	) {
+		return;
+	}
+	log.warn(
+		MaterializerWriteError.NonconformingRowsSkipped({
+			tableName,
+			nonconforming: scan.nonconforming.length,
+			newerWriter: scan.newerWriter.length,
+			unreadable: scan.unreadable.length,
+		}),
+	);
+}
 
 /** Best-effort unlink; a missing file or a failed remove is ignored. */
 async function tryUnlink(directory: string, filename: string): Promise<void> {
@@ -396,7 +451,9 @@ async function materializeTable(opts: {
 		fileState.set(id, { filename, content });
 	}
 
-	for (const row of table.getAllValid()) {
+	const initialScan = table.scan();
+	logSkippedRows(log, table.name, initialScan);
+	for (const row of initialScan.rows) {
 		await writeRow(row.id, row);
 	}
 
@@ -445,13 +502,16 @@ async function rebuildTable(opts: {
 	directory: string;
 	render: RenderRow;
 	fileState: FileState;
+	log: Logger;
 }): Promise<{ deleted: number; written: number }> {
-	const { table, directory, render, fileState } = opts;
+	const { table, directory, render, fileState, log } = opts;
 	let deleted = 0;
 	let written = 0;
 
+	const scan = table.scan();
+	logSkippedRows(log, table.name, scan);
 	const rendered: { id: string; filename: string; content: string }[] = [];
-	for (const row of table.getAllValid()) {
+	for (const row of scan.rows) {
 		const r = await render(row);
 		rendered.push({ id: row.id, filename: r.filename, content: r.content });
 	}

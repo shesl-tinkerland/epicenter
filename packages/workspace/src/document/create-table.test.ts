@@ -30,8 +30,8 @@ describe('createTable', () => {
 			// manually so the read path can route to v1's schema.
 			ykv.set('1', { id: '1', name: 'Alice', _v: 1 });
 
-			expect(helper.getAllValid()).toEqual([{ id: '1', name: 'Alice' }]);
-			expect(helper.count()).toBe(1);
+			expect(helper.scan().rows).toEqual([{ id: '1', name: 'Alice' }]);
+			expect(helper.storedCount()).toBe(1);
 			expect(helper.has('1')).toBe(true);
 			expect('set' in helper).toBe(false);
 			expect('bulkSet' in helper).toBe(false);
@@ -80,7 +80,7 @@ describe('createTable', () => {
 				},
 			);
 
-			expect(helper.getAllValid()).toHaveLength(5);
+			expect(helper.scan().rows).toHaveLength(5);
 			expect(progress).toEqual([0.4, 0.8, 1]);
 		});
 	});
@@ -120,7 +120,7 @@ describe('createTable', () => {
 			expect(error.row).toEqual({ id: '1', name: 123, _v: 1 });
 		});
 
-		test('getAll / getAllValid / getAllInvalid partition results by validity', () => {
+		test('scan partitions rows and nonconforming by validity', () => {
 			const { ykv, yarray } = setup();
 			const definition = defineTable({
 				id: field.string(),
@@ -132,16 +132,11 @@ describe('createTable', () => {
 			yarray.push([{ key: '2', val: { id: '2', name: 999, _v: 1 }, ts: 0 }]); // invalid: name type
 			yarray.push([{ key: '3', val: { id: '3', _v: 1 }, ts: 0 }]); // invalid: missing name
 
-			const results = helper.getAll();
-			expect(results).toHaveLength(3);
-			expect(results.filter((r) => !r.error)).toHaveLength(1);
-			expect(results.filter((r) => r.error)).toHaveLength(2);
-
-			const valid = helper.getAllValid();
-			expect(valid).toEqual([{ id: '1', name: 'Valid' }]);
-
-			const invalid = helper.getAllInvalid();
-			expect(invalid.map((r) => r.id).sort()).toEqual(['2', '3']);
+			const { rows, nonconforming, newerWriter, unreadable } = helper.scan();
+			expect(rows).toEqual([{ id: '1', name: 'Valid' }]);
+			expect(nonconforming.map((r) => r.id).sort()).toEqual(['2', '3']);
+			expect(newerWriter).toEqual([]);
+			expect(unreadable).toEqual([]);
 		});
 	});
 
@@ -160,7 +155,7 @@ describe('createTable', () => {
 				helper.set({ id: '3', active: true });
 			});
 
-			const active = helper.filter((row) => row.active);
+			const active = helper.scan().rows.filter((row) => row.active);
 			expect(active).toHaveLength(2);
 			expect(active.map((r) => r.id).sort()).toEqual(['1', '3']);
 		});
@@ -178,7 +173,7 @@ describe('createTable', () => {
 				helper.set({ id: '2', active: false });
 			});
 
-			const active = helper.filter((row) => row.active);
+			const active = helper.scan().rows.filter((row) => row.active);
 			expect(active).toEqual([]);
 		});
 
@@ -195,7 +190,7 @@ describe('createTable', () => {
 				{ key: '2', val: { id: '2', active: 'not-a-boolean', _v: 1 }, ts: 0 },
 			]);
 
-			const all = helper.filter(() => true);
+			const all = helper.scan().rows.filter(() => true);
 			expect(all).toHaveLength(1);
 		});
 
@@ -212,7 +207,7 @@ describe('createTable', () => {
 				helper.set({ id: '2', name: 'Bob' });
 			});
 
-			const found = helper.find((row) => row.name === 'Bob');
+			const found = helper.findValid((row) => row.name === 'Bob');
 			expect(found).toEqual({ id: '2', name: 'Bob' });
 		});
 
@@ -226,7 +221,7 @@ describe('createTable', () => {
 
 			helper.set({ id: '1', name: 'Alice' });
 
-			const found = helper.find((row) => row.name === 'Nobody');
+			const found = helper.findValid((row) => row.name === 'Nobody');
 			expect(found).toBeUndefined();
 		});
 
@@ -241,7 +236,7 @@ describe('createTable', () => {
 			yarray.push([{ key: '1', val: { id: '1', name: 123, _v: 1 }, ts: 0 }]); // invalid
 			helper.set({ id: '2', name: 'Valid' });
 
-			const found = helper.find(() => true);
+			const found = helper.findValid(() => true);
 			expect(found).toEqual({ id: '2', name: 'Valid' });
 		});
 	});
@@ -352,7 +347,7 @@ describe('createTable', () => {
 				helper.set({ id: '3', name: 'C' });
 			});
 
-			expect(helper.count()).toBe(2);
+			expect(helper.storedCount()).toBe(2);
 			expect(helper.has('1')).toBe(false);
 			expect(helper.has('2')).toBe(true);
 			expect(helper.has('3')).toBe(true);
@@ -370,10 +365,10 @@ describe('createTable', () => {
 				helper.set({ id: '1', name: 'A' });
 				helper.set({ id: '2', name: 'B' });
 			});
-			expect(helper.count()).toBe(2);
+			expect(helper.storedCount()).toBe(2);
 
 			helper.clear();
-			expect(helper.count()).toBe(0);
+			expect(helper.storedCount()).toBe(0);
 		});
 
 		test('bulkDelete removes rows in chunks and reports progress', async () => {
@@ -400,8 +395,8 @@ describe('createTable', () => {
 
 			expect(
 				helper
-					.getAllValid()
-					.map((row) => row.id)
+					.scan()
+					.rows.map((row) => row.id)
 					.sort(),
 			).toEqual(['2', '4']);
 			expect(progress).toEqual([2 / 3, 1]);
@@ -487,7 +482,7 @@ describe('createTable', () => {
 	});
 
 	describe('metadata', () => {
-		test('count returns the current number of rows', () => {
+		test('storedCount returns the current number of rows', () => {
 			const { ydoc, ykv } = setup();
 			const definition = defineTable({
 				id: field.string(),
@@ -495,16 +490,16 @@ describe('createTable', () => {
 			});
 			const helper = createTable(ykv, definition, 'test');
 
-			expect(helper.count()).toBe(0);
+			expect(helper.storedCount()).toBe(0);
 
 			helper.set({ id: '1', name: 'A' });
-			expect(helper.count()).toBe(1);
+			expect(helper.storedCount()).toBe(1);
 
 			ydoc.transact(() => {
 				helper.set({ id: '2', name: 'B' });
 				helper.set({ id: '3', name: 'C' });
 			});
-			expect(helper.count()).toBe(3);
+			expect(helper.storedCount()).toBe(3);
 		});
 
 		test('has returns true for existing row', () => {

@@ -13,23 +13,23 @@
 		const tableDefs = [
 			{
 				label: 'Recordings',
-				count: () => whispering.tables.recordings.count(),
+				count: () => whispering.tables.recordings.storedCount(),
 			},
 			{
 				label: 'Transformations',
-				count: () => whispering.tables.transformations.count(),
+				count: () => whispering.tables.transformations.storedCount(),
 			},
 			{
 				label: 'Transformation Steps',
-				count: () => whispering.tables.transformationSteps.count(),
+				count: () => whispering.tables.transformationSteps.storedCount(),
 			},
 			{
 				label: 'Transformation Runs',
-				count: () => whispering.tables.transformationRuns.count(),
+				count: () => whispering.tables.transformationRuns.storedCount(),
 			},
 			{
 				label: 'Transformation Step Runs',
-				count: () => whispering.tables.transformationStepRuns.count(),
+				count: () => whispering.tables.transformationStepRuns.storedCount(),
 			},
 		] as const;
 

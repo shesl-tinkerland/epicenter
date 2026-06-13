@@ -32,8 +32,12 @@ export function createSkillsActions({
 			description: 'List all skills (id, name, description)',
 			handler: () =>
 				tables.skills
-					.getAllValid()
-					.map((s) => ({ id: s.id, name: s.name, description: s.description }))
+					.scan()
+					.rows.map((s) => ({
+						id: s.id,
+						name: s.name,
+						description: s.description,
+					}))
 					.sort((a, b) => a.name.localeCompare(b.name)),
 		}),
 
@@ -42,7 +46,7 @@ export function createSkillsActions({
 			description: 'Get skill metadata and instructions by ID',
 			input: Type.Object({ id: Type.String() }),
 			handler: async ({ id }) => {
-				const skill = tables.skills.find((s) => s.id === id);
+				const skill = tables.skills.findValid((s) => s.id === id);
 				if (!skill) return null;
 				const instructions = await readInstructions(id);
 				return { skill, instructions };
@@ -54,10 +58,12 @@ export function createSkillsActions({
 			description: 'Get skill with instructions and all reference content',
 			input: Type.Object({ id: Type.String() }),
 			handler: async ({ id }) => {
-				const skill = tables.skills.find((s) => s.id === id);
+				const skill = tables.skills.findValid((s) => s.id === id);
 				if (!skill) return null;
 				const instructions = await readInstructions(id);
-				const refs = tables.references.filter((r) => r.skillId === id);
+				const refs = tables.references
+					.scan()
+					.rows.filter((r) => r.skillId === id);
 				const references = await Promise.all(
 					refs.map(async (ref) => ({
 						path: ref.path,

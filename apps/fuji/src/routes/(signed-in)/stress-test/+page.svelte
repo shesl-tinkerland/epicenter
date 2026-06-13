@@ -123,12 +123,12 @@
 
 			// Read performance
 			const readStart = performance.now();
-			const allValid = fuji.tables.entries.getAllValid();
+			const allValid = fuji.tables.entries.scan().rows;
 			const readTimeMs = performance.now() - readStart;
 
 			// Filter performance
 			const filterStart = performance.now();
-			fuji.tables.entries.filter(isStressTestEntry);
+			fuji.tables.entries.scan().rows.filter(isStressTestEntry);
 			const filterTimeMs = performance.now() - filterStart;
 
 			// Y.Doc binary size
@@ -158,7 +158,9 @@
 		clearing = true;
 
 		try {
-			const stressEntries = fuji.tables.entries.filter(isStressTestEntry);
+			const stressEntries = fuji.tables.entries
+				.scan()
+				.rows.filter(isStressTestEntry);
 			const ids = stressEntries.map((e) => e.id);
 
 			await fuji.tables.entries.bulkDelete(ids);
@@ -270,8 +272,11 @@
 						label: 'Y.Doc size',
 						value: formatBytes(results.ydocSizeBytes),
 					},
-					{ label: 'getAllValid() time', value: formatMs(results.readTimeMs) },
-					{ label: 'filter() time', value: formatMs(results.filterTimeMs) },
+					{ label: 'scan().rows time', value: formatMs(results.readTimeMs) },
+					{
+						label: 'scan().rows.filter() time',
+						value: formatMs(results.filterTimeMs),
+					},
 				]}
 				<div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
 					{#each stats as stat}

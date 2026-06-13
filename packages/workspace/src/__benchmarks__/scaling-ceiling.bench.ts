@@ -132,7 +132,7 @@ describe('scaling ceiling: small rows (posts)', () => {
 
 			// ── getAll ──
 			const { durationMs: getAllMs } = measureTime(() => {
-				tables.posts.getAll();
+				tables.posts.scan();
 			});
 
 			// ── 1000 random gets ──
@@ -224,7 +224,7 @@ describe('scaling ceiling: realistic rows (notes)', () => {
 			});
 
 			const { durationMs: getAllMs } = measureTime(() => {
-				tables.notes.getAll();
+				tables.notes.scan();
 			});
 
 			const { durationMs: randomGetMs } = measureTime(() => {

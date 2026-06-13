@@ -39,8 +39,8 @@
 						tableName: 'files',
 						getFiles: () =>
 							opensidian.tables.files
-								.getAllValid()
-								.filter((r) => r.type === 'file')
+								.scan()
+								.rows.filter((r) => r.type === 'file')
 								.map((r) => ({ id: r.id, name: r.name })),
 					}),
 				]

@@ -41,10 +41,10 @@ import {
  * parse it against the table's schema: a corrupt or unknown `_v` stamp at or
  * below the latest known version, failed validation, or a failed migration.
  *
- * Surfaced (alongside {@link TableNewerWriterError}) by `get()`, `getAll()`,
- * `getAllValid()`, `getAllInvalid()`, `filter()`, `find()`, `conformance()`,
- * and `update()`. "Not found" on `get()` / `update()` is *not* an error: it's
- * a legitimate absence and is returned as `data: null` instead.
+ * Surfaced (alongside {@link TableNewerWriterError}) in `scan().nonconforming`
+ * and by the point reads `get()` and `update()`. "Not found" on `get()` /
+ * `update()` is *not* an error: it's a legitimate absence and is returned as
+ * `data: null` instead.
  *
  * Every variant carries `row`: the raw stored value as it sits in the CRDT,
  * including the library-managed `_v` stamp. The conformance repair flow reads
@@ -151,6 +151,34 @@ export const TableNewerWriterError = defineErrors({
 export type TableNewerWriterError = InferErrors<typeof TableNewerWriterError>;
 
 // ════════════════════════════════════════════════════════════════════════════
+// TABLE UNREADABLE ERROR
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * An encrypted entry present in storage that this binary holds no usable key
+ * for: a key rotation that left this device behind, a missing key version, or
+ * a corrupt ciphertext.
+ *
+ * Unlike the other read errors there is no row to parse and no raw value to
+ * carry: the bytes never decrypted. It carries `id` and a human-readable
+ * `reason` (for example `keyVersion=3 not in keyring [1, 2]`). Not repairable
+ * here (the user needs the key), and `set()` refuses to clobber it for the
+ * same reason it refuses a {@link TableNewerWriterError}.
+ *
+ * Surfaced in `scan().unreadable`, built from the store's
+ * `unreadableEntries()` enumeration.
+ */
+export const TableUnreadableError = defineErrors({
+	/** A stored encrypted entry that did not decrypt under the active keyring. */
+	UnreadableRow: ({ id, reason }: { id: string; reason: string }) => ({
+		message: `Row '${id}' is encrypted with a key this device does not have: ${reason}`,
+		id,
+		reason,
+	}),
+});
+export type TableUnreadableError = InferErrors<typeof TableUnreadableError>;
+
+// ════════════════════════════════════════════════════════════════════════════
 // TABLE READ ERROR
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -160,8 +188,9 @@ export type TableNewerWriterError = InferErrors<typeof TableNewerWriterError>;
  * row a newer binary owns ({@link TableNewerWriterError}).
  *
  * Surfaced by `get()` and `update()`. A later wave adds the encrypted
- * `UnreadableRow` case (an entry present in storage that this binary holds no
- * key for), at which point this union grows a third member.
+ * {@link TableUnreadableError} case to the point-read channel (it already
+ * appears in `scan().unreadable`), at which point this union grows a third
+ * member.
  */
 export type TableReadError = TableParseError | TableNewerWriterError;
 
@@ -201,32 +230,37 @@ export const TableWriteError = defineErrors({
 export type TableWriteError = InferErrors<typeof TableWriteError>;
 
 // ════════════════════════════════════════════════════════════════════════════
-// TABLE CONFORMANCE
+// TABLE SCAN
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Per-table conformance snapshot: every stored row classified by what the
- * read path already computes in `parseRow`. Nothing here is new information;
- * `getAllValid()` silently skips exactly the rows the two queues surface.
+ * The result of a single classified table read: every stored entry resolved
+ * into exactly one of four mutually exclusive, collectively exhaustive states.
+ * The bucket lengths sum to `storedCount()`, so no read can silently drop data.
  *
- * Two causes, two queues:
- * - `nonconforming`: rows this binary should understand but cannot parse
- *   (failed validation, failed migration, or a corrupt `_v` stamp at or
- *   below the latest known version). The repair tool's input: app code
- *   iterates `getAllInvalid()` and fixes via `set()` or discards via
- *   `delete()`.
- * - `newerWriter`: rows stamped by a schema version above this binary's
+ * - `rows`: entries that parse and validate to the latest schema. The payload
+ *   almost every caller wants; `scan().rows` replaces the old `getAllValid()`,
+ *   but now the three issue buckets ride along in the same return value instead
+ *   of being silently skipped.
+ * - `nonconforming`: entries this binary should understand but cannot parse
+ *   (failed validation, failed migration, or a corrupt `_v` stamp at or below
+ *   the latest known version), classified as {@link TableParseError}. Each
+ *   carries the raw stored value so a repair flow can rebuild it via `set()`.
+ * - `newerWriter`: entries stamped by a schema version above this binary's
  *   latest, classified as {@link TableNewerWriterError}. Not repairable here;
- *   the user needs an app update. `set()` refuses these rows for the same
- *   reason (see {@link TableWriteError}).
+ *   the user needs an app update, and `set()` refuses them.
+ * - `unreadable`: encrypted entries this binary holds no usable key for,
+ *   classified as {@link TableUnreadableError}. No row exists to parse.
  */
-export type TableConformance = {
-	/** Count of rows that parse to the latest schema. */
-	valid: number;
-	/** Rows this binary should understand but cannot parse. */
+export type TableScan<TRow> = {
+	/** Entries that parse and validate to the latest schema. */
+	rows: TRow[];
+	/** Entries this binary should understand but cannot parse. */
 	nonconforming: TableParseError[];
-	/** Rows stamped by a newer schema version than this binary knows. */
+	/** Entries stamped by a newer schema version than this binary knows. */
 	newerWriter: TableNewerWriterError[];
+	/** Encrypted entries this binary holds no usable key for. */
+	unreadable: TableUnreadableError[];
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -433,32 +467,40 @@ export type ReadonlyTable<
 	 */
 	schema: TObject<LastVersion<TVersions>>;
 
+	/**
+	 * Point read by id. O(1). Returns `Ok(null)` for a row that is absent, and
+	 * `Err(TableReadError)` for a stored entry this binary cannot resolve to a
+	 * row (a parse failure or a newer-writer row).
+	 */
 	get(id: string): Result<TRow | null, TableReadError>;
-	getAll(): Array<Result<TRow, TableReadError>>;
-	getAllValid(): TRow[];
-	getAllInvalid(): TableReadError[];
-	filter(predicate: (row: TRow) => boolean): TRow[];
-	find(predicate: (row: TRow) => boolean): TRow | undefined;
+	/**
+	 * The one O(n) classified read: walk every stored entry, resolve each into
+	 * one of four buckets, and return them grouped. `scan().rows` is the conforming
+	 * payload; the three issue buckets ride along so no read silently drops data.
+	 * Pull-based; recompute on the `observe()` signal. See {@link TableScan}.
+	 */
+	scan(): TableScan<TRow>;
+	/**
+	 * Find the first conforming row matching the predicate, short-circuiting at
+	 * the first match. Unlike `scan().rows.find(...)` this stops scanning once it
+	 * hits a match and never builds the issue buckets. The `Valid` in the name is
+	 * honest: it can only match rows it can parse.
+	 */
+	findValid(predicate: (row: TRow) => boolean): TRow | undefined;
 	observe(
 		callback: (changedIds: ReadonlySet<TRow['id']>, origin?: unknown) => void,
 	): () => void;
 	/**
-	 * Classify every stored row: a full scan plus validation, same cost as
-	 * `getAllValid()`. Pull-based; recompute on the `observe()` signal.
-	 * See {@link TableConformance} for the two queues and their meaning.
+	 * Number of observer-confirmed stored entries. O(1). Counts every stored
+	 * entry across all four read states: conforming rows, nonconforming rows
+	 * that `scan().rows` excludes, newer-writer rows, and (on encrypted stores)
+	 * undecryptable entries. May lag writes made inside an open transaction.
+	 * Because it counts all four states, it reconciles exactly:
+	 * `storedCount() === scan.rows.length + scan.nonconforming.length +
+	 * scan.newerWriter.length + scan.unreadable.length`. For an "N items" badge
+	 * next to a list, use `scan().rows.length` instead.
 	 */
-	conformance(): TableConformance;
-	/**
-	 * Number of observer-confirmed stored entries. O(1). Includes every stored
-	 * entry: conforming rows, nonconforming rows that `getAllValid()` hides,
-	 * newer-writer rows, and (on encrypted stores) undecryptable entries. May
-	 * lag writes made inside an open transaction. Because it counts all four
-	 * read states, it reconciles exactly:
-	 * `count() === conformance().valid + conformance().nonconforming.length +
-	 * conformance().newerWriter.length + unreadable entries`. For an "N items"
-	 * badge next to a filtered list, use `conformance().valid` instead.
-	 */
-	count(): number;
+	storedCount(): number;
 	has(id: string): boolean;
 };
 
@@ -633,42 +675,42 @@ export function createReadonlyTable<
 			return parseRow(id, raw);
 		},
 
-		getAll(): Array<Result<TRow, TableReadError>> {
-			const results: Array<Result<TRow, TableReadError>> = [];
-			for (const [key, entry] of ykv.entries()) {
-				results.push(parseRow(key, entry.val));
-			}
-			return results;
-		},
-
-		getAllValid(): TRow[] {
+		scan(): TableScan<TRow> {
 			const rows: TRow[] = [];
+			const nonconforming: TableParseError[] = [];
+			const newerWriter: TableNewerWriterError[] = [];
 			for (const [key, entry] of ykv.entries()) {
 				const { data, error } = parseRow(key, entry.val);
-				if (!error) rows.push(data);
+				if (!error) {
+					rows.push(data);
+					continue;
+				}
+				// parseRow already classified the failure; group by name.
+				switch (error.name) {
+					case 'NewerWriter':
+						newerWriter.push(error);
+						break;
+					case 'UnknownVersion':
+					case 'ValidationFailed':
+					case 'MigrationFailed':
+						nonconforming.push(error);
+						break;
+					default:
+						error satisfies never;
+				}
 			}
-			return rows;
+			// The fourth bucket comes from the store, not the parse walk: encrypted
+			// entries `entries()` skipped because they never decrypted.
+			const unreadable: TableUnreadableError[] = [];
+			for (const { key, reason } of ykv.unreadableEntries()) {
+				unreadable.push(
+					TableUnreadableError.UnreadableRow({ id: key, reason }).error,
+				);
+			}
+			return { rows, nonconforming, newerWriter, unreadable };
 		},
 
-		getAllInvalid(): TableReadError[] {
-			const invalid: TableReadError[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const { error } = parseRow(key, entry.val);
-				if (error) invalid.push(error);
-			}
-			return invalid;
-		},
-
-		filter(predicate: (row: TRow) => boolean): TRow[] {
-			const rows: TRow[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const { data, error } = parseRow(key, entry.val);
-				if (!error && predicate(data)) rows.push(data);
-			}
-			return rows;
-		},
-
-		find(predicate: (row: TRow) => boolean): TRow | undefined {
+		findValid(predicate: (row: TRow) => boolean): TRow | undefined {
 			for (const [key, entry] of ykv.entries()) {
 				const { data, error } = parseRow(key, entry.val);
 				if (!error && predicate(data)) return data;
@@ -686,34 +728,7 @@ export function createReadonlyTable<
 			return () => ykv.unobserve(handler);
 		},
 
-		conformance(): TableConformance {
-			let valid = 0;
-			const nonconforming: TableParseError[] = [];
-			const newerWriter: TableNewerWriterError[] = [];
-			for (const [key, entry] of ykv.entries()) {
-				const { error } = parseRow(key, entry.val);
-				if (!error) {
-					valid++;
-					continue;
-				}
-				// parseRow already classified the failure; group by name.
-				switch (error.name) {
-					case 'NewerWriter':
-						newerWriter.push(error);
-						break;
-					case 'UnknownVersion':
-					case 'ValidationFailed':
-					case 'MigrationFailed':
-						nonconforming.push(error);
-						break;
-					default:
-						error satisfies never;
-				}
-			}
-			return { valid, nonconforming, newerWriter };
-		},
-
-		count(): number {
+		storedCount(): number {
 			return ykv.size;
 		},
 

@@ -39,7 +39,7 @@ describe('table operations', () => {
 			`Insert 1,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(1_000 / (durationMs / 1_000))} ops/sec)`,
 		);
 		console.log(`Average per insert: ${(durationMs / 1_000).toFixed(4)}ms`);
-		expect(tables.posts.count()).toBe(1_000);
+		expect(tables.posts.storedCount()).toBe(1_000);
 	});
 
 	test('insert 10,000 rows', () => {
@@ -60,7 +60,7 @@ describe('table operations', () => {
 			`Insert 10,000 rows: ${durationMs.toFixed(2)}ms (${Math.round(10_000 / (durationMs / 1_000))} ops/sec)`,
 		);
 		console.log(`Average per insert: ${(durationMs / 10_000).toFixed(4)}ms`);
-		expect(tables.posts.count()).toBe(10_000);
+		expect(tables.posts.storedCount()).toBe(10_000);
 	});
 
 	test('get 10,000 rows by ID', () => {
@@ -85,7 +85,7 @@ describe('table operations', () => {
 		console.log(`Average per get: ${(durationMs / 10_000).toFixed(4)}ms`);
 	});
 
-	test('getAll / getAllValid / filter with 10,000 rows', () => {
+	test('scan / scan().rows.filter with 10,000 rows', () => {
 		const ydoc = new Y.Doc();
 		const tables = { posts: attachTable(ydoc, 'posts', postDefinition) };
 
@@ -97,17 +97,17 @@ describe('table operations', () => {
 			});
 		}
 
-		const { durationMs: getAllMs } = measureTime(() => tables.posts.getAll());
-		const { durationMs: getAllValidMs } = measureTime(() =>
-			tables.posts.getAllValid(),
+		const { durationMs: scanMs } = measureTime(() => tables.posts.scan());
+		const { durationMs: scanRowsMs } = measureTime(
+			() => tables.posts.scan().rows,
 		);
 		const { durationMs: filterMs } = measureTime(() =>
-			tables.posts.filter((row) => row.views > 5000),
+			tables.posts.scan().rows.filter((row) => row.views > 5000),
 		);
 
-		console.log(`getAll: ${getAllMs.toFixed(2)}ms`);
-		console.log(`getAllValid: ${getAllValidMs.toFixed(2)}ms`);
-		console.log(`filter: ${filterMs.toFixed(2)}ms`);
+		console.log(`scan: ${scanMs.toFixed(2)}ms`);
+		console.log(`scan().rows: ${scanRowsMs.toFixed(2)}ms`);
+		console.log(`scan().rows.filter: ${filterMs.toFixed(2)}ms`);
 	});
 
 	test('delete 1,000 rows', () => {
@@ -130,7 +130,7 @@ describe('table operations', () => {
 
 		console.log(`Delete 1,000 rows: ${durationMs.toFixed(2)}ms`);
 		console.log(`Average per delete: ${(durationMs / 1_000).toFixed(4)}ms`);
-		expect(tables.posts.count()).toBe(0);
+		expect(tables.posts.storedCount()).toBe(0);
 	});
 
 	test('batch insert vs individual insert (1,000 rows)', () => {

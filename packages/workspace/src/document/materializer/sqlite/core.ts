@@ -57,6 +57,29 @@ const SqliteMaterializerError = defineErrors({
 		message: `[sqlite-materializer] teardown drain did not settle within ${timeoutMs}ms; closing with work pending`,
 		timeoutMs,
 	}),
+	/**
+	 * A full-load `scan()` surfaced entries that will not mirror into SQLite:
+	 * rows the binary cannot parse, rows from a newer writer, or undecryptable
+	 * rows. The full load mirrors only `scan().rows`; this records what it
+	 * skipped so the gap is in the log rather than silent.
+	 */
+	NonconformingRowsSkipped: ({
+		tableName,
+		nonconforming,
+		newerWriter,
+		unreadable,
+	}: {
+		tableName: string;
+		nonconforming: number;
+		newerWriter: number;
+		unreadable: number;
+	}) => ({
+		message: `[sqlite-materializer] "${tableName}" skipped rows that did not mirror: ${nonconforming} nonconforming, ${newerWriter} from a newer writer, ${unreadable} unreadable`,
+		tableName,
+		nonconforming,
+		newerWriter,
+		unreadable,
+	}),
 });
 
 type RegisteredTable = {
@@ -166,7 +189,22 @@ export function attachSqliteMaterializerCore<
 	}
 
 	async function fullLoadTable(tableName: string, table: AnyTable) {
-		const rows = table.getAllValid();
+		const scan = table.scan();
+		if (
+			scan.nonconforming.length > 0 ||
+			scan.newerWriter.length > 0 ||
+			scan.unreadable.length > 0
+		) {
+			log.warn(
+				SqliteMaterializerError.NonconformingRowsSkipped({
+					tableName,
+					nonconforming: scan.nonconforming.length,
+					newerWriter: scan.newerWriter.length,
+					unreadable: scan.unreadable.length,
+				}),
+			);
+		}
+		const rows = scan.rows;
 		if (rows.length === 0) return;
 
 		const keys = collectRowKeys(rows);
@@ -320,7 +358,7 @@ export function attachSqliteMaterializerCore<
 	async function initialize() {
 		// Always yield a microtask so callers can seed synchronous writes
 		// (e.g. `tables.posts.set(...)`) before the full-load reads
-		// `getAllValid()`.
+		// `scan().rows`.
 		await waitFor;
 		isGateOpen = true;
 		if (isFlushAbandoned) return;

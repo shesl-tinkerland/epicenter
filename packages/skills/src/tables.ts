@@ -33,11 +33,11 @@ import {
  * @example
  * ```typescript
  * // Catalog (tier 1), which skills exist?
- * const catalog = ws.tables.skills.getAllValid()
+ * const catalog = ws.tables.skills.scan().rows
  *   .map(s => ({ name: s.name, description: s.description }))
  *
  * // Activate (tier 2), inject instructions into context
- * const skill = ws.tables.skills.find(s => s.name === 'writing-voice')
+ * const skill = ws.tables.skills.findValid(s => s.name === 'writing-voice')
  * if (skill) {
  *   using h = instructionsDocs.open(skill.id)
  *   await h.whenReady
@@ -74,7 +74,7 @@ export const skillsTable = defineTable({
  * @example
  * ```typescript
  * // Load all references for a skill
- * const refs = ws.tables.references.filter(r => r.skillId === skill.id)
+ * const refs = ws.tables.references.scan().rows.filter(r => r.skillId === skill.id)
  *
  * // Read reference content
  * for (const ref of refs) {

@@ -111,7 +111,7 @@ export function openTabManagerBrowser({
 				description:
 					'List all synced devices with their names, browsers, and online status.',
 				handler: () => {
-					const devices = tables.devices.getAllValid();
+					const devices = tables.devices.scan().rows;
 					return {
 						devices: devices.map((d) => ({
 							id: d.id,
@@ -373,7 +373,7 @@ export function openTabManagerBrowser({
 				title: 'Restore All Saved Tabs',
 				description: 'Re-open all saved tabs and delete their records.',
 				handler: async () => {
-					const all = tables.savedTabs.getAllValid();
+					const all = tables.savedTabs.scan().rows;
 					if (!all.length) return { restoredCount: 0 };
 					const createPromises = all.map((tab) =>
 						browser.tabs.create({ url: tab.url, pinned: tab.pinned }),
@@ -398,7 +398,7 @@ export function openTabManagerBrowser({
 				title: 'Remove All Saved Tabs',
 				description: 'Delete all saved tabs without restoring them.',
 				handler: () => {
-					const all = tables.savedTabs.getAllValid();
+					const all = tables.savedTabs.scan().rows;
 					batch(() => {
 						for (const tab of all) tables.savedTabs.delete(tab.id);
 					});
@@ -416,8 +416,8 @@ export function openTabManagerBrowser({
 				}),
 				handler: async ({ url, title, favIconUrl }) => {
 					const allMatching = tables.bookmarks
-						.getAllValid()
-						.filter((b) => b.url === url);
+						.scan()
+						.rows.filter((b) => b.url === url);
 					if (allMatching.length > 0) {
 						for (const match of allMatching) tables.bookmarks.delete(match.id);
 						return {
@@ -469,7 +469,7 @@ export function openTabManagerBrowser({
 				title: 'Remove All Bookmarks',
 				description: 'Delete every bookmark.',
 				handler: () => {
-					const all = tables.bookmarks.getAllValid();
+					const all = tables.bookmarks.scan().rows;
 					batch(() => {
 						for (const bookmark of all) tables.bookmarks.delete(bookmark.id);
 					});

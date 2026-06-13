@@ -172,13 +172,13 @@ export function createWiki(opts?: { keyring?: () => Keyring }) {
 		pages_get_all: defineQuery({
 			title: 'List Pages',
 			description: 'Read every valid page.',
-			handler: () => tables.pages.getAllValid(),
+			handler: () => tables.pages.scan().rows,
 		}),
 
 		types_get_all: defineQuery({
 			title: 'List Types',
 			description: 'Read every user-defined type.',
-			handler: () => tables.types.getAllValid(),
+			handler: () => tables.types.scan().rows,
 		}),
 	});
 

@@ -200,7 +200,7 @@ function main() {
 
 		const afterAddDocSize = Y.encodeStateAsUpdate(ydoc).byteLength;
 		const afterAddIdb = idb.snapshot();
-		const afterAddRows = tables.events.count();
+		const afterAddRows = tables.events.storedCount();
 
 		// ── Delete the rows we just added ─────────────────────────────────
 		for (const id of addedIds) {
@@ -223,7 +223,7 @@ function main() {
 				idb: afterAddIdb,
 			},
 			afterDelete: {
-				rows: tables.events.count(),
+				rows: tables.events.storedCount(),
 				docSize: afterDeleteDocSize,
 				idb: afterDeleteIdb,
 			},
@@ -394,10 +394,10 @@ function main() {
 	const freshSize = Y.encodeStateAsUpdate(freshDoc).byteLength;
 
 	console.log(
-		`  Original doc:  ${formatBytes(finalState.byteLength)} (${tables.events.count()} rows)`,
+		`  Original doc:  ${formatBytes(finalState.byteLength)} (${tables.events.storedCount()} rows)`,
 	);
 	console.log(
-		`  Fresh doc:     ${formatBytes(freshSize)} (${freshTables.events.count()} rows)`,
+		`  Fresh doc:     ${formatBytes(freshSize)} (${freshTables.events.storedCount()} rows)`,
 	);
 	console.log(
 		`  Reduction:     ${((1 - freshSize / finalState.byteLength) * 100).toFixed(1)}%`,

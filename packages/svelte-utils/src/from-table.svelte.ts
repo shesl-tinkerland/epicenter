@@ -2,7 +2,7 @@ import type {
 	BaseRow,
 	ReadonlyTable,
 	Table,
-	TableConformance,
+	TableScan,
 } from '@epicenter/workspace';
 import { SvelteMap } from 'svelte/reactivity';
 
@@ -44,8 +44,8 @@ export function fromTable<TRow extends BaseRow>(table: Table<TRow>) {
 	const map = new SvelteMap<string, TRow>() as SvelteMap<string, TRow> &
 		Disposable;
 
-	// Seed with current valid rows
-	for (const row of table.getAllValid()) {
+	// Seed with current conforming rows
+	for (const row of table.scan().rows) {
 		map.set(row.id, row);
 	}
 
@@ -82,11 +82,10 @@ export type ReactiveTableMap<TRow extends BaseRow> = ReturnType<
 >;
 
 /**
- * Create a reactive binding to a table's conformance snapshot.
+ * Create a reactive binding to a table's classified `scan()` snapshot.
  *
- * `table.conformance()` is a full scan plus validation (same cost as
- * `getAllValid()`), so this helper recomputes on the table's `observe()`
- * signal with a debounce instead of on every render.
+ * `table.scan()` is a full O(n) walk plus validation, so this helper recomputes
+ * on the table's `observe()` signal with a debounce instead of on every render.
  *
  * Works against the readonly surface: read-only consumers can render the
  * queue even though repair (`set()` / `delete()`) needs a writable table.
@@ -99,9 +98,10 @@ export type ReactiveTableMap<TRow extends BaseRow> = ReturnType<
  * const conformance = fromTableConformance(workspace.tables.entries);
  *
  * // Reactive reads:
- * conformance.current.valid;
+ * conformance.current.rows.length;
  * conformance.current.nonconforming.length;
  * conformance.current.newerWriter.length;
+ * conformance.current.unreadable.length;
  *
  * // Teardown:
  * conformance[Symbol.dispose]();
@@ -111,13 +111,13 @@ export function fromTableConformance<TRow extends BaseRow>(
 	table: ReadonlyTable<TRow>,
 	{ debounceMs = 100 }: { debounceMs?: number } = {},
 ) {
-	let current = $state.raw<TableConformance>(table.conformance());
+	let current = $state.raw<TableScan<TRow>>(table.scan());
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
 	const unobserve = table.observe(() => {
 		clearTimeout(timer);
 		timer = setTimeout(() => {
-			current = table.conformance();
+			current = table.scan();
 		}, debounceMs);
 	});
 
@@ -132,6 +132,4 @@ export function fromTableConformance<TRow extends BaseRow>(
 	};
 }
 
-export type ReactiveTableConformance = ReturnType<
-	typeof fromTableConformance
->;
+export type ReactiveTableConformance = ReturnType<typeof fromTableConformance>;

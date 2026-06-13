@@ -199,11 +199,12 @@ export {
 	type InferTableRow,
 	type ReadonlyTable,
 	type Table,
-	type TableConformance,
 	TableNewerWriterError,
 	TableParseError,
 	type TableReadError,
+	type TableScan,
 	type Tables,
+	TableUnreadableError,
 	TableWriteError,
 } from './document/table.js';
 // Transport URL builder.

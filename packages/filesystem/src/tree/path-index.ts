@@ -57,13 +57,13 @@ export function attachFileSystemIndex(ydoc: Y.Doc, filesTable: Table<FileRow>) {
 	 * processChanges.
 	 */
 	function buildInitialState() {
-		// getAllValid() returns fresh objects (parseRow spreads input), so we
+		// scan().rows returns fresh objects (parseRow spreads input), so we
 		// can safely mutate parentId on these locals to track fix-up changes
 		// without re-scanning the whole table. TypeBox's inferred row type
 		// marks union-typed columns (e.g. nullable) as readonly; the cast
 		// recovers mutability on the local copies.
 		const activeRows: Array<{ -readonly [K in keyof FileRow]: FileRow[K] }> =
-			filesTable.getAllValid().filter((r) => r.trashedAt === null);
+			filesTable.scan().rows.filter((r) => r.trashedAt === null);
 
 		for (const id of fixCircularReferences(activeRows)) {
 			const row = activeRows.find((r) => r.id === id);

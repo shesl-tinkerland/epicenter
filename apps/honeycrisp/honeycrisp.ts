@@ -171,8 +171,8 @@ export function createHoneycrisp(opts: { keyring: () => Keyring }) {
 				handler: ({ folderId: rawId }) => {
 					const folderId = asFolderId(rawId);
 					const folderNotes = tables.notes
-						.getAllValid()
-						.filter((n) => n.folderId === folderId);
+						.scan()
+						.rows.filter((n) => n.folderId === folderId);
 					for (const note of folderNotes) {
 						tables.notes.update(note.id, { folderId: null });
 					}

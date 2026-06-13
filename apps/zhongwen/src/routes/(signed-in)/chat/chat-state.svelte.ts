@@ -74,7 +74,8 @@ export function createChatState() {
 
 	function loadMessages(conversationId: ConversationId) {
 		return zhongwen.tables.chatMessages
-			.filter((m) => m.conversationId === conversationId)
+			.scan()
+			.rows.filter((m) => m.conversationId === conversationId)
 			.sort((a, b) => a.createdAt - b.createdAt)
 			.map(toUiMessage);
 	}
@@ -287,8 +288,8 @@ export function createChatState() {
 		destroyConversation(conversationId);
 
 		const msgs = zhongwen.tables.chatMessages
-			.getAllValid()
-			.filter((m) => m.conversationId === conversationId);
+			.scan()
+			.rows.filter((m) => m.conversationId === conversationId);
 		zhongwen.ydoc.transact(() => {
 			for (const m of msgs) {
 				zhongwen.tables.chatMessages.delete(m.id);

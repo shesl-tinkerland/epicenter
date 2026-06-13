@@ -56,7 +56,7 @@ describe('repeated add/remove cycles', () => {
 		console.log(
 			`First cycle: ${cycleTimes[0]?.toFixed(2)}ms, Last: ${cycleTimes[4]?.toFixed(2)}ms`,
 		);
-		expect(tables.posts.count()).toBe(0);
+		expect(tables.posts.storedCount()).toBe(0);
 	});
 
 	test('1,000 items: Y.Doc size growth over 5 cycles', () => {
@@ -85,7 +85,7 @@ describe('repeated add/remove cycles', () => {
 		for (let i = 0; i < docSizes.length; i++) {
 			console.log(`  Cycle ${i + 1}: ${docSizes[i]?.toLocaleString()}`);
 		}
-		expect(tables.posts.count()).toBe(0);
+		expect(tables.posts.storedCount()).toBe(0);
 	});
 });
 
@@ -121,14 +121,14 @@ describe('event log stress', () => {
 		console.log('\n=== Event Log: Binary Size After Add/Delete Cycles ===');
 		for (let i = 0; i < sizes.length; i++) {
 			console.log(
-				`  Cycle ${i + 1}: ${sizes[i]} bytes (${tables.events.count()} rows)`,
+				`  Cycle ${i + 1}: ${sizes[i]} bytes (${tables.events.storedCount()} rows)`,
 			);
 		}
 
 		// After full add/delete cycles, doc should be tiny (just LWW metadata)
 		const finalSize = sizes.at(-1) ?? 0;
 		expect(finalSize).toBeLessThan(100);
-		expect(tables.events.count()).toBe(0);
+		expect(tables.events.storedCount()).toBe(0);
 	});
 
 	test('binary size: 1,000 events retained vs after deletion', () => {

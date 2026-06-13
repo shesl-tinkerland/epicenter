@@ -87,7 +87,7 @@ async function main() {
 		});
 
 		const afterAddSize = Y.encodeStateAsUpdate(ydoc).byteLength;
-		const rowCount = tables.events.count();
+		const rowCount = tables.events.storedCount();
 
 		// Delete all events
 		const { ms: deleteMs } = measureTime(() => {
@@ -97,7 +97,7 @@ async function main() {
 		});
 
 		const afterDeleteSize = Y.encodeStateAsUpdate(ydoc).byteLength;
-		const rowCountAfterDelete = tables.events.count();
+		const rowCountAfterDelete = tables.events.storedCount();
 
 		console.log(`── Cycle ${cycle + 1}/${CYCLES} ──`);
 		console.log(
@@ -118,7 +118,7 @@ async function main() {
 	const finalStateVector = Y.encodeStateVector(ydoc);
 
 	console.log(`=== Final Results ===`);
-	console.log(`Rows remaining: ${tables.events.count()}`);
+	console.log(`Rows remaining: ${tables.events.storedCount()}`);
 	console.log(`State update size: ${formatBytes(finalUpdate.byteLength)}`);
 	console.log(`State vector size: ${formatBytes(finalStateVector.byteLength)}`);
 	console.log(
@@ -141,7 +141,7 @@ async function main() {
 	Y.applyUpdate(workspace2.ydoc, finalUpdate);
 	const { ydoc: ydoc2, tables: tables2 } = workspace2;
 	console.log(`\n=== Snapshot Verification ===`);
-	console.log(`Rows after loading snapshot: ${tables2.events.count()}`);
+	console.log(`Rows after loading snapshot: ${tables2.events.storedCount()}`);
 
 	// Re-encode and compare
 	const reEncoded = Y.encodeStateAsUpdate(ydoc2);

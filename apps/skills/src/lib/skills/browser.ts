@@ -105,7 +105,7 @@ export function openSkillsBrowser() {
 			await idb.whenDisposed;
 			await Promise.all([
 				// Skill instruction docs use their own IndexedDB document names.
-				...doc.tables.skills.getAllValid().map((skill) =>
+				...doc.tables.skills.scan().rows.map((skill) =>
 					clearDocument(
 						skillInstructionsDocGuid({
 							workspaceId: doc.ydoc.guid,
@@ -114,7 +114,7 @@ export function openSkillsBrowser() {
 					),
 				),
 				// Reference content docs use their own IndexedDB document names.
-				...doc.tables.references.getAllValid().map((reference) =>
+				...doc.tables.references.scan().rows.map((reference) =>
 					clearDocument(
 						referenceContentDocGuid({
 							workspaceId: doc.ydoc.guid,

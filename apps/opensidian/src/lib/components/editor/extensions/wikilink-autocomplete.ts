@@ -15,8 +15,8 @@ import { makeEpicenterLink } from '@epicenter/workspace/links';
  *   workspaceId: 'opensidian',
  *   tableName: 'files',
  *   getFiles: () =>
- *     workspace.tables.files.getAllValid()
- *       .filter((r) => r.type === 'file')
+ *     workspace.tables.files.scan()
+ *       .rows.filter((r) => r.type === 'file')
  *       .map((r) => ({ id: r.id, name: r.name, parentId: r.parentId })),
  * })
  * ```
@@ -111,8 +111,8 @@ function wikilinkCompletionSource(config: WikilinkAutocompleteConfig) {
  *     tableName: 'files',
  *     getFiles: () =>
  *       workspace.tables.files
- *         .getAllValid()
- *         .filter((r) => r.type === 'file')
+ *         .scan()
+ *         .rows.filter((r) => r.type === 'file')
  *         .map((r) => ({ id: r.id, name: r.name, parentId: r.parentId })),
  *   }),
  * ];

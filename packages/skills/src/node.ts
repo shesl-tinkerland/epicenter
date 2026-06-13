@@ -245,7 +245,7 @@ export function openSkillsNode({ workspaceId }: { workspaceId: string }) {
 			description: 'Export all skills to an agentskills.io-compliant directory',
 			input: DirInput,
 			handler: async ({ dir }) => {
-				const skills = tables.skills.getAllValid();
+				const skills = tables.skills.scan().rows;
 				const skillNames = new Set(skills.map((s) => s.name));
 
 				// Export all skills in parallel
@@ -260,9 +260,9 @@ export function openSkillsNode({ workspaceId }: { workspaceId: string }) {
 						await writeFile(join(skillDir, 'SKILL.md'), skillMd, 'utf-8');
 
 						// Write references in parallel
-						const refs = tables.references.filter(
-							(r) => r.skillId === skill.id,
-						);
+						const refs = tables.references
+							.scan()
+							.rows.filter((r) => r.skillId === skill.id);
 						if (refs.length > 0) {
 							const refsDir = join(skillDir, 'references');
 							await mkdir(refsDir, { recursive: true });

@@ -100,7 +100,8 @@ export function createAiChatState({
 	/** Load persisted messages for a conversation from Y.Doc. */
 	function loadMessages(conversationId: ConversationId) {
 		return tabManager.tables.chatMessages
-			.filter((m) => m.conversationId === conversationId)
+			.scan()
+			.rows.filter((m) => m.conversationId === conversationId)
 			.sort((a, b) => a.createdAt - b.createdAt)
 			.map(toUiMessage);
 	}
@@ -286,7 +287,8 @@ export function createAiChatState({
 
 			get lastMessagePreview() {
 				const msgs = tabManager.tables.chatMessages
-					.filter((m) => m.conversationId === conversationId)
+					.scan()
+					.rows.filter((m) => m.conversationId === conversationId)
 					.sort((a, b) => b.createdAt - a.createdAt);
 				const last = msgs[0];
 				if (!last) return '';
@@ -478,8 +480,8 @@ export function createAiChatState({
 		destroyConversation(conversationId);
 
 		const msgs = tabManager.tables.chatMessages
-			.getAllValid()
-			.filter((m) => m.conversationId === conversationId);
+			.scan()
+			.rows.filter((m) => m.conversationId === conversationId);
 		tabManager.ydoc.transact(() => {
 			for (const m of msgs) {
 				tabManager.tables.chatMessages.delete(m.id);
@@ -489,8 +491,8 @@ export function createAiChatState({
 
 		if (activeConversationId === conversationId) {
 			const remaining = tabManager.tables.conversations
-				.getAllValid()
-				.sort((a, b) => b.updatedAt - a.updatedAt);
+				.scan()
+				.rows.sort((a, b) => b.updatedAt - a.updatedAt);
 			const first = remaining[0];
 			if (first) {
 				switchConversation(first.id);

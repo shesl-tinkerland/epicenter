@@ -98,7 +98,8 @@ export function createAiChatState({
 
 	function loadMessages(conversationId: ConversationId) {
 		return workspace.tables.chatMessages
-			.filter((message) => message.conversationId === conversationId)
+			.scan()
+			.rows.filter((message) => message.conversationId === conversationId)
 			.sort((a, b) => a.createdAt - b.createdAt)
 			.map(toUiMessage);
 	}

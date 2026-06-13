@@ -78,7 +78,7 @@
 	<div class="flex items-center justify-between border-b px-4 py-2">
 		<h2 class="text-sm font-semibold">Needs Attention</h2>
 		<span class="text-xs text-muted-foreground">
-			{conformance.valid} entries match the current schema
+			{conformance.rows.length} entries match the current schema
 		</span>
 	</div>
 
