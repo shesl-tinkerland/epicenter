@@ -218,12 +218,27 @@ export function createEncryptedYkvLww<T>(
 	};
 
 	/**
+	 * Human-readable reason a blob did not decrypt: either its key version is
+	 * missing from the keyring, or the key is present but the bytes are wrong
+	 * (corruption or a tampered blob). The one place this string is formatted,
+	 * shared by the observer warning, `unreadableEntries()`, and
+	 * `unreadableReason()` so all three describe the same failure identically.
+	 */
+	const decryptFailureReason = (
+		keyring: ReadonlyWorkspaceKeyring,
+		blob: EncryptedBlob,
+	): string => {
+		const blobVersion = getKeyVersion(blob);
+		return keyring.has(blobVersion)
+			? 'wrong key material or corrupted blob'
+			: `keyVersion=${blobVersion} not in keyring [${[...keyring.keys()].join(', ')}]`;
+	};
+
+	/**
 	 * If `stored` (the raw value at `key`) is an encrypted blob this binary
 	 * cannot decrypt, the human-readable reason; otherwise `undefined`
 	 * (plaintext passthrough, readable, or passthrough mode). Shared by the
-	 * `unreadableEntries()` enumeration and the `unreadableReason()` point probe
-	 * so both classify undecryptable blobs identically (and match the warning
-	 * the observer logs).
+	 * `unreadableEntries()` enumeration and the `unreadableReason()` point probe.
 	 */
 	const blobUnreadableReason = (
 		key: string,
@@ -233,10 +248,7 @@ export function createEncryptedYkvLww<T>(
 		if (!isEncryptedBlob(stored)) return undefined;
 		if (decrypt(stored, textEncoder.encode(key)) !== undefined)
 			return undefined;
-		const blobVersion = getKeyVersion(stored);
-		return encryption.keyring.has(blobVersion)
-			? 'wrong key material or corrupted blob'
-			: `keyVersion=${blobVersion} not in keyring [${[...encryption.keyring.keys()].join(', ')}]`;
+		return decryptFailureReason(encryption.keyring, stored);
 	};
 
 	/**
@@ -261,10 +273,7 @@ export function createEncryptedYkvLww<T>(
 			const val = decrypt(entry.val, textEncoder.encode(key));
 			if (val === undefined) {
 				if (encryption && isEncryptedBlob(entry.val)) {
-					const blobVersion = getKeyVersion(entry.val);
-					const reason = encryption.keyring.has(blobVersion)
-						? 'wrong key material or corrupted blob'
-						: `keyVersion=${blobVersion} not in keyring [${[...encryption.keyring.keys()].join(', ')}]`;
+					const reason = decryptFailureReason(encryption.keyring, entry.val);
 					log.warn(EncryptedKvError.DecryptFailed({ key, reason }));
 				}
 				continue;

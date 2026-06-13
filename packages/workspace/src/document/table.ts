@@ -692,16 +692,18 @@ export function createReadonlyTable<
 		schema: definition.schema,
 
 		get(id: string): Result<TRow | null, TableReadError> {
-			// An undecryptable entry reads as `undefined` from `ykv.get`, the same
-			// as a truly absent one. Probe first so a present-but-unreadable row is
-			// reported as `UnreadableRow`, not silently treated as absent.
+			const raw = ykv.get(id);
+			if (raw !== undefined) return parseRow(id, raw);
+			// `raw` is undefined for two different reasons: the slot is truly
+			// absent, or it holds an entry this binary could not decrypt. Probe to
+			// tell them apart so an unreadable row is reported as `UnreadableRow`,
+			// not silently treated as absent. This runs only on the cold path, so a
+			// readable get pays a single decrypt.
 			const reason = ykv.unreadableReason(id);
 			if (reason !== undefined) {
 				return TableUnreadableError.UnreadableRow({ id, reason });
 			}
-			const raw = ykv.get(id);
-			if (raw === undefined) return Ok(null);
-			return parseRow(id, raw);
+			return Ok(null);
 		},
 
 		scan(): TableScan<TRow> {
@@ -808,25 +810,27 @@ export function createTable<
 	 * The reason a whole-row write over `id` must be refused, or `undefined`
 	 * when the slot is safe to overwrite (absent, conforming, or a repairable
 	 * nonconforming row). Refuses the two states whose stored row exists but
-	 * this binary cannot read: an undecryptable blob (`UnreadableRefusal`) and a
-	 * newer-stamped row (`NewerWriterRefusal`). Checks the unreadable case first
-	 * because on an encrypted store such a row reads back as `undefined`, the
-	 * same as absent, so the version read alone cannot tell them apart.
+	 * this binary cannot read: a newer-stamped row (`NewerWriterRefusal`) and an
+	 * undecryptable blob (`UnreadableRefusal`).
+	 *
+	 * Reads the stored value first: a row that decrypts is checked for a newer
+	 * `_v`, and only when the read comes back `undefined` (absent, or present
+	 * but undecryptable) do we probe `unreadableReason` to tell those apart. So
+	 * a write over a readable slot pays a single decrypt.
 	 */
 	const writeRefusal = (id: string): TableWriteError | undefined => {
-		const reason = ykv.unreadableReason(id);
-		if (reason !== undefined) {
-			return TableWriteError.UnreadableRefusal({ id, reason }).error;
+		const stored = ykv.get(id);
+		if (stored === undefined) {
+			const reason = ykv.unreadableReason(id);
+			return reason !== undefined
+				? TableWriteError.UnreadableRefusal({ id, reason }).error
+				: undefined;
 		}
-		const storedVersion = newerStoredVersion(ykv.get(id));
-		if (storedVersion !== undefined) {
-			return TableWriteError.NewerWriterRefusal({
-				id,
-				storedVersion,
-				latestVersion,
-			}).error;
-		}
-		return undefined;
+		const storedVersion = newerStoredVersion(stored);
+		return storedVersion !== undefined
+			? TableWriteError.NewerWriterRefusal({ id, storedVersion, latestVersion })
+					.error
+			: undefined;
 	};
 
 	return {
