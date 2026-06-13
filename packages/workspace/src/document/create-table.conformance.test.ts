@@ -85,7 +85,10 @@ describe('conformance', () => {
 
 		expect(newerWriter).toEqual([]);
 		expect(nonconforming).toHaveLength(1);
-		expect(nonconforming[0]!.name).toBe('MigrationFailed');
+		const error = nonconforming[0]!;
+		expect(error.name).toBe('MigrationFailed');
+		// Carries the raw stored value so the repair flow can rebuild the row.
+		expect(error.row).toEqual({ id: '1', title: 'a', _v: 1 });
 	});
 
 	test('rows stamped above the latest known version land in newerWriter', () => {
@@ -105,6 +108,8 @@ describe('conformance', () => {
 		if (error.name !== 'UnknownVersion')
 			throw new Error('Expected UnknownVersion');
 		expect(error.version).toBe(2);
+		// The raw stored value is carried even though this binary cannot parse it.
+		expect(error.row).toEqual({ id: '1', title: 'future', extra: true, _v: 2 });
 	});
 
 	test('corrupt version stamps land in nonconforming, not newerWriter', () => {

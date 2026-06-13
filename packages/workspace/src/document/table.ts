@@ -40,16 +40,32 @@ import {
  * Errors produced when parsing stored rows against a table's schema.
  *
  * Surfaced by `get()`, `getAll()`, `getAllValid()`, `getAllInvalid()`,
- * `filter()`, `find()`, and `update()`. "Not found" on `get()` / `update()`
- * is *not* an error: it's a legitimate absence and is returned as
- * `data: null` instead.
+ * `filter()`, `find()`, `conformance()`, and `update()`. "Not found" on
+ * `get()` / `update()` is *not* an error: it's a legitimate absence and is
+ * returned as `data: null` instead.
+ *
+ * Every variant carries `row`: the raw stored value as it sits in the CRDT,
+ * including the library-managed `_v` stamp. The conformance repair flow reads
+ * it to rebuild a conforming row (coerce the fields that still fit, default
+ * the rest) and write it back with `set()`. The one cause it cannot repair is
+ * a `newerWriter` row (an `UnknownVersion` stamped above this binary's latest
+ * version): that needs an app update, and `set()` refuses it anyway.
  */
 export const TableParseError = defineErrors({
 	/** The row's `_v` did not match any registered schema version. */
-	UnknownVersion: ({ id, version }: { id: string; version: unknown }) => ({
+	UnknownVersion: ({
+		id,
+		version,
+		row,
+	}: {
+		id: string;
+		version: unknown;
+		row: unknown;
+	}) => ({
 		message: `Row '${id}' has unknown _v value: ${String(version)}`,
 		id,
 		version,
+		row,
 	}),
 	/** TypeBox `Value.Check` rejected the row against the matched version. */
 	ValidationFailed: ({
@@ -69,10 +85,19 @@ export const TableParseError = defineErrors({
 		row,
 	}),
 	/** The migration function threw while upgrading a valid-at-parse-time row. */
-	MigrationFailed: ({ id, cause }: { id: string; cause: unknown }) => ({
+	MigrationFailed: ({
+		id,
+		cause,
+		row,
+	}: {
+		id: string;
+		cause: unknown;
+		row: unknown;
+	}) => ({
 		message: `Row '${id}' could not be migrated: ${extractErrorMessage(cause)}`,
 		id,
 		cause,
+		row,
 	}),
 });
 export type TableParseError = InferErrors<typeof TableParseError>;
@@ -494,7 +519,7 @@ export function createReadonlyTable<
 		const schema =
 			typeof version === 'number' ? versionSchemas.get(version) : undefined;
 		if (!schema) {
-			return TableParseError.UnknownVersion({ id, version });
+			return TableParseError.UnknownVersion({ id, version, row: stored });
 		}
 		if (!Value.Check(schema, stored)) {
 			const errors = [...Value.Errors(schema, stored)].map((e) => ({
@@ -513,7 +538,7 @@ export function createReadonlyTable<
 			} as Parameters<typeof definition.migrate>[0]) as TRow;
 			return Ok(migrated);
 		} catch (cause) {
-			return TableParseError.MigrationFailed({ id, cause });
+			return TableParseError.MigrationFailed({ id, cause, row: stored });
 		}
 	}
 
