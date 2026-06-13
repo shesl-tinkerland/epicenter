@@ -78,7 +78,7 @@ const faqItems = [
 	{
 		question: 'How is this different from other transcription apps?',
 		answer:
-			"We're one of the few truly open source transcription apps with this level of polish. Unlike closed-source alternatives, you get complete transparency: see exactly where your audio goes, audit the code, and maintain full control. No middleman servers collecting your data—your audio goes directly to providers using your API keys, or stays completely local with Speaches. You own the tool, not rent access to it.",
+			"We're one of the few truly open source transcription apps with this level of polish. Unlike closed-source alternatives, you get complete transparency: see exactly where your audio goes, audit the code, and maintain full control. No middleman servers collect your data. Your audio goes directly to providers using your API keys, or stays completely local with Speaches. You own the tool, not rent access to it.",
 	},
 	{
 		question: 'Can I use it completely free?',
@@ -93,7 +93,7 @@ const faqItems = [
 	{
 		question: 'Which providers are supported?',
 		answer:
-			'For cloud: Groq (fastest and cheapest), OpenAI Whisper, and ElevenLabs. For local: Speaches runs completely offline. You choose based on your needs—speed or privacy. More providers are added based on community feedback.',
+			'For cloud: Groq (fastest and cheapest), OpenAI Whisper, and ElevenLabs. For local: Speaches runs completely offline. You choose based on your needs: speed or privacy. More providers are added based on community feedback.',
 	},
 	{
 		question: 'Is Whispering suitable for long recordings?',
@@ -105,11 +105,10 @@ const faqItems = [
 const downloads = [
 	{
 		platform: 'macOS',
-		description: 'Native app for all Macs',
+		description: 'Native app for Apple Silicon Macs',
 		icon: AppleIcon,
-		isMacOS: true,
-		appleSiliconUrl: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg`,
-		intelUrl: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64.dmg`,
+		url: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg`,
+		extension: '.dmg',
 	},
 	{
 		platform: 'Windows',
@@ -120,7 +119,7 @@ const downloads = [
 	},
 	{
 		platform: 'Linux',
-		description: 'All distributions',
+		description: 'Recent distributions',
 		icon: TerminalIcon,
 		url: 'https://github.com/EpicenterHQ/epicenter/releases',
 		extension: 'View Releases',
@@ -443,7 +442,7 @@ const downloads = [
 			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 				<div class="text-center mb-16 space-y-6">
 					<h2 class="text-3xl lg:text-5xl font-bold">
-						Download for all platforms
+						Download for supported platforms
 					</h2>
 					<p class="text-xl text-foreground/75 max-w-3xl mx-auto">
 						Native desktop application with cross-platform support
@@ -467,27 +466,7 @@ const downloads = [
 										<Card.Description>{download.description}</Card.Description>
 									</Card.Header>
 									<Card.Content>
-										{download.isMacOS ? (
-											<div class="space-y-2">
-												<Button
-													href={download.appleSiliconUrl}
-													class="min-h-[40px] w-full transition-shadow duration-300 group-hover:shadow-md"
-													size="sm"
-												>
-													<DownloadIcon class="mr-1.5 h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-y-0.5" />
-													Apple Silicon
-												</Button>
-												<Button
-													href={download.intelUrl}
-													variant="secondary"
-													class="min-h-[40px] w-full transition-shadow duration-300 group-hover:shadow-md"
-													size="sm"
-												>
-													<DownloadIcon class="mr-1.5 h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-y-0.5" />
-													Intel
-												</Button>
-											</div>
-										) : download.isWebApp ? (
+										{download.isWebApp ? (
 											<Button
 												href={download.url}
 												variant="secondary"

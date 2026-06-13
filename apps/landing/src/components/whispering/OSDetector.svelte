@@ -3,40 +3,21 @@
 	import { Button } from '@epicenter/ui/button';
 	import { onMount } from 'svelte';
 
-	let platform = $state('');
-	let downloadUrl = $state('');
-	let downloadText = $state('Download');
+	let downloadUrl = $state('https://github.com/EpicenterHQ/epicenter/releases');
+	let downloadText = $state('Download Whispering');
 
 	onMount(() => {
 		const userAgent = navigator.userAgent.toLowerCase();
-		const appVersion = navigator.appVersion.toLowerCase();
 
-		if (userAgent.includes('mac') || appVersion.includes('mac')) {
-			// Check for Apple Silicon
-			// This is still imperfect - User-Agent doesn't reliably indicate ARM
-			// But we check for common indicators
-			if (userAgent.includes('arm') || navigator.userAgent.includes('Apple')) {
-				platform = 'macOS (Apple Silicon)';
-				downloadUrl = `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg`;
-				downloadText = 'Download Whispering for macOS';
-			} else {
-				platform = 'macOS (Intel)';
-				downloadUrl = `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64.dmg`;
-				downloadText = 'Download Whispering for macOS';
-			}
+		if (userAgent.includes('mac')) {
+			downloadUrl = `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg`;
+			downloadText = 'Download for Apple Silicon Mac';
 		} else if (userAgent.includes('win')) {
-			platform = 'Windows';
 			downloadUrl = `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64_en-US.msi`;
 			downloadText = 'Download Whispering for Windows';
 		} else if (userAgent.includes('linux')) {
-			platform = 'Linux';
-			// For Linux, we'll redirect to releases page since there's no direct download
 			downloadUrl = 'https://github.com/EpicenterHQ/epicenter/releases';
 			downloadText = 'Download Whispering for Linux';
-		} else {
-			// Default to releases page
-			downloadUrl = 'https://github.com/EpicenterHQ/epicenter/releases';
-			downloadText = 'Download Whispering';
 		}
 	});
 </script>

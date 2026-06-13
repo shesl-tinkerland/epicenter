@@ -6,14 +6,14 @@ All workflows live flat in `.github/workflows/` (GitHub Actions requirement). We
 
 | Prefix | Purpose | Scope |
 |---|---|---|
-| `release.{app}` | Tag-triggered desktop builds + GitHub Release | Per Tauri app (expensive 4-platform matrix) |
-| `pr-preview.{app}` | PR preview desktop builds | Per Tauri app (expensive 4-platform matrix) |
+| `release.{app}` | Tag-triggered desktop builds + GitHub Release | Per Tauri app (expensive 3-platform matrix) |
+| `pr-preview.{app}` | PR preview desktop builds | Per Tauri app (expensive 3-platform matrix) |
 | `deploy.{target}` | Web app deployment | All web apps together (cheap, fast) |
 | `ci.{name}` | Code quality checks | Whole repo |
 | `auto.{name}` | Automated repo maintenance | Whole repo |
 | `meta.{name}` | Repo housekeeping | Whole repo |
 
-Tauri desktop apps get **separate per-app workflows** because builds run a 4-platform matrix (macOS ARM, macOS Intel, Ubuntu, Windows) taking 20+ minutes. A PR touching only Whispering shouldn't trigger an Epicenter build.
+Tauri desktop apps get **separate per-app workflows** because builds run a 3-platform matrix (macOS Apple Silicon, Ubuntu, Windows) taking 20+ minutes. A PR touching only Whispering shouldn't trigger an Epicenter build.
 
 Web apps (Cloudflare Workers) deploy **together in one workflow** because deploys are fast (~2 min on a single runner) and share the same build step.
 
@@ -23,8 +23,8 @@ Web apps (Cloudflare Workers) deploy **together in one workflow** because deploy
 
 | File | Trigger | What it does |
 |---|---|---|
-| `release.whispering.yml` | `v*` tags, manual | Builds Whispering for 4 platforms, publishes to GitHub Releases as draft. Includes code signing, notarization, and release notes from `docs/release-notes/`. |
-| `pr-preview.whispering.yml` | Pull requests | Builds Whispering for 4 platforms, uploads as PR artifacts. Cancels previous builds via concurrency groups. |
+| `release.whispering.yml` | `v*` tags, manual | Builds Whispering for 3 platforms, publishes to GitHub Releases as draft. Includes code signing, notarization, and release notes from `docs/release-notes/`. |
+| `pr-preview.whispering.yml` | Pull requests | Builds Whispering for 3 platforms, uploads as PR artifacts. Cancels previous builds via concurrency groups. |
 
 ### Web Deployment (Cloudflare Workers)
 
