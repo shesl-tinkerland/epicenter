@@ -107,11 +107,21 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
+          $windowsKit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $windowsKit) {
+            throw 'Windows SDK bin directory not found'
+          }
+          $rc = Join-Path $windowsKit.FullName 'x64\rc.exe'
+          if (-not (Test-Path $rc)) {
+            throw "Windows SDK resource compiler not found at $rc"
+          }
           ninja --version
           where.exe cl
           "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
           "CXX=cl" >> $env:GITHUB_ENV
+          "RC=$rc" >> $env:GITHUB_ENV
+          "CMAKE_RC_COMPILER=$rc" >> $env:GITHUB_ENV
 
       - name: setup bun
         uses: oven-sh/setup-bun@v2
