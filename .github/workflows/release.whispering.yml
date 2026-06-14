@@ -128,12 +128,11 @@ jobs:
           "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION" >> $env:GITHUB_ENV
           "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\Bin" >> $env:GITHUB_PATH
 
-      - name: Setup MSVC developer command prompt (Windows)
-        if: ${{ matrix.os == 'windows' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
+      # No msvc-dev-cmd step: cargo and the cc crate locate the MSVC toolchain
+      # via vswhere at build time, so sourcing vcvars is unnecessary for the x64
+      # build (Handy ships the same whisper-rs-sys on windows-latest without it).
+      # Dropping it also sheds an unmaintained action that still runs on the
+      # deprecated node20. Verified green on the Blacksmith preview build first.
       - name: Configure Windows native build
         if: ${{ matrix.os == 'windows' }}
         shell: pwsh
