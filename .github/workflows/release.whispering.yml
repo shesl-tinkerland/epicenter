@@ -59,12 +59,7 @@ jobs:
           # macOS Apple Silicon (M1, M2, M3, etc.)
           - platform: 'blacksmith-6vcpu-macos-15'
             args: '--target aarch64-apple-darwin'
-            rustTargets: 'aarch64-apple-darwin,x86_64-apple-darwin'
-
-          # macOS Intel-based
-          - platform: 'blacksmith-6vcpu-macos-15'
-            args: '--target x86_64-apple-darwin'
-            rustTargets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            rustTargets: 'aarch64-apple-darwin'
 
           # Linux (Ubuntu)
           - platform: 'ubuntu-24.04'
@@ -129,6 +124,12 @@ jobs:
           "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
           "$($sdk.FullName)\Bin" >> $env:GITHUB_PATH
 
+      - name: setup MSVC developer environment
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       # Setup Bun package manager
       - name: setup bun
         uses: oven-sh/setup-bun@v2
@@ -145,7 +146,7 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # For macOS: specify both Intel and ARM targets
+          # For macOS: specify the Apple Silicon target
           # For other platforms: empty string (uses default target)
           targets: ${{ matrix.rustTargets }}
 

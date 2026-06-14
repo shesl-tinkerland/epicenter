@@ -50,11 +50,7 @@ jobs:
         include:
           - platform: 'blacksmith-6vcpu-macos-15'
             args: '--target aarch64-apple-darwin'
-            rustTargets: 'aarch64-apple-darwin,x86_64-apple-darwin'
-
-          - platform: 'blacksmith-6vcpu-macos-15'
-            args: '--target x86_64-apple-darwin'
-            rustTargets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            rustTargets: 'aarch64-apple-darwin'
 
           - platform: 'ubuntu-24.04'
             args: ''
@@ -100,6 +96,12 @@ jobs:
           }
           "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
           "$($sdk.FullName)\Bin" >> $env:GITHUB_PATH
+
+      - name: setup MSVC developer environment
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: setup bun
         uses: oven-sh/setup-bun@v2
@@ -183,8 +185,6 @@ jobs:
         run: |
           if [[ "${{ matrix.args }}" == *"aarch64-apple-darwin"* ]]; then
             echo "suffix=macos-arm64" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.args }}" == *"x86_64-apple-darwin"* ]]; then
-            echo "suffix=macos-intel" >> $GITHUB_OUTPUT
           elif [[ "${{ matrix.platform }}" == "ubuntu-24.04" ]]; then
             echo "suffix=linux" >> $GITHUB_OUTPUT
           elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
