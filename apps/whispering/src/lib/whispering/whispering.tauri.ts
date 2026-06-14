@@ -12,16 +12,22 @@ import {
 	defineMutation,
 	defineWorkspace,
 } from '@epicenter/workspace';
+import { attachMarkdownExport } from '@epicenter/workspace/document/materializer/markdown';
 import { open } from '@tauri-apps/plugin-dialog';
-import yaml from 'js-yaml';
 import {
 	defineErrors,
 	extractErrorMessage,
 	type InferErrors,
 } from 'wellcrafted/error';
+import { createLogger } from 'wellcrafted/logger';
 import { type Result, tryAsync } from 'wellcrafted/result';
+import { PATHS } from '$lib/services/fs-paths';
 import { commands } from '$lib/tauri/commands';
 import { createWhispering, type Recording } from '$lib/workspace';
+import {
+	assembleMarkdown,
+	tauriMarkdownDeps,
+} from '$lib/workspace/markdown-export-fs';
 
 const RecordingMarkdownExportError = defineErrors({
 	WriteFailed: ({ cause }: { cause: unknown }) => ({
@@ -32,6 +38,8 @@ const RecordingMarkdownExportError = defineErrors({
 type RecordingMarkdownExportError = InferErrors<
 	typeof RecordingMarkdownExportError
 >;
+
+const log = createLogger('whispering/markdown-export');
 
 type RecordingMarkdownExportResult =
 	| {
@@ -50,6 +58,44 @@ export function openWhispering() {
 
 	const idb = attachIndexedDb(workspace.ydoc);
 	attachBroadcastChannel(workspace.ydoc);
+
+	// Continuously materialize each recording to a plain-Markdown sidecar beside
+	// its audio in the appdata `recordings/` folder: `{id}.md` next to `{id}.wav`.
+	// One-way Yjs -> disk; the observer rewrites on edit and removes the file when
+	// a recording is deleted. This is the always-on counterpart to the manual
+	// `recordings_export_markdown` action below, which snapshots to a folder the
+	// user picks. Gated on local hydration so the first flush sees every recording,
+	// not an empty doc. The Rust artifact layer already preserves these sidecars
+	// when audio is cleared.
+	const recordingMarkdown = attachMarkdownExport(workspace, {
+		dir: () => PATHS.DB.RECORDINGS(),
+		...tauriMarkdownDeps,
+		waitFor: idb.whenLoaded,
+		log,
+		tables: {
+			recordings: {
+				// No per-table subdir: write straight into `recordings/` so the
+				// sidecar sits beside the audio file of the same id.
+				dir: '',
+				// Mirror the manual export's shape: the transcript is the file body,
+				// every other column is frontmatter.
+				toMarkdown: (recording) => {
+					const { transcript, ...frontmatter } = recording;
+					return { frontmatter, body: transcript || undefined };
+				},
+			},
+		},
+	});
+	// Per-row write failures log inside the export; a cold-start flush rejection
+	// (e.g. the batch write command erroring) surfaces here instead of as an
+	// unhandled rejection.
+	recordingMarkdown.whenFlushed.catch((cause) => {
+		log.warn(
+			new Error(
+				`initial recording markdown flush failed: ${extractErrorMessage(cause)}`,
+			),
+		);
+	});
 
 	return defineWorkspace({
 		...workspace,
@@ -81,10 +127,12 @@ export function openWhispering() {
 								.scan()
 								.rows.map((row: Recording) => {
 									const { transcript, ...frontmatter } = row;
-									const yamlStr = yaml.dump(frontmatter, { lineWidth: -1 });
 									return {
 										filename: `${row.id}.md`,
-										content: `---\n${yamlStr}---\n${transcript || ''}\n`,
+										content: assembleMarkdown(
+											frontmatter,
+											transcript || undefined,
+										),
 									};
 								});
 							const { error } = await commands.writeMarkdownFiles(
