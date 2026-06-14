@@ -7,6 +7,7 @@
 		type Vocabulary,
 	} from '@epicenter/zhongwen';
 	import { Button } from '@epicenter/ui/button';
+	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import * as Empty from '@epicenter/ui/empty';
 	import { Input } from '@epicenter/ui/input';
 	import * as Item from '@epicenter/ui/item';
@@ -15,6 +16,7 @@
 	import { ToggleGroup, ToggleGroupItem } from '@epicenter/ui/toggle-group';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { onDestroy } from 'svelte';
 	import { requireZhongwen } from '$lib/session';
 
@@ -88,6 +90,24 @@
 	 */
 	function setMastery(id: TermId, mastery: Vocabulary['mastery']) {
 		zhongwen.tables.vocabulary.update(id, { mastery });
+	}
+
+	/**
+	 * Hard delete (the row is the current state, not a log, so there is nothing to
+	 * archive). Re-adding the same text is the recovery path. Confirm first since a
+	 * delete drops the word's mastery and review schedule with it.
+	 */
+	function deleteWord(word: Vocabulary) {
+		confirmationDialog.open({
+			title: `Remove "${word.text}"?`,
+			description:
+				'This removes the word and its comfort level from your dictionary. You can add it again later, but it will start over as new.',
+			confirm: { text: 'Remove', variant: 'destructive' },
+			onConfirm: () => {
+				zhongwen.tables.vocabulary.delete(word.id);
+				toast.success(`Removed "${word.text}"`);
+			},
+		});
 	}
 
 	onDestroy(() => {
@@ -174,6 +194,15 @@
 									Known
 								</ToggleGroupItem>
 							</ToggleGroup>
+							<Button
+								variant="ghost"
+								size="icon"
+								tooltip="Remove word"
+								aria-label={`Remove "${word.text}"`}
+								onclick={() => deleteWord(word)}
+							>
+								<Trash2Icon class="text-muted-foreground" />
+							</Button>
 						</Item.Actions>
 					</Item.Root>
 				{/each}
