@@ -157,16 +157,6 @@
 			cell: formattedCell((recording) => recording.recordedAtZone),
 		},
 		{
-			accessorKey: 'updatedAt',
-			meta: { label: 'Updated At' },
-			header: ({ column }) =>
-				renderComponent(SortableTableHeader, {
-					column,
-					headerText: 'Updated At',
-				}),
-			cell: formattedCell(),
-		},
-		{
 			accessorKey: 'transcript',
 			meta: { label: 'Transcript' },
 			header: ({ column }) =>
@@ -257,7 +247,6 @@
 		schema: type('Record<string, boolean>'),
 		defaultValue: {
 			id: false,
-			updatedAt: false,
 		},
 	});
 	let rowSelection = createPersistedState({

@@ -388,22 +388,30 @@ Running inside `vault/apps/fuji` still works because `findProjectRoot()` walks u
 
 ## Gitignore Model
 
-For a repo using `apps/` as the namespace root:
+The Epicenter namespace root owns its own `.gitignore`. For a namespace at
+`repo/apps/`, the file lives at `repo/apps/.gitignore`:
 
 ```gitignore
-/apps/.epicenter/
-/apps/*/
-!/apps/epicenter.config.ts
+# Epicenter folder. Only epicenter.config.ts is tracked; the generated mount
+# projections and the machine state under .epicenter/ are derived from the Yjs
+# log and rebuilt on demand, so git ignores them.
+/*
+!/.gitignore
+!/epicenter.config.ts
 ```
 
 If the namespace needs a tracked `AGENTS.md` or README:
 
 ```gitignore
-!/apps/AGENTS.md
-!/apps/README.md
+!/AGENTS.md
+!/README.md
 ```
 
-Do not ignore all of `/apps/` without unignoring the config. The config is the tracked boundary marker.
+Do not ignore the namespace without unignoring the config. The config is the
+tracked boundary marker. `openProject()` claims the namespace after config,
+auth, mount-name, and populated-folder validation, but before any mount opens.
+Fresh claims write the root ignore before creating `.epicenter/`, so
+`.epicenter/` remains the "already claimed" marker.
 
 ## Edge Cases
 
@@ -431,6 +439,23 @@ The marker is `epicenter.config.ts`, not the literal folder name `apps`.
 3. Under the namespace model, direct child folders are generated mount folders.
 
 Recommendation: first implementation should refuse this on bootstrap if `.epicenter/` does not exist yet, because the namespace has not been established. Once `.epicenter/` exists, rebuild may treat declared mount folders as generated projection folders.
+
+### Mount startup partially fails
+
+1. User creates `repo/apps/epicenter.config.ts` with multiple mounts.
+2. The populated-folder guard passes.
+3. `openProject()` writes `repo/apps/.gitignore`, then creates `repo/apps/.epicenter/`.
+4. One mount later fails while opening.
+
+Recommendation: keep the namespace claim. The folder has already passed the
+ownership guard, so startup failure should release runtime resources but should
+not roll back the git boundary. This preserves the invariant that `.epicenter/`
+exists only after the root ignore has been handled.
+
+After this point, declared mount folders are reserved even if no projection was
+generated before the startup failure. The bootstrap guard protects files that
+predate the namespace claim; it does not make post-claim mount folders a safe
+place for hand-authored content.
 
 ### Mount removed from config
 
@@ -478,6 +503,14 @@ Rejected for v1. A repo may contain several namespace roots. Upward-only discove
 
 Rejected. `.epicenter/` is namespace state, not projection content. Putting it inside each mount makes every mount look like a separate project root and blurs the boundary.
 
+### Round-trip editing of the projection (markdown as source)
+
+Rejected. The markdown folder is a read-only projection of the Yjs log, not a source. Making file edits flow back means reconstructing CRDT structure from a lossy, flattened view, and that reverse map is not generally invertible (fuji reads the body from a separate content-doc, so the `.md` on disk does not even hold everything needed to rebuild the row).
+
+A continuous watcher fights editor atomic-save patterns, partial writes, multiple events per save, and the feedback loop where a re-projection write looks like a user edit. An explicit "re-upload the folder" action avoids the watcher but clobbers concurrent edits from other devices, throwing away the merge guarantee that is the entire reason for a CRDT.
+
+The single write path is the app or the CLI. If editor ergonomics matter later, an `epicenter edit` checkout that commits through a workspace action gives "edit in my editor" without a watcher and without clobbering, because the save is a normal merging write. The on-disk projection stays read-only output.
+
 ## Open Questions
 
 1. **Should the default namespace folder be `apps/` or `epicenter/` in new docs?**
@@ -490,7 +523,11 @@ Rejected. `.epicenter/` is namespace state, not projection content. Putting it i
    - Recommendation: avoid implicit repo-root creation. Prefer an explicit init flow that writes `apps/epicenter.config.ts` or accepts the target namespace path.
 
 4. **Should rebuild always trash before deleting?**
-   - Recommendation: yes for first-party mount projections once the mount context can supply the namespace root and mount name. Keep the generic primitive simpler only if passing that context would pollute its API.
+   - Refused. With directory-level ownership (a mount folder is generated output) and the bootstrap guard refusing a pre-populated mount folder before `.epicenter/` exists, the only files a rebuild sweeps are ones Epicenter generated, and those re-project from the Yjs log. So the delete is not data loss and a trash protects nothing. Trash was a proxy for "the user edited a projected file"; that case is refused outright (see Rejected Alternatives: round-trip editing), so the proxy is unnecessary and would add an unbounded trash plus per-mount plumbing.
+   - Revisit when: rebuild starts sweeping files Epicenter did not generate, or the projection becomes editable source (which this spec refuses).
+
+5. **Should projected files be written read-only (mode `0444`)?**
+   - Recommendation: lean yes, as honest enforcement of the read-only contract. An accidental editor save then fails loudly instead of being silently discarded on the next rebuild, which is the real UX trap. Cost: some tools and some users hit "why can't I edit this," so it needs a clear message and the `epicenter edit` escape hatch. Defer until the edit path exists if that friction outweighs the safety.
 
 ## Success Criteria
 
@@ -524,3 +561,9 @@ Rejected. `.epicenter/` is namespace state, not projection content. Putting it i
 
 - Keep upward-only discovery for command execution: it is predictable and avoids choosing between several child namespace roots.
   Revisit when: users routinely run commands from repo roots that contain exactly one Epicenter namespace.
+
+- The markdown projection is read-only; round-trip editing is refused. Writes enter through the app or the CLI, and the projection regenerates from Yjs. The bootstrap guard (refuse a pre-populated mount folder before `.epicenter/` exists) is the directory-level ownership check; no per-mount marker is added.
+  Revisit when: there is a concrete product need to treat on-disk markdown as editable source, with a defined merge story against concurrent CRDT edits.
+
+- Rebuild hard-deletes generated projection files; no trash. Directory-level ownership plus the bootstrap guard mean a sweep only ever removes Epicenter-generated, regenerable output.
+  Revisit when: rebuild's sweep scope widens beyond Epicenter-generated files.

@@ -53,7 +53,6 @@ export async function processRecordingPipeline({
 		title: '',
 		recordedAt: now,
 		recordedAtZone: IanaTimeZone.current(),
-		updatedAt: now,
 		transcript: '',
 		duration: durationMs,
 		transcription: null,

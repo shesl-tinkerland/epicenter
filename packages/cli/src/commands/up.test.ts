@@ -263,6 +263,71 @@ describe('runUp: failure cleanup', () => {
 		}
 	});
 
+	test('scaffolds a root .gitignore that tracks only the config', async () => {
+		writeRuntimeMount();
+
+		const handle = expectOk(
+			await runUp({
+				epicenterRoot: workDir,
+				quiet: true,
+				createAuthClient: stubAuthFactory,
+			}),
+		);
+
+		try {
+			const rootGitignore = readFileSync(join(workDir, '.gitignore'), 'utf8');
+			// Ignore-all + allowlist: the config (and the ignore file) are tracked,
+			// every generated child folder is not.
+			expect(rootGitignore).toContain('/*');
+			expect(rootGitignore).toContain('!/.gitignore');
+			expect(rootGitignore).toContain('!/epicenter.config.ts');
+		} finally {
+			await handle.teardown();
+		}
+	});
+
+	test('does not overwrite an existing root .gitignore', async () => {
+		writeRuntimeMount();
+		const custom = '# mine\n/build\n';
+		writeFileSync(join(workDir, '.gitignore'), custom);
+
+		const handle = expectOk(
+			await runUp({
+				epicenterRoot: workDir,
+				quiet: true,
+				createAuthClient: stubAuthFactory,
+			}),
+		);
+
+		try {
+			expect(readFileSync(join(workDir, '.gitignore'), 'utf8')).toBe(custom);
+		} finally {
+			await handle.teardown();
+		}
+	});
+
+	test('does not scaffold a root .gitignore once the namespace exists', async () => {
+		// `.epicenter/` present means a prior run already established the folder;
+		// a plain `up` must not retroactively write a `/*` rule into a folder the
+		// user may have turned into a git repo since.
+		writeRuntimeMount();
+		mkdirSync(join(workDir, '.epicenter'), { recursive: true });
+
+		const handle = expectOk(
+			await runUp({
+				epicenterRoot: workDir,
+				quiet: true,
+				createAuthClient: stubAuthFactory,
+			}),
+		);
+
+		try {
+			expect(existsSync(join(workDir, '.gitignore'))).toBe(false);
+		} finally {
+			await handle.teardown();
+		}
+	});
+
 	test('releases the daemon lease when config loading fails', async () => {
 		writeFileSync(join(workDir, 'epicenter.config.ts'), 'export default {;\n');
 

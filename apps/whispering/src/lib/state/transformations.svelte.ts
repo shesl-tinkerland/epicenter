@@ -2,8 +2,8 @@
  * Reactive transformation state backed by Yjs workspace tables.
  *
  * Replaces TanStack Query + BlobStore for transformation CRUD. The workspace
- * model stores transformations as metadata rows (title, description, timestamps)
- * without embedded steps. Steps live in a separate `transformationSteps` table.
+ * model stores transformations as metadata rows (title, description) without
+ * embedded steps. Steps live in a separate `transformationSteps` table.
  *
  * @example
  * ```typescript
@@ -19,7 +19,6 @@
  * ```
  */
 
-import { InstantString } from '@epicenter/field';
 import { fromTable } from '@epicenter/svelte';
 import { nanoid } from 'nanoid/non-secure';
 import { whispering } from '#platform/whispering';
@@ -110,13 +109,10 @@ if (import.meta.hot) {
  * ```
  */
 export function generateDefaultTransformation(): Transformation {
-	const now = InstantString.now();
 	return {
 		id: nanoid(),
 		title: '',
 		description: '',
-		createdAt: now,
-		updatedAt: now,
 	};
 }
 
@@ -124,7 +120,6 @@ export function generateDefaultTransformation(): Transformation {
  * Atomically save a transformation and its steps in a single workspace batch.
  *
  * Works for both create and update:
- * - Sets `updatedAt` to now (harmless on create since it was already "now").
  * - Deletes existing steps first (no-op on create since none exist yet),
  *   then re-inserts with correct ordering.
  *
@@ -142,10 +137,7 @@ export function saveTransformationWithSteps(
 	steps: TransformationStep[],
 ) {
 	whispering.ydoc.transact(() => {
-		transformations.set({
-			...transformation,
-			updatedAt: InstantString.now(),
-		});
+		transformations.set(transformation);
 		transformationSteps.deleteByTransformationId(transformation.id);
 		for (const [order, step] of steps.entries()) {
 			transformationSteps.set({
