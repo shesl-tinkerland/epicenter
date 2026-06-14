@@ -19,6 +19,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { onDestroy } from 'svelte';
 	import { requireZhongwen } from '$lib/session';
+	import BulkAddModal from './BulkAddModal.svelte';
 
 	const zhongwen = requireZhongwen();
 	const vocabularyMap = fromTable(zhongwen.tables.vocabulary);
@@ -29,6 +30,12 @@
 		[...vocabularyMap.values()].sort((a, b) =>
 			a.createdAt.localeCompare(b.createdAt),
 		),
+	);
+
+	// Keyed by text for the bulk-import dedup (text is the dedup key); the import
+	// looks each pasted line up here to decide new vs already-have.
+	const existingByText = $derived(
+		new Map(words.map((word) => [word.text, word])),
 	);
 
 	// mastery is the self-reported comfort (0 new, 1 learning, 2 known); it is
@@ -121,6 +128,9 @@
 			<ArrowLeftIcon />
 		</Button>
 		<h1 class="text-lg font-semibold">Words</h1>
+		<div class="ml-auto">
+			<BulkAddModal {existingByText} />
+		</div>
 	</header>
 
 	<form
