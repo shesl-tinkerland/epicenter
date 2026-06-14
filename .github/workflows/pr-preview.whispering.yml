@@ -15,6 +15,7 @@ name: PR Preview Builds
 # - All workflow runs for the same PR share the same concurrency group (keyed by PR number)
 # - When a new run starts, GitHub Actions automatically cancels previous runs in that group
 # - The 'closed' trigger activates a fast dummy job that joins the concurrency group and triggers cancellation
+# - A cheap changed-files job decides whether the expensive 3-platform build is needed
 
 on:
   pull_request:
@@ -34,12 +35,38 @@ jobs:
   cancel-on-close:
     if: github.event.action == 'closed'
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
     steps:
       - run: echo "PR closed - cancelling in-progress builds via concurrency group"
 
+  changes:
+    if: github.event.action != 'closed'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      build_preview: ${{ steps.changed_files.outputs.build_preview }}
+    steps:
+      - name: Check changed files
+        id: changed_files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          files=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+
+          if echo "$files" | grep -Eq '^(apps/whispering/|packages/|\.github/workflows/pr-preview\.whispering\.yml$)'; then
+            echo "build_preview=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_preview=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Main build job - runs on PR open and updates, skipped when PR is closed
   build-preview:
-    if: github.event.action != 'closed'
+    needs: changes
+    if: github.event.action != 'closed' && needs.changes.outputs.build_preview == 'true'
     permissions:
       contents: read
       pull-requests: write
@@ -82,6 +109,7 @@ jobs:
             rustTargets: ''
 
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
 
@@ -276,3 +304,4 @@ jobs:
             target/release/bundle/**/*.exe
             target/release/bundle/**/*.msi
           if-no-files-found: warn
+          retention-days: 7

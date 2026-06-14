@@ -24,7 +24,7 @@ Web apps (Cloudflare Workers) deploy **together in one workflow** because deploy
 | File | Trigger | What it does |
 |---|---|---|
 | `release.whispering.yml` | `v*` tags, manual | Builds Whispering for 3 platforms, publishes to GitHub Releases as draft. Includes code signing, notarization, and release notes from `docs/release-notes/`. |
-| `pr-preview.whispering.yml` | Pull requests | Builds Whispering for 3 platforms, uploads as PR artifacts. Cancels previous builds via concurrency groups. |
+| `pr-preview.whispering.yml` | Pull requests | Cancels previous runs via concurrency groups, then builds Whispering for 3 platforms only when the PR touches `apps/whispering/**` or `packages/**`. Uploads short-lived PR artifacts. |
 
 ### Web Deployment (Cloudflare Workers)
 
@@ -37,8 +37,8 @@ Web apps (Cloudflare Workers) deploy **together in one workflow** because deploy
 
 | File | Trigger | What it does |
 |---|---|---|
-| `ci.format.yml` | Push, pull requests | Runs `bun run lint:check` and `bun run typecheck`. |
-| `ci.autofix.yml` | Push, pull requests | Runs `bun run format` and commits fixes back via autofix-ci. |
+| `ci.format.yml` | Push to `main`, pull requests | Runs `bun run lint:check` and `bun run typecheck`. Cancels older runs for the same branch or PR. |
+| `ci.autofix.yml` | Push to `main`, pull requests | Runs `bun run format` and commits fixes back via autofix-ci. Cancels older runs for the same branch or PR. |
 
 ### Automation
 
