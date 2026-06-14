@@ -118,6 +118,7 @@ jobs:
           ninja --version
           where.exe cl
           "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CARGO_TARGET_DIR=D:/t" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
           "CXX=cl" >> $env:GITHUB_ENV
           "RC=$rc" >> $env:GITHUB_ENV
