@@ -246,13 +246,63 @@ existing single-root `daemon up`.
    condition is downstream of Wave 4 (distribution), so Wave 4 precedes real
    Wave 3 demand.
 
-### Wave 4: jsrepo registry
+### Wave 4: jsrepo registry (BLOCKED on the npm publish pipeline)
 
-9. Spike: convert fuji into one vendored block in a registry repo with
-   `allowSubdirectories: true`. Prove end to end: `jsrepo add fuji` vendors the
-   folder, rewrites relative imports, installs npm deps, and `epicenter up`
-   inside it runs. Validate the gitignore story on a fresh clone.
-10. Convert honeycrisp, tab-manager, and the notes example to blocks.
+Audited 2026-06-14: the premise that "the framework stays an npm dependency;
+`jsrepo add` installs the npm packages" does NOT hold today. `jsrepo add fuji`
+cannot work end to end because the framework it would `npm install` is currently
+uninstallable. Two independent defects:
+
+DEFECT 1, incomplete publish set. `@epicenter/workspace` depends on
+`@epicenter/encryption`, `@epicenter/field`, `@epicenter/identity`,
+`@epicenter/sync`, `@epicenter/util`. Of these, `encryption`, `field`, `util`
+are `private: true` (so changesets skips them) and `identity` is non-private but
+was never given a changeset; all four are 404 on npm. Only `sync` and `workspace`
+are published. So installing `@epicenter/workspace` pulls four 404s.
+(`@epicenter/constants`, also `private: true`, blocks other apps the same way.)
+
+DEFECT 2, bun protocol strings ship unresolved. The published
+`@epicenter/workspace@0.1.0` manifest declares deps verbatim as
+`'@epicenter/sync': 'workspace:*'` and `wellcrafted: 'catalog:'`. The release
+path is `changeset version && changeset publish` (changesets over npm, per
+`.github/workflows/README.md`, which says not to run `bun publish` directly).
+`changeset version` rewrites `workspace:*` for managed packages, but `catalog:`
+is a bun-only protocol that neither changesets nor `npm publish` resolves, and no
+prepack step rewrites it. Every published `@epicenter/*` package with a
+`catalog:` dep therefore has a broken manifest.
+
+The block candidate is `examples/fuji/` (a clean Epicenter root:
+`epicenter.config.ts` + `export default fuji()`, its own gitignore and tsconfig),
+NOT the SvelteKit `apps/fuji`. But `examples/fuji` is stale: it predates this
+spec's merge (its `.gitignore` ignores the old `/fuji/` mount-name projection
+instead of the per-table `entries/` dir, and it cites the superseded layout spec
+`20260612T000201`). It needs a Wave 1 refresh regardless.
+
+Phased plan:
+
+9. PHASE 0 (prerequisite, the bulk of the work): make the `@epicenter/*` runtime
+   closure installable from npm. Two sub-decisions:
+   - Publish-the-closure vs bundle-the-closure. Either un-`private` and publish
+     `encryption`, `field`, `identity`, `util` (add them to the changesets
+     `fixed` group), or bundle them into `@epicenter/workspace` at build time so
+     they stop being separate npm deps. The spec names workspace, encryption, and
+     identity as the public framework, which argues for publishing those and
+     bundling the rest (`field`/`util` are implementation detail).
+   - Resolve `catalog:` (and any stray `workspace:*`) at publish: a catalog
+     rewrite step before `changeset publish` (a prepack rewrite, a changesets
+     catalog plugin, or a bun-publish-based tag step). Verify
+     `npm install @epicenter/workspace` in an empty dir actually resolves.
+   Until Phase 0 is green nothing downstream works, and the broken published
+   packages are a latent problem independent of jsrepo.
+10. PHASE 1 (jsrepo mechanics, de-riskable now WITHOUT npm): build the block over
+    a refreshed `examples/fuji`-shaped source with `allowSubdirectories: true`
+    and a `subdirectory: true` manifest, against locally-linked deps. Prove
+    vendoring rewrites relative imports and the gitignore story holds (vendored
+    source tracked; `.epicenter/` and `entries/` self-ignored).
+11. PHASE 2 (end to end, needs Phase 0 + 1): `jsrepo add fuji` in a real external
+    project; npm installs the framework; `epicenter daemon up` runs inside the
+    vendored folder. Validate on a fresh clone. This is the spec acceptance test.
+12. PHASE 3: convert honeycrisp, tab-manager, and the notes example to blocks.
 
 ## Edge Cases
 
