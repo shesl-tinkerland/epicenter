@@ -11,15 +11,14 @@
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { defineActions, defineWorkspace } from '@epicenter/workspace';
 import { defineSessionMount } from '@epicenter/workspace/daemon';
-import {
-	attachGitAutosave,
-	attachMarkdownExport,
-	type GitAutosaveConfig,
-} from '@epicenter/workspace/document/materializer/markdown';
+import { attachMarkdownExport } from '@epicenter/workspace/document/materializer/markdown';
 import { attachBunSqliteMaterializer } from '@epicenter/workspace/document/materializer/sqlite';
 import {
+	attachGitAutosave,
 	attachMountInfrastructure,
+	type GitAutosaveConfig,
 	mountMarkdownPath,
+	nodeMarkdownDeps,
 	sqlitePath,
 } from '@epicenter/workspace/node';
 import { createLogger } from 'wellcrafted/logger';
@@ -46,6 +45,7 @@ export function honeycrisp(opts: HoneycrispMountOptions = {}) {
 
 			const markdown = attachMarkdownExport(workspace, {
 				dir: mdDir,
+				...nodeMarkdownDeps,
 				tables: { notes: {} },
 			});
 			if (opts.git) {

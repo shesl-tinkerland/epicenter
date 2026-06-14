@@ -14,6 +14,7 @@
  */
 
 import { attachMarkdownExport } from '@epicenter/workspace/document/materializer/markdown';
+import { nodeMarkdownDeps } from '@epicenter/workspace/node';
 import type { WikiWorkspace } from './index';
 
 /**
@@ -29,6 +30,7 @@ export function attachWikiVault(
 		{ ydoc: wiki.ydoc, tables: wiki.tables },
 		{
 			dir,
+			...nodeMarkdownDeps,
 			tables: {
 				types: {},
 				pages: {

@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'wellcrafted/logger';
 import { createWorkspace } from '../../../index.js';
-import { attachGitAutosave, type GitAutosaveConfig } from './index.js';
+import { attachGitAutosave, type GitAutosaveConfig } from './git-autosave.js';
 
 type GitResult = {
 	exitCode: number;

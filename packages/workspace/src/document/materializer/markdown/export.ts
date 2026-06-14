@@ -1,9 +1,6 @@
-import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Type } from 'typebox';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
-import { assembleMarkdown } from '../../../markdown/assemble-markdown.js';
 import { defineActions, defineMutation } from '../../../shared/actions.js';
 import type { MaybePromise } from '../../../shared/types.js';
 import type { BaseRow, Table } from '../../table.js';
@@ -25,6 +22,14 @@ import {
 // validated actions instead, never by editing the materialized `.md`. The sqlite
 // materializer is the read-only sibling for a relational projection.
 //
+// The engine carries NO filesystem or YAML runtime of its own: both the
+// `MarkdownExportFs` and the `assemble` serializer are injected. That keeps this
+// module free of any `node:*` or `bun` import, so it loads in a Tauri webview
+// (with a `@tauri-apps/plugin-fs` adapter) exactly as it does in the daemon (with
+// the node adapter). All path *policy* lives here (confinement, table scoping);
+// the adapter owns path *mechanics* (joining the "/"-relative path onto the base
+// directory with the platform separator) and the actual reads and writes.
+//
 // The observe/flush/rebuild machinery (materializeTable, rebuildTable) lives at
 // the bottom of this file: it was a shared substrate back when an editable vault
 // seam also consumed it; with that seam deleted, this export is its only caller,
@@ -37,9 +42,58 @@ export type MarkdownShape = {
 	body: string | undefined;
 };
 
+/**
+ * Serialize frontmatter + an optional body into a markdown file's contents.
+ * Injected so the engine carries no YAML runtime: the daemon passes the
+ * `Bun.YAML`-backed `assembleMarkdown`; a webview passes a browser-safe one.
+ */
+export type AssembleMarkdown = (
+	frontmatter: Record<string, unknown>,
+	body: string | undefined,
+) => string;
+
+/**
+ * The filesystem surface the markdown export writes through. Every `relPath` is a
+ * validated, "/"-separated path relative to `baseDir` with no `.`/`..` segment and
+ * no leading separator; the adapter translates "/" to the platform separator (and
+ * `listFiles` translates back). Keeping the surface to these few verbs lets one
+ * `node:fs`/`bun` adapter serve the daemon and a `@tauri-apps/plugin-fs` adapter
+ * serve the desktop app, with the confinement policy living in the engine, not
+ * duplicated per adapter.
+ */
+export interface MarkdownExportFs {
+	/** `mkdir -p` of `baseDir`, or of `baseDir/subDir` when `subDir` is given. */
+	ensureDir(baseDir: string, subDir?: string): Promise<void>;
+	/**
+	 * Write `content` at `baseDir/relPath`, creating any intermediate directories
+	 * the relPath implies (e.g. `archive/old.md`).
+	 */
+	writeFile(baseDir: string, relPath: string, content: string): Promise<void>;
+	/**
+	 * Remove `baseDir/relPath`. MUST resolve (not reject) when the file is already
+	 * gone; the engine treats deletes as best-effort.
+	 */
+	removeFile(baseDir: string, relPath: string): Promise<void>;
+	/**
+	 * Every file under `baseDir`, recursively, as "/"-relative paths. Resolves to
+	 * `[]` when `baseDir` does not exist. Drives the destructive rebuild's sweep.
+	 */
+	listFiles(baseDir: string): Promise<string[]>;
+	/**
+	 * Optional bulk write for the cold-start flush. Adapters that can batch (a
+	 * single Tauri invoke, `Bun.write`) implement it; the engine falls back to
+	 * looping `writeFile` when it is absent. Only ever called with a fresh,
+	 * rename-free set (the initial flush), so it carries no ordering obligation.
+	 */
+	writeFiles?(
+		baseDir: string,
+		files: ReadonlyArray<{ relPath: string; content: string }>,
+	): Promise<void>;
+}
+
 /** Per-table customization for the read-only export. Every field is optional. */
 export type ExportTableConfig<TRow extends BaseRow> = {
-	/** Subdirectory (joined onto the base `dir`) for this table. Default: `table.name`. */
+	/** Subdirectory (joined onto the base `dir`) for this table. Default: `table.name`. Pass `''` or `'.'` to write into the base dir directly. */
 	dir?: string;
 	/** Compute the on-disk filename for a row. Default: `${row.id}.md`. */
 	filename?: (row: TRow) => MaybePromise<string>;
@@ -77,6 +131,8 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 	workspace: MaterializerInput<TTableHandles>,
 	{
 		dir,
+		fs,
+		assemble,
 		tables: tablesConfig,
 		waitFor,
 		disposeTimeoutMs = 10_000,
@@ -84,6 +140,10 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 	}: {
 		/** Base output directory. A string or async getter for lazy path resolution. */
 		dir: string | (() => MaybePromise<string>);
+		/** Filesystem adapter (node/bun or Tauri). The engine carries none of its own. */
+		fs: MarkdownExportFs;
+		/** Frontmatter + body serializer. The engine carries no YAML runtime of its own. */
+		assemble: AssembleMarkdown;
 		/**
 		 * Per-table customization keyed by `workspace.tables` name. Presence selects:
 		 * only tables named here are exported. Pass `{}` for an entry to export with
@@ -120,15 +180,21 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 				: `${row.id}.md`;
 			return {
 				filename,
-				content: assembleMarkdown(shape.frontmatter, shape.body),
+				content: assemble(shape.frontmatter, shape.body),
 			};
 		};
+		// Normalize the table's subdirectory: `''`/`'.'` mean "the base dir
+		// itself". A non-empty subdir is validated lazily, at flush time, so a bad
+		// `config.dir` surfaces through `whenFlushed` rather than throwing from this
+		// constructor.
+		const rawSubdir = config.dir ?? name;
+		const subdir = rawSubdir === '' || rawSubdir === '.' ? '' : rawSubdir;
 		registered.set(name, {
 			table: anyTable,
 			config,
 			fileState: new Map(),
 			render,
-			subdir: config.dir ?? name,
+			subdir,
 		});
 	}
 	let isDisposed = false;
@@ -191,12 +257,14 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 		if (isFlushAbandoned) return;
 
 		const baseDir = await resolveDir();
-		await mkdir(baseDir, { recursive: true });
+		await fs.ensureDir(baseDir);
 
 		for (const entry of registered.values()) {
 			const unsubscribe = await materializeTable({
+				fs,
+				baseDir,
+				subdir: entry.subdir,
 				table: entry.table,
-				directory: confineToDir(baseDir, entry.subdir),
 				render: entry.render,
 				fileState: entry.fileState,
 				track: trackPendingWrite,
@@ -218,8 +286,10 @@ export function attachMarkdownExport<TTableHandles extends TablesRecord>(
 
 		async function rebuildOne(entry: RegisteredTable) {
 			return rebuildTable({
+				fs,
+				baseDir,
+				subdir: entry.subdir,
 				table: entry.table,
-				directory: confineToDir(baseDir, entry.subdir),
 				render: entry.render,
 				fileState: entry.fileState,
 				log,
@@ -280,7 +350,8 @@ export type MarkdownExport = ReturnType<typeof attachMarkdownExport>;
 // Materialize machinery: Yjs -> disk observe/flush/rebuild
 //
 // HOW a row renders to a file (custom filename + serialization) is injected as a
-// `RenderRow`; everything below is the generic write loop the export drives.
+// `RenderRow`; everything below is the generic write loop the export drives,
+// through the injected `MarkdownExportFs`.
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Render a row to its on-disk artifact: the export's injected serialization. */
@@ -290,7 +361,7 @@ type RenderRow = (
 
 /**
  * What materialize last wrote for a row, keyed by id. Drives rename cleanup:
- * when a row's filename changes, unlink the previous file before writing the new
+ * when a row's filename changes, remove the previous file before writing the new
  * one so a rename does not leave an orphan behind.
  */
 type FileState = Map<string, { filename: string; content: string }>;
@@ -345,43 +416,44 @@ const MaterializerWriteError = defineErrors({
 });
 
 /**
- * Resolve an untrusted path `segment` (a table `dir`, or a row's rendered
- * filename, which may include subdirectories like `archive/old.md`) against a
- * trusted `root`, and return the absolute target only if it stays strictly
- * inside `root`. Throws otherwise.
+ * Validate a "/"-relative export path, the confinement boundary the export
+ * relies on now that the namespace root, not a hardcoded `apps/` segment, is the
+ * ownership claim. Rejects absolute paths (a leading separator or a Windows drive
+ * letter) and any `.`, `..`, or empty segment, so a `render` that returns
+ * `../../notes/x.md`, an absolute path, or a table `dir` of `..` can never resolve
+ * outside the export root (spec invariants 7 and 9). Both separators are checked
+ * defensively in case a renderer emits `\`.
  *
- * This is the confinement boundary the export relies on now that the namespace
- * root, not a hardcoded `apps/` segment, is the ownership claim. Every write and
- * every delete (initial flush, rename cleanup, and the `markdown_rebuild` sweep)
- * goes through here, so a `render` that returns `../../notes/x.md`, an absolute
- * path, or a table `dir` of `..` is rejected before it can touch disk outside the
- * mount projection (spec invariants 7 and 9).
- *
- * Throws a plain `Error` (not a `defineErrors` variant): these propagate through
- * the same throw/catch path as the rest of the write code, and a `defineErrors`
- * value is an `Err` Result meant for logging or returning, never for `throw`.
- *
- * An absolute `segment` is rejected outright: a relative join would drop the
- * leading slash, but an absolute filename is never legitimate output and signals
- * a broken renderer.
+ * Returns the "/"-normalized path so the adapter always receives one separator
+ * flavor. Throws a plain `Error` (not a `defineErrors` variant): these propagate
+ * through the same throw/catch path as the rest of the write code, and a
+ * `defineErrors` value is an `Err` Result meant for logging or returning, never
+ * for `throw`.
  */
-function confineToDir(root: string, segment: string): string {
-	const resolvedRoot = resolve(root);
-	const reject = () => {
-		throw new Error(
-			`[markdown] refusing path "${segment}": it resolves outside the export root "${resolvedRoot}"`,
-		);
-	};
-	if (isAbsolute(segment)) reject();
-	const target = resolve(resolvedRoot, segment);
-	const rel = relative(resolvedRoot, target);
-	// Inside the root iff the relative path neither climbs out (`..`) nor jumps
-	// to another absolute root (Windows drive change). An empty `rel` means the
-	// segment resolved to the root itself, which is also not a valid file target.
+function assertSafeRelPath(relPath: string): string {
+	const normalized = relPath.replace(/\\/g, '/');
+	const segments = normalized.split('/');
 	const escapes =
-		rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-	if (escapes) reject();
-	return target;
+		normalized === '' ||
+		normalized.startsWith('/') ||
+		/^[A-Za-z]:/.test(normalized) ||
+		segments.some((s) => s === '' || s === '.' || s === '..');
+	if (escapes) {
+		throw new Error(
+			`[markdown] refusing path "${relPath}": it resolves outside the export root`,
+		);
+	}
+	return normalized;
+}
+
+/**
+ * Compose a table's subdirectory and a row's rendered filename into one validated
+ * "/"-relative path. The filename may itself contain subdirectories (e.g.
+ * `archive/old.md`); the whole composed path is validated, so an escaping filename
+ * is rejected before any byte is written.
+ */
+function joinRel(subdir: string, filename: string): string {
+	return assertSafeRelPath(subdir ? `${subdir}/${filename}` : filename);
 }
 
 /**
@@ -416,45 +488,28 @@ function logSkippedRows(
 }
 
 /**
- * Best-effort unlink of a file under `directory`; a missing file or a failed
- * remove is ignored. The target is confined to `directory` first, so a rename
- * whose previous filename somehow escaped can never delete outside the mount
- * projection (`confineToDir` throws, which propagates past the best-effort
- * catch deliberately: an escaping delete is a bug, not a routine miss).
+ * Best-effort remove of an already-confined `relPath` under `baseDir`; a missing
+ * file or a failed remove is ignored. The caller composes `relPath` through
+ * `joinRel` first, so an escaping previous filename throws there (before this
+ * best-effort catch): an escaping delete is a bug, not a routine miss.
  */
-async function tryUnlink(directory: string, filename: string): Promise<void> {
-	const fullPath = confineToDir(directory, filename);
+async function tryRemove(
+	fs: MarkdownExportFs,
+	baseDir: string,
+	relPath: string,
+): Promise<void> {
 	try {
-		await unlink(fullPath);
+		await fs.removeFile(baseDir, relPath);
 	} catch {
 		// already gone, or the remove failed; nothing to do
 	}
 }
 
 /**
- * Write a markdown file under `directory`, creating any intermediate
- * subdirectories implied by a filename like `"archive/old.md"`. The resolved
- * target is confined to `directory`; a filename that escapes (`../x.md`, an
- * absolute path) is rejected before any directory is created or any byte is
- * written.
- */
-async function writeMarkdownFile(
-	directory: string,
-	filename: string,
-	content: string,
-): Promise<void> {
-	const fullPath = confineToDir(directory, filename);
-	const parent = dirname(fullPath);
-	if (parent !== resolve(directory)) {
-		await mkdir(parent, { recursive: true });
-	}
-	await writeFile(fullPath, content);
-}
-
-/**
- * Continuously materialize one table to `directory`: an initial flush of every
- * valid row, then an observe that rewrites a row's file on change and unlinks it
- * when the row goes invalid or is deleted. Returns the observer unsubscribe.
+ * Continuously materialize one table under `baseDir/subdir`: an initial flush of
+ * every valid row, then an observe that rewrites a row's file on change and
+ * removes it when the row goes invalid or is deleted. Returns the observer
+ * unsubscribe.
  *
  * Only CONTENT PRODUCTION is guarded: a throwing `render` (e.g. a body read
  * hitting its connect deadline) skips that one row and leaves its existing `.md`
@@ -463,17 +518,24 @@ async function writeMarkdownFile(
  * the initial flush rejects and the observer's outer catch surfaces it.
  */
 async function materializeTable(opts: {
+	fs: MarkdownExportFs;
+	baseDir: string;
+	subdir: string;
 	table: AnyTable;
-	directory: string;
 	render: RenderRow;
 	fileState: FileState;
 	/** Register an observer batch with the attachment's teardown drain. */
 	track: (work: Promise<void>) => void;
 	log: Logger;
 }): Promise<() => void> {
-	const { table, directory, render, fileState, track, log } = opts;
+	const { fs, baseDir, subdir, table, render, fileState, track, log } = opts;
 
-	await mkdir(directory, { recursive: true });
+	// Validate the table's subdir here (not at registration) so an escaping
+	// `config.dir` rejects through `whenFlushed` instead of throwing from the
+	// constructor, and never reaches `ensureDir` to create a directory outside
+	// the export root.
+	if (subdir) assertSafeRelPath(subdir);
+	await fs.ensureDir(baseDir, subdir || undefined);
 
 	// Write one valid row to disk, shared by the initial flush and the observer.
 	// The rename branch is a no-op on first write (`fileState` starts empty), so
@@ -495,16 +557,48 @@ async function materializeTable(opts: {
 		const { filename, content } = rendered;
 		const previous = fileState.get(id);
 		if (previous && previous.filename !== filename) {
-			await tryUnlink(directory, previous.filename);
+			await tryRemove(fs, baseDir, joinRel(subdir, previous.filename));
 		}
-		await writeMarkdownFile(directory, filename, content);
+		await fs.writeFile(baseDir, joinRel(subdir, filename), content);
 		fileState.set(id, { filename, content });
 	}
 
 	const initialScan = table.scan();
 	logSkippedRows(log, table.name, initialScan);
-	for (const row of initialScan.rows) {
-		await writeRow(row.id, row);
+
+	// Cold-start flush. `fileState` is empty, so there are no renames to sequence:
+	// when the adapter can batch, render the whole set and hand it over in one call
+	// (one Tauri invoke instead of N), else fall back to the per-row path.
+	if (fs.writeFiles && initialScan.rows.length > 0) {
+		const batch: { id: string; filename: string; content: string }[] = [];
+		for (const row of initialScan.rows) {
+			try {
+				const rendered = await render(row);
+				batch.push({ id: row.id, ...rendered });
+			} catch (cause) {
+				log.warn(
+					MaterializerWriteError.TableWriteFailed({
+						tableName: table.name,
+						id: row.id,
+						cause,
+					}),
+				);
+			}
+		}
+		await fs.writeFiles(
+			baseDir,
+			batch.map((b) => ({
+				relPath: joinRel(subdir, b.filename),
+				content: b.content,
+			})),
+		);
+		for (const b of batch) {
+			fileState.set(b.id, { filename: b.filename, content: b.content });
+		}
+	} else {
+		for (const row of initialScan.rows) {
+			await writeRow(row.id, row);
+		}
 	}
 
 	// Sequential writes inside the observer avoid rename races; a parallel
@@ -514,11 +608,11 @@ async function materializeTable(opts: {
 			for (const id of changedIds) {
 				const { data: row, error } = table.get(id);
 
-				// Invalid or missing → unlink any previously-written file.
+				// Invalid or missing → remove any previously-written file.
 				if (error || row === null) {
 					const previous = fileState.get(id);
 					if (previous) {
-						await tryUnlink(directory, previous.filename);
+						await tryRemove(fs, baseDir, joinRel(subdir, previous.filename));
 						fileState.delete(id);
 					}
 					continue;
@@ -541,22 +635,28 @@ async function materializeTable(opts: {
 }
 
 /**
- * Destructive re-export of one table to `directory`: render every valid row
- * BEFORE touching disk (a throwing render aborts the rebuild with the existing
- * files intact, rather than deleting everything and then failing to rewrite),
- * then sweep existing `.md` files and write the rendered set. Updates `fileState`
- * so the live observer stays consistent.
+ * Destructive re-export of one table under `baseDir/subdir`: render every valid
+ * row BEFORE touching disk (a throwing render aborts the rebuild with the existing
+ * files intact, rather than deleting everything and then failing to rewrite), then
+ * sweep the existing `.md` files in this table's subtree and write the rendered
+ * set. Updates `fileState` so the live observer stays consistent.
  */
 async function rebuildTable(opts: {
+	fs: MarkdownExportFs;
+	baseDir: string;
+	subdir: string;
 	table: AnyTable;
-	directory: string;
 	render: RenderRow;
 	fileState: FileState;
 	log: Logger;
 }): Promise<{ deleted: number; written: number }> {
-	const { table, directory, render, fileState, log } = opts;
+	const { fs, baseDir, subdir, table, render, fileState, log } = opts;
 	let deleted = 0;
 	let written = 0;
+
+	// Confine the subdir before any sweep or write, so a rebuild of an
+	// escaping-`dir` table cannot delete or create outside the export root.
+	if (subdir) assertSafeRelPath(subdir);
 
 	const scan = table.scan();
 	logSkippedRows(log, table.name, scan);
@@ -566,35 +666,33 @@ async function rebuildTable(opts: {
 		rendered.push({ id: row.id, filename: r.filename, content: r.content });
 	}
 
-	try {
-		const files = await readdir(directory, { recursive: true });
-		for (const filename of files) {
-			if (!filename.endsWith('.md')) continue;
-			// Confine every swept path to `directory`. readdir entries are relative
-			// to it and so resolve inside under normal conditions; confinement is the
-			// guard for a symlink or other entry that resolves out of the projection.
-			// An escaping entry is skipped, not unlinked (spec invariant 9).
-			let path: string;
-			try {
-				path = confineToDir(directory, filename);
-			} catch {
-				continue;
-			}
-			await unlink(path).then(
-				() => {
-					deleted++;
-				},
-				() => undefined,
-			);
+	// Sweep existing `.md` files in this table's subtree. `listFiles` returns
+	// "/"-relative paths under `baseDir`; scope to this table by its subdir prefix
+	// (empty subdir = the base dir, so every file is in scope, matching the old
+	// per-table-directory readdir). An entry that fails confinement (a symlink
+	// resolving out of the projection) is skipped, not removed (spec invariant 9).
+	const prefix = subdir ? `${subdir}/` : '';
+	for (const rel of await fs.listFiles(baseDir)) {
+		if (!rel.endsWith('.md')) continue;
+		if (prefix && !rel.startsWith(prefix)) continue;
+		let safe: string;
+		try {
+			safe = assertSafeRelPath(rel);
+		} catch {
+			continue;
 		}
-	} catch {
-		// Directory doesn't exist yet. Fine.
+		try {
+			await fs.removeFile(baseDir, safe);
+			deleted++;
+		} catch {
+			// best-effort: a file that vanished or failed to remove is not fatal
+		}
 	}
 
 	fileState.clear();
-	await mkdir(directory, { recursive: true });
+	await fs.ensureDir(baseDir, subdir || undefined);
 	for (const { id, filename, content } of rendered) {
-		await writeMarkdownFile(directory, filename, content);
+		await fs.writeFile(baseDir, joinRel(subdir, filename), content);
 		fileState.set(id, { filename, content });
 		written++;
 	}

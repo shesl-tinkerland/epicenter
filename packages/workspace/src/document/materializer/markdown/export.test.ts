@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { field } from '@epicenter/field';
 import { createWorkspace, defineTable } from '../../../index.js';
 import { attachMarkdownExport } from './export.js';
+import { nodeMarkdownDeps } from './node-fs.js';
 
 const postsTable = defineTable({
 	id: field.string(),
@@ -49,6 +50,7 @@ describe('attachMarkdownExport', () => {
 		});
 		const exporter = attachMarkdownExport(workspace, {
 			dir: TEST_DIR,
+			...nodeMarkdownDeps,
 			tables: {
 				posts: { filename: (row) => `${row.title}-${row.id}.md` },
 			},
@@ -72,6 +74,7 @@ describe('attachMarkdownExport', () => {
 		});
 		const exporter = attachMarkdownExport(workspace, {
 			dir: TEST_DIR,
+			...nodeMarkdownDeps,
 			tables: {
 				posts: {
 					toMarkdown: (row) => ({
@@ -105,6 +108,7 @@ describe('attachMarkdownExport', () => {
 		});
 		const exporter = attachMarkdownExport(workspace, {
 			dir: TEST_DIR,
+			...nodeMarkdownDeps,
 			tables: { posts: { dir: 'published' } },
 		});
 		await exporter.whenFlushed;
@@ -129,6 +133,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: { posts: {} },
 			});
 
@@ -149,6 +154,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: { posts: {} },
 			});
 			await exporter.whenFlushed;
@@ -170,6 +176,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				disposeTimeoutMs: 50,
 				tables: {
 					posts: { toMarkdown: () => new Promise<never>(() => {}) },
@@ -192,6 +199,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				waitFor: gate.promise,
 				tables: { posts: {} },
 			});
@@ -220,6 +228,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: {
 					posts: { filename: () => '../../escape.md' },
 				},
@@ -250,6 +259,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: {
 					posts: { filename: () => '/tmp/epicenter-escape-absolute.md' },
 				},
@@ -272,6 +282,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: {
 					posts: { filename: (row) => `archive/${row.id}.md` },
 				},
@@ -295,6 +306,7 @@ describe('attachMarkdownExport', () => {
 			});
 			const exporter = attachMarkdownExport(workspace, {
 				dir: TEST_DIR,
+				...nodeMarkdownDeps,
 				tables: { posts: { dir: '../escape-dir' } },
 			});
 
@@ -314,6 +326,7 @@ describe('attachMarkdownExport', () => {
 		});
 		const exporter = attachMarkdownExport(workspace, {
 			dir: TEST_DIR,
+			...nodeMarkdownDeps,
 			tables: { posts: {} },
 		});
 		await exporter.whenFlushed;

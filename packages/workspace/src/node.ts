@@ -75,6 +75,15 @@ export {
 	type YjsLogReaderAttachment,
 } from './document/attach-yjs-log-reader.js';
 export {
+	attachGitAutosave,
+	type GitAutosave,
+	type GitAutosaveConfig,
+} from './document/materializer/markdown/git-autosave.js';
+export {
+	createNodeFs,
+	nodeMarkdownDeps,
+} from './document/materializer/markdown/node-fs.js';
+export {
 	type OpenSqliteReaderOptions,
 	openSqliteReader,
 	type SqliteReader,
