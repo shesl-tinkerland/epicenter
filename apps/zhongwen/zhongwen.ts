@@ -48,6 +48,9 @@ export type ConversationId = Id & Brand<'ConversationId'>;
 export const generateConversationId = (): ConversationId =>
 	generateId<ConversationId>();
 
+export type TermId = Id & Brand<'TermId'>;
+export const generateTermId = (): TermId => generateId<TermId>();
+
 export const ZHONGWEN_DEFAULT_PROVIDER = 'gemini' satisfies ServableProvider;
 export const ZHONGWEN_DEFAULT_MODEL =
 	'gemini-3.1-flash-lite-preview' satisfies (typeof SERVABLE_PROVIDER_MODELS)[typeof ZHONGWEN_DEFAULT_PROVIDER][number];
@@ -65,6 +68,21 @@ const conversationsTable = defineTable({
 	updatedAt: field.number(),
 });
 export type Conversation = InferTableRow<typeof conversationsTable>;
+
+// The dictionary of Chinese words you are learning: one row per word, current
+// state only (no usage log). `mastery` is the self-reported comfort that also
+// drives the list filter, the lens color, and the review interval. `dueAt` is
+// the spaced-repetition schedule as a calendar day (events are instants,
+// schedules are dates). See the 2026-06-14 revision in
+// `specs/20260614T022000-vocab-two-boats-conversation-and-dictionary.md`.
+const vocabularyTable = defineTable({
+	id: field.string<TermId>(),
+	text: field.string(),
+	mastery: field.integer({ minimum: 0, maximum: 2 }),
+	dueAt: field.date(),
+	createdAt: field.instant(),
+});
+export type Vocabulary = InferTableRow<typeof vocabularyTable>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Workspace Factory
@@ -86,9 +104,14 @@ export function createZhongwen({ keyring }: { keyring: () => Keyring }) {
 		keyring,
 		tables: {
 			conversations: conversationsTable,
+			vocabulary: vocabularyTable,
 		},
 		kv: {
 			showPinyin: defineKv(Type.Boolean(), () => true),
+			// Caps how many new words (mastery 0) enter the daily review queue, so
+			// a bulk import of hundreds of words does not overwhelm. Pacing lives
+			// in the queue query + this number, not in per-word state.
+			newWordsPerDay: defineKv(Type.Number(), () => 10),
 		},
 	});
 
