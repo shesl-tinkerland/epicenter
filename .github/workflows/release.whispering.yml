@@ -116,7 +116,7 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          choco install vulkan-sdk -y --no-progress
+          choco install vulkan-sdk ninja -y --no-progress
           $sdk = Get-ChildItem 'C:\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1
           if (-not $sdk) {
             throw 'Vulkan SDK install did not create C:\VulkanSDK'
@@ -129,6 +129,16 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: configure Windows CMake generator
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          ninja --version
+          where.exe cl
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CC=cl" >> $env:GITHUB_ENV
+          "CXX=cl" >> $env:GITHUB_ENV
 
       # Setup Bun package manager
       - name: setup bun
