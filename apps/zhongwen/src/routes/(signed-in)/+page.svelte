@@ -16,6 +16,7 @@
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import * as Sidebar from '@epicenter/ui/sidebar';
 	import { toast } from '@epicenter/ui/sonner';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import { onDestroy } from 'svelte';
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { requireZhongwen } from '$lib/session';
@@ -183,6 +184,14 @@
 			<div class="flex items-center gap-3">
 				<Sidebar.Trigger />
 				<h1 class="text-lg font-semibold">中文 Zhongwen</h1>
+				<Button
+					variant="ghost"
+					size="icon"
+					href="/words"
+					tooltip="Your words"
+				>
+					<BookOpenIcon />
+				</Button>
 				{#if activeConversation}
 					<ModelPicker
 						provider={activeConversation.provider}
