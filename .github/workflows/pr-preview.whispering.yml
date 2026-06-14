@@ -34,14 +34,14 @@ jobs:
   # any running builds for this PR, saving CI minutes
   cancel-on-close:
     if: github.event.action == 'closed'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - run: echo "PR closed - cancelling in-progress builds via concurrency group"
 
   changes:
     if: github.event.action != 'closed'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       pull-requests: read
@@ -55,9 +55,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          files=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if ! files=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename'); then
+            echo "::warning::Could not list PR files. Running preview build to avoid a false skip."
+            echo "build_preview=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          if echo "$files" | grep -Eq '^(apps/whispering/|packages/|\.github/workflows/pr-preview\.whispering\.yml$)'; then
+          if echo "$files" | grep -Eq '^(apps/whispering/|packages/|package\.json$|bun\.lock$|tsconfig[^/]*\.json$|\.nvmrc$|\.github/workflows/pr-preview\.whispering\.yml$)'; then
             echo "build_preview=true" >> "$GITHUB_OUTPUT"
           else
             echo "build_preview=false" >> "$GITHUB_OUTPUT"
