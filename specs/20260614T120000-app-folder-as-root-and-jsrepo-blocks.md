@@ -178,7 +178,7 @@ DAEMON PATHS  already per-root (NO CHANGE)
 
 Sequenced so each wave is independently shippable and reviewable.
 
-### Wave 1: Projection convention + gitignore (behavior-preserving prep)
+### Wave 1: Projection convention + gitignore (behavior-preserving prep) [landed in #1980]
 
 1. Change the projection to root-relative. Mount factories pass `dir:
    epicenterRoot` (or a chosen content dir), letting the exporter's per-table
@@ -192,7 +192,7 @@ Sequenced so each wave is independently shippable and reviewable.
    Keep `.epicenter/.gitignore = *`. The jsrepo block MAY ship a tracked
    `.gitignore` for belt-and-suspenders, but vendored source is tracked by default.
 
-### Wave 2: Cardinality collapse (the #1957 idea, rebuilt against current main)
+### Wave 2: Cardinality collapse (the #1957 idea, rebuilt against current main) [landed in #1980]
 
 4. `loadEpicenterConfig` returns `Result<Mount>`. Accept a bare `Mount`, reject a
    `Mount[]` with a pointer to unwrap it. Move format validation
@@ -207,12 +207,44 @@ Sequenced so each wave is independently shippable and reviewable.
 7. `runUp` consumes the single outcome. `init` scaffolds a comment-only singular
    template. Update the 4 in-repo configs to `export default fuji()` etc.
 
-### Wave 3: Fan-out (opt-in, deferred)
+### Wave 3: Fan-out (opt-in, deferred until Wave 4 creates multiple installed apps)
 
-8. Keep `findEpicenterRoot` upward-only. Add an explicit `epicenter up --all`
-   (or the control-plane app) that scans down from a container, enumerates roots,
-   and supervises N daemons. This is the only scan-down path. Defer until daily
-   use demands it.
+The teardown and visibility sides are ALREADY container-global: `daemon ps`
+enumerates every running daemon for the user (`enumerateDaemons` over the runtime
+metadata dir) and `daemon down --all` stops them all in parallel. Only `up` is
+still single-root. Wave 3 closes that asymmetry by giving `up` the same fan-out
+the other two verbs already have.
+
+The one genuinely-new capability is downward discovery. `ps` / `down --all`
+enumerate RUNNING daemons from runtime metadata, but nothing is running before
+`up`, so `up --all` must enumerate ROOTS ON DISK by scanning down a container for
+`epicenter.config.ts`. Everything else (spawn, signal, teardown) reuses the
+existing single-root `daemon up`.
+
+8. Keep `findEpicenterRoot` upward-only. Add the explicit, opt-in scan-down
+   command. Decisions settled (2026-06-14):
+   - Process model: a FOREGROUND SUPERVISOR that spawns one child
+     `epicenter daemon up -C <root>` per discovered root, multiplexes their
+     stderr, propagates SIGINT/SIGTERM, and reports per-child health. Child
+     processes (not N mounts in one process) preserve the physical fault
+     isolation that is this topology's headline benefit, and reuse the
+     single-root lifecycle (lease, socket, metadata, teardown) unchanged.
+   - Partial failure: start-healthy-and-report. Start every root, keep the
+     healthy children running, report which failed and why; do not tear the
+     fleet down because one app failed to open.
+   - Discovery: this `--all` scan is the ONLY scan-down path. It descends from
+     the cwd container, stops descending at the first `epicenter.config.ts` on
+     each branch (a root is a leaf for this scan), and skips `.epicenter`,
+     `node_modules`, and `.git`.
+   - Naming forks on Open Question 2 (see below). A thin CLI fan-out is
+     `epicenter daemon up --all`, where `--all` is a PURE DISPATCH to a separate
+     `runSupervisor()`: it does not generalize `runUp`, so the single-root
+     `UpHandle` return is untouched and the array-of-one overload never returns.
+     A graduated control-plane gets its own noun, ultimately the app, not a flag.
+
+   Gate: defer until there are multiple installed apps to supervise. That
+   condition is downstream of Wave 4 (distribution), so Wave 4 precedes real
+   Wave 3 demand.
 
 ### Wave 4: jsrepo registry
 
@@ -254,8 +286,17 @@ Sequenced so each wave is independently shippable and reviewable.
 1. Projection visibility: gitignore the generated `.md` (default here) or let
    users commit their notes? Leaning gitignore + an explicit "export to tracked
    folder" action later.
-2. `--all` orchestrator: a CLI fan-out vs the separate control-plane app. Likely
-   start as a CLI command, graduate to the app.
+2. `--all` orchestrator: a thin CLI fan-out vs the separate control-plane app.
+   This fork is still live, and it controls Wave 3's NAME and whether the CLI
+   version is throwaway. Settled regardless of the fork (see Wave 3):
+   child-process supervision, start-healthy-and-report, and the downward-discovery
+   rules. What the fork still decides: if a control-plane app is coming
+   (persistent fleet state, auto-restart / start-on-login policy, a health UI,
+   cross-app queries through one surface), then a CLI `up --all` is throwaway
+   scaffolding and we should skip to the app. If "bring my apps up in one terminal
+   for dev" is the whole need, the `daemon up --all` dispatch is the complete
+   answer. Not decidable without living with multiple installed apps, which is the
+   Wave 3 gate.
 3. Keep the single-mount action prefix, or drop it for ergonomics?
 4. Registry hosting: GitHub-backed registry vs a custom HTTP registry for the
    first-party blocks.
