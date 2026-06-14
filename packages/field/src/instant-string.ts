@@ -29,11 +29,21 @@ export const InstantString = {
 	},
 
 	/**
+	 * Canonical UTC instant string for a given `Date`. The companion to `now()`
+	 * (which is `from(new Date())`); use it when you need to stamp a sequence of
+	 * instants a known offset apart, e.g. preserving paste order across a bulk
+	 * import landing within the same millisecond.
+	 */
+	from(date: Date): InstantString {
+		return date.toISOString() as InstantString;
+	},
+
+	/**
 	 * Current instant in canonical UTC form.
 	 *
 	 * @example `"2026-06-09T14:00:00.000Z"`
 	 */
 	now(): InstantString {
-		return new Date().toISOString() as InstantString;
+		return this.from(new Date());
 	},
 };
