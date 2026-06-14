@@ -304,6 +304,55 @@ Phased plan:
     vendored folder. Validate on a fresh clone. This is the spec acceptance test.
 12. PHASE 3: convert honeycrisp, tab-manager, and the notes example to blocks.
 
+### Framework package decomposition (audited 2026-06-14)
+
+Before publishing anything, the package boundaries were traced (no dependency
+cycles; clean DAG). The framework is LAYERED, not flat, and the layering is what
+makes the boundaries correct:
+
+```txt
+encryption (no @epicenter deps)   identity (-> encryption)   foundation
+field (no @epicenter deps)                                   schema authoring
+sync (-> identity)                                           sync protocol
+workspace (-> encryption, field, identity, sync)             runtime / daemon
+```
+
+Proof the layering is real (not monorepo convenience): `auth` and `client`
+depend on `encryption` / `identity` / `sync` WITHOUT depending on `workspace`. So
+a mega-package (collapsing the foundation up into `workspace`) is REJECTED: it
+would force the auth client and the `client` package to drag the 14k-LOC
+workspace runtime just to get crypto and identity. The foundation sits BELOW
+workspace.
+
+Public framework set (publish these four; each is justified by multiple
+consumers that do not all route through workspace, so deprecation risk is low):
+- `@epicenter/encryption` (481 LOC): used by workspace, auth, server, identity.
+- `@epicenter/field` (866 LOC): used by workspace + 11 apps directly; the
+  schema-authoring surface (`field`, `Field`, `Kind`, `InstantString`, ...).
+- `@epicenter/identity` (64 LOC): used by 8+ packages; foundational. Missing a
+  `version` field today; add one.
+- `@epicenter/sync` (339 LOC): used by workspace, auth, server; already public.
+
+Do NOT publish (handle by shrinking the surface, not by committing a name):
+- `@epicenter/util` (61 LOC) is just `debounce()`. DISSOLVE into
+  `@epicenter/workspace` (all four importers already depend on workspace, so no
+  cycle). The `@epicenter/util` name never goes public.
+- `@epicenter/constants` (898 LOC) is Epicenter PRODUCT config (hosted API URLs,
+  OAuth, vite), not framework. Keep it internal. The fuji block couples to it
+  only for `EPICENTER_API_URL` (`apps/fuji/src/lib/workspace/project.ts`, used as
+  `baseURL` twice); decouple by injecting that URL as config so the block's
+  closure drops `constants`.
+
+False alarm checked: the published `@epicenter/cli` does NOT drag in apps.
+`@epicenter/api` / `honeycrisp` / `tab-manager` are devDependencies (tests), not
+runtime deps, and the CLI source never imports them.
+
+Two prep refactors precede the first publish (both reversible; nothing published
+yet): (1) dissolve `@epicenter/util` into workspace; (2) decouple the fuji block
+from `@epicenter/constants`. Then give `@epicenter/identity` a version and
+un-`private` `encryption` and `field`. After that the fuji block's npm closure is
+exactly workspace + field + (encryption, identity, sync transitively).
+
 ## Edge Cases
 
 - **clientID base.** `hashYDocClientId(path)` derives from the root path. More
