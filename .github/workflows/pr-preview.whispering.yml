@@ -107,12 +107,11 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          $windowsKit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $windowsKit) {
-            throw 'Windows SDK bin directory not found'
-          }
-          $rc = Join-Path $windowsKit.FullName 'x64\rc.exe'
+          $rc = Join-Path $env:WindowsSdkVerBinPath 'x64\rc.exe'
           if (-not (Test-Path $rc)) {
+            $rc = (Get-ChildItem (Join-Path $env:WindowsSdkDir 'bin\*\x64\rc.exe') | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $rc -or -not (Test-Path $rc)) {
             throw "Windows SDK resource compiler not found at $rc"
           }
           ninja --version
