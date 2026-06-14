@@ -353,6 +353,31 @@ from `@epicenter/constants`. Then give `@epicenter/identity` a version and
 un-`private` `encryption` and `field`. After that the fuji block's npm closure is
 exactly workspace + field + (encryption, identity, sync transitively).
 
+### Publish policy (decided 2026-06-14)
+
+Mechanism: `bun publish` packs and uploads; `changeset version` owns version math
+and changelogs. `bun publish` resolves both `workspace:*` and `catalog:` at pack
+time (verified: it actively resolves `workspace:*`, erroring on identity's
+missing version), which is the fix for Defect 2. `changeset publish` (npm-based,
+the cause of the broken 0.1.0s) is replaced by a small script: version, then
+`bun publish` each bumped public package, then tag. GATE: before the first real
+publish, run `bun publish --dry-run` across the closure and confirm zero
+`catalog:` / `workspace:*` strings remain in the packed manifests.
+
+Versioning: stay 0.x (breaking changes are allowed pre-1.0). Default changesets
+to `patch`; use `minor` only for features or breaking changes; never `major` (a
+`major` changeset jumps 0.x to 1.0.0). Add `encryption`, `field`, `identity` to
+the changesets `fixed` group so the whole framework closure versions in lockstep
+with workspace / cli / sync / filesystem / skills / ui / svelte (one framework
+version; the known cost is version inflation and `field` / `encryption` jumping
+up to the group's current version).
+
+First correct publish: un-`private` `encryption` and `field`, add a `version` to
+`identity`, and add a `files` allowlist to each so published tarballs ship source
+(`src`), not tests or tsconfig. After correct versions are live, `npm deprecate`
+the broken `@epicenter/workspace@0.1.0`, `@epicenter/sync@0.1.0`, and
+`@epicenter/cli@0.1.0` with a pointer to `>=0.2.x`.
+
 ## Edge Cases
 
 - **clientID base.** `hashYDocClientId(path)` derives from the root path. More
