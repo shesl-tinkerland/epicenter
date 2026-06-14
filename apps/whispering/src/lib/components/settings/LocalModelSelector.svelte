@@ -121,10 +121,10 @@
 		if (!tauri) return;
 		entries = await listModelEntries(engine);
 		// The folder is user-editable truth, so the catalog handles re-check
-		// disk on the same signal that rescans the folder.
-		for (const model of models) {
-			localModelDownloads.get(model).refresh();
-		}
+		// disk on the same signal that rescans the folder. Await the disk-stat
+		// so `isInstalled` (and the "Downloaded" badge it drives) is settled
+		// before the listing does, instead of racing the next render.
+		await Promise.all(models.map((model) => localModelDownloads.get(model).refresh()));
 		// A user who already brought their own model gets the list, not a
 		// download pitch: when nothing is active and the first scan finds
 		// custom entries, start with the list open instead of the hero.

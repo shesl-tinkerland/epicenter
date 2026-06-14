@@ -28,6 +28,7 @@ import {
 	deleteModelEntry,
 	type LocalModelFolderError,
 } from '$lib/services/transcription/local-model-folder';
+import { transcriptionReload } from '$lib/state/transcription-reload.svelte';
 
 type ModelDownloadState =
 	| { type: 'not-downloaded' }
@@ -106,6 +107,11 @@ function createModelDownload(model: LocalModelConfig) {
 			// computed machine lands directly on ready.
 			await refresh();
 			progress = null;
+			// A fresh file now sits at this model's path. The selected model name
+			// may be unchanged (delete + re-download under the same name), so the
+			// layout's config push would not re-fire on settings alone. Bump the
+			// reload signal it also reads so Rust drops and reloads the model.
+			transcriptionReload.bump();
 			return Ok({ entryName: modelEntryName(model), outcome: 'downloaded' });
 		},
 

@@ -26,6 +26,7 @@
 	import { localModel } from '$lib/state/local-model.svelte';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { settings } from '$lib/state/settings.svelte';
+	import { transcriptionReload } from '$lib/state/transcription-reload.svelte';
 	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
 	import { recordingOverlay } from '#platform/recording-overlay';
 	import { tauri } from '#platform/tauri';
@@ -92,6 +93,14 @@
 
 		const modelName = deviceConfig.get(PROVIDERS[service].modelConfigKey);
 		if (!modelName) return;
+
+		// Re-push when a model is re-downloaded under an unchanged name. The
+		// model name above stays the same across delete + re-download, and a
+		// SvelteMap.set with an unchanged value does not notify, so without this
+		// dependency the effect would not re-run and Rust would keep serving the
+		// evicted model. Reading the signal here tracks it; the download path
+		// bumps it once the new file is on disk.
+		void transcriptionReload.version;
 
 		const language = settings.get('transcription.language');
 		const prompt = settings.get('transcription.prompt');
