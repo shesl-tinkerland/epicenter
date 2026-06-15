@@ -314,7 +314,8 @@
 		model: string;
 		phase: 'actions' | 'meaning';
 		x: number;
-		y: number;
+		top: number;
+		bottom: number;
 	} | null>(null);
 
 	/** The raw text of a message by id: the sentence a gloss reads for context. */
@@ -328,7 +329,8 @@
 		messageId: string | null;
 		phase: 'actions' | 'meaning';
 		x: number;
-		y: number;
+		top: number;
+		bottom: number;
 	}) {
 		const row = readRow();
 		popover = {
@@ -338,7 +340,8 @@
 			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
 			phase: at.phase,
 			x: at.x,
-			y: at.y,
+			top: at.top,
+			bottom: at.bottom,
 		};
 	}
 
@@ -357,7 +360,8 @@
 			messageId,
 			phase: 'meaning',
 			x: rect.left + rect.width / 2,
-			y: rect.top,
+			top: rect.top,
+			bottom: rect.bottom,
 		});
 	}
 
@@ -462,7 +466,8 @@
 		fetchFn={aiChatFetch}
 		phase={popover.phase}
 		x={popover.x}
-		y={popover.y}
+		top={popover.top}
+		bottom={popover.bottom}
 		onAdd={addFromPopover}
 		onAskMeaning={() => popover && (popover = { ...popover, phase: 'meaning' })}
 		onClose={() => (popover = null)}

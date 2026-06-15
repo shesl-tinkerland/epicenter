@@ -15,7 +15,8 @@
 			text: string;
 			messageId: string | null;
 			x: number;
-			y: number;
+			top: number;
+			bottom: number;
 		}) => void;
 	} = $props();
 
@@ -38,7 +39,13 @@
 			element?.closest('[data-message-id]')?.getAttribute('data-message-id') ??
 			null;
 		const rect = range.getBoundingClientRect();
-		onSelect({ text, messageId, x: rect.left + rect.width / 2, y: rect.top });
+		onSelect({
+			text,
+			messageId,
+			x: rect.left + rect.width / 2,
+			top: rect.top,
+			bottom: rect.bottom,
+		});
 	}
 </script>
 

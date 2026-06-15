@@ -20,6 +20,12 @@
 	 *
 	 * No selection-preservation hack: the popover reads its `text` from props, not
 	 * the live selection, so a button press collapsing the selection is harmless.
+	 *
+	 * Placement is measured, not transform-based, so the card stays on screen: it
+	 * centers on the word's `x`, then clamps to the viewport horizontally and flips
+	 * below the word when there is no room above (a word on the first line). The
+	 * anchor is the word's vertical span (`top`/`bottom`), so the flip has both
+	 * edges to work from.
 	 */
 	let {
 		text,
@@ -29,7 +35,8 @@
 		fetchFn,
 		phase,
 		x,
-		y,
+		top,
+		bottom,
 		onAdd,
 		onAskMeaning,
 		onClose,
@@ -41,7 +48,8 @@
 		fetchFn: typeof fetch;
 		phase: 'actions' | 'meaning';
 		x: number;
-		y: number;
+		top: number;
+		bottom: number;
 		onAdd: () => void;
 		onAskMeaning: () => void;
 		onClose: () => void;
@@ -49,6 +57,36 @@
 
 	let cardEl = $state<HTMLDivElement | null>(null);
 	const reading = $derived(pinyin(text));
+
+	// Gap between the word and the card, and the minimum breathing room kept from
+	// the viewport edges.
+	const GAP = 4;
+	const MARGIN = 8;
+
+	// The measured, viewport-clamped position. Null until the card has been laid
+	// out once, so it stays hidden for the single frame before it can be placed
+	// (no flash at the unclamped origin).
+	let placement = $state<{ left: number; top: number } | null>(null);
+
+	$effect(() => {
+		if (!cardEl) return;
+		// Re-measure when the anchor moves (a tap on a different word) or the card
+		// resizes (the meaning streaming in, or actions -> meaning).
+		void x;
+		void top;
+		void bottom;
+		void phase;
+		void meaning;
+		void failed;
+		const card = cardEl.getBoundingClientRect();
+		const left = Math.min(
+			Math.max(MARGIN, x - card.width / 2),
+			window.innerWidth - card.width - MARGIN,
+		);
+		const fitsAbove = top - card.height - GAP >= MARGIN;
+		const cardTop = fitsAbove ? top - card.height - GAP : bottom + GAP;
+		placement = { left, top: cardTop };
+	});
 
 	let meaning = $state('');
 	let failed = $state(false);
@@ -96,8 +134,10 @@
 
 <div
 	bind:this={cardEl}
-	class="fixed z-50 -translate-x-1/2 -translate-y-full pb-1"
-	style="left: {x}px; top: {y}px"
+	class="fixed z-50"
+	style="left: {placement?.left ?? x}px; top: {placement?.top ?? top}px; visibility: {placement
+		? 'visible'
+		: 'hidden'}"
 >
 	{#if phase === 'actions'}
 		<div class="flex gap-1">
