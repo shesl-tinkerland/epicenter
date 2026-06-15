@@ -277,7 +277,7 @@
 		zhongwen.tables.vocabulary.update(id, { mastery });
 	}
 
-	// The scroll container holding the messages; SelectionCapture scopes its
+	// The scroll container holding the messages; SelectionSource scopes its
 	// text-selection listener to it so selecting in the input or header is ignored.
 	let chatListEl = $state.raw<HTMLDivElement | null>(null);
 
