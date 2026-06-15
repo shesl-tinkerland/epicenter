@@ -4,7 +4,7 @@
 	import LanguagesIcon from '@lucide/svelte/icons/languages';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { pinyin } from 'pinyin-pro';
-	import { streamGloss } from '$lib/gloss';
+	import { cachedGloss, streamGloss } from '$lib/gloss';
 
 	/**
 	 * One anchored surface over a word or phrase in the chat, in two phases:
@@ -57,6 +57,13 @@
 		// Stream only once we are showing the meaning; re-run when the word changes
 		// (a tap on a different word). Abort on dismiss, retap, or Escape.
 		if (phase !== 'meaning') return;
+		// A word glossed earlier this session shows instantly, no model call.
+		const hit = cachedGloss(text, context);
+		if (hit !== undefined) {
+			meaning = hit;
+			failed = false;
+			return;
+		}
 		const controller = new AbortController();
 		meaning = '';
 		failed = false;

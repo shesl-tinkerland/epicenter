@@ -6,6 +6,17 @@ const GLOSS_SYSTEM_PROMPT =
 	'given word as it is used in the sentence. Reply with the meaning only: one ' +
 	'short line, no pinyin, no preamble, no quotes.';
 
+// A word's meaning is contextual, so the cache keys on the sentence too: the same
+// word in a different line earns its own gloss. Session-lived and unbounded by
+// design (a personal chat taps few enough words for this to never matter).
+const glossCache = new Map<string, string>();
+const cacheKey = (word: string, context: string) => `${word}\n${context}`;
+
+/** A previously streamed gloss for this word-in-context, if one has landed. */
+export function cachedGloss(word: string, context: string): string | undefined {
+	return glossCache.get(cacheKey(word, context));
+}
+
 /**
  * Stream a one-shot contextual gloss from `/api/ai/chat`, invoking `onText` with
  * the text accumulated so far as deltas arrive.
@@ -74,4 +85,9 @@ export async function streamGloss({
 			}
 		}
 	}
+
+	// The stream closed cleanly (an abort would have thrown before here), so the
+	// gloss is complete and worth caching. Skip empties so a dropped stream is
+	// retried rather than memoized as blank.
+	if (text) glossCache.set(cacheKey(word, context), text);
 }
