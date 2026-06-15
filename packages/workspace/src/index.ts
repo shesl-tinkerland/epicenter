@@ -177,7 +177,7 @@ export {
 	DispatchError,
 	type DispatchRequest,
 } from './document/dispatch.js';
-export { docGuid } from './document/doc-guid.js';
+export { type DocGuid, docGuid, isDocGuid } from './document/doc-guid.js';
 // One-shot HTTP read of a hosted room: GET the snapshot into a throwaway doc.
 // The atomic snapshot lets a relay-only doc be read without a live
 // `openCollaboration` session.

@@ -55,6 +55,19 @@ const WINDOWS_RESERVED = new Set([
 ]);
 
 /**
+ * True when `value` is a single safe guid segment: lowercase `a-z`/`0-9` with
+ * single internal hyphens, no dots, and not a Windows reserved device name.
+ *
+ * This is the one grammar predicate. {@link assertSafeSegment} (minting) and
+ * `isDocGuid` (boundary validation) both derive from it, so the segment
+ * contract can never drift between the path that builds a guid and the path
+ * that checks one.
+ */
+export function isSafeSegment(value: string): boolean {
+	return SAFE_SEGMENT.test(value) && !WINDOWS_RESERVED.has(value);
+}
+
+/**
  * Assert that `value` is a single safe guid segment. Throws on anything that
  * would break a URL, a filename, or the injectivity of a composed guid. This
  * is the one chokepoint: every guid-minting path runs it, so a malformed id
@@ -64,7 +77,7 @@ const WINDOWS_RESERVED = new Set([
  * @param label what it is, for the error message (e.g. `'workspace id'`)
  */
 export function assertSafeSegment(value: string, label: string): void {
-	if (!SAFE_SEGMENT.test(value) || WINDOWS_RESERVED.has(value)) {
+	if (!isSafeSegment(value)) {
 		throw new Error(
 			`Invalid ${label}: ${JSON.stringify(value)}. A guid segment must be lowercase a-z and 0-9 with single internal hyphens (matching ${SAFE_SEGMENT}), contain no dots, and not be a reserved device name.`,
 		);

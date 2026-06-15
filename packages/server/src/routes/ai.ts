@@ -44,6 +44,7 @@ import {
 	type ServableModel,
 } from '@epicenter/constants/ai-providers';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
+import { isDocGuid } from '@epicenter/workspace';
 import { sValidator } from '@hono/standard-validator';
 import {
 	type AnyTextAdapter,
@@ -88,18 +89,15 @@ const aiChatBody = type({
 	'apiKey?': 'string | undefined',
 });
 
-/**
- * Canonical content-doc guid grammar: four dot-separated safe segments
- * (`workspaceId.collection.rowId.field`, see `docGuid` in
- * `@epicenter/workspace`). Ownership scoping happens upstream via
- * `doName(ownerId, guid)`; this only rejects strings that could never name
- * a content doc.
- */
-const DOC_GUID_REGEX =
-	/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*){3}$/;
-
 const aiChatDocBody = type({
-	guid: type('string').narrow((s) => DOC_GUID_REGEX.test(s)),
+	/**
+	 * Canonical content-doc guid (`workspaceId.collection.rowId.field`).
+	 * Validated with `isDocGuid` from `@epicenter/workspace` so this boundary
+	 * shares the one grammar `docGuid` mints with, rather than re-deriving it.
+	 * Ownership scoping happens upstream via `doName(ownerId, guid)`; this only
+	 * rejects strings that could never name a content doc.
+	 */
+	guid: type('string').narrow((s) => isDocGuid(s)),
 	/** Client-minted; doubles as the assistant message id for idempotency. */
 	generationId: 'string > 0',
 	// Same options as the SSE route minus `tools` (doc-as-wire chat is
