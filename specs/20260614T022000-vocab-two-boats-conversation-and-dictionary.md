@@ -260,6 +260,24 @@ Deferred, with triggers:
 - **Gloss caching / persistence.** The first version can call the model per tap. If repeat taps feel slow or wasteful, cache `word -> gloss` in memory or persist a tiny gloss field. Trigger: re-glossing the same word feels redundant.
 - **Pronunciation (STT/TTS/tone).** Unchanged from the research subpage; a later rung, never gating the core loop.
 
+### Step 7 as built: one WordPopover for capture and gloss (2026-06-14)
+
+The collapse above shipped, and it collapsed further in the build than the plan drew. What landed:
+
+- **Gloss is the model, out-of-band.** `streamGloss` (`apps/zhongwen/src/lib/gloss.ts`) hits the plain `/api/ai/chat` SSE route, never `chatDoc`, so a gloss never writes to the transcript doc and never reaches the reflection roster. It hand-parses the TanStack AI SSE frames (`TEXT_MESSAGE_CONTENT` deltas) rather than pulling `@tanstack/ai-svelte` for one tooltip; the trigger to replace it with `fetchServerSentEvents` is zhongwen adopting `createChat` anywhere. Glosses are cached by word + context for the session, so retaps are instant with no model call.
+- **Segmentation stayed refused.** No `Intl.Segmenter`, no dictionary. Boundaries come from the lens spans (tracked words) and from free selection (anything else).
+- **The capture toolbar and the gloss card collapsed into one component.** The plan kept a `SelectionCapture` toolbar and a separate gloss card; the build merged them into `WordPopover` (`.../components/WordPopover.svelte`), one anchored surface with two phases: `actions` ([Add] [What's this?], shown for a fresh selection) and `meaning` (the reading via pinyin-pro, instant, plus the streamed contextual meaning). A tap on a lens-highlighted word opens straight in `meaning`; a selection opens in `actions` and "What's this?" walks it to `meaning`. The phase is owned by `ConversationView` (single source of truth). Detection moved to a headless `SelectionSource`. This retired `SelectionCapture` and `GlossPopover` (both deleted), so the step-6 note above describes a file that no longer exists.
+- **Context resolves once, by id.** Each bubble carries `data-message-id`; both entry points resolve the sentence from the live `messages` array (`contextFor`), so no message text is duplicated into the DOM and resolution is not split between the two paths.
+- **The selection-preservation hack is gone.** `WordPopover` reads its text from props, not the live selection, so a button press collapsing the selection is harmless; the old `onpointerdown` preventDefault was deleted, not ported.
+- **The lens runs over the learner's own messages too.** `AssistantMessagePart` generalized to `MessageContent` (both roles); user lines render literal (markdown off) but take the same highlight + tap-to-gloss path, so production (a word the learner typed) is painted and tappable.
+
+Deferred, with triggers:
+
+- **Re-add reschedule from chat.** Selecting a word you already have still just toasts; bump/reset (the bulk-import affordance) could surface in the popover's actions phase. Trigger: re-capturing a known word to reschedule feels wanted.
+- **Single-tap-add via segmentation.** Still refused; `Intl.Segmenter` is the native, zero-asset way in if drag-select ergonomics chafe.
+- **Gloss persistence.** The cache is session-lived and in-memory; persist a `word -> gloss` field only if cross-session reuse is wanted. Trigger: glossing the same words every session feels wasteful.
+- **Verification.** The interaction (two-phase popover, tap-vs-drag disjointness, the hack removal) is typed and reasoned, not yet driven in a browser.
+
 ## How to read this spec
 
 ```txt
