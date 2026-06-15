@@ -27,11 +27,24 @@ function masteryClass(mastery: Vocabulary['mastery']): string {
 }
 
 /**
+ * Escape a string for use inside a double-quoted HTML attribute. Vocabulary text
+ * is usually CJK, but capture lets the learner add an arbitrary selection, which
+ * can include ASCII punctuation, so the `data-vocab` value must be escaped.
+ */
+function escapeAttr(value: string): string {
+	return value
+		.replaceAll('&', '&amp;')
+		.replaceAll('"', '&quot;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;');
+}
+
+/**
  * Wrap every dictionary word inside the text nodes of `html` in a styled span.
  * Splits by tags (odd indices are tags, even are text) so tag names and
- * attributes are never touched, mirroring `annotateHtml`. The text nodes are
- * already HTML-escaped by `marked`, and vocabulary terms are CJK, so matched
- * runs need no further escaping.
+ * attributes are never touched, mirroring `annotateHtml`. The matched run text is
+ * already HTML-escaped by `marked`; the `data-vocab` attribute carries the raw
+ * term so a tap can read it back (escaped, since captured terms are arbitrary).
  */
 export function highlightVocabHtml(html: string, words: Vocabulary[]): string {
 	if (words.length === 0) return html;
@@ -43,7 +56,7 @@ export function highlightVocabHtml(html: string, words: Vocabulary[]): string {
 		parts[i] = findVocabMatches(text, words)
 			.map((segment) =>
 				segment.kind === 'match'
-					? `<span class="${masteryClass(segment.word.mastery)}">${segment.text}</span>`
+					? `<span class="${masteryClass(segment.word.mastery)} cursor-pointer" data-vocab="${escapeAttr(segment.word.text)}">${segment.text}</span>`
 					: segment.text,
 			)
 			.join('');

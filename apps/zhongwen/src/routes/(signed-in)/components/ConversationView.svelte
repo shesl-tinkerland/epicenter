@@ -51,6 +51,7 @@
 	} from '../chat/system-prompt';
 	import ChatInput from './ChatInput.svelte';
 	import ChatMessage from './ChatMessage.svelte';
+	import GlossPopover from './GlossPopover.svelte';
 	import ReflectionSheet from './ReflectionSheet.svelte';
 	import SelectionCapture from './SelectionCapture.svelte';
 
@@ -299,12 +300,28 @@
 		});
 		toast.success(`Added "${text}"`);
 	}
+
+	// Tap-to-gloss: a plain click on a lens-highlighted word floats its reading.
+	// Capture (drag-select) and gloss (click) never collide: a click leaves the
+	// selection collapsed, so SelectionCapture stays quiet here. Delegated on the
+	// list because the spans live inside {@html} message bodies.
+	let gloss = $state<{ text: string; x: number; y: number } | null>(null);
+
+	function openGloss(event: MouseEvent) {
+		const span = (event.target as HTMLElement).closest('[data-vocab]');
+		if (!span) return;
+		const text = span.getAttribute('data-vocab');
+		if (!text) return;
+		const rect = span.getBoundingClientRect();
+		gloss = { text, x: rect.left + rect.width / 2, y: rect.top };
+	}
 </script>
 
 <Chat.List
 	bind:ref={chatListEl}
 	class="flex-1 overflow-y-auto p-4"
 	aria-live="polite"
+	onclick={openGloss}
 >
 	{#if messages.length === 0}
 		<div class="flex flex-1 items-center justify-center text-muted-foreground">
@@ -376,3 +393,12 @@
 />
 
 <SelectionCapture root={chatListEl ?? undefined} onAdd={captureWord} />
+
+{#if gloss}
+	<GlossPopover
+		word={gloss.text}
+		x={gloss.x}
+		y={gloss.y}
+		onClose={() => (gloss = null)}
+	/>
+{/if}
