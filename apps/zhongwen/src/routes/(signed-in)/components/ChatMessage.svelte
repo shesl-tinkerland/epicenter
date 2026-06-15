@@ -16,7 +16,9 @@
 	const isUser = $derived(message.role === 'user');
 </script>
 
-<Chat.Bubble variant={isUser ? 'sent' : 'received'}>
+<!-- data-message-id lets a tapped word or a selection resolve its sentence from
+	the live messages array (no message text duplicated into the DOM). -->
+<Chat.Bubble variant={isUser ? 'sent' : 'received'} data-message-id={message.id}>
 	<Chat.BubbleMessage>
 		<!-- Text-only by design: zhongwen chat docs carry a single Y.Text per
 			message; there are no tool or media parts to dispatch on. -->

@@ -51,9 +51,9 @@
 	} from '../chat/system-prompt';
 	import ChatInput from './ChatInput.svelte';
 	import ChatMessage from './ChatMessage.svelte';
-	import GlossPopover from './GlossPopover.svelte';
 	import ReflectionSheet from './ReflectionSheet.svelte';
-	import SelectionCapture from './SelectionCapture.svelte';
+	import SelectionSource from './SelectionSource.svelte';
+	import WordPopover from './WordPopover.svelte';
 
 	let {
 		conversationId,
@@ -301,44 +301,69 @@
 		toast.success(`Added "${text}"`);
 	}
 
-	// Tap-to-gloss: a plain click on a lens-highlighted word floats its reading.
-	// Capture (drag-select) and gloss (click) never collide: a click leaves the
-	// selection collapsed, so SelectionCapture stays quiet here. Delegated on the
-	// list because the spans live inside {@html} message bodies.
-	let gloss = $state<{
+	// One anchored popover serves both entry points: a tap on a lens-highlighted
+	// word and a free selection. The phase is owned here (single source of truth):
+	// a tap opens 'meaning', a selection opens 'actions', and "What's this?" walks
+	// it to 'meaning'. Tap (click) and selection (drag) never collide, since a
+	// click leaves the selection collapsed so SelectionSource stays quiet.
+	let popover = $state<{
 		text: string;
 		context: string;
 		provider: string;
 		model: string;
+		phase: 'actions' | 'meaning';
 		x: number;
 		y: number;
 	} | null>(null);
 
-	function openGloss(event: MouseEvent) {
+	/** The raw text of a message by id: the sentence a gloss reads for context. */
+	function contextFor(messageId: string | null): string {
+		if (!messageId) return '';
+		return messages.find((message) => message.id === messageId)?.text ?? '';
+	}
+
+	function openPopover(at: {
+		text: string;
+		messageId: string | null;
+		phase: 'actions' | 'meaning';
+		x: number;
+		y: number;
+	}) {
+		const row = readRow();
+		popover = {
+			text: at.text,
+			context: contextFor(at.messageId),
+			provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
+			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
+			phase: at.phase,
+			x: at.x,
+			y: at.y,
+		};
+	}
+
+	/** Tap on a highlighted word: open straight to the meaning. Delegated on the
+	 * list because the lens spans live inside {@html} message bodies. */
+	function openFromTap(event: MouseEvent) {
 		const span = (event.target as HTMLElement).closest('[data-vocab]');
 		if (!span) return;
 		const text = span.getAttribute('data-vocab');
 		if (!text) return;
-		const context =
-			span.closest('[data-gloss-context]')?.getAttribute('data-gloss-context') ??
-			'';
+		const messageId =
+			span.closest('[data-message-id]')?.getAttribute('data-message-id') ?? null;
 		const rect = span.getBoundingClientRect();
-		showGloss({ text, context, x: rect.left + rect.width / 2, y: rect.top });
+		openPopover({
+			text,
+			messageId,
+			phase: 'meaning',
+			x: rect.left + rect.width / 2,
+			y: rect.top,
+		});
 	}
 
-	/**
-	 * Open the gloss card for a word or phrase. Both entry points feed it: a tap on
-	 * a lens-highlighted word (openGloss) and the "What's this?" action on a free
-	 * selection (SelectionCapture). The provider/model are read here so the card
-	 * stays a dumb renderer of one already-resolved request.
-	 */
-	function showGloss(at: { text: string; context: string; x: number; y: number }) {
-		const row = readRow();
-		gloss = {
-			...at,
-			provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
-			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
-		};
+	function addFromPopover() {
+		if (!popover) return;
+		captureWord(popover.text);
+		popover = null;
 	}
 </script>
 
@@ -346,7 +371,7 @@
 	bind:ref={chatListEl}
 	class="flex-1 overflow-y-auto p-4"
 	aria-live="polite"
-	onclick={openGloss}
+	onclick={openFromTap}
 >
 	{#if messages.length === 0}
 		<div class="flex flex-1 items-center justify-center text-muted-foreground">
@@ -417,21 +442,23 @@
 	onBump={bumpMastery}
 />
 
-<SelectionCapture
+<SelectionSource
 	root={chatListEl ?? undefined}
-	onAdd={captureWord}
-	onGloss={showGloss}
+	onSelect={(selection) => openPopover({ ...selection, phase: 'actions' })}
 />
 
-{#if gloss}
-	<GlossPopover
-		word={gloss.text}
-		context={gloss.context}
-		provider={gloss.provider}
-		model={gloss.model}
+{#if popover}
+	<WordPopover
+		text={popover.text}
+		context={popover.context}
+		provider={popover.provider}
+		model={popover.model}
 		fetchFn={aiChatFetch}
-		x={gloss.x}
-		y={gloss.y}
-		onClose={() => (gloss = null)}
+		phase={popover.phase}
+		x={popover.x}
+		y={popover.y}
+		onAdd={addFromPopover}
+		onAskMeaning={() => popover && (popover = { ...popover, phase: 'meaning' })}
+		onClose={() => (popover = null)}
 	/>
 {/if}
