@@ -22,7 +22,9 @@
 	import { APP_URLS } from '@epicenter/constants/vite';
 	import { Button } from '@epicenter/ui/button';
 	import * as Chat from '@epicenter/ui/chat';
+	import * as Empty from '@epicenter/ui/empty';
 	import { toast } from '@epicenter/ui/sonner';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { generateId } from '@epicenter/workspace';
 	import {
@@ -364,69 +366,82 @@
 	}
 </script>
 
-<Chat.List
-	bind:ref={chatListEl}
-	class="flex-1 overflow-y-auto p-4"
-	aria-live="polite"
-	onclick={openFromTap}
->
-	{#if messages.length === 0}
-		<div class="flex flex-1 items-center justify-center text-muted-foreground">
-			<p>Ask a question in English and get a response in Chinese and English.</p>
-		</div>
-	{:else}
-		{#each messages as message (message.id)}
-			<!-- An empty assistant message is the in-progress turn before its first
-				token; the typing bubble below stands in for it. -->
-			{#if message.role === 'user' || message.text.length > 0}
-				<ChatMessage
-					{message}
-					{showPinyin}
-					{highlightVocab}
-					words={vocabularyWords}
-				/>
+<div class="min-h-0 flex-1 overflow-hidden">
+	<Chat.List
+		bind:ref={chatListEl}
+		class="p-0"
+		aria-live="polite"
+		onclick={openFromTap}
+	>
+		<div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-6">
+			{#if messages.length === 0}
+				<Empty.Root class="flex-1 border-0">
+					<Empty.Media variant="icon">
+						<MessageSquareTextIcon class="size-5" />
+					</Empty.Media>
+					<Empty.Title>Start a Mandarin Practice Chat</Empty.Title>
+					<Empty.Description>
+						Ask in English. Zhongwen replies in Chinese and English, with your
+						saved words highlighted as you go.
+					</Empty.Description>
+				</Empty.Root>
+			{:else}
+				{#each messages as message (message.id)}
+					<!-- An empty assistant message is the in-progress turn before its first
+						token; the typing bubble below stands in for it. -->
+					{#if message.role === 'user' || message.text.length > 0}
+						<ChatMessage
+							{message}
+							{showPinyin}
+							{highlightVocab}
+							words={vocabularyWords}
+						/>
+					{/if}
+				{/each}
 			{/if}
-		{/each}
-	{/if}
 
-	{#if isThinking}
-		<Chat.Bubble variant="received">
-			<Chat.BubbleMessage typing />
-		</Chat.Bubble>
-	{/if}
-
-	{#if error && !dismissedError}
-		<div
-			class="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
-		>
-			<span class="flex-1">{error}</span>
-			{#if canRetry}
-				<Button size="sm" variant="outline" onclick={retry}>Retry</Button>
+			{#if isThinking}
+				<Chat.Bubble variant="received">
+					<Chat.BubbleMessage typing />
+				</Chat.Bubble>
 			{/if}
-			<Button
-				size="sm"
-				variant="ghost"
-				aria-label="Dismiss"
-				onclick={() => (dismissedError = true)}
-			>
-				<XIcon class="size-3.5" />
-			</Button>
+
+			{#if error && !dismissedError}
+				<div
+					class="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+				>
+					<span class="flex-1">{error}</span>
+					{#if canRetry}
+						<Button size="sm" variant="outline" onclick={retry}>Retry</Button>
+					{/if}
+					<Button
+						size="sm"
+						variant="ghost"
+						aria-label="Dismiss"
+						onclick={() => (dismissedError = true)}
+					>
+						<XIcon class="size-3.5" />
+					</Button>
+				</div>
+			{:else if isInterrupted}
+				<div
+					class="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"
+				>
+					<span class="flex-1">This reply was interrupted.</span>
+					<Button size="sm" variant="outline" onclick={retry}>Retry</Button>
+				</div>
+			{/if}
 		</div>
-	{:else if isInterrupted}
-		<div
-			class="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"
-		>
-			<span class="flex-1">This reply was interrupted.</span>
-			<Button size="sm" variant="outline" onclick={retry}>Retry</Button>
-		</div>
-	{/if}
-</Chat.List>
+	</Chat.List>
+</div>
 
 {#if messages.length > 0}
-	<div class="flex justify-end border-t px-4 py-2">
-		<Button variant="outline" size="sm" onclick={openReflection}>
-			Finish & review words
-		</Button>
+	<div class="border-t px-4 py-2">
+		<div class="mx-auto flex w-full max-w-3xl justify-end">
+			<Button variant="outline" size="sm" onclick={openReflection}>
+				Finish & review words
+			</Button>
+		</div>
 	</div>
 {/if}
 

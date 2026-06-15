@@ -10,6 +10,9 @@
 	import * as Sidebar from '@epicenter/ui/sidebar';
 	import { toast } from '@epicenter/ui/sonner';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
+	import HighlighterIcon from '@lucide/svelte/icons/highlighter';
+	import LanguagesIcon from '@lucide/svelte/icons/languages';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { onDestroy } from 'svelte';
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { requireZhongwen } from '$lib/session';
@@ -35,6 +38,19 @@
 	const conversations = $derived(readSortedConversations());
 
 	let activeConversationId = $state<ConversationId | undefined>();
+	let sidebarOpen = $state(true);
+
+	$effect(() => {
+		const query = window.matchMedia('(max-width: 639px)');
+		const collapseOnMobile = () => {
+			if (query.matches) sidebarOpen = false;
+		};
+
+		collapseOnMobile();
+		query.addEventListener('change', collapseOnMobile);
+
+		return () => query.removeEventListener('change', collapseOnMobile);
+	});
 
 	/**
 	 * Write only the cheap list row. The transcript child doc is opened lazily by
@@ -122,7 +138,7 @@
 	}
 </script>
 
-<Sidebar.Provider>
+<Sidebar.Provider bind:open={sidebarOpen}>
 	<ZhongwenSidebar
 		{conversations}
 		{activeConversationId}
@@ -132,43 +148,52 @@
 	/>
 
 	<main class="flex h-dvh flex-1 flex-col">
-		<header class="flex items-center justify-between border-b px-4 py-3">
-			<div class="flex items-center gap-3">
+		<header class="flex items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+			<div class="flex min-w-0 items-center gap-2 sm:gap-3">
 				<Sidebar.Trigger />
-				<h1 class="text-lg font-semibold">中文 Zhongwen</h1>
+				<h1 class="truncate text-lg font-semibold">中文 Zhongwen</h1>
 				<Button
 					variant="ghost"
 					size="icon"
 					href="/words"
 					tooltip="Your words"
+					aria-label="Open words"
 				>
 					<BookOpenIcon />
 				</Button>
 			</div>
 
-			<div class="flex items-center gap-2">
+			<div class="flex shrink-0 items-center gap-1">
 				<Button
-					variant={showPinyin.current ? 'default' : 'outline'}
-					size="sm"
+					variant={showPinyin.current ? 'secondary' : 'ghost'}
+					size="icon"
 					onclick={() => (showPinyin.current = !showPinyin.current)}
 					aria-pressed={showPinyin.current}
 					aria-label="Toggle pinyin annotations"
+					tooltip={showPinyin.current ? 'Hide pinyin' : 'Show pinyin'}
 				>
-					{showPinyin.current ? 'Hide Pinyin' : 'Show Pinyin'}
+					<LanguagesIcon />
 				</Button>
 
 				<Button
-					variant={highlightVocab.current ? 'default' : 'outline'}
-					size="sm"
+					variant={highlightVocab.current ? 'secondary' : 'ghost'}
+					size="icon"
 					onclick={() => (highlightVocab.current = !highlightVocab.current)}
 					aria-pressed={highlightVocab.current}
 					aria-label="Toggle vocabulary highlights"
+					tooltip={highlightVocab.current ? 'Hide words' : 'Show words'}
 				>
-					{highlightVocab.current ? 'Hide Words' : 'Show Words'}
+					<HighlighterIcon />
 				</Button>
 
-				<Button variant="ghost" size="sm" onclick={openForgetDeviceDialog}>
-					Forget device
+				<Button
+					variant="ghost"
+					size="icon"
+					onclick={openForgetDeviceDialog}
+					aria-label="Forget this device"
+					tooltip="Forget this device"
+				>
+					<LogOutIcon />
 				</Button>
 			</div>
 		</header>

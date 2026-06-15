@@ -30,26 +30,30 @@
 </script>
 
 <form
-	class="flex gap-2 border-t p-4"
+	class="border-t px-4 py-3"
 	onsubmit={(e) => {
 		e.preventDefault();
 		submit();
 	}}
 >
-	<Textarea
-		placeholder="Ask something in English..."
-		class="min-h-[44px] max-h-[120px] resize-none"
-		aria-label="Message input"
-		bind:value
-		onkeydown={handleKeydown}
-		disabled={isGenerating}
-	/>
-	{#if isGenerating}
-		<Button type="button" variant="outline" onclick={onStop}>Stop</Button>
-	{:else}
-		<Button type="submit" disabled={!value.trim()}>Send</Button>
-	{/if}
+	<div class="mx-auto flex w-full max-w-3xl gap-2">
+		<Textarea
+			placeholder="Ask something in English..."
+			class="min-h-[44px] max-h-[120px] min-w-0 resize-none"
+			aria-label="Message input"
+			bind:value
+			onkeydown={handleKeydown}
+			disabled={isGenerating}
+		/>
+		{#if isGenerating}
+			<Button type="button" variant="outline" onclick={onStop}>Stop</Button>
+		{:else}
+			<Button type="submit" disabled={!value.trim()}>Send</Button>
+		{/if}
+	</div>
 </form>
-<p class="px-4 pb-2 text-xs text-muted-foreground">
-	Enter to send, Shift+Enter for new line
-</p>
+<div class="px-4 pb-2">
+	<p class="mx-auto w-full max-w-3xl text-xs text-muted-foreground">
+		Enter to send, Shift+Enter for new line
+	</p>
+</div>
