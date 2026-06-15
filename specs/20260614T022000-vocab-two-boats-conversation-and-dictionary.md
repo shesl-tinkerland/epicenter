@@ -198,6 +198,18 @@ Deferred, with triggers:
 - **Used/met show every appearance regardless of mastery**, so a common Known word the AI happened to say lands in "you met." Honest but potentially noisy. Trigger: a real reflection feels cluttered with already-retired words, then filter `met`/`used` to `mastery < 2`.
 - **The "missed" bucket only offers a comfort bump, not a snooze.** Nudging `dueAt` to defer a word that did not come up is the natural action there but has no UI yet. Trigger: a manual dueAt-nudge control exists (the deferred half of step 4's snooze cursor).
 
+### Step 6 as built: highlight-to-add capture (2026-06-14)
+
+Capture is the second write-back from TALK to WORDS (reflection was the first): see a word in the chat you do not have yet, select it, add it. `SelectionCapture` (`apps/zhongwen/src/routes/(signed-in)/components/SelectionCapture.svelte`) watches text selections scoped to the chat scroll container and, for a short Han-script selection, floats an "Add <word>" button at the selection. Clicking it calls `captureWord` in `ConversationView`, which writes the same entry the Words screen's single-add does (mastery 0, `dueAt` today, `createdAt` now) and dedupes on exact text (re-adding is a no-op with an info toast).
+
+The one design turn from the spec's sketch: the spec imagined capture as "the inverse selection" of the matcher (the untracked segments become tappable adds). That only works once the text is segmented into words. Without CC-CEDICT (step 7) an untracked run is a whole multi-word stretch with no internal boundaries, so tapping it would add a sentence fragment, not a word. A free **text selection** is therefore the honest capture unit for now: the learner draws the word boundary themselves and we capture exactly that. The matcher-driven tap-to-add-word becomes viable only after step 7 makes each untracked word its own unit; until then `findVocabMatches` earns its keep on the render side (the lens) and the reflection roster, not capture.
+
+Deferred, with triggers:
+
+- **Re-add reschedule in chat.** Selecting a word you already have just toasts "already in your words". The bulk-import flow offers bump/reset on a duplicate; the same could surface here. Trigger: re-capturing a known word to reschedule it feels wanted.
+- **Tap-to-add (no drag).** Once segmentation exists, an untracked word can be a single-tap add, lighter than a selection. Folds in with step 7.
+- **Capturing from your own messages.** The selection listener already covers the whole chat, including user bubbles, so this works today; it is called out only because highlighting the learner's own words (the lens over user text) is still deferred to the reflection-roster follow-up.
+
 ## How to read this spec
 
 ```txt

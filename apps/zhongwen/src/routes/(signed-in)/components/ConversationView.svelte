@@ -22,6 +22,7 @@
 	import { APP_URLS } from '@epicenter/constants/vite';
 	import { Button } from '@epicenter/ui/button';
 	import * as Chat from '@epicenter/ui/chat';
+	import { toast } from '@epicenter/ui/sonner';
 	import { generateId } from '@epicenter/workspace';
 	import {
 		appendUserMessage,
@@ -32,12 +33,13 @@
 	} from '@epicenter/workspace/ai';
 	import {
 		type ConversationId,
+		generateTermId,
 		type TermId,
 		type Vocabulary,
 		ZHONGWEN_DEFAULT_MODEL,
 		ZHONGWEN_DEFAULT_PROVIDER,
 	} from '@epicenter/zhongwen';
-	import { CalendarDateString } from '@epicenter/field';
+	import { CalendarDateString, InstantString } from '@epicenter/field';
 	import { onDestroy } from 'svelte';
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { requireZhongwen } from '$lib/session';
@@ -50,6 +52,7 @@
 	import ChatInput from './ChatInput.svelte';
 	import ChatMessage from './ChatMessage.svelte';
 	import ReflectionSheet from './ReflectionSheet.svelte';
+	import SelectionCapture from './SelectionCapture.svelte';
 
 	let {
 		conversationId,
@@ -272,9 +275,37 @@
 	function bumpMastery(id: TermId, mastery: Vocabulary['mastery']) {
 		zhongwen.tables.vocabulary.update(id, { mastery });
 	}
+
+	// The scroll container holding the messages; SelectionCapture scopes its
+	// text-selection listener to it so selecting in the input or header is ignored.
+	let chatListEl = $state.raw<HTMLDivElement | null>(null);
+
+	/**
+	 * Capture a selected word into the dictionary at mastery 0, due today, the same
+	 * entry shape the Words screen's single-add uses. Re-adding an existing word is
+	 * a no-op (dedup on exact text), matching that screen's behavior.
+	 */
+	function captureWord(text: string) {
+		if (vocabularyWords.some((word) => word.text === text)) {
+			toast.info(`"${text}" is already in your words`);
+			return;
+		}
+		zhongwen.tables.vocabulary.set({
+			id: generateTermId(),
+			text,
+			mastery: 0,
+			dueAt: CalendarDateString.today(),
+			createdAt: InstantString.now(),
+		});
+		toast.success(`Added "${text}"`);
+	}
 </script>
 
-<Chat.List class="flex-1 overflow-y-auto p-4" aria-live="polite">
+<Chat.List
+	bind:ref={chatListEl}
+	class="flex-1 overflow-y-auto p-4"
+	aria-live="polite"
+>
 	{#if messages.length === 0}
 		<div class="flex flex-1 items-center justify-center text-muted-foreground">
 			<p>Ask a question in English and get a response in Chinese and English.</p>
@@ -343,3 +374,5 @@
 	words={vocabularyWords}
 	onBump={bumpMastery}
 />
+
+<SelectionCapture root={chatListEl ?? undefined} onAdd={captureWord} />
