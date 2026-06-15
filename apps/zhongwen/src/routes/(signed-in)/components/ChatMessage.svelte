@@ -1,14 +1,17 @@
 <script lang="ts">
 	import * as Chat from '@epicenter/ui/chat';
 	import type { ChatDocMessage } from '@epicenter/workspace/ai';
+	import type { Vocabulary } from '@epicenter/zhongwen';
 	import AssistantMessagePart from './AssistantMessagePart.svelte';
 
 	type Props = {
 		message: ChatDocMessage;
 		showPinyin: boolean;
+		highlightVocab: boolean;
+		words: Vocabulary[];
 	};
 
-	let { message, showPinyin }: Props = $props();
+	let { message, showPinyin, highlightVocab, words }: Props = $props();
 
 	const isUser = $derived(message.role === 'user');
 </script>
@@ -20,7 +23,12 @@
 		{#if isUser}
 			{message.text}
 		{:else}
-			<AssistantMessagePart content={message.text} {showPinyin} />
+			<AssistantMessagePart
+				content={message.text}
+				{showPinyin}
+				{highlightVocab}
+				{words}
+			/>
 		{/if}
 	</Chat.BubbleMessage>
 </Chat.Bubble>

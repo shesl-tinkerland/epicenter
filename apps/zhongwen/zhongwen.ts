@@ -18,7 +18,7 @@
 
 import {
 	SERVABLE_MODELS,
-	SERVABLE_PROVIDER_MODELS,
+	type SERVABLE_PROVIDER_MODELS,
 	SERVABLE_PROVIDERS,
 	type ServableProvider,
 } from '@epicenter/constants/ai-providers';
@@ -108,6 +108,10 @@ export function createZhongwen({ keyring }: { keyring: () => Keyring }) {
 		},
 		kv: {
 			showPinyin: defineKv(Type.Boolean(), () => true),
+			// The vocab-highlight channel of the lens: paint dictionary words onto
+			// assistant messages, colored by mastery. On by default (it is the point
+			// of the app); a no-op until the learner has words.
+			highlightVocab: defineKv(Type.Boolean(), () => true),
 			// Caps how many new words (mastery 0) enter the daily review queue, so
 			// a bulk import of hundreds of words does not overwhelm. Pacing lives
 			// in the queue query + this number, not in per-word state.

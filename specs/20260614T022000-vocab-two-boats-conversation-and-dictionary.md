@@ -97,6 +97,107 @@ There will be a dedicated vocab app later, its own deployable, following this sa
 - [ ] `newWordsPerDay` paces the queue so a large dump does not overwhelm
 - [ ] `dueAt` advances on review and is user-nudgeable; the review queue is a query, not a stored list
 
+### Step 4 as built: the queue steers the conversation (2026-06-14)
+
+Step 4 shipped without a review screen and without spaced-repetition intervals, which corrects the last success criterion above (`dueAt` does not advance on review). The review queue is a pure selector, `reviewQueue(words, { today, newWordsPerDay })` in `apps/zhongwen/src/lib/review.ts`, whose only consumer is the conversation system prompt: on each generation kickoff, `ConversationView` feeds the in-play words into a steering block (`buildVocabularySystemPrompt`) so the AI weaves them into the scene instead of the user drilling them on a card. A word is in play when `mastery < 2` (not retired) and `dueAt <= today`. There is no `/review` route, no `intervalDays`, no `dueAt` advancement, and no `grade` action: the self-report toggle already on the Words screen is the whole grading path, and marking a word Known retires it because the selector filters it out. The deleted interval machinery only earned its keep when a drill was the sole exposure; the conversation is the repetition, so a word stays in play until you self-report it Known.
+
+This redefines two fields from the model above:
+
+- **`dueAt` is now a manual snooze/nudge cursor**, not an auto-advancing schedule: "do not surface this word in conversation until this day." Nothing advances it automatically; it moves only through the bulk-import bump/reset (step 3) and a future manual nudge. The queue compare (`dueAt <= today`) is the snooze gate.
+- **`mastery` is self-reported comfort with no predictions and no auto-change.** Exposure in a conversation never changes mastery; only the user does. This keeps the two axes independent: `dueAt` is scheduling, `mastery` is comfort, and the only automatic decision is which words to feature today, never how well you know them.
+
+Open questions this surfaces (deferred, with triggers):
+
+- **Airtime / rotation.** With no bump, every in-play word is fed to every conversation, which floods the prompt and removes variety once the list grows past a handful. The fix is rotation (airtime), not spaced repetition. Two ways: sample a capped handful per conversation (stateless, no chat-time writes, `dueAt` stays purely manual), or auto-bump `dueAt` on exposure (a rotation cursor, but it writes on every chat and risks intra-conversation churn when targets are recomputed per message). Prefer sampling. Trigger: a real conversation feels flooded or monotonous.
+- **Knowing the meaning landed.** You do not truly know whether the user understands a word; self-report is the honest best-effort signal, and a wrong call is cheap to recover (re-add, or leave it in Learning). AI-graded usage detection over the transcript is the richer answer and is steps 5 to 6 territory. Trigger: self-report feels like too much manual bookkeeping.
+
+### Two roles per conversation: recognize vs use (2026-06-14)
+
+There are two relationships a learner can have to a word, and they are the real structure behind the GRE intuition (most words you only need to read; a chosen few you want to wield yourself):
+
+- **Recognition.** You understand the word when you meet it. This is where most words stop, and stopping here is a legitimate finish, not a failure.
+- **Production (use).** You can deploy the word yourself, unprompted. The chosen subset you want to actively wield.
+
+The decisive design point: **these are not two axes, they are one ordered ladder.** You cannot produce a word you cannot recognize, so production sits *above* recognition on a single comfort value, never beside it. A second slider (a separate "usage comfort") would let you record impossible states (high usage, low recognition) and is refused for the same reason the 0-5 / two-integer grid was: comfort has one honest direction.
+
+```txt
+not tracked → recognizing → recognized ──(opt-in fork)──▶ producing → fluent
+                                │                              │
+                       terminal happy state            the wield subset; earns
+                       (most words stop here)           its rungs only once a
+                                                        production-grading
+                                                        consumer exists
+```
+
+**The role is derived per conversation, never stored.** This is what makes the recognize/use split free and what keeps the dead `use` boolean buried (see the refusal below). On each kickoff the queue's in-play words are sorted by comfort and handed to the AI as two buckets:
+
+- New words (mastery 0) → **recognition role**: the AI introduces them in its own lines with an inline gloss.
+- Learning words (mastery 1) → **production role**: the AI sets up openings where the learner must supply the word themselves, without saying it for them.
+
+This is implemented in `buildVocabularySystemPrompt` (`apps/zhongwen/src/routes/(signed-in)/chat/system-prompt.ts`): the same function that used to dump one undifferentiated blob now steers two buckets. The split is mutually exclusive *per conversation* (a word is in exactly one bucket today) but not fixed: a word migrates from recognition to production as the learner bumps its comfort. The conversation steering is the **consumer** that finally makes recognize-vs-use earn its keep, which the bare flag never had.
+
+Coarse-cut limitation: New = recognize, Learning = produce lumps "barely know it" with "almost have it." Acceptable to start. Trigger to refine: the production bucket feels too blunt, at which point either split Learning into more rungs or add the wield fork (below), never a second slider.
+
+### The reflection grading moment (recorded, partially deferred)
+
+Self-report currently lives only on the Words screen, divorced from the moment of use. The richer placement is a **reflection step bound to finishing a conversation**: when the learner deliberately wraps up a chat, surface the words this chat was practicing and let them bump comfort while the experience is fresh.
+
+Design constraints (so it stays a payoff, not a tax):
+
+- **Skippable.** Closing or navigating away without grading is always free; grading attaches only to an explicit "Finish / wrap up" action.
+- **Scoped.** Show only this chat's steered words, not the whole dictionary. v1 roster = the in-play words fed to the prompt (a recompute, free). v2 roster, once the lens (step 5) exists = the words that actually *appeared* in the transcript.
+- **One-tap bumps**, not a form. The reflection reuses the same self-report control the Words screen owns; it is a new *moment* for that control, not new machinery.
+
+Lifecycle binding: grading attaches to **Finish / archive**, never to **delete**. Delete means "throw this away," so it skips grading entirely; forcing a grading ritual before a destructive action is hostile. A distinct "archived" conversation state is deferred until the conversation list is cluttered enough to want it; until then "Finish & review" just leaves the chat in the list.
+
+Built now: the two-role split (above) and a reflection screen over the existing three levels (New → Learning → Known). Deferred: the screen's value is the *moment*, not extra rungs, so prove the moment first.
+
+### The wield fork and the compose surface (vision, gated)
+
+The one place a genuine second dimension appears is **wield intent**: among words already recognized comfortably, the chosen few you want to push into production anyway. Plain comfort says "recognized, retire it"; wield intent says "keep climbing this one." It is the opt-in fork at the top of the ladder, not a parallel boolean, and it earns the `producing`/`fluent` rungs only when a real production consumer exists. Self-reported "I used it" is too weak to feed a new rung (people over-claim); it would recreate the decoration problem in subtler form.
+
+The endpoint the fork walks toward is a **compose / output surface**: the learner writes (or speaks) something and the app checks which wield-target words they actually deployed. That measures active vocabulary by *production* instead of asking the learner to declare it, and it is the only honest answer to "comfortable using a word." It is the true north for the productive side of the app, not a footnote; everything shipped so far is recognition machinery.
+
+| Candidate | Refusal | Trigger to revisit |
+| --- | --- | --- |
+| `use` boolean on a word | Fuses "focus on" with "produce"; breaks the `mastery < 2` retire rule (a Known+use word can never exit); no consumer reads it. The recognize/use split is derived per conversation, not stored | Never as a boolean. Wield intent returns as the ordered fork below, not a flag |
+| Second comfort slider (recognition vs usage) | Usage requires recognition, so the two collapse onto one ordered ladder; a second axis encodes impossible states | Never; refine the single ladder with more rungs instead |
+| `producing` / `fluent` rungs above Known | No production-grading consumer exists; a self-report-only rung is decoration | AI usage-detection over the transcript, or the compose surface, gives the rung a real signal |
+| Reflection grading on delete | Delete is "throw away"; grading before a destructive action is hostile | Never; grading binds to Finish / archive only |
+
+### Step 5 as built: the vocab-highlight lens (2026-06-14)
+
+Step 5 shipped the highlight channel of the lens, not yet tap-to-gloss (which depends on the CC-CEDICT offline dictionary, step 7). The lens is two pieces:
+
+- **The matcher** (`apps/zhongwen/src/lib/lens/match.ts`): `findVocabMatches(text, words)` splits a stretch of Chinese into an ordered list of plain-text and matched-word segments, longest-match-first (Chinese has no spaces, so matching is dictionary-driven). This is the reusable core. The reflection roster (the "what actually appeared in this transcript" set) will reuse it over the full transcript, the AI's lines and the learner's, which is why building the lens before the reflection screen was the right order.
+- **The highlight overlay** (`apps/zhongwen/src/lib/lens/highlight.ts`): `highlightVocabHtml` wraps matched words in mastery-colored spans (New and Learning underlined to pop, Known faded back). It generalizes the existing `annotateHtml` pinyin overlay and composes with it: highlight first (whole terms), then pinyin annotates the text inside each span. A `highlightVocab` KV (default on) and a "Show Words / Hide Words" header toggle drive it, exactly mirroring `showPinyin`.
+
+This keeps the live conversation a conversation: the only persistent vocab UI in the chat is the lens (recognition words are visibly painted onto the AI's lines). Accounting (targets, grading) stays at the edges per the two-roles and reflection sections above. Currently the lens highlights assistant messages; highlighting the learner's own words (their production) folds in with the reflection roster work, since both need the matcher run over user text.
+
+Deferred from step 5, with triggers:
+
+- **Tap-to-gloss.** A highlighted word should be tappable for its meaning. The English/Chinese gloss needs the offline dictionary (step 7); a pinyin-only tap (pinyin-pro is already a dependency) plus an in-chat comfort bump is a cheaper interim. Trigger: build alongside step 6 capture or step 7 gloss.
+- **Highlight-to-add capture** (step 6): tapping an un-tracked word to add it at mastery 0. The matcher already distinguishes tracked from untracked text, so capture is the inverse selection.
+
+### The reflection screen as built (2026-06-14)
+
+The reflection moment from "The reflection grading moment" above is built, on the v2 (accurate) roster the lens enabled. This is the first thing the conversation **writes back** to the dictionary: until now TALK only read WORDS (step 4 steering, step 5 lens). Finishing a chat now bumps comfort on the words it practiced.
+
+- **The roster** (`apps/zhongwen/src/lib/reflection.ts`): `reflectionRoster({ messages, words, inPlay })` runs `findVocabMatches` over the transcript and splits the dictionary into three mutually exclusive buckets, `used` (appeared in the learner's messages, production wins the tie), `met` (appeared only in the AI's messages), and `missed` (today's steering targets that never surfaced). Pure selector, no doc reads or writes; 7 tests. This is exactly the matcher reuse the step-5 note predicted, which is why the lens came first.
+- **The sheet** (`apps/zhongwen/src/routes/(signed-in)/components/ReflectionSheet.svelte`): a bottom sheet over the chat (the moment, not a navigation away), opened by a "Finish & review words" button in `ConversationView` that shows once a chat has messages. Each row is the self-report control, now extracted to `components/MasteryToggle.svelte` and shared with the Words screen (with `$lib/mastery.ts` for the labels), so the reflection is a new *moment* for that control, not new machinery, exactly as the spec required.
+
+Two design points settled in the build:
+
+- **The roster is snapshotted at Finish, not reactive.** A bump writes mastery through immediately, but the buckets are frozen for the duration of the review so a word does not vanish from "didn't come up" the instant you mark it Known. The row's toggle still reflects the live value (it reads current mastery from the live `vocabularyWords` by id), so the snapshot freezes membership, never the displayed choice.
+- **No new transcript read.** The roster runs over `messages`, the same `readChatDocMessages` array `ConversationView` already holds; the flagged "one new read of the child doc" turned out to be a read that already existed.
+
+Lifecycle held to the spec: Finish is skippable (closing the sheet bumps nothing), binds only to the explicit action (never to delete or navigate-away), and leaves the chat in the list (no archive state yet). Highlighting/grading the learner's own words now has its first home here; the lens highlighting user messages in-chat still folds in with step 6.
+
+Deferred, with triggers:
+
+- **Used/met show every appearance regardless of mastery**, so a common Known word the AI happened to say lands in "you met." Honest but potentially noisy. Trigger: a real reflection feels cluttered with already-retired words, then filter `met`/`used` to `mastery < 2`.
+- **The "missed" bucket only offers a comfort bump, not a snooze.** Nudging `dueAt` to defer a word that did not come up is the natural action there but has no UI yet. Trigger: a manual dueAt-nudge control exists (the deferred half of step 4's snooze cursor).
+
 ## How to read this spec
 
 ```txt
@@ -113,7 +214,8 @@ Read if challenging the direction:
   Considered and rejected
 
 Carried forward from the superseded spec (do not relitigate):
-  mastery = Leitner integer box; "scalar now, log later"
+  mastery = self-reported comfort on one ordered ladder (New/Learning/Known);
+    not a Leitner box (see the mastery-range refusal and the one-ladder section)
   gloss = pinyin-pro (reading) + CC-CEDICT (meaning); CC-CEDICT also does
     segmentation + capture-unit (one bundled asset, three jobs, offline)
   the practice STAIRCASE (recognize -> cloze -> produce), now expressed as the
@@ -250,17 +352,7 @@ The user owns the role; the app owns the pedagogy and appends it. A mode's `syst
 
 ## The loop
 
-The staircase from the superseded spec is no longer screens; it is the AI's steering policy inside one conversation:
-
-```txt
-Box 0 new      -> AI introduces the word in-scene; you highlight + add; gloss appears
-Box 1 seen     -> AI re-uses it; a light recognition beat
-Box 2-3 learn  -> AI sets up a line where you must produce it (cued / cloze-like)
-Box 4 familiar -> free production; AI grades "correct + natural? yes/no + fix"
-Box 5 known    -> used unprompted in a later scenario (real-use detection); stretch combos
-```
-
-The steerer reads the due query from `vocabulary` and weaves **consolidating words (box 3-5)** into the AI's turns, introducing a box-0 word only as a deliberate i+1 with an inline gloss. Capture (highlight-to-add) and grading (your uses) write back. STT/TTS adds a pronunciation rung (see research).
+The loop is defined by "Two roles per conversation: recognize vs use" in the Revision 2026-06-14 section above: one ordered comfort ladder (New, Learning, Known), where each in-play word is steered in one of two roles derived per conversation (the AI shows New words for recognition; the AI fishes for the learner to produce Learning words). The earlier Box 0-5 staircase is dropped, because self-report's honest ceiling is about three states, not five (see the mastery-range refusal). Capture (highlight-to-add) and grading (the reflection moment) write back; STT/TTS adds a pronunciation rung (see research).
 
 ## Three screens (the surface)
 

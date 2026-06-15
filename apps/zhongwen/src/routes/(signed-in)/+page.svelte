@@ -27,6 +27,7 @@
 
 	const zhongwen = requireZhongwen();
 	const showPinyin = fromKv(zhongwen.kv, 'showPinyin');
+	const highlightVocab = fromKv(zhongwen.kv, 'highlightVocab');
 	const conversationsMap = fromTable(zhongwen.tables.conversations);
 
 	/**
@@ -213,6 +214,16 @@
 					{showPinyin.current ? 'Hide Pinyin' : 'Show Pinyin'}
 				</Button>
 
+				<Button
+					variant={highlightVocab.current ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (highlightVocab.current = !highlightVocab.current)}
+					aria-pressed={highlightVocab.current}
+					aria-label="Toggle vocabulary highlights"
+				>
+					{highlightVocab.current ? 'Hide Words' : 'Show Words'}
+				</Button>
+
 				<Button variant="ghost" size="sm" onclick={openForgetDeviceDialog}>
 					Forget device
 				</Button>
@@ -224,6 +235,7 @@
 				<ConversationView
 					conversationId={activeConversationId}
 					showPinyin={showPinyin.current}
+					highlightVocab={highlightVocab.current}
 				/>
 			{/key}
 		{/if}

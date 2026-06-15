@@ -1,5 +1,5 @@
 <script module lang="ts">
-	import { createAiChatFetch } from '@epicenter/svelte';
+	import { createAiChatFetch, fromTable } from '@epicenter/svelte';
 	import { auth } from '$platform/auth';
 
 	// auth is a module singleton, so the wrapped fetch is built once and shared
@@ -32,22 +32,41 @@
 	} from '@epicenter/workspace/ai';
 	import {
 		type ConversationId,
+		type TermId,
+		type Vocabulary,
 		ZHONGWEN_DEFAULT_MODEL,
 		ZHONGWEN_DEFAULT_PROVIDER,
 	} from '@epicenter/zhongwen';
+	import { CalendarDateString } from '@epicenter/field';
 	import { onDestroy } from 'svelte';
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { requireZhongwen } from '$lib/session';
-	import { ZHONGWEN_SYSTEM_PROMPT } from '../chat/system-prompt';
+	import { reviewQueue } from '$lib/review';
+	import { reflectionRoster, type ReflectionRoster } from '$lib/reflection';
+	import {
+		buildVocabularySystemPrompt,
+		ZHONGWEN_SYSTEM_PROMPT,
+	} from '../chat/system-prompt';
 	import ChatInput from './ChatInput.svelte';
 	import ChatMessage from './ChatMessage.svelte';
+	import ReflectionSheet from './ReflectionSheet.svelte';
 
 	let {
 		conversationId,
 		showPinyin,
-	}: { conversationId: ConversationId; showPinyin: boolean } = $props();
+		highlightVocab,
+	}: {
+		conversationId: ConversationId;
+		showPinyin: boolean;
+		highlightVocab: boolean;
+	} = $props();
 
 	const zhongwen = requireZhongwen();
+
+	// The lens reads the live dictionary to paint words onto assistant messages.
+	// Reactive so bumping a word's comfort recolors it in place.
+	const vocabularyMap = fromTable(zhongwen.tables.vocabulary);
+	const vocabularyWords = $derived([...vocabularyMap.values()]);
 
 	type SendError = {
 		message: string;
@@ -93,12 +112,27 @@
 		clearInterval(ticker);
 		unobserve();
 		docHandle[Symbol.dispose]();
+		vocabularyMap[Symbol.dispose]();
 	});
 
 	let kickoffController = $state.raw<AbortController | null>(null);
 	let sendError = $state<SendError | null>(null);
 	let dismissedError = $state(false);
 	let inputValue = $state('');
+
+	// The reflection sheet, opened from Finish. The roster is snapshotted at open
+	// (so bumping a word does not reshuffle the buckets mid-review); the sheet
+	// reads each row's live mastery from `vocabularyWords` for the toggle value.
+	let showReflection = $state(false);
+	let roster = $state.raw<ReflectionRoster | null>(null);
+
+	/** Today's steering targets, the same query that feeds the system prompt. */
+	function inPlayToday(): Vocabulary[] {
+		return reviewQueue(zhongwen.tables.vocabulary.scan().rows, {
+			today: CalendarDateString.today(),
+			newWordsPerDay: zhongwen.kv.get('newWordsPerDay'),
+		});
+	}
 
 	const trailing = $derived(messages.at(-1));
 	const activeGeneration = $derived(
@@ -157,6 +191,10 @@
 		sendError = null;
 		dismissedError = false;
 		const row = readRow();
+		// Steer the AI toward today's words. Recomputed each kickoff so marking a
+		// word Known mid-conversation drops it from the next turn's targets. Empty
+		// queue → no block, and the chat runs on the base prompt alone.
+		const vocabularyPrompt = buildVocabularySystemPrompt(inPlayToday());
 		try {
 			await aiChatFetch(API_ROUTES.ai.chatDoc.url(APP_URLS.API), {
 				method: 'POST',
@@ -167,7 +205,9 @@
 					data: {
 						provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
 						model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
-						systemPrompts: [ZHONGWEN_SYSTEM_PROMPT],
+						systemPrompts: vocabularyPrompt
+							? [ZHONGWEN_SYSTEM_PROMPT, vocabularyPrompt]
+							: [ZHONGWEN_SYSTEM_PROMPT],
 					},
 				}),
 				signal: controller.signal,
@@ -213,6 +253,25 @@
 		dismissedError = false;
 		void kickoffGeneration();
 	}
+
+	/**
+	 * Finish: snapshot which words actually appeared in this transcript (the
+	 * matcher run over every message, the learner's and the AI's) against today's
+	 * steering targets, then open the reflection sheet. Skippable by construction:
+	 * this attaches only to the explicit Finish action, never to navigating away
+	 * or deleting.
+	 */
+	function openReflection() {
+		const words = [...vocabularyWords].sort((a, b) =>
+			a.createdAt.localeCompare(b.createdAt),
+		);
+		roster = reflectionRoster({ messages, words, inPlay: inPlayToday() });
+		showReflection = true;
+	}
+
+	function bumpMastery(id: TermId, mastery: Vocabulary['mastery']) {
+		zhongwen.tables.vocabulary.update(id, { mastery });
+	}
 </script>
 
 <Chat.List class="flex-1 overflow-y-auto p-4" aria-live="polite">
@@ -225,7 +284,12 @@
 			<!-- An empty assistant message is the in-progress turn before its first
 				token; the typing bubble below stands in for it. -->
 			{#if message.role === 'user' || message.text.length > 0}
-				<ChatMessage {message} {showPinyin} />
+				<ChatMessage
+					{message}
+					{showPinyin}
+					{highlightVocab}
+					words={vocabularyWords}
+				/>
 			{/if}
 		{/each}
 	{/if}
@@ -258,9 +322,24 @@
 	{/if}
 </Chat.List>
 
+{#if messages.length > 0}
+	<div class="flex justify-end border-t px-4 py-2">
+		<Button variant="outline" size="sm" onclick={openReflection}>
+			Finish & review words
+		</Button>
+	</div>
+{/if}
+
 <ChatInput
 	bind:value={inputValue}
 	{isGenerating}
 	onSend={sendMessage}
 	onStop={() => kickoffController?.abort()}
+/>
+
+<ReflectionSheet
+	bind:open={showReflection}
+	roster={roster ?? { used: [], met: [], missed: [] }}
+	words={vocabularyWords}
+	onBump={bumpMastery}
 />

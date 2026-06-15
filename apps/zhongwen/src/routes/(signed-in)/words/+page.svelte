@@ -13,12 +13,13 @@
 	import * as Item from '@epicenter/ui/item';
 	import { toast } from '@epicenter/ui/sonner';
 	import * as Tabs from '@epicenter/ui/tabs';
-	import { ToggleGroup, ToggleGroupItem } from '@epicenter/ui/toggle-group';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { onDestroy } from 'svelte';
+	import { MASTERY_LABELS } from '$lib/mastery';
 	import { requireZhongwen } from '$lib/session';
+	import MasteryToggle from '../components/MasteryToggle.svelte';
 	import BulkAddModal from './BulkAddModal.svelte';
 
 	const zhongwen = requireZhongwen();
@@ -37,14 +38,6 @@
 	const existingByText = $derived(
 		new Map(words.map((word) => [word.text, word])),
 	);
-
-	// mastery is the self-reported comfort (0 new, 1 learning, 2 known); it is
-	// the filter, the toggle value, and (later) the review interval input.
-	const MASTERY_LABELS: Record<number, string> = {
-		0: 'New',
-		1: 'Learning',
-		2: 'Known',
-	};
 
 	// Tab keys map onto a mastery bucket; the absent key ('all') means no filter.
 	const MASTERY_BY_TAB: Record<string, Vocabulary['mastery']> = {
@@ -185,25 +178,10 @@
 							<Item.Description>{MASTERY_LABELS[word.mastery]}</Item.Description>
 						</Item.Content>
 						<Item.Actions>
-							<ToggleGroup
-								type="single"
-								variant="outline"
-								size="sm"
-								value={String(word.mastery)}
-								onValueChange={(value) => {
-									if (value) setMastery(word.id, Number(value));
-								}}
-							>
-								<ToggleGroupItem value="0" aria-label="Mark as new">
-									New
-								</ToggleGroupItem>
-								<ToggleGroupItem value="1" aria-label="Mark as learning">
-									Learning
-								</ToggleGroupItem>
-								<ToggleGroupItem value="2" aria-label="Mark as known">
-									Known
-								</ToggleGroupItem>
-							</ToggleGroup>
+							<MasteryToggle
+								mastery={word.mastery}
+								onChange={(mastery) => setMastery(word.id, mastery)}
+							/>
 							<Button
 								variant="ghost"
 								size="icon"
