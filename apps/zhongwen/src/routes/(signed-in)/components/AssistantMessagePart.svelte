@@ -29,4 +29,6 @@
 	});
 </script>
 
-<div class="prose prose-sm">{@html html}</div>
+<!-- data-gloss-context carries the raw message so a tapped word can be glossed in
+	its sentence; the lens spans inside resolve it via closest(). -->
+<div class="prose prose-sm" data-gloss-context={content}>{@html html}</div>

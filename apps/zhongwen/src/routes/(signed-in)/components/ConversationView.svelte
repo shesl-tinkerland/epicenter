@@ -305,15 +305,33 @@
 	// Capture (drag-select) and gloss (click) never collide: a click leaves the
 	// selection collapsed, so SelectionCapture stays quiet here. Delegated on the
 	// list because the spans live inside {@html} message bodies.
-	let gloss = $state<{ text: string; x: number; y: number } | null>(null);
+	let gloss = $state<{
+		text: string;
+		context: string;
+		provider: string;
+		model: string;
+		x: number;
+		y: number;
+	} | null>(null);
 
 	function openGloss(event: MouseEvent) {
 		const span = (event.target as HTMLElement).closest('[data-vocab]');
 		if (!span) return;
 		const text = span.getAttribute('data-vocab');
 		if (!text) return;
+		const context =
+			span.closest('[data-gloss-context]')?.getAttribute('data-gloss-context') ??
+			'';
+		const row = readRow();
 		const rect = span.getBoundingClientRect();
-		gloss = { text, x: rect.left + rect.width / 2, y: rect.top };
+		gloss = {
+			text,
+			context,
+			provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
+			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
+			x: rect.left + rect.width / 2,
+			y: rect.top,
+		};
 	}
 </script>
 
@@ -397,6 +415,10 @@
 {#if gloss}
 	<GlossPopover
 		word={gloss.text}
+		context={gloss.context}
+		provider={gloss.provider}
+		model={gloss.model}
+		fetchFn={aiChatFetch}
 		x={gloss.x}
 		y={gloss.y}
 		onClose={() => (gloss = null)}
