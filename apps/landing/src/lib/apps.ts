@@ -22,6 +22,8 @@ export type AppEntry = {
 	href: string;
 	/** Source folder on GitHub, for "follow the build". */
 	repo: string;
+	/** A plausible file this app writes, shown in the one-folder visual. */
+	exampleFile: string;
 	/** The featured app, shown first and anchored as "start here". */
 	featured?: boolean;
 };
@@ -37,6 +39,7 @@ export const APPS: AppEntry[] = [
 		icon: 'mic',
 		href: '/whispering',
 		repo: `${GITHUB}/whispering`,
+		exampleFile: 'standup.md',
 		featured: true,
 	},
 	{
@@ -47,15 +50,19 @@ export const APPS: AppEntry[] = [
 		icon: 'notebook-pen',
 		href: '/honeycrisp',
 		repo: `${GITHUB}/honeycrisp`,
+		exampleFile: 'meeting-notes.md',
 	},
 	{
+		// Planned, not in-progress: the direction is set but there is no Vocab
+		// code yet. It will be built on the zhongwen experiment (the repo link).
 		slug: 'vocab',
 		name: 'Vocab',
 		tagline: 'Build your vocabulary in any language, a word at a time.',
-		status: 'in-progress',
+		status: 'planned',
 		icon: 'languages',
 		href: '/vocab',
 		repo: `${GITHUB}/zhongwen`,
+		exampleFile: 'spanish.md',
 	},
 ];
 

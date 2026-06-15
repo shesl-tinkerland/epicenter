@@ -1,0 +1,39 @@
+---
+type Props = {
+	sourceHref?: string;
+	sourceLabel?: string;
+	showHome?: boolean;
+	showPricing?: boolean;
+	showBlog?: boolean;
+};
+
+const {
+	sourceHref,
+	sourceLabel = 'Source',
+	showHome = false,
+	showPricing = false,
+	showBlog = true,
+} = Astro.props;
+
+const year = new Date().getFullYear();
+const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
+const discordUrl = 'https://go.epicenter.so/discord';
+---
+
+<footer class="band footer-band">
+	<div
+		class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-12 text-sm md:flex-row"
+	>
+		<p class="fineprint">
+			© {year} Epicenter. Open source under the AGPL-3.0 license.
+		</p>
+		<div class="flex flex-wrap justify-center gap-x-7 gap-y-3">
+			{showHome && <a class="nav-link" href="/">Epicenter</a>}
+			{showPricing && <a class="nav-link" href="/whispering#pricing">How is it free?</a>}
+			{sourceHref && <a class="nav-link" href={sourceHref}>{sourceLabel}</a>}
+			<a class="nav-link" href={githubUrl}>GitHub</a>
+			<a class="nav-link" href={discordUrl}>Discord</a>
+			{showBlog && <a class="nav-link" href="/blog">Blog</a>}
+		</div>
+	</div>
+</footer>

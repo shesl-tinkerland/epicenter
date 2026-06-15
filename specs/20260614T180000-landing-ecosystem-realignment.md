@@ -24,7 +24,7 @@ Owner decision (2026-06-14): the public story is the **family of apps and where 
 | Tabs mechanism | Routed pages (`/whispering`, `/honeycrisp`, `/vocab`) + Astro View Transitions; persistent switcher | Owner, 2026-06-14 |
 | Unshipped apps | Named publicly, each with a truthful status badge; Whispering is the only "Download now" | Owner, 2026-06-14 |
 | Positioning doc | Rewrite `docs/positioning.md` to a vision-forward public stance | Owner, 2026-06-14 |
-| App set (first cut) | Whispering (Live), Honeycrisp (In progress), Vocab (In progress, seeded from `apps/zhongwen`) | Owner, 2026-06-14 |
+| App set (first cut) | Whispering (Live), Honeycrisp (In progress), Vocab (Planned, seeded from the `apps/zhongwen` experiment) | Owner, 2026-06-14 |
 
 ## Status Taxonomy (the honesty gate)
 
@@ -33,8 +33,8 @@ Every app surface carries a status `Badge`. Each label must be provable in the r
 | Badge | Means | Today |
 | --- | --- | --- |
 | **Live** | Installable through a normal release channel | Whispering (`7.11.0`) |
-| **In progress** | Code exists in the repo, built in public, not yet a shipped product | Honeycrisp (`0.0.1`), Vocab (seeded from `apps/zhongwen`, `0.0.1`) |
-| **Planned** | Announced direction, no code yet | (none in first cut) |
+| **In progress** | Code exists in the repo, built in public, not yet a shipped product | Honeycrisp (`0.0.1`) |
+| **Planned** | Announced direction, no code yet | Vocab, seeded from the `apps/zhongwen` experiment |
 
 Hard rule: exactly one **Live** download anchor exists across the whole site (Whispering). Every other app CTA is "Follow the build" or a link to its page/GitHub, never "Download".
 
@@ -45,7 +45,7 @@ Persistent shell (top switcher, transition:persist, looks like tabs)
   /             Ecosystem    promise + where it's going + app browser + founder note
   /whispering   Live         deep product page; the only "Download now"
   /honeycrisp   In progress  thin honest page; "follow the build"
-  /vocab        In progress  thin honest page; "follow the build"
+  /vocab        Planned      thin honest page; links to the zhongwen experiment
   /blog         unchanged
   /404          unchanged
 ```
@@ -65,8 +65,9 @@ Matter and Fuji stay out of the first cut (not named, no tile, no page) until ow
 Today `/` is hand-rolled warm-paper CSS and `/whispering` is shadcn/style-vega. A multi-page shell needs one language. Decision: keep the warm-paper visual identity (it is the brand), but extract the repeated pieces into small landing-local components so every app page is coherent:
 
 - `AppSwitcher.astro` (the persistent routed tab bar)
-- `AppTile.astro` (ecosystem grid card: icon, name, one line, status)
-- `StatusBadge.astro` (Live / In progress / Planned; wraps `@epicenter/ui/badge`)
+- `AppsFolder.astro` (fused app browser plus one-folder visual: icon, name, one line, status, and generated file)
+- `AppFooter.astro` (shared footer links)
+- `StatusBadge.astro` (Live / In progress / Planned)
 - `AppPageHeader.astro` (per-app header: name, status, one line, primary action)
 
 `@epicenter/ui` is wired already (`BaseLayout` sets `class="style-vega"` + imports `app.css`). Use `@epicenter/ui/badge`, `card`, `button`, `tooltip`, `tree-view`, `separator`, `github-button` where they fit the warm-paper theme; do not use `@epicenter/ui/tabs` for the switcher (that is in-page panels, not routed nav).
@@ -76,8 +77,8 @@ Today `/` is hand-rolled warm-paper CSS and `/whispering` is shadcn/style-vega. 
 ### `/` (Ecosystem)
 
 1. **Umbrella hero (direction).** Headline is the place we are heading, e.g. "Purpose-built apps. One folder you own." No per-app download in the headline. Proof line satisfied lower down (Whispering named, "ready today", platforms) to keep it honest.
-2. **Ecosystem browser.** `AppTile` grid: Whispering (Live, featured / "Start here"), Honeycrisp (In progress), Vocab (In progress). This grid is the visual twin of the top switcher.
-3. **Shared guarantee.** "Apps come and go. Your files shouldn't." Its natural home is here, between the apps. The export gag and the one-folder `tree-view` visual live here. The tree shows each app folder as its own Epicenter root with a muted `epicenter.config.ts` before the generated file, so the topology is honest without making developer detail the visual headline.
+2. **Ecosystem browser plus folder visual.** `AppsFolder` fuses the app browser with the one-folder picture: Whispering (Live), Honeycrisp (In progress), and Vocab (Planned) each lands a file into the same folder. The tree shows each app folder as its own Epicenter root with a muted `epicenter.config.ts` before the generated file, so the topology is honest without making developer detail the visual headline.
+3. **Shared guarantee.** "Apps come and go. Your files shouldn't." The export gag lives here after the fused folder visual, so the joke lands after the reader has seen where the files are.
 4. **Founder note.** Moves here (it is about the whole project). Owner text still outstanding; keep the "if we disappeared tomorrow" beat here and nowhere else.
 5. **Footer.**
 
@@ -95,9 +96,9 @@ Absorbs the Whispering depth currently bloating root, rewritten to the spine voi
 - Downloads per platform, setup video, FAQ.
 - The only "Download now" on the site.
 
-### `/honeycrisp`, `/vocab` (In progress)
+### `/honeycrisp` (In progress), `/vocab` (Planned)
 
-`AppPageHeader` (name, In progress badge, one line) + a short honest "what it is / where it's at" body + "Follow the build" (GitHub). No download, no pricing, no shipped-product framing. Vocab's body explains it is being built on the `apps/zhongwen` foundation, reframed around building vocabulary.
+`AppPageHeader` (name, status badge, one line) + a short honest "what it is / where it's at" body + source or experiment link. No download, no pricing, no shipped-product framing. Vocab's body explains that it is planned, not installable, and that the closest repo artifact today is the `apps/zhongwen` experiment reframed around vocabulary.
 
 ## `docs/positioning.md` Edits
 
@@ -111,7 +112,7 @@ Targeted, not a teardown:
 
 ### Wave 1: Foundation (shell + shared components)
 - [x] `BaseLayout.astro`: add `<ClientRouter />`; keep `style-vega` + font slot.
-- [x] `StatusBadge.astro`, `AppSwitcher.astro` (`transition:persist`), `AppTile.astro`, `AppPageHeader.astro`.
+- [x] `StatusBadge.astro`, `AppSwitcher.astro` (`transition:persist`), `AppsFolder.astro`, `AppFooter.astro`, `AppPageHeader.astro`.
 - [x] Single source of truth for the app registry (name, slug, status, one-line, icon) so `/`, the switcher, and per-app pages stay in sync.
 
 ### Wave 2: Root rebuild
@@ -119,7 +120,7 @@ Targeted, not a teardown:
 
 ### Wave 3: App pages
 - [x] Rewrite `/whispering` to the warm-paper language + spine voice; absorb moved depth; keep the only "Download now".
-- [x] Add `/honeycrisp` and `/vocab` (thin, honest, In progress).
+- [x] Add `/honeycrisp` (thin, honest, In progress) and `/vocab` (thin, honest, Planned).
 
 ### Wave 4: Positioning + cleanup
 - [x] Apply `docs/positioning.md` edits.

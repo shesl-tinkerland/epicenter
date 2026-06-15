@@ -1,18 +1,9 @@
 ---
 import { Font } from 'astro:assets';
-import {
-	FileCog as FileCogIcon,
-	FileText as FileTextIcon,
-	Folder as FolderIcon,
-} from '@lucide/astro';
+import AppFooter from '../components/ecosystem/AppFooter.astro';
 import AppSwitcher from '../components/ecosystem/AppSwitcher.astro';
-import AppTile from '../components/ecosystem/AppTile.astro';
-import { APPS } from '../lib/apps';
+import AppsFolder from '../components/ecosystem/AppsFolder.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-
-const year = new Date().getFullYear();
-const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
-const discordUrl = 'https://go.epicenter.so/discord';
 ---
 
 <BaseLayout
@@ -52,24 +43,8 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			</p>
 		</header>
 
-		<!-- The ecosystem browser: the visual twin of the switcher -->
-		<section id="apps">
-			<div class="mx-auto max-w-5xl px-6 py-24 md:py-32">
-				<div class="text-center">
-					<p class="eyebrow reveal">The apps</p>
-					<h2 class="font-display reveal mt-4 text-balance">
-						One family, one folder.
-					</h2>
-					<p class="sub reveal mx-auto mt-5 max-w-2xl">
-						Each app stands on its own. Together they write to the same folder,
-						so everything you capture lives in one place that belongs to you.
-					</p>
-				</div>
-				<div class="grid reveal mt-12 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					{APPS.map((app) => <AppTile app={app} />)}
-				</div>
-			</div>
-		</section>
+		<!-- The apps and the one folder they write to, fused into one beat -->
+		<AppsFolder />
 
 		<!-- The shared guarantee, delivered as the export gag -->
 		<section class="band">
@@ -88,75 +63,6 @@ const discordUrl = 'https://go.epicenter.so/discord';
 					ordinary files in your folder from day one, so there is nothing to
 					export because nothing was held.
 				</p>
-			</div>
-		</section>
-
-		<!-- The folder: everything lands in one place you keep -->
-		<section id="folder">
-			<div class="mx-auto max-w-2xl px-6 py-28 text-center md:py-36">
-				<p class="eyebrow reveal">Where it all lands</p>
-				<h2 class="font-display reveal mt-4 text-balance">
-					Everything in one folder you keep.
-				</h2>
-				<p class="sub reveal mx-auto mt-6 max-w-xl">
-					Readable now, readable in twenty years, no account required. Every app
-					you add writes alongside the last, in plain files you can open, search,
-					and back up yourself.
-				</p>
-				<div class="tree-wrap reveal mt-12 w-full text-left">
-					<div class="demo-window">
-						<div class="demo-titlebar">
-							<span class="demo-dot"></span><span class="demo-dot"></span
-							><span class="demo-dot"></span>
-							<span class="demo-title">my-brain</span>
-						</div>
-						<div class="ns-tree">
-							<div class="ns-row"><FolderIcon /> my-brain/</div>
-							<div class="ns-row i1" data-step="1"><FolderIcon /> journal/</div>
-							<div class="ns-row i1" data-step="1"><FolderIcon /> ideas/</div>
-							<div class="ns-row i1" data-step="2">
-								<FolderIcon /> whispering/
-							</div>
-							<div
-								class="ns-row i2 ns-file ns-managed"
-								data-step="3"
-								title="Epicenter setup file"
-							>
-								<FileCogIcon /> epicenter.config.ts
-							</div>
-							<div class="ns-row i2 ns-file" data-step="4">
-								<FileTextIcon /> standup.md
-							</div>
-							<div class="ns-row i1" data-step="5">
-								<FolderIcon /> honeycrisp/
-							</div>
-							<div
-								class="ns-row i2 ns-file ns-managed"
-								data-step="6"
-								title="Epicenter setup file"
-							>
-								<FileCogIcon /> epicenter.config.ts
-							</div>
-							<div class="ns-row i2 ns-file" data-step="7">
-								<FileTextIcon /> meeting-notes.md
-							</div>
-							<div class="ns-row i1" data-step="8"><FolderIcon /> vocab/</div>
-							<div
-								class="ns-row i2 ns-file ns-managed"
-								data-step="9"
-								title="Epicenter setup file"
-							>
-								<FileCogIcon /> epicenter.config.ts
-							</div>
-							<div class="ns-row i2 ns-file" data-step="10">
-								<FileTextIcon /> spanish.md
-							</div>
-						</div>
-					</div>
-					<p class="ns-caption mono-caption mt-4 text-center">
-						Your folder. Every app writes here.
-					</p>
-				</div>
 			</div>
 		</section>
 
@@ -200,88 +106,72 @@ const discordUrl = 'https://go.epicenter.so/discord';
 			</div>
 		</section>
 
-		<footer class="band footer-band">
-			<div
-				class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-12 text-sm md:flex-row"
-			>
-				<p class="fineprint">
-					© {year} Epicenter. Open source under the AGPL-3.0 license.
-				</p>
-				<div class="flex flex-wrap justify-center gap-x-7 gap-y-3">
-					<a class="nav-link" href="/whispering#pricing">How is it free?</a>
-					<a class="nav-link" href={githubUrl}>GitHub</a>
-					<a class="nav-link" href={discordUrl}>Discord</a>
-					<a class="nav-link" href="/blog">Blog</a>
-				</div>
-			</div>
-		</footer>
+		<AppFooter showPricing />
 	</main>
 </BaseLayout>
 
-<script is:inline>
-	// Runs on first load and after every view-transition navigation.
-	document.addEventListener('astro:page-load', () => {
-	const motionOK = matchMedia('(prefers-reduced-motion: no-preference)').matches;
+<script>
+	// Module script: runs once and registers a single astro:page-load listener
+	// that re-binds against the freshly swapped DOM on each navigation. (An
+	// is:inline script re-executes per navigation and leaks a listener each time.)
+	// The folder's staged fill lives in AppsFolder.astro; this handles the export
+	// gag and the generic scroll reveals.
+	const init = () => {
+		const motionOK = matchMedia(
+			'(prefers-reduced-motion: no-preference)',
+		).matches;
 
-	// The export gag: one state change.
-	for (const btn of document.querySelectorAll('.gag-btn')) {
-		btn.addEventListener('click', () => {
-			if (btn.classList.contains('done')) return;
-			btn.classList.add('done');
-			btn.textContent = 'Already done.';
-		});
-	}
+		// The export gag: one state change.
+		for (const btn of Array.from(
+			document.querySelectorAll<HTMLButtonElement>('.gag-btn'),
+		)) {
+			if (btn.dataset.gagBound === 'true') continue;
+			btn.dataset.gagBound = 'true';
+			btn.addEventListener('click', () => {
+				if (btn.classList.contains('done')) return;
+				btn.classList.add('done');
+				btn.textContent = 'Already done.';
+			});
+		}
 
-	// CSS hides animated elements; JS reveals them. Run fn once, when el is seen.
-	const inView = (el, fn, threshold = 0.15) => {
-		if (!el) return;
-		const io = new IntersectionObserver(
-			(entries) => {
-				if (entries.some((e) => e.isIntersecting)) {
-					io.disconnect();
-					fn();
-				}
-			},
-			{ threshold },
-		);
-		io.observe(el);
+		// CSS hides animated elements; JS reveals them. Run fn once, when seen.
+		const inView = (
+			el: Element | null,
+			fn: () => void,
+			threshold = 0.15,
+		) => {
+			if (!el) return;
+			const io = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((e) => e.isIntersecting)) {
+						io.disconnect();
+						fn();
+					}
+				},
+				{ threshold },
+			);
+			io.observe(el);
+		};
+
+		// Animate from a hidden keyframe to the element's natural state. The
+		// forwards fill keeps the end state and outranks the CSS hidden rule.
+		const reveal = (el: Element, from: Keyframe, ms = 600) =>
+			el.animate([from, { opacity: 1, filter: 'none', transform: 'none' }], {
+				duration: ms,
+				easing: 'cubic-bezier(0.2, 0.6, 0.2, 1)',
+				fill: 'forwards',
+			});
+
+		for (const el of Array.from(document.querySelectorAll<HTMLElement>('.reveal'))) {
+			if (el.dataset.revealBound === 'true') continue;
+			el.dataset.revealBound = 'true';
+			inView(el, () =>
+				motionOK
+					? reveal(el, { opacity: 0, transform: 'translateY(16px)' })
+					: null,
+			);
+		}
 	};
 
-	// Animate from a hidden keyframe to the element's natural state. The forwards
-	// fill keeps the end state and outranks the CSS hidden rule.
-	const reveal = (el, from, ms = 600) =>
-		el.animate([from, { opacity: 1, filter: 'none', transform: 'none' }], {
-			duration: ms,
-			easing: 'cubic-bezier(0.2, 0.6, 0.2, 1)',
-			fill: 'forwards',
-		});
-
-	// Scroll reveals.
-	for (const el of document.querySelectorAll('.reveal'))
-		inView(el, () =>
-			motionOK ? reveal(el, { opacity: 0, transform: 'translateY(16px)' }) : null,
-		);
-
-	// The folder fills in one branch at a time when scrolled into view.
-	const tree = document.querySelector('.ns-tree');
-	if (tree && motionOK) {
-		const rows = [...tree.querySelectorAll('[data-step]')];
-		const lastStep = Math.max(...rows.map((row) => +row.dataset.step));
-		inView(
-			tree,
-			() => {
-				let step = 0;
-				const advance = () => {
-					step += 1;
-					for (const r of rows)
-						if (+r.dataset.step === step)
-							reveal(r, { opacity: 0, transform: 'translateX(-8px)' });
-					if (step < lastStep) setTimeout(advance, 260);
-				};
-				advance();
-			},
-			0.2,
-		);
-	}
-	});
+	document.addEventListener('astro:page-load', init);
 </script>

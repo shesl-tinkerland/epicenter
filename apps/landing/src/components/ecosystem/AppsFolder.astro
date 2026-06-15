@@ -1,0 +1,333 @@
+---
+// The fused ecosystem beat: the apps on the left, the one folder they write to
+// on the right. Replaces the old separate app grid and folder tree. On scroll,
+// each app's folder lands in turn (its card glows as the folder arrives); after
+// the sequence you can hover any app to see which file it owns.
+//
+// Tree shape matches the committed design: each app is a self-contained folder
+// with a muted epicenter.config.ts (the app-folder-as-root topology). Your own
+// folders (journal, ideas) are already there with no config, so "apps come and
+// go, your files shouldn't" reads straight off the tree.
+//
+// On phones the left cards drop away (they'd sit too far from their folders) and
+// the tree fills on its own, named by its subfolders.
+import {
+	FileCog as FileCogIcon,
+	FileText as FileTextIcon,
+	Folder as FolderIcon,
+} from '@lucide/astro';
+import { APPS } from '../../lib/apps';
+import AppIcon from './AppIcon.astro';
+import StatusBadge from './StatusBadge.astro';
+---
+
+<section id="apps" class="af">
+	<div class="mx-auto max-w-5xl px-6 py-24 md:py-32">
+		<div class="text-center">
+			<p class="eyebrow reveal">The apps</p>
+			<h2 class="font-display reveal mt-4 text-balance">
+				One family. One folder you own.
+			</h2>
+			<p class="sub reveal mx-auto mt-5 max-w-2xl">
+				Each app does one job. They all write to the same folder on your
+				computer, so everything you make lands in one place that stays yours.
+			</p>
+		</div>
+
+		<div class="af-grid reveal mt-14">
+			<!-- Left: the apps, each a door to its page -->
+			<div class="af-apps">
+				{
+					APPS.map((app, i) => (
+						<a
+							href={app.href}
+							class:list={['af-app', app.status, { featured: app.featured }]}
+							data-app={app.slug}
+							style={`--seq: ${i + 1}`}
+						>
+							<span class="af-app-icon">
+								<AppIcon name={app.icon} />
+							</span>
+							<span class="af-app-body">
+								<span class="af-app-head">
+									<span class="font-display af-app-name">{app.name}</span>
+									<StatusBadge status={app.status} />
+								</span>
+								<span class="af-app-line">{app.tagline}</span>
+							</span>
+						</a>
+					))
+				}
+			</div>
+
+			<!-- Right: the one folder everything lands in -->
+			<div class="af-folder demo-window">
+				<div class="demo-titlebar">
+					<span class="demo-dot"></span><span class="demo-dot"></span
+					><span class="demo-dot"></span>
+					<span class="demo-title">my-brain</span>
+				</div>
+				<div class="ns-tree af-tree">
+					<div class="ns-row"><FolderIcon /> my-brain/</div>
+					<div class="ns-row i1 ns-yours">
+						<FolderIcon /> journal/ <span class="ns-hint">yours</span>
+					</div>
+					<div class="ns-row i1 ns-yours">
+						<FolderIcon /> ideas/ <span class="ns-hint">yours</span>
+					</div>
+					{
+						APPS.map((app, i) => (
+							<>
+								<div
+									class="ns-row i1 af-block"
+									data-block={app.slug}
+									style={`--seq: ${i + 1}`}
+								>
+									<FolderIcon /> {app.slug}/
+								</div>
+								<div
+									class="ns-row i2 ns-file ns-managed af-block"
+									style={`--seq: ${i + 1}`}
+									title="Epicenter setup file"
+								>
+									<FileCogIcon /> epicenter.config.ts
+								</div>
+								<div
+									class:list={['ns-row i2 ns-file af-block af-out', { dim: app.status !== 'live' }]}
+									data-file={app.slug}
+									style={`--seq: ${i + 1}`}
+								>
+									<FileTextIcon /> {app.exampleFile}
+									{app.status === 'in-progress' && <span class="ns-tag">soon</span>}
+									{app.status === 'planned' && <span class="ns-tag">planned</span>}
+								</div>
+							</>
+						))
+					}
+				</div>
+			</div>
+		</div>
+
+		<p class="af-caption reveal mono-caption mt-8 text-center">
+			Your own folders are already there. Each app adds its own, and your files
+			stay when an app goes.
+		</p>
+	</div>
+</section>
+
+<style>
+	.ns-hint {
+		margin-left: 0.5rem;
+		font-size: 0.72rem;
+		color: var(--ink-soft);
+		opacity: 0.7;
+	}
+
+	.ns-yours {
+		color: var(--ink);
+		font-weight: 600;
+	}
+
+	.ns-tag {
+		margin-left: 0.5rem;
+		font-size: 0.62rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		padding: 0.05rem 0.4rem;
+	}
+
+	.af-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: clamp(1.5rem, 5vw, 4rem);
+		align-items: center;
+	}
+
+	.af-apps {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.af-app {
+		display: flex;
+		align-items: center;
+		gap: 0.9rem;
+		padding: 1.1rem 1.2rem;
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		text-decoration: none;
+		color: var(--ink);
+		transition:
+			transform 150ms ease,
+			border-color 150ms ease,
+			box-shadow 150ms ease;
+	}
+
+	.af-app:hover {
+		transform: translateX(3px);
+		border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+		box-shadow: 0 10px 24px rgb(38 34 26 / 8%);
+	}
+
+	.af-app.featured {
+		border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+	}
+
+	.af-app-icon :global(svg) {
+		width: 1.5rem;
+		height: 1.5rem;
+		color: var(--accent);
+		flex: none;
+	}
+
+	.af-app-body {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.af-app-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.af-app-name {
+		font-size: 1.15rem;
+		font-weight: 600;
+	}
+
+	.af-app-line {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 0.85rem;
+		line-height: 1.45;
+		color: var(--ink-soft);
+	}
+
+	/* The output file rests dimmer for unshipped apps. */
+	.af-out {
+		--land-op: 1;
+	}
+
+	.af-out.dim {
+		opacity: 0.5;
+		--land-op: 0.5;
+	}
+
+	/* Hover correspondence: card lights the file it owns. */
+	.ns-row.lit {
+		background: rgb(188 63 29 / 8%);
+		border-radius: 5px;
+	}
+
+	/* Choreographed fill: each app's folder lands in turn, synced to its card's
+	   glow. Hidden start gated on motion + JS, so no-JS and reduced-motion show
+	   the tree filled and at rest (hover correspondence still works). */
+	@media (prefers-reduced-motion: no-preference) {
+		:global(html.js) .af-block {
+			opacity: 0;
+		}
+
+		.af-grid {
+			--af-step: 0.95s;
+		}
+
+		.af-grid.play .af-block {
+			animation: af-land 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) forwards;
+			animation-delay: calc(var(--seq) * var(--af-step));
+		}
+
+		.af-grid.play .af-app {
+			animation: af-glow 1.2s ease;
+			animation-delay: calc(var(--seq) * var(--af-step));
+		}
+	}
+
+	@keyframes af-land {
+		from {
+			opacity: 0;
+			transform: translateX(-10px) scale(0.97);
+		}
+		to {
+			opacity: var(--land-op, 1);
+			transform: none;
+		}
+	}
+
+	@keyframes af-glow {
+		0%,
+		100% {
+			border-color: var(--line);
+			box-shadow: 0 0 0 0 transparent;
+		}
+		45% {
+			border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+			box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+		}
+	}
+
+	/* Mobile option (b): drop the left cards (they'd sit far from their folders);
+	   the tree fills on its own, named by its subfolders. */
+	@media (max-width: 720px) {
+		.af-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.af-apps {
+			display: none;
+		}
+
+		.af-folder {
+			max-width: 26rem;
+			margin-inline: auto;
+		}
+	}
+</style>
+
+<script>
+	// Module script: runs once, registers a single astro:page-load listener that
+	// re-binds against the freshly swapped DOM on each navigation. (An is:inline
+	// script would re-execute per navigation and leak a listener each time.)
+	const init = () => {
+		const grid = document.querySelector<HTMLElement>('.af-grid');
+		if (!grid) return;
+		if (grid.dataset.afBound === 'true') return;
+		grid.dataset.afBound = 'true';
+		const motionOK = matchMedia(
+			'(prefers-reduced-motion: no-preference)',
+		).matches;
+
+		// Hover correspondence: card lights the file it owns.
+		for (const card of Array.from(
+			grid.querySelectorAll<HTMLElement>('.af-app[data-app]'),
+		)) {
+			const slug = card.getAttribute('data-app');
+			const file = grid.querySelector<HTMLElement>(
+				`.af-out[data-file="${slug}"]`,
+			);
+			if (!file) continue;
+			card.addEventListener('mouseenter', () => file.classList.add('lit'));
+			card.addEventListener('mouseleave', () => file.classList.remove('lit'));
+		}
+
+		// Staged fill, once, when the folder scrolls into view.
+		if (!motionOK) return;
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) {
+					io.disconnect();
+					grid.classList.add('play');
+				}
+			},
+			{ threshold: 0.35 },
+		);
+		io.observe(grid);
+	};
+
+	document.addEventListener('astro:page-load', init);
+</script>

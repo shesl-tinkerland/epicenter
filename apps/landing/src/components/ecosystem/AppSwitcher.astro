@@ -65,6 +65,7 @@ const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
 		gap: 0.25rem;
 		margin-right: auto;
 		overflow-x: auto;
+		min-width: 0;
 	}
 
 	.tab {
@@ -102,8 +103,19 @@ const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
 
 	@media (max-width: 640px) {
 		.brand {
-			display: none;
+			font-size: 1rem;
+			flex: none;
 		}
+
+		.switch-inner {
+			gap: 0.55rem;
+			padding-inline: 0.8rem;
+		}
+
+		.tab {
+			padding-inline: 0.65rem;
+		}
+
 		.ext {
 			display: none;
 		}
