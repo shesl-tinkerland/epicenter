@@ -1,5 +1,6 @@
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import { APP_URLS } from '@epicenter/constants/vite';
+import { ZHONGWEN_MODEL } from '@epicenter/zhongwen';
 
 const GLOSS_SYSTEM_PROMPT =
 	'You are a Chinese vocabulary tutor. Give a concise English meaning of the ' +
@@ -34,16 +35,12 @@ export async function streamGloss({
 	fetchFn,
 	word,
 	context,
-	provider,
-	model,
 	signal,
 	onText,
 }: {
 	fetchFn: typeof fetch;
 	word: string;
 	context: string;
-	provider: string;
-	model: string;
 	signal: AbortSignal;
 	onText: (text: string) => void;
 }): Promise<void> {
@@ -55,7 +52,7 @@ export async function streamGloss({
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({
 			messages: [{ role: 'user', content: userContent }],
-			data: { provider, model, systemPrompts: [GLOSS_SYSTEM_PROMPT] },
+			data: { model: ZHONGWEN_MODEL, systemPrompts: [GLOSS_SYSTEM_PROMPT] },
 		}),
 		signal,
 	});

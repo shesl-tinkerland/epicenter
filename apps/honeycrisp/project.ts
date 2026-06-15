@@ -9,7 +9,6 @@
  */
 
 import { join } from 'node:path';
-import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { defineActions, defineWorkspace } from '@epicenter/workspace';
 import { defineSessionMount } from '@epicenter/workspace/daemon';
 import {
@@ -27,6 +26,11 @@ import { createHoneycrisp } from './honeycrisp.js';
 
 export type HoneycrispMountOptions = {
 	git?: GitAutosaveConfig;
+	/**
+	 * Base URL of the Epicenter cloud API used for sync.
+	 * Defaults to `process.env.EPICENTER_API_URL`, falling back to the hosted API.
+	 */
+	baseURL?: string;
 };
 
 export function honeycrisp(opts: HoneycrispMountOptions = {}) {
@@ -34,6 +38,10 @@ export function honeycrisp(opts: HoneycrispMountOptions = {}) {
 		name: 'honeycrisp',
 		open(ctx) {
 			const { epicenterRoot, mount } = ctx;
+			const baseURL =
+				opts.baseURL ||
+				process.env.EPICENTER_API_URL ||
+				'https://api.epicenter.so';
 
 			const workspace = createHoneycrisp({ keyring: ctx.session.keyring });
 
@@ -61,7 +69,7 @@ export function honeycrisp(opts: HoneycrispMountOptions = {}) {
 			});
 
 			const infrastructure = attachMountInfrastructure(workspace.ydoc, ctx, {
-				baseURL: EPICENTER_API_URL,
+				baseURL,
 				actions,
 				materializers: [sqlite, markdown],
 			});

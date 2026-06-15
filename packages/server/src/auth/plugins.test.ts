@@ -2,7 +2,7 @@
  * Auth plugin (OAuth server) tests.
  *
  * Verifies the first-party OAuth client registry projected by
- * `@epicenter/constants/oauth` and the Better Auth behavior `authPlugins`
+ * `@epicenter/constants/oauth-seed` and the Better Auth behavior `authPlugins`
  * wires around it.
  *
  * Key behaviors:
@@ -14,13 +14,15 @@
 
 import { expect, test } from 'bun:test';
 import {
-	buildTrustedOAuthClients,
 	EPICENTER_CLI_OAUTH_CLIENT_ID,
 	EPICENTER_FUJI_OAUTH_CLIENT_ID,
 	EPICENTER_OAUTH_SCOPES,
+} from '@epicenter/constants/oauth-clients';
+import {
+	buildTrustedOAuthClients,
 	projectTrustedOAuthClientToRow,
 	type TrustedOAuthClient,
-} from '@epicenter/constants/oauth';
+} from '@epicenter/constants/oauth-seed';
 import { betterAuth } from 'better-auth';
 import { type MemoryDB, memoryAdapter } from 'better-auth/adapters/memory';
 import { generateCodeChallenge } from 'better-auth/oauth2';

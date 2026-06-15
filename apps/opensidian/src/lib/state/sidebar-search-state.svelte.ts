@@ -1,5 +1,5 @@
 import { createPersistedState } from '@epicenter/svelte';
-import { debounce } from '@epicenter/util';
+import { debounce } from '@epicenter/workspace';
 import { type } from 'arktype';
 import type { OpensidianBrowser } from 'opensidian/browser';
 

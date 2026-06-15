@@ -18,7 +18,7 @@
  * `Symbol.dispose` tears down the root Y.Doc without touching local storage.
  */
 
-import type { SignedIn } from '@epicenter/svelte';
+import type { SignedIn } from '@epicenter/svelte/auth';
 import {
 	attachLocalStorage,
 	defineActions,

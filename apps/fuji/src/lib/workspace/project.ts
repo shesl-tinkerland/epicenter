@@ -20,7 +20,6 @@
  */
 
 import { join } from 'node:path';
-import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import {
 	defineActions,
 	defineWorkspace,
@@ -44,6 +43,11 @@ import { createFuji, type Entry, entryContentDocGuid } from './index.js';
 export type FujiMountOptions = {
 	/** Enable per-materializer Git autosave for markdown output. */
 	git?: GitAutosaveConfig;
+	/**
+	 * Base URL of the Epicenter cloud API used for entry-body reads and sync.
+	 * Defaults to `process.env.EPICENTER_API_URL`, falling back to the hosted API.
+	 */
+	baseURL?: string;
 };
 
 export function fuji(opts: FujiMountOptions = {}) {
@@ -51,6 +55,10 @@ export function fuji(opts: FujiMountOptions = {}) {
 		name: 'fuji',
 		open(ctx) {
 			const { epicenterRoot, mount, session } = ctx;
+			const baseURL =
+				opts.baseURL ||
+				process.env.EPICENTER_API_URL ||
+				'https://api.epicenter.so';
 
 			const workspace = createFuji({ keyring: session.keyring });
 
@@ -73,7 +81,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 			const readEntryBody = (entry: Entry): Promise<string> =>
 				readRoomOverHttp({
 					fetch: session.fetch,
-					baseURL: EPICENTER_API_URL,
+					baseURL,
 					ownerId: session.ownerId,
 					guid: entryContentDocGuid(entry.id),
 					read: (ydoc) => serializeEntryBody(ydoc.getXmlFragment('content')),
@@ -111,7 +119,7 @@ export function fuji(opts: FujiMountOptions = {}) {
 			});
 
 			const infrastructure = attachMountInfrastructure(workspace.ydoc, ctx, {
-				baseURL: EPICENTER_API_URL,
+				baseURL,
 				actions,
 				materializers: [sqlite, markdown],
 			});

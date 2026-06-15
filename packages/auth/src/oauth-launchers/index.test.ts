@@ -14,7 +14,7 @@
  */
 
 import { expect, test } from 'bun:test';
-import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth';
+import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth-clients';
 import { expectErr, expectOk } from 'wellcrafted/testing';
 import type { AuthFetch } from '../auth-contract.js';
 import {

@@ -8,6 +8,7 @@
 
 import type { Result } from 'wellcrafted/result';
 import type {
+	commands,
 	LocalModelState,
 	ModelStateEvent,
 	ModelStatus,
@@ -15,7 +16,6 @@ import type {
 	TranscriptionConfig,
 	TranscriptionError,
 } from './commands';
-import { commands } from './commands';
 
 // Helper: a no-op assertion that two types are equal.
 type Expect<T extends true> = T;

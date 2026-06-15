@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
-	import { ZonedNaturalLanguageDateInput } from '@epicenter/ui/natural-language-date-input';
+	import { NaturalLanguageZonedDateTimeInput } from '@epicenter/ui/natural-language-date-input';
 	import * as Popover from '@epicenter/ui/popover';
 	import { toastOnError } from '@epicenter/ui/sonner';
 	import * as StarRating from '@epicenter/ui/star-rating';
@@ -136,7 +136,7 @@
 						align="start"
 						class="w-80 space-y-3 p-3"
 					>
-						<ZonedNaturalLanguageDateInput
+						<NaturalLanguageZonedDateTimeInput
 							initialDateZone={entry.dateZone}
 							onChoice={({ date, dateZone }) => {
 								updateEntry({ date, dateZone });

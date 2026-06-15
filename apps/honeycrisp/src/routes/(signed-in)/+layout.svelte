@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { WorkspaceGate } from '@epicenter/app-shell/workspace-gate';
 	import { Button } from '@epicenter/ui/button';
 	import * as Tooltip from '@epicenter/ui/tooltip';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';

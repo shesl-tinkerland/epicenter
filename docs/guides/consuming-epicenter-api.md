@@ -41,7 +41,7 @@ import {
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import { createSession, type InferSignedIn, type SignedIn } from '@epicenter/svelte';
+import { createSession, type InferSignedIn, type SignedIn } from '@epicenter/svelte/auth';
 import Type from 'typebox';
 import { auth } from './auth';
 

@@ -27,10 +27,11 @@ use tauri::State;
 use tokio::io::AsyncWriteExt;
 
 /// In-flight download registry. Holds one `AbortHandle` per download id while
-/// its transfer task runs; `cancel_download` aborts the task through it. A
-/// `download_id` maps to at most one running transfer at a time (the multi-file
-/// engines download their files sequentially under the same id), so a plain map
-/// is enough.
+/// its transfer task runs; `cancel_download` aborts the task through it. The
+/// frontend mints a fresh, unique `download_id` for every download attempt, so
+/// an id maps to exactly one transfer for its whole lifetime: `register` can
+/// never overwrite a live entry, and `unregister`/`abort` can never touch a
+/// different attempt's entry. A plain map is enough.
 #[derive(Default)]
 pub struct DownloadManager {
     inflight: Mutex<HashMap<String, tokio::task::AbortHandle>>,
@@ -44,9 +45,8 @@ impl DownloadManager {
             .insert(id.to_string(), handle);
     }
 
-    /// Drop the entry after the transfer settles. The frontend never runs two
-    /// `download_file` calls for the same id at once (its state machine guards
-    /// on `progress !== null`), so a plain remove cannot clobber a live entry.
+    /// Drop the entry after the transfer settles. Download ids are unique per
+    /// attempt, so this only ever removes its own entry.
     fn unregister(&self, id: &str) {
         self.inflight
             .lock()
@@ -66,19 +66,17 @@ impl DownloadManager {
     }
 }
 
-/// Whole-file download progress. Field names mirror the plugin payload the
-/// frontend already consumes (`progressTotal`, `total`), so the JS progress
-/// math is unchanged.
+/// Whole-file download progress: bytes received so far and the total to expect.
 #[derive(Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
     /// Bytes received so far. `f64` because specta forbids exporting 64-bit
     /// ints to TypeScript; model sizes are far below `f64`'s 2^53 exact-integer
     /// ceiling, so no precision is lost.
-    progress_total: f64,
+    bytes_received: f64,
     /// Total bytes from the response `content-length`, or 0 when the server
     /// omits it. The frontend falls back to the catalog size in that case.
-    total: f64,
+    total_bytes: f64,
 }
 
 /// Stream a URL to a file on disk, reporting whole-file progress on `channel`.
@@ -99,7 +97,7 @@ async fn stream_to_file(
             response.status().as_u16()
         ));
     }
-    let total = response.content_length().unwrap_or(0) as f64;
+    let total_bytes = response.content_length().unwrap_or(0) as f64;
 
     let mut file = tokio::io::BufWriter::new(
         tokio::fs::File::create(file_path)
@@ -107,7 +105,7 @@ async fn stream_to_file(
             .map_err(|e| e.to_string())?,
     );
 
-    let mut progress_total: u64 = 0;
+    let mut bytes_received: u64 = 0;
     let mut last_emit = Instant::now();
     // A download fires thousands of small chunks, but each `send` crosses IPC
     // and repaints the progress bar, and no one reads progress faster than this.
@@ -117,12 +115,12 @@ async fn stream_to_file(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
         file.write_all(&chunk).await.map_err(|e| e.to_string())?;
-        progress_total += chunk.len() as u64;
+        bytes_received += chunk.len() as u64;
         if last_emit.elapsed() >= throttle {
             // The receiver may already be gone (e.g. window closed); ignore.
             let _ = channel.send(DownloadProgress {
-                progress_total: progress_total as f64,
-                total,
+                bytes_received: bytes_received as f64,
+                total_bytes,
             });
             last_emit = Instant::now();
         }
@@ -131,8 +129,8 @@ async fn stream_to_file(
     // Land on the true final byte count (typically 100%); the throttle may have
     // skipped the last chunk's update.
     let _ = channel.send(DownloadProgress {
-        progress_total: progress_total as f64,
-        total,
+        bytes_received: bytes_received as f64,
+        total_bytes,
     });
     Ok(())
 }

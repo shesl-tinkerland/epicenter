@@ -299,7 +299,7 @@
 			{#if manualRecorder.state === 'RECORDING'}
 				<Button
 					tooltip="Cancel recording and discard audio"
-					onclick={() => commandCallbacks.cancelManualRecording()}
+					onclick={() => commandCallbacks.cancelRecording()}
 					variant="ghost-destructive"
 					size="sm"
 					style="view-transition-name: {viewTransition.global.cancel};"

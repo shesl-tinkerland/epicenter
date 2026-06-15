@@ -5,7 +5,7 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { defineKeys } from 'wellcrafted/query';
-import { Err, Ok, tryAsync, trySync } from 'wellcrafted/result';
+import { Err, Ok, tryAsync } from 'wellcrafted/result';
 import type { VadState } from '$lib/constants/audio';
 import { defineQuery } from '$lib/rpc/client';
 import {
@@ -84,6 +84,7 @@ function computeFrameRms(frame: Float32Array): number {
 
 function createVadRecorder() {
 	let _session = $state<VadSession | null>(null);
+	let _starting = false;
 
 	return {
 		/**
@@ -129,79 +130,96 @@ function createVadRecorder() {
 			 */
 			onLevel?: (level: number) => void;
 		}) {
-			// Prevent starting if already active
-			if (_session) return VadRecorderError.AlreadyActive();
+			// `_session` is assigned after async setup, so `_starting` closes the
+			// duplicate-start window before a live session exists.
+			if (_session || _starting) return VadRecorderError.AlreadyActive();
+			_starting = true;
 
-			// Get device ID from settings
-			const configuredDeviceId = deviceConfig.get(
-				'recording.navigator.deviceId',
-			);
-			const deviceId = configuredDeviceId
-				? asDeviceIdentifier(configuredDeviceId)
-				: null;
+			try {
+				// Get device ID from settings
+				const configuredDeviceId = deviceConfig.get(
+					'recording.navigator.deviceId',
+				);
+				const deviceId = configuredDeviceId
+					? asDeviceIdentifier(configuredDeviceId)
+					: null;
 
-			// Get validated stream with device fallback
-			const { data: streamResult, error: streamError } =
-				await getRecordingStream({
-					selectedDeviceId: deviceId,
+				// Get validated stream with device fallback
+				const { data: streamResult, error: streamError } =
+					await getRecordingStream({
+						selectedDeviceId: deviceId,
+					});
+
+				if (streamError) return Err(streamError);
+
+				const { stream, deviceOutcome } = streamResult;
+
+				// Create VAD with the validated stream
+				const { data: newVad, error: initializeVadError } = await tryAsync({
+					try: () =>
+						MicVAD.new({
+							// The recorder owns the stream lifecycle: it is acquired via
+							// getRecordingStream and released by stopActiveListening's
+							// cleanupRecordingStream below. MicVAD only borrows it, so
+							// pause is a no-op and resume hands back the same live stream.
+							// (Resume is never reached today: this app starts once and
+							// destroys on stop, but keeping it live keeps the three stream
+							// hooks mutually consistent rather than handing back a stopped
+							// stream.)
+							getStream: async () => stream,
+							pauseStream: async () => {},
+							resumeStream: async () => stream,
+							startOnLoad: false,
+							submitUserSpeechOnPause: true,
+							onSpeechStart: () => {
+								if (_session) _session.state = 'SPEECH_DETECTED';
+								onSpeechStart();
+							},
+							onSpeechEnd: (audio) => {
+								if (_session) _session.state = 'LISTENING';
+								const wavBuffer = utils.encodeWAV(audio);
+								const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+								onSpeechEnd(blob);
+							},
+							onVADMisfire: () => {
+								if (_session) _session.state = 'LISTENING';
+								onVADMisfire?.();
+							},
+							onFrameProcessed: (_probabilities, frame) => {
+								if (onLevel) onLevel(computeFrameRms(frame));
+							},
+							model: 'v5',
+						}),
+					catch: (error) => VadRecorderError.InitializeFailed({ cause: error }),
 				});
 
-			if (streamError) return Err(streamError);
+				if (initializeVadError) {
+					// Clean up stream if VAD initialization fails
+					cleanupRecordingStream(stream);
+					return Err(initializeVadError);
+				}
 
-			const { stream, deviceOutcome } = streamResult;
-
-			// Create VAD with the validated stream
-			const { data: newVad, error: initializeVadError } = await tryAsync({
-				try: () =>
-					MicVAD.new({
-						stream,
-						submitUserSpeechOnPause: true,
-						onSpeechStart: () => {
-							if (_session) _session.state = 'SPEECH_DETECTED';
-							onSpeechStart();
-						},
-						onSpeechEnd: (audio) => {
-							if (_session) _session.state = 'LISTENING';
-							const wavBuffer = utils.encodeWAV(audio);
-							const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-							onSpeechEnd(blob);
-						},
-						onVADMisfire: () => {
-							if (_session) _session.state = 'LISTENING';
-							onVADMisfire?.();
-						},
-						onFrameProcessed: (_probabilities, frame) => {
-							if (onLevel) onLevel(computeFrameRms(frame));
-						},
-						model: 'v5',
-					}),
-				catch: (error) => VadRecorderError.InitializeFailed({ cause: error }),
-			});
-
-			if (initializeVadError) {
-				// Clean up stream if VAD initialization fails
-				cleanupRecordingStream(stream);
-				return Err(initializeVadError);
-			}
-
-			// Start listening
-			const { error: startError } = trySync({
-				try: () => newVad.start(),
-				catch: (error) => VadRecorderError.StartFailed({ cause: error }),
-			});
-
-			if (startError) {
-				// Clean up everything on start error
-				trySync({
-					try: () => newVad.destroy(),
-					catch: () => Ok(undefined),
+				// Start listening
+				const { error: startError } = await tryAsync({
+					try: async () => newVad.start(),
+					catch: (error) => VadRecorderError.StartFailed({ cause: error }),
 				});
-				cleanupRecordingStream(stream);
-				return Err(startError);
-			}
 
-			_session = { state: 'LISTENING', vad: newVad, stream };
-			return Ok(deviceOutcome);
+				if (startError) {
+					// Clean up everything on start error
+					await tryAsync({
+						try: async () => newVad.destroy(),
+						catch: () => Ok(undefined),
+					});
+					cleanupRecordingStream(stream);
+					return Err(startError);
+				}
+
+				_session = { state: 'LISTENING', vad: newVad, stream };
+				return Ok(deviceOutcome);
+			} finally {
+				_starting = false;
+			}
 		},
 
 		/**
@@ -209,11 +227,14 @@ function createVadRecorder() {
 		 * Sets `state` back to 'IDLE'.
 		 */
 		async stopActiveListening() {
-			if (!_session) return Ok(undefined);
+			if (!_session)
+				return Ok({
+					status: 'idle' as const,
+				});
 
 			const { vad, stream } = _session;
-			const { error: destroyError } = trySync({
-				try: () => vad.destroy(),
+			const { error: destroyError } = await tryAsync({
+				try: async () => vad.destroy(),
 				catch: (error) => VadRecorderError.StopFailed({ cause: error }),
 			});
 
@@ -222,7 +243,9 @@ function createVadRecorder() {
 			cleanupRecordingStream(stream);
 
 			if (destroyError) return Err(destroyError);
-			return Ok(undefined);
+			return Ok({
+				status: 'stopped' as const,
+			});
 		},
 	};
 }

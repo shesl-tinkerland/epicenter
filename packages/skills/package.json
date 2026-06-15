@@ -1,6 +1,6 @@
 {
 	"name": "@epicenter/skills",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "Skill definitions and loaders for Epicenter workspace actions.",
 	"keywords": [
 		"local-first",

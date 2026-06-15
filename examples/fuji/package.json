@@ -1,6 +1,6 @@
 {
 	"name": "@examples/fuji",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"private": true,
 	"type": "module",
 	"description": "Canonical Epicenter project layout demonstrated against the @epicenter/fuji workspace.",

@@ -1,4 +1,4 @@
-import { debounce } from '@epicenter/util';
+import { debounce } from '@epicenter/workspace';
 import type { KeyboardEventSupportedKey } from '$lib/constants/keyboard';
 import type { PressedKeys } from '$lib/utils/createPressedKeys.svelte';
 

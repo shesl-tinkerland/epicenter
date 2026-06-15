@@ -92,7 +92,7 @@ sync supervisor, mirrors the relay's server-owned presence channel as
 `devices`, and runs inbound dispatch frames against the local action registry.
 
 ```typescript
-import type { SignedIn } from '@epicenter/svelte';
+import type { SignedIn } from '@epicenter/svelte/auth';
 import {
   attachLocalStorage,
   createWorkspace,

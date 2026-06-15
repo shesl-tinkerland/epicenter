@@ -101,7 +101,7 @@ describe('AI chat route HTTP responses', () => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					messages: [{ role: 'user', content: 'hi' }],
-					data: { provider: 'openai', model: 'gpt-4o-mini' },
+					data: { model: 'gpt-5.4-mini' },
 				}),
 			},
 			// No env: OPENAI_API_KEY is undefined.
@@ -130,7 +130,7 @@ describe('AI chat route HTTP responses', () => {
 				body: JSON.stringify({
 					guid: 'not a doc guid',
 					generationId: 'gen-1',
-					data: { provider: 'openai', model: 'gpt-4o-mini' },
+					data: { model: 'gpt-5.4-mini' },
 				}),
 			},
 			{ OPENAI_API_KEY: 'sk-test' },
@@ -149,7 +149,7 @@ describe('AI chat route HTTP responses', () => {
 				body: JSON.stringify({
 					guid: 'epicenter-zhongwen.conversations.abc123.messages',
 					generationId: 'gen-1',
-					data: { provider: 'openai', model: 'gpt-4o-mini' },
+					data: { model: 'gpt-5.4-mini' },
 				}),
 			},
 			// No env: OPENAI_API_KEY is undefined; fails before any room access.
@@ -170,7 +170,7 @@ describe('AI chat route HTTP responses', () => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					messages: [{ role: 'user', content: 'hi' }],
-					data: { provider: 'openai', model: 'gpt-4o-mini' },
+					data: { model: 'gpt-5.4-mini' },
 				}),
 			},
 			// A house key IS configured; admission must fail first so it is never read.

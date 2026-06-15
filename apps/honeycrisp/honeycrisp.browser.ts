@@ -16,7 +16,7 @@
  * local storage.
  */
 
-import type { SignedIn } from '@epicenter/svelte';
+import type { SignedIn } from '@epicenter/svelte/auth';
 import {
 	attachLocalStorage,
 	createDisposableCache,

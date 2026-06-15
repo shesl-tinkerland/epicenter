@@ -47,7 +47,7 @@ import type { BillingError } from './errors.js';
 import { createBillingService } from './service.js';
 
 type AiChatBody = {
-	data?: { model?: string; provider?: string };
+	data?: { model?: string };
 	apiKey?: string;
 };
 
@@ -73,7 +73,6 @@ export const chargeAiCreditsWithAutumn = createMiddleware<Env>(
 		const { data: reservation, error: guardError } =
 			await billing.reserveAiChat({
 				model: body.data?.model ?? '',
-				provider: body.data?.provider,
 			});
 		if (guardError) {
 			return c.json(

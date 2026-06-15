@@ -1,7 +1,7 @@
 import { Ok, type Result } from 'wellcrafted/result';
-import type { SoundError } from '#platform/sound';
 import type { WhisperingSoundNames } from '$lib/constants/sounds';
 import { services } from '$lib/services';
+import type { SoundError } from '$lib/services/sound';
 import { settings } from '$lib/state/settings.svelte';
 
 const soundSettingKeyMap = {

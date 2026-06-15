@@ -15,7 +15,7 @@
 import { spawn } from 'node:child_process';
 import * as readline from 'node:readline';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
-import { EPICENTER_OAUTH_SCOPES } from '@epicenter/constants/oauth';
+import { EPICENTER_OAUTH_SCOPES } from '@epicenter/constants/oauth-clients';
 import { OAUTH_ROUTES } from '@epicenter/constants/oauth-routes';
 import {
 	defineErrors,

@@ -91,5 +91,5 @@ When edits land:
 
 1. Run `bun x --package skills skills add /Users/braden/Code/epicenter/.agents/skills --skill <skill-name> --list` for changed or added skills.
 2. Run `git diff --check` on touched instruction files.
-3. Scan touched prose for em and en dashes.
+3. Check touched prose against the `writing-voice` punctuation rubric.
 4. Stage specific files only when the user asks.

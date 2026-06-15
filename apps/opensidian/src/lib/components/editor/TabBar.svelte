@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { asFileId } from '@epicenter/filesystem';
-	import { AccountPopover } from '@epicenter/svelte/account-popover';
+	import { AccountPopover } from '@epicenter/app-shell/account-popover';
 	import { Button, buttonVariants } from '@epicenter/ui/button';
 	import * as Tabs from '@epicenter/ui/tabs';
 	import XIcon from '@lucide/svelte/icons/x';

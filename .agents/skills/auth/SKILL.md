@@ -421,7 +421,7 @@ export type SignedIn = {
 Use it against the real `createSession`:
 
 ```ts
-import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createSession, type SignedIn } from '@epicenter/svelte/auth';
 
 export const session = createSession({
 	auth,
@@ -520,8 +520,15 @@ mismatch with `OwnerMismatch` (403). The keyring derivation's HKDF label IS the
 `ownerId`: personal owners get a per-user keyring, every member of a shared
 deployment shares one keyring.
 
-Note: the same-origin dashboard SPA currently still uses PKCE against its own
-origin; a cookie-based same-origin path is a known wart under consideration.
+Note: the same-origin dashboard SPA (`apps/api/ui`) uses
+`createSameOriginCookieAuth`, not PKCE. Served same-origin by the API, it already
+holds a first-party Better Auth session cookie after Google sign-in, so minting a
+bearer (and an unused `offline_access` refresh token) via PKCE against its own
+origin would be redundant. The cookie client uses that cookie directly
+(`credentials: 'include'`, no `Authorization`), reads `/api/session` once for
+`ownerId`/`keyring`, and is a plain `AuthClient` (no `openWebSocket`: a billing
+surface has no sync). It is the cookie-credential sibling of `createOAuthAppAuth`,
+not a mode flag on it.
 
 ## Common Pitfalls
 

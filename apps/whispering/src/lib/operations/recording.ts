@@ -3,6 +3,7 @@ import { manualRecorderConfig } from '#platform/manual-recorder-config';
 import { recordingOverlay } from '#platform/recording-overlay';
 import { goto } from '$app/navigation';
 import { analytics } from '$lib/operations/analytics';
+import { recordingMedia } from '$lib/operations/media';
 import { processRecordingPipeline } from '$lib/operations/pipeline';
 import { sound } from '$lib/operations/sound';
 import { log, type Notice, report } from '$lib/report';
@@ -50,6 +51,12 @@ function handleDeviceAcquisitionOutcome(
 	}
 }
 
+function isVadRecordingActive() {
+	return (
+		vadRecorder.state === 'LISTENING' || vadRecorder.state === 'SPEECH_DETECTED'
+	);
+}
+
 export async function startManualRecording() {
 	settings.set('recording.mode', 'manual');
 
@@ -58,9 +65,12 @@ export async function startManualRecording() {
 		description: 'Setting up your recording environment...',
 	});
 
+	recordingMedia.pause();
+
 	const { data: outcome, error } = await manualRecorder.startRecording();
 
 	if (error) {
+		void recordingMedia.resume();
 		loading.reject({ cause: error });
 		return;
 	}
@@ -89,6 +99,7 @@ export async function stopManualRecording() {
 	const { data: source, error } = await manualRecorder.stopRecording();
 
 	if (error) {
+		void recordingMedia.resume();
 		loading.reject({ cause: error });
 		return;
 	}
@@ -104,6 +115,7 @@ export async function stopManualRecording() {
 	});
 	log.info('Recording stopped');
 	sound.playSoundIfEnabled('manual-stop');
+	void recordingMedia.resume();
 
 	analytics.logEvent({
 		type: 'manual_recording_completed',
@@ -124,37 +136,40 @@ export function toggleManualRecording() {
 	return startManualRecording();
 }
 
-export async function cancelManualRecording() {
-	const loading = report.loading({
-		title: '⏸️ Canceling recording...',
-		description: 'Cleaning up recording session...',
-	});
+export async function cancelRecording() {
+	// Note: distinct from the low-level Tauri `commands.cancelRecording()` (CPAL
+	// stream teardown). This is the user-facing command: it decides what "cancel"
+	// means across the manual and VAD recorders.
+	//
+	// Cancel aborts whichever capture is live, without touching `recording.mode`:
+	// the chosen input mode (manual vs VAD) is a deliberate preference, not
+	// something a cancel keystroke should flip, so cancelling in VAD mode leaves
+	// you in VAD mode, idle and ready to listen again. This is also the global
+	// cancel chord (Cmd + . on macOS), which the rdev hook observes on every
+	// system press without swallowing it, so when nothing is live it stays silent
+	// rather than toasting on an unrelated press.
 
+	// A manual recording is the live capture: discard it.
 	const { data, error } = await manualRecorder.cancelRecording();
-
 	if (error) {
-		loading.reject({ cause: error });
+		report.error({ title: 'Failed to cancel recording', cause: error });
+		return;
+	}
+	if (data.status === 'cancelled') {
+		void recordingMedia.resume();
+		sound.playSoundIfEnabled('manual-cancel');
+		report.success({ title: '✅ Recording cancelled' });
+		log.info('Recording cancelled');
 		return;
 	}
 
-	switch (data.status) {
-		case 'no-recording': {
-			loading.resolve({
-				title: 'No active recording',
-				description: 'There is no recording in progress to cancel.',
-			});
-			break;
-		}
-		case 'cancelled': {
-			loading.resolve({
-				title: '✅ All Done!',
-				description: 'Recording cancelled successfully',
-			});
-			sound.playSoundIfEnabled('manual-cancel');
-			log.info('Recording cancelled');
-			break;
-		}
-	}
+	// No manual recording, but a VAD session may be live. VAD has no
+	// discard-vs-finalize split: tearing the session down is the only way to
+	// abort it, which is exactly what stopVadRecording already does (same
+	// stopActiveListening call, same end state, mode left on `vad`). So cancel a
+	// live VAD session by stopping it, rather than cloning the teardown with a
+	// second toast and a manual-recording sound. Nothing live: silent no-op.
+	if (isVadRecordingActive()) await stopVadRecording();
 }
 
 export async function startVadRecording() {
@@ -165,6 +180,8 @@ export async function startVadRecording() {
 		title: '🎙️ Starting voice activated capture',
 		description: 'Your voice activated capture is starting...',
 	});
+
+	recordingMedia.pause();
 
 	const { data: outcome, error } = await vadRecorder.startActiveListening({
 		onLevel: (level) => recordingOverlay.reportLevel(level),
@@ -200,6 +217,7 @@ export async function startVadRecording() {
 	});
 
 	if (error) {
+		void recordingMedia.resume();
 		loading.reject({ cause: error });
 		return;
 	}
@@ -217,14 +235,24 @@ export async function startVadRecording() {
 }
 
 export async function stopVadRecording() {
+	if (!isVadRecordingActive()) return;
+
 	log.info('Stopping voice activated capture');
 	const loading = report.loading({
 		title: '⏸️ Stopping voice activated capture...',
 		description: 'Finalizing your voice activated capture...',
 	});
-	const { error } = await vadRecorder.stopActiveListening();
+	const { data, error } = await vadRecorder.stopActiveListening();
 	if (error) {
+		void recordingMedia.resume();
 		loading.reject({ cause: error });
+		return;
+	}
+	if (data.status === 'idle') {
+		loading.resolve({
+			title: '🎙️ Voice activated capture stopped',
+			description: 'Your voice activated capture has been stopped.',
+		});
 		return;
 	}
 	loading.resolve({
@@ -232,6 +260,7 @@ export async function stopVadRecording() {
 		description: 'Your voice activated capture has been stopped.',
 	});
 	sound.playSoundIfEnabled('vad-stop');
+	void recordingMedia.resume();
 }
 
 export function toggleVadRecording() {

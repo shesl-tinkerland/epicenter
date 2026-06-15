@@ -30,8 +30,6 @@
 	let {
 		text,
 		context,
-		provider,
-		model,
 		fetchFn,
 		phase,
 		x,
@@ -43,8 +41,6 @@
 	}: {
 		text: string;
 		context: string;
-		provider: string;
-		model: string;
 		fetchFn: typeof fetch;
 		phase: 'actions' | 'meaning';
 		x: number;
@@ -109,8 +105,6 @@
 			fetchFn,
 			word: text,
 			context,
-			provider,
-			model,
 			signal: controller.signal,
 			onText: (next) => {
 				meaning = next;

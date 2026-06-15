@@ -8,6 +8,12 @@ import {
 } from '@epicenter/auth';
 import { createSubscriber } from 'svelte/reactivity';
 
+// `createSession`/`SignedIn` bind a `SyncAuthClient` (produced by the reactive
+// `createOAuthAppAuth` below) to a workspace lifecycle, so the whole reactive
+// auth + session story is one subpath. Re-exported here rather than from the
+// package root, which stays pure workspace-data reactivity (`fromTable`, etc.).
+export { createSession, type SignedIn } from './session.svelte.js';
+
 /**
  * Make an auth client's `state` Svelte-reactive: spread the closure-bound
  * client and override `state` with a getter that calls `subscribe()` so reads

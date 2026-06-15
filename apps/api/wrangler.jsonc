@@ -5,8 +5,15 @@
 	"compatibility_date": "2026-03-06",
 	"compatibility_flags": ["nodejs_compat", "enable_request_signal"],
 	"send_metrics": false,
+	// Build the dashboard SPA before publishing. Wrangler runs build.command for
+	// `deploy` and `versions upload`, so local, CI prod, and CI preview build
+	// through one definition. Skip it for `dev`/`types`: the local `wrangler dev`
+	// loop (scripts/dev.ts) intentionally serves an unbuilt dashboard so the
+	// edit loop stays fast.
+	"build": {
+		"command": "case \"$WRANGLER_COMMAND\" in dev|types) ;; *) bun run --cwd ui build ;; esac"
+	},
 	// --- Static assets: Dashboard SPA (built by SvelteKit adapter-static) ---
-	// Build first: bun run --cwd apps/api/ui build
 	// SvelteKit writes output to ui/build/dashboard/ (paths.base = '/dashboard');
 	// the directory below is the PARENT so /dashboard/* URLs map correctly.
 	// Hono handles SPA fallback for /dashboard/*.

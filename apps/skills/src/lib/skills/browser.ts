@@ -19,64 +19,58 @@ export function openSkillsBrowser() {
 	const idb = attachIndexedDb(doc.ydoc);
 	attachBroadcastChannel(doc.ydoc);
 
-	const instructionsDocs = createDisposableCache(
-		(skillId: string) => {
-			const ydoc = new Y.Doc({
-				guid: skillInstructionsDocGuid({
-					workspaceId: doc.ydoc.guid,
-					skillId,
-				}),
-				gc: true,
-			});
-			onLocalUpdate(ydoc, () =>
-				doc.tables.skills.update(skillId, { updatedAt: Date.now() }),
-			);
-			const childIdb = attachIndexedDb(ydoc);
-			return {
-				ydoc,
-				instructions: attachPlainText(ydoc),
-				idb: childIdb,
-				/**
-				 * child disposer rejections do not propagate; bundle.wipe() relies on
-				 * IDB's deleteDatabase native blocking as belt-and-suspenders for
-				 * storage deletion.
-				 */
-				[Symbol.dispose]() {
-					ydoc.destroy();
-				},
-			};
-		},
-		{ gcTime: 5_000 },
-	);
-	const referenceDocs = createDisposableCache(
-		(referenceId: string) => {
-			const ydoc = new Y.Doc({
-				guid: referenceContentDocGuid({
-					workspaceId: doc.ydoc.guid,
-					referenceId,
-				}),
-				gc: true,
-			});
-			onLocalUpdate(ydoc, () =>
-				doc.tables.references.update(referenceId, { updatedAt: Date.now() }),
-			);
-			const childIdb = attachIndexedDb(ydoc);
-			return {
-				ydoc,
-				content: attachPlainText(ydoc),
-				idb: childIdb,
-				/**
-				 * child disposer rejections do not propagate; bundle.wipe() relies on
-				 * IDB's deleteDatabase native blocking as belt-and-suspenders for
-				 * storage deletion.
-				 */
-				[Symbol.dispose]() {
-					ydoc.destroy();
-				},
-			};
-		},
-		{ gcTime: 5_000 },
-	);
+	const instructionsDocs = createDisposableCache((skillId: string) => {
+		const ydoc = new Y.Doc({
+			guid: skillInstructionsDocGuid({
+				workspaceId: doc.ydoc.guid,
+				skillId,
+			}),
+			gc: true,
+		});
+		onLocalUpdate(ydoc, () =>
+			doc.tables.skills.update(skillId, { updatedAt: Date.now() }),
+		);
+		const childIdb = attachIndexedDb(ydoc);
+		return {
+			ydoc,
+			instructions: attachPlainText(ydoc),
+			idb: childIdb,
+			/**
+			 * child disposer rejections do not propagate; bundle.wipe() relies on
+			 * IDB's deleteDatabase native blocking as belt-and-suspenders for
+			 * storage deletion.
+			 */
+			[Symbol.dispose]() {
+				ydoc.destroy();
+			},
+		};
+	});
+	const referenceDocs = createDisposableCache((referenceId: string) => {
+		const ydoc = new Y.Doc({
+			guid: referenceContentDocGuid({
+				workspaceId: doc.ydoc.guid,
+				referenceId,
+			}),
+			gc: true,
+		});
+		onLocalUpdate(ydoc, () =>
+			doc.tables.references.update(referenceId, { updatedAt: Date.now() }),
+		);
+		const childIdb = attachIndexedDb(ydoc);
+		return {
+			ydoc,
+			content: attachPlainText(ydoc),
+			idb: childIdb,
+			/**
+			 * child disposer rejections do not propagate; bundle.wipe() relies on
+			 * IDB's deleteDatabase native blocking as belt-and-suspenders for
+			 * storage deletion.
+			 */
+			[Symbol.dispose]() {
+				ydoc.destroy();
+			},
+		};
+	});
 
 	const actions = createSkillsActions({
 		tables: doc.tables,

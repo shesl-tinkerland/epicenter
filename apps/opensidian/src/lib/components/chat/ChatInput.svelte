@@ -1,17 +1,19 @@
 <script lang="ts">
+	import { MODELS_BY_ID } from '@epicenter/constants/ai-providers';
 	import { Button } from '@epicenter/ui/button';
 	import * as Select from '@epicenter/ui/select';
 	import { Textarea } from '@epicenter/ui/textarea';
 	import SendIcon from '@lucide/svelte/icons/send';
 	import SquareIcon from '@lucide/svelte/icons/square';
-	import { PROVIDER_MODELS, type Provider } from '$lib/chat/providers';
+	import { APP_MODELS } from '$lib/chat/models';
 
 	import { requireOpensidian } from '$lib/session';
 
 	const opensidian = requireOpensidian();
-	const providers = Object.keys(PROVIDER_MODELS) as Provider[];
-	const models = $derived(
-		opensidian.state.chat.modelsForProvider(opensidian.state.chat.provider),
+
+	const currentModelLabel = $derived(
+		MODELS_BY_ID[opensidian.state.chat.model as keyof typeof MODELS_BY_ID]
+			?.label ?? opensidian.state.chat.model,
 	);
 
 	let inputValue = $state('');
@@ -25,25 +27,8 @@
 </script>
 
 <div class="flex flex-col gap-1.5 border-t bg-background px-2 py-1.5">
-	<!-- Provider + Model selects -->
+	<!-- Model select: ordered roles (Fast / Best) -->
 	<div class="flex gap-2">
-		<Select.Root
-			type="single"
-			value={opensidian.state.chat.provider}
-			onValueChange={(v) => {
-				if (v) opensidian.state.chat.provider = v as Provider;
-			}}
-		>
-			<Select.Trigger size="sm" class="w-[120px]">
-				{opensidian.state.chat.provider || 'Provider\u2026'}
-			</Select.Trigger>
-			<Select.Content>
-				{#each providers as p (p)}
-					<Select.Item value={p} label={p} />
-				{/each}
-			</Select.Content>
-		</Select.Root>
-
 		<Select.Root
 			type="single"
 			value={opensidian.state.chat.model}
@@ -52,13 +37,18 @@
 			}}
 		>
 			<Select.Trigger size="sm" class="flex-1">
-				<span class="truncate"
-					>{opensidian.state.chat.model || 'Model\u2026'}</span
-				>
+				<span class="truncate">{currentModelLabel}</span>
 			</Select.Trigger>
 			<Select.Content>
-				{#each models as m (m)}
-					<Select.Item value={m} label={m} />
+				{#each APP_MODELS as id (id)}
+					<Select.Item value={id} label={MODELS_BY_ID[id].label}>
+						<div class="flex w-full items-center justify-between gap-4">
+							<span>{MODELS_BY_ID[id].label}</span>
+							<span class="text-xs text-muted-foreground">
+								{MODELS_BY_ID[id].credits} cr
+							</span>
+						</div>
+					</Select.Item>
 				{/each}
 			</Select.Content>
 		</Select.Root>

@@ -1,6 +1,6 @@
 {
 	"name": "@epicenter/filesystem",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "Filesystem utilities for Epicenter. Markdown parsing, frontmatter handling, and file operations.",
 	"keywords": [
 		"local-first",
@@ -25,11 +25,9 @@
 	},
 	"dependencies": {
 		"@epicenter/field": "workspace:*",
-		"@epicenter/util": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"@libsql/client": "^0.14.0",
 		"@libsql/client-wasm": "^0.14.0",
-		"drizzle-orm": "^0.38.3",
 		"just-bash": "^2.9.7",
 		"prosemirror-markdown": "^1.13.4",
 		"y-prosemirror": "^1.3.7",

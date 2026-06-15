@@ -20,7 +20,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
-import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
+import { EPICENTER_CLI_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth-clients';
 import type { Keyring } from '@epicenter/encryption';
 import envPaths from 'env-paths';
 import {

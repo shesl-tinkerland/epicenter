@@ -120,8 +120,10 @@ pub enum Key {
 /// exactly (see `Matcher`), matching the existing `arraysMatch` semantics of
 /// `local-shortcut-manager` and the plugin's exact-modifier behavior. An empty
 /// `keys` with non-empty `modifiers` is a modifier-only hold (for example hold
-/// Meta); empty `modifiers` with one key is a bare single-key push-to-talk.
-/// Both were impossible with the plugin.
+/// Meta), which was impossible with the plugin. The matcher also accepts a bare
+/// key with no modifiers, but the frontend refuses to *configure* one (a global
+/// gesture must carry a modifier or Fn so it cannot fire on an ordinary
+/// keypress); the matcher stays permissive so the policy lives in one place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyBinding {

@@ -42,7 +42,7 @@ Fuji's browser workspace is built once per signed-in session by `createSession`.
 
 ```ts
 import { openFujiBrowser } from "$lib/browser";
-import { createSession } from "@epicenter/svelte";
+import { createSession } from "@epicenter/svelte/auth";
 import { createDeviceId } from "@epicenter/workspace";
 import { auth } from "$lib/auth";
 

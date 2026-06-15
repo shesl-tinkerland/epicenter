@@ -70,6 +70,15 @@ export const log = {
 			data,
 		} satisfies LogEvent);
 	},
+	warn(error: Error, data?: unknown): void {
+		consoleSink({
+			ts: Date.now(),
+			level: 'warn',
+			source: SOURCE,
+			message: error.message,
+			data: data ?? error,
+		} satisfies LogEvent);
+	},
 } as const;
 
 // ── Internals ─────────────────────────────────────────────────────────────

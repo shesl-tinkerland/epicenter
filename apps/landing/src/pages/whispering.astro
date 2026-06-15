@@ -9,7 +9,6 @@ import {
 	ChevronDown as ChevronDownIcon,
 	Download as DownloadIcon,
 	ExternalLink as ExternalLinkIcon,
-	Github as GithubIcon,
 	Globe as GlobeIcon,
 	Lightbulb as LightbulbIcon,
 	Lock as LockIcon,
@@ -19,6 +18,7 @@ import {
 	Zap as ZapIcon,
 } from '@lucide/astro';
 import GitHubStars from '../components/whispering/GitHubStars.astro';
+import GithubIcon from '../components/whispering/GithubIcon.astro';
 import MicrophoneHero from '../components/whispering/MicrophoneHero.svelte';
 import OSDetector from '../components/whispering/OSDetector.svelte';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -220,7 +220,7 @@ const downloads = [
 					size="sm"
 					class="github-star-button bg-background/90 backdrop-blur-md hover:bg-background border shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105 lg:min-w-[140px]"
 				>
-					<GithubIcon
+					<ExternalLinkIcon
 						class="github-icon w-4 h-4 lg:mr-2 transition-all duration-300"
 					/>
 					<span
@@ -632,7 +632,7 @@ const downloads = [
 							href="https://github.com/EpicenterHQ/epicenter/tree/main/apps/whispering"
 							class="inline-flex items-center text-foreground/65 hover:text-foreground font-medium transition-colors group text-sm"
 						>
-							<GithubIcon
+							<ExternalLinkIcon
 								class="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform"
 							/>
 							View on GitHub

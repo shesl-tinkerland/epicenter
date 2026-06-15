@@ -2,7 +2,7 @@
 	"name": "@epicenter/api-ui",
 	"description": "Dashboard SPA bundled with apps/api (billing and credits)",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
 		"dev": "bun run dev:local",

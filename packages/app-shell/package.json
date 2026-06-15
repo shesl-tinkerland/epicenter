@@ -1,0 +1,35 @@
+{
+	"name": "@epicenter/app-shell",
+	"version": "0.3.0",
+	"private": true,
+	"type": "module",
+	"description": "Shared Epicenter app chrome: account popover and workspace gate. Branded, full-stack-aware UI mounted in each app's layout. Private (not published).",
+	"keywords": [
+		"svelte",
+		"epicenter",
+		"app-shell"
+	],
+	"exports": {
+		"./account-popover": "./src/account-popover/index.ts",
+		"./workspace-gate": "./src/workspace-gate/index.ts"
+	},
+	"scripts": {
+		"typecheck": "svelte-check --tsconfig ./tsconfig.json"
+	},
+	"dependencies": {
+		"@epicenter/auth": "workspace:*",
+		"@epicenter/client": "workspace:*",
+		"@epicenter/ui": "workspace:*",
+		"@epicenter/workspace": "workspace:*",
+		"@lucide/svelte": "catalog:",
+		"@tanstack/svelte-query": "catalog:",
+		"wellcrafted": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"typescript": "catalog:"
+	},
+	"license": "AGPL-3.0-or-later"
+}

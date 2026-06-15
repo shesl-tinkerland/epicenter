@@ -1,22 +1,24 @@
 <script lang="ts">
+	import { MODELS_BY_ID } from '@epicenter/constants/ai-providers';
 	import { Button } from '@epicenter/ui/button';
+	import * as Select from '@epicenter/ui/select';
 	import { Textarea } from '@epicenter/ui/textarea';
 	import SendIcon from '@lucide/svelte/icons/send';
 	import SquareIcon from '@lucide/svelte/icons/square';
+	import { APP_MODELS } from '$lib/chat/models';
 	import type { ConversationHandle } from '$lib/chat/chat-state.svelte';
-	import { requireTabManager } from '$lib/session.svelte';
-	import ModelCombobox from './ModelCombobox.svelte';
-	import ProviderSelect from './ProviderSelect.svelte';
 
-	const tabManager = requireTabManager();
 	let {
 		active,
 	}: {
 		active: ConversationHandle | undefined;
 	} = $props();
 
-	const models = $derived(
-		tabManager.state.aiChat.modelsForProvider(active?.provider ?? ''),
+	const currentModelLabel = $derived(
+		active
+			? (MODELS_BY_ID[active.model as keyof typeof MODELS_BY_ID]?.label ??
+				active.model)
+			: '',
 	);
 
 	function send() {
@@ -29,24 +31,31 @@
 </script>
 
 <div class="flex flex-col gap-1.5 border-t bg-background px-2 py-1.5">
-	<!-- Provider + Model selects -->
+	<!-- Model select: ordered roles (Fast / Best) -->
 	<div class="flex gap-2">
-		<ProviderSelect
-			value={active?.provider ?? ''}
-			providers={tabManager.state.aiChat.availableProviders}
-			onValueChange={(v) => {
-				if (active) active.provider = v;
-			}}
-		/>
-
-		<ModelCombobox
-			class="flex-1"
+		<Select.Root
+			type="single"
 			value={active?.model ?? ''}
-			{models}
-			onSelect={(m) => {
-				if (active) active.model = m;
+			onValueChange={(v) => {
+				if (v && active) active.model = v;
 			}}
-		/>
+		>
+			<Select.Trigger size="sm" class="flex-1">
+				<span class="truncate">{currentModelLabel}</span>
+			</Select.Trigger>
+			<Select.Content>
+				{#each APP_MODELS as id (id)}
+					<Select.Item value={id} label={MODELS_BY_ID[id].label}>
+						<div class="flex w-full items-center justify-between gap-4">
+							<span>{MODELS_BY_ID[id].label}</span>
+							<span class="text-xs text-muted-foreground">
+								{MODELS_BY_ID[id].credits} cr
+							</span>
+						</div>
+					</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 	</div>
 
 	<!-- Input + send/stop button -->

@@ -239,9 +239,10 @@
 								variant="ghost"
 								size="sm"
 								onclick={cancelRecommendedDownload}
+								disabled={recommendedState.cancelling}
 							>
 								<X class="size-4" />
-								Cancel
+								{recommendedState.cancelling ? 'Cancelling…' : 'Cancel'}
 							</Button>
 						</div>
 					{:else if recommendedState.type === 'ready'}

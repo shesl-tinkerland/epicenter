@@ -1,6 +1,6 @@
 {
 	"name": "@epicenter/sync",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "Sync protocol for Epicenter workspaces. Yjs-based encoding, WebSocket transport, and broadcast channel sync.",
 	"keywords": [
 		"local-first",

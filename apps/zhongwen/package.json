@@ -2,7 +2,7 @@
 	"name": "@epicenter/zhongwen",
 	"description": "Bilingual Chinese-English chat app for learning Mandarin",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"exports": {
 		".": "./zhongwen.ts",
@@ -17,10 +17,12 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"test": "if find src -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.spec.ts' | grep -q .; then bun test; fi",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"deploy": "bun run build && wrangler deploy"
+		"deploy": "wrangler deploy"
 	},
 	"dependencies": {
+		"@epicenter/app-shell": "workspace:*",
 		"@epicenter/auth": "workspace:*",
+		"@epicenter/client": "workspace:*",
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/field": "workspace:*",
 		"@epicenter/svelte": "workspace:*",
@@ -28,7 +30,7 @@
 		"@epicenter/workspace": "workspace:*",
 		"@lucide/svelte": "catalog:",
 		"arktype": "catalog:",
-		"dompurify": "^3.3.3",
+		"dompurify": "^3.4.10",
 		"marked": "^17.0.5",
 		"mode-watcher": "^1.1.0",
 		"pinyin-pro": "^3.28.0",
@@ -38,12 +40,12 @@
 		"yjs": "catalog:"
 	},
 	"devDependencies": {
+		"@epicenter/vite-config": "workspace:*",
 		"@sveltejs/adapter-static": "catalog:",
 		"@sveltejs/kit": "catalog:",
 		"@sveltejs/vite-plugin-svelte": "catalog:",
 		"@tailwindcss/vite": "catalog:",
 		"@types/bun": "catalog:",
-		"@types/dompurify": "^3.2.0",
 		"svelte": "catalog:",
 		"svelte-check": "catalog:",
 		"tailwindcss": "catalog:",

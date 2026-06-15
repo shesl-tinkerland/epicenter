@@ -19,6 +19,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -27,11 +32,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build all packages
-        run: bun run build
-        env:
-          NODE_ENV: production
-
+      # Each `deploy` runs the worker's own `wrangler.jsonc` build.command first,
+      # so build stays coupled to deploy (no stale assets) without a separate
+      # build step here. The same build runs on local `wrangler deploy` and in
+      # the preview workflow's `versions upload`, so there is one build path.
       - name: Deploy Whispering
         id: whispering
         uses: cloudflare/wrangler-action@v3

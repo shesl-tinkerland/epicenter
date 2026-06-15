@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AccountPopover } from '@epicenter/svelte/account-popover';
+	import { AccountPopover } from '@epicenter/app-shell/account-popover';
 	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Sidebar from '@epicenter/ui/sidebar';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';

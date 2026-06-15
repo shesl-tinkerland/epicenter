@@ -1,6 +1,6 @@
 {
 	"name": "@epicenter/client",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"private": true,
 	"type": "module",
 	"description": "Typed HTTP client for the Epicenter server (assets, session, AI chat). Composes on @epicenter/auth's AuthFetch.",
@@ -13,7 +13,8 @@
 	"dependencies": {
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/constants": "workspace:*",
-		"@epicenter/identity": "workspace:*"
+		"@epicenter/identity": "workspace:*",
+		"wellcrafted": "catalog:"
 	},
 	"devDependencies": {
 		"@types/bun": "catalog:",

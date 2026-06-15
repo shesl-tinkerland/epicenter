@@ -1,16 +1,9 @@
 <script lang="ts">
-	import {
-		SERVABLE_PROVIDER_MODELS,
-		type ServableModel,
-		type ServableProvider,
-	} from '@epicenter/constants/ai-providers';
 	import { fromKv, fromTable } from '@epicenter/svelte';
 	import {
 		type Conversation,
 		type ConversationId,
 		generateConversationId,
-		ZHONGWEN_DEFAULT_MODEL,
-		ZHONGWEN_DEFAULT_PROVIDER,
 	} from '@epicenter/zhongwen';
 	import { Button } from '@epicenter/ui/button';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
@@ -22,7 +15,6 @@
 	import { requireZhongwen } from '$lib/session';
 	import { auth } from '$platform/auth';
 	import ConversationView from './components/ConversationView.svelte';
-	import ModelPicker from './components/ModelPicker.svelte';
 	import ZhongwenSidebar from './components/ZhongwenSidebar.svelte';
 
 	const zhongwen = requireZhongwen();
@@ -43,28 +35,18 @@
 	const conversations = $derived(readSortedConversations());
 
 	let activeConversationId = $state<ConversationId | undefined>();
-	const activeConversation = $derived(
-		activeConversationId ? conversationsMap.get(activeConversationId) : undefined,
-	);
 
 	/**
 	 * Write only the cheap list row. The transcript child doc is opened lazily by
-	 * `ConversationView`, keyed by the row id.
+	 * `ConversationView`, keyed by the row id. The model is an app constant
+	 * (`ZHONGWEN_MODEL`), so it is not stored per conversation.
 	 */
-	function createConversationRow({
-		provider = ZHONGWEN_DEFAULT_PROVIDER,
-		model = ZHONGWEN_DEFAULT_MODEL,
-	}: {
-		provider?: ServableProvider;
-		model?: ServableModel;
-	} = {}): ConversationId {
+	function createConversationRow(): ConversationId {
 		const id = generateConversationId();
 		const timestamp = Date.now();
 		zhongwen.tables.conversations.set({
 			id,
 			title: 'New Chat',
-			provider,
-			model,
 			createdAt: timestamp,
 			updatedAt: timestamp,
 		});
@@ -84,26 +66,9 @@
 	}
 
 	function createConversation(): ConversationId {
-		const id = createConversationRow({
-			provider: activeConversation?.provider,
-			model: activeConversation?.model,
-		});
+		const id = createConversationRow();
 		activeConversationId = id;
 		return id;
-	}
-
-	/**
-	 * Route row mutations through one helper so provider, model, title, and
-	 * recency stay coupled.
-	 */
-	function updateConversation(
-		conversationId: ConversationId,
-		patch: Partial<Omit<Conversation, 'id'>>,
-	) {
-		zhongwen.tables.conversations.update(conversationId, {
-			...patch,
-			updatedAt: Date.now(),
-		});
 	}
 
 	function deleteConversation(conversationId: ConversationId) {
@@ -112,20 +77,6 @@
 		if (wasActive) {
 			activeConversationId = ensureDefaultConversation(conversationId);
 		}
-	}
-
-	function setActiveProvider(provider: ServableProvider) {
-		if (!activeConversationId) return;
-		const firstModel = SERVABLE_PROVIDER_MODELS[provider][0];
-		updateConversation(activeConversationId, {
-			provider,
-			model: firstModel,
-		});
-	}
-
-	function setActiveModel(model: ServableModel) {
-		if (!activeConversationId) return;
-		updateConversation(activeConversationId, { model });
 	}
 
 	const unobserveConversations = zhongwen.tables.conversations.observe(() => {
@@ -193,14 +144,6 @@
 				>
 					<BookOpenIcon />
 				</Button>
-				{#if activeConversation}
-					<ModelPicker
-						provider={activeConversation.provider}
-						model={activeConversation.model}
-						onProviderChange={setActiveProvider}
-						onModelChange={setActiveModel}
-					/>
-				{/if}
 			</div>
 
 			<div class="flex items-center gap-2">

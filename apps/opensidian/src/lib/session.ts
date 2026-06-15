@@ -1,4 +1,4 @@
-import { createSession } from '@epicenter/svelte';
+import { createSession } from '@epicenter/svelte/auth';
 import { createDeviceId } from '@epicenter/workspace';
 import { openOpensidianBrowser } from 'opensidian/browser';
 import { auth } from '$platform/auth';

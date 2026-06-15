@@ -17,8 +17,8 @@
  * `@epicenter/server`, so `pg` and the drizzle query-builder graph stay out of
  * the worker's module and type programs. The row shape and the trusted-client
  * invariant come from `projectTrustedOAuthClientToRow` in
- * `@epicenter/constants/oauth` (beside `buildTrustedOAuthClients`, its input),
- * so this script never imports the request-path auth barrel.
+ * `@epicenter/constants/oauth-seed` (beside `buildTrustedOAuthClients`, its
+ * input), so this script never imports the request-path auth barrel.
  *
  * The upsert is raw parameterized SQL rather than a drizzle query: the
  * `oauth_client` table object is built against `@epicenter/server`'s
@@ -34,7 +34,7 @@ import { APPS, localUrl } from '@epicenter/constants/apps';
 import {
 	buildTrustedOAuthClients,
 	projectTrustedOAuthClientToRow,
-} from '@epicenter/constants/oauth';
+} from '@epicenter/constants/oauth-seed';
 import pg from 'pg';
 import { LOCAL_DATABASE_URL } from '../wrangler-config';
 

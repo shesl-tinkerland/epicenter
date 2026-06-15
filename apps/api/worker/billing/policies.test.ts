@@ -57,7 +57,7 @@ function recordingReservation() {
 
 mock.module('./service.js', () => ({
 	createBillingService: () => ({
-		reserveAiChat: async (_input: { model: string; provider?: string }) =>
+		reserveAiChat: async (_input: { model: string }) =>
 			aiReserveOutcome.error ? aiReserveOutcome : Ok(recordingReservation()),
 		checkAssetStorageUpload: async (_input: { sizeBytes: number }) =>
 			assetCheckOutcome,

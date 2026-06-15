@@ -21,8 +21,8 @@
  * Library-side, billing-free. The deployment composes any plan or credit
  * gating in front of this app via `mountAiApp`'s `policies`. apps/api
  * passes `chargeAiCreditsWithAutumn`; a self-hosted shared-wiki deployment
- * passes no policies. Both routes carry `data.provider` / `data.model` in
- * the body, which is what the billing policy reads.
+ * passes no policies. Both routes carry `data.model` in the body, which is
+ * what the billing policy reads; the provider is derived from the catalog.
  *
  * BYOK: callers may pass `apiKey` in the request body, in which case the
  * deployment's provider key is ignored. No billing implications; the
@@ -39,8 +39,9 @@ import {
 	AiChatErrorStatus,
 } from '@epicenter/constants/ai-chat-errors';
 import {
-	SERVABLE_PROVIDER_MODELS,
-	type ServableProvider,
+	MODELS_BY_ID,
+	SERVABLE_MODELS,
+	type ServableModel,
 } from '@epicenter/constants/ai-providers';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import { sValidator } from '@hono/standard-validator';
@@ -72,32 +73,17 @@ const chatOptions = type({
 	'tools?': 'object[] | undefined',
 });
 
-const providerModel = type.or(
-	{
-		provider: "'openai'",
-		model: type.enumerated(...SERVABLE_PROVIDER_MODELS.openai),
-	},
-	{
-		provider: "'gemini'",
-		model: type.enumerated(...SERVABLE_PROVIDER_MODELS.gemini),
-	},
-);
-
-/**
- * Every provider in the shared registry (`@epicenter/constants/ai-providers`)
- * must be one this validator accepts, so a client picker that re-exports the
- * registry can never offer a provider this route answers with a 400. Adding a
- * provider to the registry without a branch above is a compile error here.
- */
-const _serverAcceptsEveryServableProvider: [ServableProvider] extends [
-	(typeof providerModel.infer)['provider'],
-]
-	? true
-	: never = true;
+// The body carries `model` only; the catalog owns the model -> provider
+// mapping, so the client never asserts a provider and this route derives it
+// (see `resolveAdapter`). Adding a model to the catalog makes it acceptable
+// here automatically.
+const modelChoice = type({
+	model: type.enumerated(...SERVABLE_MODELS),
+});
 
 const aiChatBody = type({
 	messages: 'object[] >= 1',
-	data: chatOptions.merge(providerModel),
+	data: chatOptions.merge(modelChoice),
 	/** Caller-provided API key for BYOK. When present, the deployment's house key is bypassed. */
 	'apiKey?': 'string | undefined',
 });
@@ -118,7 +104,7 @@ const aiChatDocBody = type({
 	generationId: 'string > 0',
 	// Same options as the SSE route minus `tools` (doc-as-wire chat is
 	// text-only) and minus `messages` (history lives in the doc).
-	data: chatOptions.omit('tools').merge(providerModel),
+	data: chatOptions.omit('tools').merge(modelChoice),
 	/** Caller-provided API key for BYOK. When present, the deployment's house key is bypassed. */
 	'apiKey?': 'string | undefined',
 });
@@ -128,34 +114,38 @@ const aiChatDocBody = type({
  * deployment's house key, else `ProviderNotConfigured`.
  */
 function resolveAdapter({
-	data,
+	model,
 	userApiKey,
 	env,
 }: {
-	data: typeof providerModel.infer;
+	model: ServableModel;
 	userApiKey: string | undefined;
 	env: { OPENAI_API_KEY?: string; GEMINI_API_KEY?: string };
 }): Result<
 	AnyTextAdapter,
 	ReturnType<typeof AiChatError.ProviderNotConfigured>['error']
 > {
-	switch (data.provider) {
+	// The catalog entry is discriminated on `provider`, so this switch narrows
+	// `entry.id` to the matching SDK model union: each adapter call is typed
+	// with no cast.
+	const entry = MODELS_BY_ID[model];
+	switch (entry.provider) {
 		case 'openai': {
 			const apiKey = userApiKey ?? env.OPENAI_API_KEY;
 			if (!apiKey) {
-				return AiChatError.ProviderNotConfigured({ provider: data.provider });
+				return AiChatError.ProviderNotConfigured({ provider: entry.provider });
 			}
-			return Ok(createOpenaiChat(data.model, apiKey));
+			return Ok(createOpenaiChat(entry.id, apiKey));
 		}
 		case 'gemini': {
 			const apiKey = userApiKey ?? env.GEMINI_API_KEY;
 			if (!apiKey) {
-				return AiChatError.ProviderNotConfigured({ provider: data.provider });
+				return AiChatError.ProviderNotConfigured({ provider: entry.provider });
 			}
-			return Ok(createGeminiChat(data.model, apiKey));
+			return Ok(createGeminiChat(entry.id, apiKey));
 		}
 		default:
-			return data satisfies never;
+			return entry satisfies never;
 	}
 }
 
@@ -173,10 +163,10 @@ const aiApp = new Hono<Env>()
 		sValidator('json', aiChatBody),
 		async (c) => {
 			const { messages, data, apiKey: userApiKey } = c.req.valid('json');
-			const { provider, model, tools, ...options } = data;
+			const { model, tools, ...options } = data;
 
 			const { data: adapter, error: adapterError } = resolveAdapter({
-				data,
+				model,
 				userApiKey,
 				env: c.env,
 			});
@@ -214,10 +204,10 @@ const aiApp = new Hono<Env>()
 				data,
 				apiKey: userApiKey,
 			} = c.req.valid('json');
-			const { provider, model, ...options } = data;
+			const { model, ...options } = data;
 
 			const { data: adapter, error: adapterError } = resolveAdapter({
-				data,
+				model,
 				userApiKey,
 				env: c.env,
 			});

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { Command } from '$lib/commands';
+	import { onDestroy } from 'svelte';
+	import { type Command, commands } from '$lib/commands';
 	import { report } from '$lib/report';
 	import type { Tauri } from '#platform/tauri';
 	import { syncGlobalShortcutsWithSettings } from '$routes/(app)/_layout-utils/register-commands';
@@ -7,10 +8,12 @@
 	import type { Key, KeyBinding, Modifier } from '$lib/tauri/commands';
 	import { os } from '#platform/os';
 	import {
+		bindingsOverlap,
 		isEmptyBinding,
 		keyBindingToLabel,
 		parseManualBinding,
 	} from '$lib/utils/key-binding';
+	import { validateGlobalBinding } from '$lib/utils/reserved-shortcuts';
 	import RecorderShell from './RecorderShell.svelte';
 
 	// `tauri` is passed non-null from the Tauri-gated global settings page; the
@@ -63,12 +66,54 @@
 		await tauri.globalShortcuts.setCapturing(false);
 	}
 
+	// If the recorder is torn down mid-capture (route change, or the popover
+	// dismissed by unmount rather than by onOpenChange), nothing else exits
+	// capture mode, so Rust would stay capturing and silently swallow every
+	// global shortcut. Always leave capture on destroy.
+	onDestroy(() => {
+		if (isListening) void stopCapture();
+	});
+
+	// A gesture's keys must be unique to it. The matcher fires on exact set
+	// equality with no prefix resolution, so a gesture that contains (or is
+	// contained by) another would shadow it or be unreachable. Refuse the overlap
+	// and name the gesture it collides with.
+	function overlapReason(next: KeyBinding): string | null {
+		for (const other of commands) {
+			if (other.id === command.id) continue;
+			const otherBinding = deviceConfig.get(`shortcuts.global.${other.id}`);
+			if (!otherBinding || isEmptyBinding(otherBinding)) continue;
+			if (bindingsOverlap(next, otherBinding)) {
+				return `Those keys are already part of the "${other.title}" gesture (${keyBindingToLabel(otherBinding, os.isApple)}). Each global gesture needs its own keys, so a key used by one gesture cannot be part of another.`;
+			}
+		}
+		return null;
+	}
+
+	// Reject reserved or overlapping gestures before saving. Returns true when the
+	// binding is allowed; otherwise reports why and leaves the current binding
+	// untouched.
+	function validateAndReport(next: KeyBinding): boolean {
+		const reason = validateGlobalBinding(next) ?? overlapReason(next);
+		if (!reason) return true;
+		report.error({
+			title: 'That shortcut is not available',
+			description: reason,
+			cause: {
+				name: 'UnavailableShortcut',
+				message: `${keyBindingToLabel(next, os.isApple)}: ${reason}`,
+			},
+		});
+		return false;
+	}
+
 	async function commitCapture() {
 		const next: KeyBinding = {
 			modifiers: [...capturedModifiers],
 			keys: [...capturedKeys],
 		};
 		await stopCapture();
+		if (!validateAndReport(next)) return;
 		await persist(next);
 		open = false;
 	}
@@ -98,7 +143,7 @@
 			report.error({
 				title: 'Invalid shortcut',
 				description:
-					'Try e.g. cmd+shift+d, fn+space, or a modifier-only hold like cmd.',
+					'Try e.g. fn+space, ctrl+meta, or a modifier-only hold like fn.',
 				cause: {
 					name: 'InvalidManualShortcut',
 					message: `"${raw}" is not a valid combination.`,
@@ -106,6 +151,7 @@
 			});
 			return false;
 		}
+		if (!validateAndReport(next)) return false;
 		void persist(next).then(() => {
 			open = false;
 		});
@@ -135,9 +181,9 @@
 	{recorder}
 	copy={{
 		placeholder,
-		recordHelp: 'Press a combination. Fn and modifier-only holds work here.',
-		manualHelp: 'Type a combination (e.g. cmd+shift+d, fn+space)',
-		manualPlaceholder: 'e.g. cmd+shift+d',
+		recordHelp: 'Press a gesture. Fn and modifier-only holds work here.',
+		manualHelp: 'Type a gesture (e.g. fn+space, ctrl+meta)',
+		manualPlaceholder: 'e.g. fn+space',
 		manualButtonLabel: 'Type manually',
 		listeningHint: 'Release to set, Esc to cancel',
 	}}

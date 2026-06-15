@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth';
+import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth-clients';
 import type { MemoryDB } from 'better-auth/adapters/memory';
 import { generateCodeChallenge } from 'better-auth/oauth2';
 

@@ -20,6 +20,6 @@ Script suffix convention: `:local` suffix scripts work on a fresh clone without 
 
 Library logging: Do not use direct `console.*` in library code. Use `wellcrafted/logger`, except in CLIs, tests, and benchmarks.
 
-Writing conventions: Load `writing-voice` skill for any user-facing text (UI strings, tooltips, error messages, docs). Do not use em dash characters (`U+2014`) or en dash characters (`U+2013`) anywhere, including prose, comments, JSDoc, and error strings. Use a colon, comma, semicolon, parenthesis, or sentence break instead. This applies to source files, markdown, and commit messages.
+Writing conventions: Load `writing-voice` skill for any user-facing text or punctuation-sensitive prose (UI strings, tooltips, error messages, docs, comments, JSDoc, markdown, and commit messages). Default to colon, comma, semicolon, parenthesis, or sentence break over em dash characters (`U+2014`), especially in UI strings. Do not use en dash characters (`U+2013`).
 
 Review gates: For substantial implementations, public API changes, refactors, multi-file changes, or user requests to grill, simplify, or clean up the result, load `post-implementation-review` before final handoff or staging. Load `collapse-pass` directly for continuous indirection-reduction work. During review, escalate to `cohesive-clean-breaks` for ownership, lifecycle, API, package-boundary, or asymmetric-win decisions, and to `greenfield-clean-breaks` when compatibility is not load-bearing or the user asks for the ideal shape. Keep procedures in skills; keep `AGENTS.md` to routing.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AccountPopover } from '@epicenter/svelte/account-popover';
+	import { AccountPopover } from '@epicenter/app-shell/account-popover';
 	import { Button } from '@epicenter/ui/button';
 	import { CommandPalette } from '@epicenter/ui/command-palette';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';

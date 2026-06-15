@@ -1,5 +1,9 @@
 name: Publish Tauri Releases
 
+# The shared toolchain/dependency setup lives in .github/actions/setup-whispering-build
+# so this release workflow and pr-preview.whispering.yml configure the build identically.
+# Only the build, signing, and release-publishing steps differ and stay below.
+
 on:
   push:
     tags:
@@ -12,41 +16,11 @@ on:
         type: string
 
 jobs:
-  # Job to clean up existing release assets before building
-  cleanup-release:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    permissions:
-      contents: write
-    steps:
-      - name: Delete existing release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          echo "Cleaning up assets for release: $TAG"
-
-          # Get release ID
-          RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
-
-          if [ -n "$RELEASE_ID" ]; then
-            echo "Found release ID: $RELEASE_ID"
-
-            # Get all assets and delete them
-            ASSETS=$(gh api "repos/$REPO/releases/$RELEASE_ID/assets" --jq '.[].id' 2>/dev/null || echo "")
-
-            for ASSET_ID in $ASSETS; do
-              echo "Deleting asset: $ASSET_ID"
-              gh api -X DELETE "repos/$REPO/releases/assets/$ASSET_ID" || true
-            done
-
-            echo "Cleanup complete"
-          else
-            echo "No existing release found for $TAG, skipping cleanup"
-          fi
-
+  # tauri-action (below) overwrites same-named assets after each successful
+  # build, so re-running a release replaces its assets in place. We deliberately
+  # do NOT pre-delete assets in a separate job: that would strand the release
+  # with zero downloads if any later build step (e.g. notarization) failed.
   publish-tauri:
-    needs: cleanup-release
     # Required permissions to create releases and upload assets
     permissions:
       contents: write
@@ -62,15 +36,18 @@ jobs:
             tauriArgs: '--target aarch64-apple-darwin'
             rustTargets: 'aarch64-apple-darwin'
 
-          # Linux (Ubuntu) on Blacksmith: GA drop-in runner, same base image as
-          # GitHub-hosted ubuntu-24.04. The `os: 'linux'` field below still drives
-          # every apt/Vulkan/FUSE conditional step, so only the runner changes.
+          # Linux on Blacksmith: GA drop-in runner, same base image as GitHub-hosted
+          # ubuntu-24.04. `os: 'linux'` still drives every linux-specific setup step.
           - platform: 'blacksmith-8vcpu-ubuntu-2404'
             os: 'linux'
             tauriArgs: ''  # No specific target needed for Linux
             rustTargets: ''
 
-          # Windows
+          # Windows on github-hosted windows-latest. Preview already builds Windows
+          # on Blacksmith; release stays here until that has run green across more
+          # PRs and a Blacksmith-built installer is manually confirmed to record and
+          # transcribe. Moving this to blacksmith-*-windows-* auto-engages the LLVM
+          # install in the setup action.
           - platform: 'windows-latest'
             os: 'windows'
             tauriArgs: ''  # No specific target needed for Windows
@@ -82,103 +59,18 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      # macOS specific: Install create-dmg for DMG bundling
-      - name: Install create-dmg (macOS only)
-        if: ${{ matrix.os == 'macos' }}
-        run: brew install create-dmg
-
-      # Ubuntu/Linux specific: Install system dependencies required by Tauri
-      - name: install dependencies (ubuntu only)
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt-get update
-          # Dependencies explanation:
-          # - libwebkit2gtk-4.1-dev: WebKit engine for Tauri v2 (4.0 was for v1)
-          # - libappindicator3-dev: System tray support
-          # - librsvg2-dev: SVG rendering
-          # - patchelf: Required for AppImage packaging
-          # - libxdo-dev: Keyboard/mouse automation
-          # - libasound2-dev: Audio support
-          # - libopenblas-dev: GPU acceleration support
-          # - libx11-dev: X11 development files for window system interaction
-          # - libxtst-dev: X11 testing extensions for input simulation
-          # - libxrandr-dev: X11 RandR extension for display configuration
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev
-
-      # Linux Vulkan SDK installation (required for whisper-cpp GPU acceleration on Linux)
-      - name: Install Vulkan SDK (Ubuntu)
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          # Add official Vulkan SDK repository
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          # Note: Using "noble" for Ubuntu 24.04
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.290-noble.list https://packages.lunarg.com/vulkan/1.3.290/lunarg-vulkan-1.3.290-noble.list
-          sudo apt update
-          sudo apt install -y vulkan-sdk mesa-vulkan-drivers
-
-      - name: Install Vulkan SDK (Windows)
-        if: ${{ matrix.os == 'windows' }}
-        shell: pwsh
-        env:
-          VULKAN_SDK_VERSION: 1.3.290.0
-        run: |
-          $installer = Join-Path $env:RUNNER_TEMP "VulkanSDK-$env:VULKAN_SDK_VERSION.exe"
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/VulkanSDK-$env:VULKAN_SDK_VERSION-Installer.exe" -OutFile $installer
-          Start-Process -FilePath $installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
-          "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION" >> $env:GITHUB_ENV
-          "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\Bin" >> $env:GITHUB_PATH
-
-      - name: Setup MSVC developer command prompt (Windows)
-        if: ${{ matrix.os == 'windows' }}
-        uses: ilammy/msvc-dev-cmd@v1
+      # Referenced as owner/repo/...@main (not ./) so the action resolves from the
+      # default branch no matter which tag this job checks out. A local ./ action
+      # would be read from the checked-out tag's tree, which breaks re-releasing
+      # any tag that predates this action and changes the existing semantics
+      # (workflow_dispatch already runs the default branch's setup, not the tag's).
+      # Preview uses ./ instead, so a PR tests its own edits to this action.
+      - name: Setup Whispering build
+        uses: EpicenterHQ/epicenter/.github/actions/setup-whispering-build@main
         with:
-          arch: x64
-
-      - name: Configure Windows native build
-        if: ${{ matrix.os == 'windows' }}
-        shell: pwsh
-        run: |
-          $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
-          $targetDir = Join-Path $drive "t"
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          "CARGO_TARGET_DIR=$targetDir" >> $env:GITHUB_ENV
-
-      # Setup Bun package manager
-      - name: setup bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: "package.json"
-
-      # Setup Node.js for compatibility
-      - name: setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: lts/*
-
-      # Install Rust toolchain required for building Tauri
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          # macOS rows specify the target they build.
-          # For other platforms: empty string (uses default target)
-          targets: ${{ matrix.rustTargets }}
-
-      # Cache Rust dependencies for faster builds
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          # Point to the Rust project directory
-          workspaces: './apps/whispering/src-tauri -> target'
-          # Windows redirects CARGO_TARGET_DIR to a short drive-root path outside this workspace.
-          cache-targets: ${{ matrix.os != 'windows' }}
-
-      # Install all JavaScript dependencies
-      - name: install frontend dependencies
-        run: bun install
-
-      # Build the frontend (SvelteKit app) before Tauri packaging
-      - name: Build frontend
-        run: bun --filter @epicenter/whispering build  # Targets the specific workspace package
+          os: ${{ matrix.os }}
+          rust-targets: ${{ matrix.rustTargets }}
+          windows-runner: ${{ matrix.platform }}
 
       # Read and process release notes from the release-notes directory
       - name: Process release notes
@@ -207,7 +99,8 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       # Main Tauri build and release action
-      - uses: tauri-apps/tauri-action@v0
+      - id: tauri-build
+        uses: tauri-apps/tauri-action@v0
         env:
           # Set CI environment variable to help with DMG bundling
           CI: true
@@ -258,54 +151,26 @@ jobs:
           # Platform-specific build arguments (e.g., --target for macOS)
           args: ${{ matrix.tauriArgs }}
 
-      # Install FUSE for AppImage processing
-      - name: Install FUSE for AppImage processing
+      # tauri-action notarizes and staples the .app but only signs the .dmg it
+      # wraps around it afterwards, so the downloaded .dmg is "Unnotarized
+      # Developer ID" and fails Gatekeeper's open assessment. This notarizes,
+      # staples, and verifies the .dmg itself, then replaces the draft's asset
+      # with the stapled copy before anyone can publish or download it. The
+      # release id and upload URL come from the tauri-build step's outputs so the
+      # asset swap addresses the draft directly instead of resolving it by tag.
+      # @main rather than ./ for the same reason as the setup action above.
+      - name: Notarize Whispering DMG (macOS only)
+        if: ${{ matrix.os == 'macos' }}
+        uses: EpicenterHQ/epicenter/.github/actions/notarize-whispering-dmg@main
+        with:
+          apple-id: ${{ secrets.APPLE_ID }}
+          apple-password: ${{ secrets.APPLE_PASSWORD }}
+          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          release-id: ${{ steps.tauri-build.outputs.releaseId }}
+          upload-url: ${{ steps.tauri-build.outputs.releaseUploadUrl }}
+
+      # @main rather than ./ for the same reason as the setup action above.
+      - name: Process AppImage (Linux only)
         if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fuse libfuse2
-
-      # Remove libwayland-client.so from AppImage for better compatibility
-      # This fixes EGL_BAD_PARAMETER errors on Wayland systems (Issues #114, #121)
-      - name: Remove libwayland-client.so from AppImage
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          # Find the AppImage file
-          APPIMAGE_PATH=$(find apps/whispering/src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -1)
-
-          if [ -n "$APPIMAGE_PATH" ]; then
-            echo "Processing AppImage: $APPIMAGE_PATH"
-
-            # Make AppImage executable
-            chmod +x "$APPIMAGE_PATH"
-
-            # Extract using the AppImage itself
-            cd "$(dirname "$APPIMAGE_PATH")"
-            APPIMAGE_NAME=$(basename "$APPIMAGE_PATH")
-            "./$APPIMAGE_NAME" --appimage-extract
-
-            # Remove libwayland-client.so files
-            echo "Removing libwayland-client.so files..."
-            find squashfs-root -name "libwayland-client.so*" -type f -delete
-
-            # List what was removed for verification
-            echo "Files remaining in lib directories:"
-            find squashfs-root -name "lib*" -type d | head -5 | while read dir; do
-              echo "Contents of $dir:"
-              ls "$dir" | grep -E "(wayland|fuse)" || echo "  No wayland/fuse libraries found"
-            done
-
-            # Get appimagetool
-            wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-            chmod +x appimagetool-x86_64.AppImage
-
-            # Repackage AppImage with no-appstream to avoid warnings
-            ARCH=x86_64 ./appimagetool-x86_64.AppImage --no-appstream squashfs-root "$APPIMAGE_NAME"
-
-            # Clean up
-            rm -rf squashfs-root appimagetool-x86_64.AppImage
-
-            echo "libwayland-client.so removed from AppImage successfully"
-          else
-            echo "No AppImage found to process"
-          fi
+        uses: EpicenterHQ/epicenter/.github/actions/process-whispering-appimage@main

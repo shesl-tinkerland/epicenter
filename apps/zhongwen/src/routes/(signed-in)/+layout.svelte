@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { WorkspaceGate } from '@epicenter/app-shell/workspace-gate';
 	import { Loading } from '@epicenter/ui/loading';
 	import { goto } from '$app/navigation';
 	import { requireZhongwen, session } from '$lib/session';

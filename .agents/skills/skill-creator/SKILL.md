@@ -233,5 +233,5 @@ Use sharper review questions when the design still feels soft:
   them.
 - The skill avoids time-sensitive facts unless sourced and necessary.
 - No orphan `CLAUDE.md` files are created; sibling shims only import `@AGENTS.md`.
-- No em dash or en dash characters are present.
+- Punctuation follows `writing-voice`: no en dash characters, and em dash characters only when they earn the emphasis.
 - Validation passed with the Vercel `skills` CLI.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { WorkspaceGate } from '@epicenter/svelte/workspace-gate';
+	import { WorkspaceGate } from '@epicenter/app-shell/workspace-gate';
 	import { Button } from '@epicenter/ui/button';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import { requireOpensidian, session } from '$lib/session';

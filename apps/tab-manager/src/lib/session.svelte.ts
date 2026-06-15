@@ -1,8 +1,7 @@
 import type { SyncAuthClient } from '@epicenter/auth';
-import { EPICENTER_TAB_MANAGER_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
+import { EPICENTER_TAB_MANAGER_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth-clients';
 import { APP_URLS } from '@epicenter/constants/vite';
-import { createSession } from '@epicenter/svelte';
-import { createOAuthAppAuth } from '@epicenter/svelte/auth';
+import { createOAuthAppAuth, createSession } from '@epicenter/svelte/auth';
 import { openCollaboration, roomWsUrl } from '@epicenter/workspace';
 import { actionsToAiTools } from '@epicenter/workspace/ai';
 import { createAiChatState } from './chat/chat-state.svelte';

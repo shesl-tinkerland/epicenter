@@ -26,9 +26,12 @@
 
 import type { UserId } from '@epicenter/auth';
 import { AiChatError } from '@epicenter/constants/ai-chat-errors';
+import {
+	MODELS_BY_ID,
+	type ServableModel,
+} from '@epicenter/constants/ai-providers';
 import { AssetError } from '@epicenter/constants/asset-errors';
 import { Err, Ok, type Result } from 'wellcrafted/result';
-import { MODEL_CREDITS } from './ai-model-pricing.js';
 import { createAutumnClient, tryAutumn } from './autumn.js';
 import {
 	type CheckoutPlanId,
@@ -108,12 +111,16 @@ export function createBillingService(
 	 */
 	async function reserveAiChat(input: {
 		model: string;
-		provider: string | undefined;
 	}): Promise<Result<Reservation, AiChatError | BillingError>> {
-		const credits = MODEL_CREDITS[input.model as keyof typeof MODEL_CREDITS];
-		if (credits === undefined) {
+		// One catalog lookup yields both the price and the provider. The catalog
+		// owns the model -> provider mapping, so the provider lands on the usage
+		// event (the dashboard groups spend by it) without the client asserting
+		// it. An unknown id is the only failure mode.
+		const entry = MODELS_BY_ID[input.model as ServableModel];
+		if (!entry) {
 			return AiChatError.UnknownModel({ model: input.model });
 		}
+		const { credits, provider } = entry;
 
 		// Resolve the active plan from a single customer fetch. A billing-provider
 		// outage fails closed: entitlement cannot be verified, so deny.
@@ -137,7 +144,7 @@ export function createBillingService(
 		// so a failed call never permanently consumes credits.
 		const { data: check, error: checkError } = await reserveAiCreditsWithLock({
 			credits,
-			properties: { model: input.model, provider: input.provider },
+			properties: { model: input.model, provider },
 		});
 		if (checkError) return Err(checkError);
 		if (!check.allowed) {
@@ -355,6 +362,11 @@ export function createBillingService(
 			return {
 				id: e.id,
 				timestampMs: e.timestamp,
+				// Both are best-effort historical ids read off the persisted Autumn
+				// event, not validated against the live catalog: an id this deploy
+				// no longer serves (or does not yet know) still renders, resolved to
+				// a label at the dashboard edge. Missing metadata (refunds, older
+				// provider-less events) is null.
 				model: typeof props.model === 'string' ? props.model : null,
 				provider: typeof props.provider === 'string' ? props.provider : null,
 				credits: e.value,

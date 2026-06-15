@@ -51,14 +51,18 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { exit } from '@tauri-apps/plugin-process';
 import mime from 'mime';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
-import { Err, Ok, type Result, tryAsync } from 'wellcrafted/result';
+import { Ok, tryAsync } from 'wellcrafted/result';
 import { os } from '#platform/os';
 import { goto } from '$app/navigation';
 import type { ShortcutEventState } from '$lib/commands';
 import type { WhisperingRecordingState } from '$lib/constants/audio';
 import { defineMutation, defineQuery, queryClient } from '$lib/rpc/client';
 import { autostartKeys } from '$lib/tauri/autostart-keys';
-import type { CommandBinding, KeyBinding } from '$lib/tauri/commands';
+import type {
+	CommandBinding,
+	KeyBinding,
+	MediaPlayer,
+} from '$lib/tauri/commands';
 import { commands, events } from '$lib/tauri/commands';
 
 // fs ----------------------------------------------------------------
@@ -399,6 +403,12 @@ const globalShortcuts = {
 		),
 };
 
+// media -------------------------------------------------------------
+const media = {
+	pause: () => commands.pauseActiveMedia(),
+	resume: (players: MediaPlayer[]) => commands.resumeMedia(players),
+};
+
 // barrel ------------------------------------------------------------
 // `tauriOnly` is the non-null namespace for `.tauri.ts` files. The
 // `tauri` export widens it to `Tauri | null` so shared consumers narrow.
@@ -409,6 +419,7 @@ export const tauriOnly = {
 	tray,
 	globalShortcuts,
 	autostart,
+	media,
 };
 
 /** Shape of the Tauri capability namespace (non-null). */

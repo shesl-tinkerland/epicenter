@@ -23,7 +23,7 @@ import {
 	createSqliteIndex,
 	type FileId,
 } from '@epicenter/filesystem';
-import type { SignedIn } from '@epicenter/svelte';
+import type { SignedIn } from '@epicenter/svelte/auth';
 import {
 	attachLocalStorage,
 	createDisposableCache,

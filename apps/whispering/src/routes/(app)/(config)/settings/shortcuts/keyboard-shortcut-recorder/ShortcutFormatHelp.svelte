@@ -30,22 +30,25 @@
 		`control+${CommandOrAlt.toLowerCase()}+delete`,
 	];
 
-	// Global (desktop, rdev) binds in physical-key space with an Fn modifier and
-	// two shapes the old plugin could not express. Labels render through the same
-	// helper the recorder uses, so the guide always matches what gets stored.
+	// Global (desktop, rdev) binds in physical-key space as a held gesture. Labels
+	// render through the same helper the recorder uses, so the guide always
+	// matches what gets stored. Examples mirror the shipped defaults.
 	const GLOBAL_MODIFIERS: Modifier[] = ['ctrl', 'alt', 'shift', 'meta', 'fn'];
 	const modifierLabel = (modifier: Modifier) =>
 		keyBindingToLabel({ modifiers: [modifier], keys: [] }, os.isApple);
 	const GLOBAL_SHAPES = [
 		{
-			binding: { modifiers: ['meta', 'shift'], keys: ['keyD'] },
-			desc: 'a modifier + key combo',
+			binding: os.isApple
+				? { modifiers: ['fn'], keys: [] }
+				: { modifiers: ['ctrl', 'meta'], keys: [] },
+			desc: 'a modifier held on its own (the push-to-talk default)',
 		},
 		{
-			binding: { modifiers: ['fn'], keys: [] },
-			desc: 'a modifier held on its own (great for push-to-talk)',
+			binding: os.isApple
+				? { modifiers: ['meta', 'shift'], keys: ['space'] }
+				: { modifiers: ['ctrl', 'shift'], keys: ['space'] },
+			desc: 'a modifier chord plus a key (the toggle default)',
 		},
-		{ binding: { modifiers: [], keys: ['space'] }, desc: 'a single key' },
 	] satisfies { binding: { modifiers: Modifier[]; keys: string[] }; desc: string }[];
 </script>
 
@@ -160,9 +163,12 @@
 				<!-- Global (rdev) summary -->
 				<div class="rounded-lg bg-muted p-4">
 					<p class="text-sm">
-						Global shortcuts match physical keys system-wide, so they fire from
-						any app and can use keys the old shortcuts could not: the Fn key, a
-						modifier held on its own, or a single key.
+						Global shortcuts are held gestures that fire system-wide, so they
+						work from any app and can use keys the old shortcuts could not: the
+						Fn key or a modifier held on its own. Give every gesture a modifier
+						or Fn so it cannot fire on an ordinary keypress, and give each one its
+						own keys: a key bound to one gesture (like push-to-talk's Fn) cannot
+						be part of another.
 					</p>
 				</div>
 
@@ -181,7 +187,7 @@
 
 				<!-- The three shapes -->
 				<div>
-					<h4 class="text-sm font-semibold mb-1">Three kinds of shortcut</h4>
+					<h4 class="text-sm font-semibold mb-1">Two kinds of shortcut</h4>
 					<div class="space-y-2">
 						{#each GLOBAL_SHAPES as shape}
 							<div class="flex items-center gap-2">
@@ -194,9 +200,9 @@
 
 				<p class="text-xs text-muted-foreground">
 					Keys match by physical position, so on a non-US layout the label may
-					differ from the printed character. Record a shortcut by pressing it, or
-					type one like <code class="font-mono text-xs">cmd+shift+d</code> or
-					<code class="font-mono text-xs">fn+space</code>.
+					differ from the printed character. Record a gesture by pressing it, or
+					type one like <code class="font-mono text-xs">fn+space</code> or
+					<code class="font-mono text-xs">ctrl+meta</code>.
 				</p>
 			{/if}
 		</div>

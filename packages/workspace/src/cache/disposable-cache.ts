@@ -147,11 +147,7 @@
  * @module
  */
 
-import {
-	defineErrors,
-	extractErrorMessage,
-	type InferErrors,
-} from 'wellcrafted/error';
+import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 
 /** Errors surfaced by the cache's background disposal machinery. */
@@ -165,7 +161,6 @@ const DisposableCacheError = defineErrors({
 		cause,
 	}),
 });
-type DisposableCacheError = InferErrors<typeof DisposableCacheError>;
 
 /**
  * Refcounted cache returned by `createDisposableCache`. Itself `Disposable`:
@@ -194,7 +189,14 @@ type CacheEntry<TValue extends Disposable> = {
  *                `0` = synchronous teardown, no timer. `Infinity` = never
  *                auto-evict; only `cache[Symbol.dispose]()` can force teardown.
  *                A fresh `open` during the grace window cancels the pending
- *                teardown.
+ *                teardown. The 5s default is tuned for the bursty reopen
+ *                patterns of an SPA (route and pane swaps, HMR, back-to-back
+ *                reads of the same id) without holding dead instances long.
+ *                It is a sensible baseline, not a per-call requirement: leave it
+ *                unset unless a specific resource wants a different window.
+ *                Mistuning `gcTime` only trades a rebuild cost against a memory
+ *                cost; it never changes behavior, so a wrong value is never a
+ *                correctness bug.
  */
 export function createDisposableCache<
 	TId extends string | number,
@@ -289,11 +291,6 @@ export function createDisposableCache<
 				...entry.value,
 				[Symbol.dispose]: dispose,
 			} as TValue;
-		},
-
-		/** Whether an instance is currently held (refcounted or in grace window). */
-		has(id: TId) {
-			return entries.has(id);
 		},
 
 		[Symbol.dispose]() {

@@ -2,7 +2,7 @@
 	"name": "@epicenter/self-host",
 	"description": "Self-hosted shared-wiki Cloudflare Worker (reference implementation, community-supported)",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"exports": {
 		".": "./worker/index.ts"

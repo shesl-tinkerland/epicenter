@@ -1,14 +1,12 @@
 import type { IanaTimeZone } from '@epicenter/workspace';
 import * as chrono from 'chrono-node';
 
-export type ParsedSuggestion = { label: string; date: Date };
+type ParsedSuggestion = { label: string; date: Date };
 
-export type ParseInZoneOptions = {
+type ParseInZoneOptions = {
 	text: string;
 	referenceNow: Date;
 	timeZone: IanaTimeZone;
-	min?: Date;
-	max?: Date;
 };
 
 /**
@@ -24,7 +22,7 @@ export type ParseInZoneOptions = {
  * not at the resolved instant. This matches chrono's own behavior.
  */
 export function parseInZone(opts: ParseInZoneOptions): ParsedSuggestion[] {
-	const { text, referenceNow, timeZone, min, max } = opts;
+	const { text, referenceNow, timeZone } = opts;
 	if (!text.trim()) return [];
 
 	const offsetMinutes = getZoneOffsetMinutes(timeZone, referenceNow);
@@ -33,16 +31,10 @@ export function parseInZone(opts: ParseInZoneOptions): ParsedSuggestion[] {
 		timezone: offsetMinutes,
 	});
 
-	return parsed
-		.map((result) => ({
-			label: result.text,
-			date: result.start.date(),
-		}))
-		.filter(
-			(s) =>
-				(min === undefined || s.date > min) &&
-				(max === undefined || s.date < max),
-		);
+	return parsed.map((result) => ({
+		label: result.text,
+		date: result.start.date(),
+	}));
 }
 
 /**

@@ -95,8 +95,8 @@ export const generateChatMessageId = (): ChatMessageId =>
  * Conversations: metadata for each chat thread.
  *
  * Stores the thread title, optional parent/subpage relationship, source
- * message linkage, and the model/provider metadata needed to resume or audit
- * the conversation later.
+ * message linkage, and the chosen model. The provider is derived from the
+ * model by the catalog, so it is not stored.
  */
 const conversationsTable = defineTable({
 	id: field.string<ConversationId>(),
@@ -104,7 +104,6 @@ const conversationsTable = defineTable({
 	parentId: nullable(field.string<ConversationId>()),
 	sourceMessageId: nullable(field.string<ChatMessageId>()),
 	systemPrompt: nullable(field.string()),
-	provider: field.string(),
 	model: field.string(),
 	createdAt: field.number(),
 	updatedAt: field.number(),

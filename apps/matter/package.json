@@ -2,7 +2,7 @@
 	"name": "@epicenter/matter",
 	"description": "Typed markdown folder editor: open a folder, give it a model, see files grouped by conformance (valid / invalid / unparseable).",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",

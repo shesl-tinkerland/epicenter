@@ -1,9 +1,9 @@
 {
 	"name": "@epicenter/svelte",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"private": true,
 	"type": "module",
-	"description": "Svelte 5 utilities for Epicenter workspaces. Reactive state bindings, auth UI, and workspace gates.",
+	"description": "Svelte 5 bindings for Epicenter: reactive workspace state, persisted state, and the auth/session adapter.",
 	"keywords": [
 		"svelte",
 		"local-first",
@@ -14,22 +14,13 @@
 	],
 	"exports": {
 		".": "./src/index.ts",
-		"./auth": "./src/auth.svelte.ts",
-		"./account-popover": "./src/account-popover/index.ts",
-		"./workspace-gate": "./src/workspace-gate/index.ts"
+		"./auth": "./src/auth.svelte.ts"
 	},
 	"dependencies": {
 		"@epicenter/auth": "workspace:*",
-		"@epicenter/constants": "workspace:*",
-		"@epicenter/api": "workspace:*",
 		"@epicenter/identity": "workspace:*",
-		"@epicenter/ui": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
-		"@lucide/svelte": "catalog:",
-		"@tanstack/svelte-query": "catalog:",
 		"arktype": "catalog:",
-		"better-auth": "catalog:",
-		"idb": "^8.0.3",
 		"wellcrafted": "catalog:"
 	},
 	"devDependencies": {

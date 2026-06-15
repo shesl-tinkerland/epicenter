@@ -14,6 +14,8 @@ import type { ApiSessionResponse, AuthFetch } from '@epicenter/auth';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import type { OwnerId } from '@epicenter/identity';
 
+export { createAiChatFetch } from './ai-chat-fetch.js';
+
 export type EpicenterClientOptions = {
 	/** Base URL of the Epicenter server (no trailing slash required). */
 	baseURL: string;
@@ -59,13 +61,11 @@ export type SetVisibilityResponse = {
 // AI chat types (matches packages/server/src/routes/ai.ts request body)
 // ---------------------------------------------------------------------------
 
-export type AiChatProvider =
-	| { provider: 'openai'; model: string }
-	| { provider: 'gemini'; model: string };
-
 export type AiChatBody = {
 	messages: ReadonlyArray<unknown>;
-	data: AiChatProvider & {
+	data: {
+		/** Servable model id; the server derives the provider from the catalog. */
+		model: string;
 		systemPrompts?: ReadonlyArray<string>;
 		temperature?: number;
 		maxTokens?: number;

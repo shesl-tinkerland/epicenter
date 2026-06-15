@@ -2,7 +2,7 @@
 	"name": "@epicenter/fuji",
 	"description": "Local-first personal CMS with collaborative rich-text editing",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"exports": {
 		".": "./src/lib/workspace/index.ts",
@@ -23,6 +23,7 @@
 		"dev:local": "vite dev",
 		"build": "NODE_ENV=production vite build",
 		"preview": "vite preview",
+		"deploy": "wrangler deploy",
 		"prepare": "svelte-kit sync || echo ''",
 		"tauri": "tauri",
 		"test": "bun test",
@@ -30,6 +31,7 @@
 	},
 	"devDependencies": {
 		"@epicenter/ui": "workspace:*",
+		"@epicenter/vite-config": "workspace:*",
 		"@types/bun": "catalog:",
 		"@lucide/svelte": "catalog:",
 		"@sveltejs/adapter-static": "catalog:",
@@ -47,6 +49,7 @@
 		"vite": "catalog:"
 	},
 	"dependencies": {
+		"@epicenter/app-shell": "workspace:*",
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/encryption": "workspace:*",

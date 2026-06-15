@@ -1,5 +1,5 @@
 <script module lang="ts">
-	import { createAiChatFetch, fromTable } from '@epicenter/svelte';
+	import { createAiChatFetch } from '@epicenter/client';
 	import { auth } from '$platform/auth';
 
 	// auth is a module singleton, so the wrapped fetch is built once and shared
@@ -32,13 +32,13 @@
 		observeChatDocMessages,
 		readChatDocMessages,
 	} from '@epicenter/workspace/ai';
+	import { fromTable } from '@epicenter/svelte';
 	import {
 		type ConversationId,
 		generateTermId,
 		type TermId,
 		type Vocabulary,
-		ZHONGWEN_DEFAULT_MODEL,
-		ZHONGWEN_DEFAULT_PROVIDER,
+		ZHONGWEN_MODEL,
 	} from '@epicenter/zhongwen';
 	import { CalendarDateString, InstantString } from '@epicenter/field';
 	import { onDestroy } from 'svelte';
@@ -78,9 +78,8 @@
 		name?: AiChatError['name'];
 	};
 
-	// The durable conversation row (provider/model/title) is read at action
-	// time inside the send/kickoff handlers, never in the template (the header
-	// owns its reactive display), so a plain read suffices here.
+	// The durable conversation row (title) is read at action time inside the
+	// send handler, never in the template, so a plain read suffices here.
 	function readRow() {
 		return zhongwen.tables.conversations.get(conversationId).data;
 	}
@@ -195,7 +194,6 @@
 		kickoffController = controller;
 		sendError = null;
 		dismissedError = false;
-		const row = readRow();
 		// Steer the AI toward today's words. Recomputed each kickoff so marking a
 		// word Known mid-conversation drops it from the next turn's targets. Empty
 		// queue → no block, and the chat runs on the base prompt alone.
@@ -208,8 +206,7 @@
 					guid: docHandle.ydoc.guid,
 					generationId: generateId(),
 					data: {
-						provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
-						model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
+						model: ZHONGWEN_MODEL,
 						systemPrompts: vocabularyPrompt
 							? [ZHONGWEN_SYSTEM_PROMPT, vocabularyPrompt]
 							: [ZHONGWEN_SYSTEM_PROMPT],
@@ -310,8 +307,6 @@
 	let popover = $state<{
 		text: string;
 		context: string;
-		provider: string;
-		model: string;
 		phase: 'actions' | 'meaning';
 		x: number;
 		top: number;
@@ -332,12 +327,9 @@
 		top: number;
 		bottom: number;
 	}) {
-		const row = readRow();
 		popover = {
 			text: at.text,
 			context: contextFor(at.messageId),
-			provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
-			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
 			phase: at.phase,
 			x: at.x,
 			top: at.top,
@@ -461,8 +453,6 @@
 	<WordPopover
 		text={popover.text}
 		context={popover.context}
-		provider={popover.provider}
-		model={popover.model}
 		fetchFn={aiChatFetch}
 		phase={popover.phase}
 		x={popover.x}

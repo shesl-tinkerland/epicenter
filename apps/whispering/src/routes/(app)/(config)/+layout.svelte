@@ -38,7 +38,7 @@
 				{#if manualRecorder.state === 'RECORDING'}
 					<Button
 						tooltip="Cancel recording"
-						onclick={() => commandCallbacks.cancelManualRecording()}
+						onclick={() => commandCallbacks.cancelRecording()}
 						variant="ghost"
 						size="icon"
 						style="view-transition-name: {viewTransition.global.cancel};"

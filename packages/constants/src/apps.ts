@@ -35,6 +35,7 @@ export const APPS = {
 		url: 'https://opensidian.com',
 		aliases: ['https://opensidian.epicenter.so'],
 	},
+	TODOS: { port: 5177, url: 'https://todos.epicenter.so' },
 	ZHONGWEN: { port: 8888, url: 'https://zhongwen.epicenter.so' },
 } as const;
 

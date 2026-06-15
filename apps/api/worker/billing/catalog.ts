@@ -104,7 +104,7 @@ type OneOffTopUpPlan = {
 export type Plan = SubscriptionPlan | OneOffTopUpPlan;
 
 /** Cap on the per-call credit cost that the free tier may consume.
- *  Resolved against `MODEL_CREDITS` at request time. */
+ *  Compared against the model's catalog `credits` at request time. */
 export const FREE_TIER_MAX_CREDITS_PER_CALL = 2;
 
 export const PLANS = {

@@ -7,6 +7,7 @@
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import { createMutation } from '@tanstack/svelte-query';
 	import { mutationOptions } from 'wellcrafted/query';
+	import { SettingSelect } from '$lib/components/settings';
 	import {
 		BITRATE_OPTIONS,
 		RECORDING_MODE_OPTIONS,
@@ -24,12 +25,6 @@
 	import VadSelectRecordingDevice from './VadSelectRecordingDevice.svelte';
 
 	// Derived labels for select triggers
-	const recordingModeLabel = $derived(
-		RECORDING_MODE_OPTIONS.find(
-			(o) => o.value === settings.get('recording.mode'),
-		)?.label,
-	);
-
 	const sampleRateLabel = $derived(
 		SAMPLE_RATE_OPTIONS.find(
 			(o) => o.value === deviceConfig.get('recording.cpal.sampleRate'),
@@ -59,31 +54,14 @@
 	</Field.Description>
 	<Field.Separator />
 	<Field.Group>
-		<Field.Field>
-			<Field.Label for="recording-mode">Recording Mode</Field.Label>
-			<Select.Root
-				type="single"
-				bind:value={() => settings.get('recording.mode'),
-					(selected) => {
-						if (selected) settings.set('recording.mode', selected);
-					}}
-			>
-				<Select.Trigger id="recording-mode" class="w-full">
-					{recordingModeLabel ?? 'Select a recording mode'}
-				</Select.Trigger>
-				<Select.Content>
-					{#each RECORDING_MODE_OPTIONS as item}
-						<Select.Item value={item.value} label={item.label} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-			<Field.Description>
-				Choose how you want to activate recording:
-				{RECORDING_MODE_OPTIONS.map(
-					(option) => option.label.toLowerCase(),
-				).join(', ')}
-			</Field.Description>
-		</Field.Field>
+		<SettingSelect
+			key="recording.mode"
+			label="Recording Mode"
+			items={RECORDING_MODE_OPTIONS}
+			description="Choose how you want to activate recording: {RECORDING_MODE_OPTIONS.map(
+				(option) => option.label.toLowerCase(),
+			).join(', ')}"
+		/>
 
 		{#if settings.get('recording.mode') === 'manual'}
 			<ManualSelectRecordingDevice

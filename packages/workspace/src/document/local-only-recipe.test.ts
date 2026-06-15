@@ -8,11 +8,10 @@
  * composite that requires an owner-scoped keyring. Local-only data has no
  * cloud adversary.
  *
- * If this file ever needs to import from `@epicenter/auth`,
- * `@epicenter/encryption`, or `@epicenter/util`, the
- * primitives have drifted away from the local-only ergonomic that
- * motivated the workspace split. Either rename the test, or fix the
- * primitive.
+ * If this file ever needs to import from `@epicenter/auth` or
+ * `@epicenter/encryption`, the primitives have drifted away from the
+ * local-only ergonomic that motivated the workspace split. Either rename
+ * the test, or fix the primitive.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';

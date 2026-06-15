@@ -8,7 +8,7 @@ import {
 import {
 	EPICENTER_FUJI_OAUTH_CLIENT_ID,
 	EPICENTER_FUJI_TAURI_OAUTH_REDIRECT_URI,
-} from '@epicenter/constants/oauth';
+} from '@epicenter/constants/oauth-clients';
 import { APP_URLS } from '@epicenter/constants/vite';
 import { createOAuthAppAuth } from '@epicenter/svelte/auth';
 import type { UnlistenFn } from '@tauri-apps/api/event';

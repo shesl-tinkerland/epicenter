@@ -100,13 +100,24 @@
 
 	$effect(() => {
 		const strategy = settings.get('retention.strategy');
-		if (strategy !== 'limit-count') return;
+		if (strategy === 'keep-forever') return;
 
-		const maxCount = settings.get('retention.maxCount');
-		const allRecordingIds = recordings.sorted.map((r) => r.id);
-		if (allRecordingIds.length <= maxCount) return;
+		// `keep-none` keeps zero recordings; it maps to a runtime count of 0
+		// without ever persisting 0 (the schema enforces `maxCount >= 1`).
+		const maxCount =
+			strategy === 'keep-none' ? 0 : settings.get('retention.maxCount');
 
-		const idsToDelete = allRecordingIds.slice(maxCount);
+		// Only settled recordings are eligible for pruning. A recording still
+		// in the pipeline has `transcription: null`; deleting it would pull the
+		// audio blob out from under transcription, which reads it back by id.
+		// So `keep-none` deletes each recording once its transcription settles,
+		// never before, which is the window the recording needs to be usable.
+		const settledIds = recordings.sorted
+			.filter((recording) => recording.transcription !== null)
+			.map((recording) => recording.id);
+		if (settledIds.length <= maxCount) return;
+
+		const idsToDelete = settledIds.slice(maxCount);
 		// Delete audio blobs from storage
 		services.blobs.audio.delete(idsToDelete);
 		// Delete recording metadata from workspace (single-scan bulk)

@@ -21,24 +21,42 @@ const globalBinding = type({
 	keys: 'string[]',
 }).or('null');
 
-// Default bindings, platform-resolved (Command on macOS, Control/Alt elsewhere),
-// matching the spirit of the old accelerator defaults. Exported so the reset
-// path in register-commands shares this one source of truth.
-const PRIMARY: KeyBinding['modifiers'][number] = os.isApple ? 'meta' : 'ctrl';
-const PUSH_TO_TALK: KeyBinding['modifiers'][number] = os.isApple
-	? 'meta'
-	: 'alt';
+// Default bindings as global gestures, not mnemonic app hotkeys. Every gesture
+// is a distinct, non-overlapping combo: the rdev matcher fires on exact set
+// equality with no prefix resolution, so no gesture's keys may be a subset of
+// another's (the shorter one would fire first and shadow the longer). That is
+// why push-to-talk gets its own dedicated key and nothing else reuses it.
+//
+//   macOS:   Fn = push-to-talk,        Cmd + Shift + Space  = toggle
+//   Windows: Ctrl+Win = push-to-talk,  Ctrl + Shift + Space = toggle
+//
+// Fn is a single physical key on Apple keyboards; elsewhere we reach for
+// Ctrl+Win, a held chord that no common OS shortcut claims. Toggle adds Shift
+// so it shares no prefix with push-to-talk while keeping Space as the "record"
+// affordance. Cancel is the platform cancel chord (Cmd + . on macOS, the system
+// cancel gesture since classic Mac OS; Ctrl + Shift + . elsewhere); it carries a
+// modifier so it is safe to hold globally and registers like any other gesture
+// with no session gating. Transformation gestures ship unbound: opt-in only.
+// Exported so the reset path in register-commands shares this one source of truth.
+const PUSH_TO_TALK_MODIFIERS: KeyBinding['modifiers'] = os.isApple
+	? ['fn']
+	: ['ctrl', 'meta'];
+
+const TOGGLE_MODIFIERS: KeyBinding['modifiers'] = os.isApple
+	? ['meta', 'shift']
+	: ['ctrl', 'shift'];
+
+const CANCEL_MODIFIERS: KeyBinding['modifiers'] = os.isApple
+	? ['meta']
+	: ['ctrl', 'shift'];
 
 export const DEFAULT_GLOBAL_BINDINGS = {
-	pushToTalk: { modifiers: [PUSH_TO_TALK, 'shift'], keys: ['keyD'] },
-	toggleManualRecording: { modifiers: [PRIMARY, 'shift'], keys: ['semiColon'] },
-	cancelManualRecording: { modifiers: [PRIMARY, 'shift'], keys: ['quote'] },
+	pushToTalk: { modifiers: PUSH_TO_TALK_MODIFIERS, keys: [] },
+	toggleManualRecording: { modifiers: TOGGLE_MODIFIERS, keys: ['space'] },
+	cancelRecording: { modifiers: CANCEL_MODIFIERS, keys: ['dot'] },
 	toggleVadRecording: null,
-	openTransformationPicker: { modifiers: [PRIMARY, 'shift'], keys: ['keyX'] },
-	runTransformationOnClipboard: {
-		modifiers: [PRIMARY, 'shift'],
-		keys: ['keyR'],
-	},
+	openTransformationPicker: null,
+	runTransformationOnClipboard: null,
 } satisfies Record<string, KeyBinding | null>;
 
 // ── Per-key definitions ──────────────────────────────────────────────────────
@@ -130,9 +148,9 @@ const DEVICE_DEFINITIONS = {
 		globalBinding,
 		DEFAULT_GLOBAL_BINDINGS.toggleManualRecording,
 	),
-	'shortcuts.global.cancelManualRecording': defineEntry(
+	'shortcuts.global.cancelRecording': defineEntry(
 		globalBinding,
-		DEFAULT_GLOBAL_BINDINGS.cancelManualRecording,
+		DEFAULT_GLOBAL_BINDINGS.cancelRecording,
 	),
 	'shortcuts.global.toggleVadRecording': defineEntry(
 		globalBinding,

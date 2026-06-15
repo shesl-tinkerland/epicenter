@@ -16,12 +16,12 @@
  */
 
 import type { Database, SQLQueryBindings } from 'bun:sqlite';
-import { debounce } from '@epicenter/util';
 import Type from 'typebox';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import type * as Y from 'yjs';
 import { defineActions, defineMutation } from '../../../shared/actions.js';
+import { debounce } from '../../../shared/debounce.js';
 import type { BaseRow, Table } from '../../table.js';
 import { type AnyTable, settledWithin, type TablesRecord } from '../shared.js';
 import { generateDdl, quoteIdentifier } from './ddl.js';

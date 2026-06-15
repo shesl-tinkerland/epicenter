@@ -31,6 +31,7 @@
 		shortcutValue ? getShortcutDisplayLabel(shortcutValue) : null,
 	);
 
+	// svelte-ignore state_referenced_locally -- pressedKeys is the stable recorder handle for this mounted shortcut table.
 	const keyRecorder = createKeyRecorder({
 		pressedKeys,
 		onRegister: async (keyCombination: KeyboardEventSupportedKey[]) => {

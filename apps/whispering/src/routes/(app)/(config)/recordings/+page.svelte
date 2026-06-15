@@ -50,10 +50,10 @@
 	import { report } from '$lib/report';
 	import { rpc } from '$lib/rpc';
 	import { tauri } from '#platform/tauri';
+	import { deleteRecordingsWithConfirmation } from '$lib/operations/recordings';
 	import { services } from '$lib/services';
 	import { type Recording, recordings } from '$lib/state/recordings.svelte';
 	import { createCopyFn } from '$lib/utils/createCopyFn';
-	import { recordingActions } from '$lib/utils/recording-actions';
 	import LatestTransformationRunOutputByRecordingId from './LatestTransformationRunOutputByRecordingId.svelte';
 	import RenderAudioUrl from './RenderAudioUrl.svelte';
 	import { RecordingRowActions } from './row-actions';
@@ -532,9 +532,9 @@
 						variant="outline"
 						size="icon"
 						onclick={() =>
-						recordingActions.deleteWithConfirmation(
-							selectedRecordingRows.map(({ original }) => original),
-						)}
+							deleteRecordingsWithConfirmation(
+								selectedRecordingRows.map(({ original }) => original),
+							)}
 					>
 						<TrashIcon class="size-4" />
 					</Button>

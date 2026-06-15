@@ -25,9 +25,9 @@
  * does carry `whenLoaded`; that asymmetry is real, not vestigial.
  */
 
-import { debounce } from '@epicenter/util';
 import { createLogger, type Logger } from 'wellcrafted/logger';
 import * as Y from 'yjs';
+import { debounce } from '../shared/debounce.js';
 import { openWriterSqlite } from './sqlite-writer.js';
 
 /** Max compacted update size (2 MB). Matches the Cloudflare DO limit. */

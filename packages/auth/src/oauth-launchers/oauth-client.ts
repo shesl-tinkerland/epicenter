@@ -1,4 +1,4 @@
-import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth';
+import { EPICENTER_OAUTH_SCOPE } from '@epicenter/constants/oauth-clients';
 import * as oauth from 'oauth4webapi';
 import {
 	defineErrors,

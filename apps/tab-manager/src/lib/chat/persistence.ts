@@ -7,7 +7,7 @@
  *   chat client through the {@link chatPersistence} adapter (full list on
  *   every change through the client's ordered write queue).
  * - `settings`: conversationId -> {@link ModelChoice}, the per-conversation
- *   provider/model pick, written by the conversation handles.
+ *   model pick, written by the conversation handles.
  *
  * The conversation list is derived from this store: a conversation exists
  * once its first message lands (drafts live in memory only), its title and
@@ -49,8 +49,12 @@ export const generateConversationId = (): ConversationId =>
 export const asConversationId = (value: string): ConversationId =>
 	value as ConversationId;
 
-/** The per-conversation provider/model pick. */
-export type ModelChoice = { provider: string; model: string };
+/**
+ * The per-conversation model pick. Provider is derived from the model by the
+ * catalog, so it is not stored; rows written by older builds carry an extra
+ * `provider` field that is simply ignored on read.
+ */
+export type ModelChoice = { model: string };
 
 // ── IndexedDB plumbing ─────────────────────────────────────────────────
 

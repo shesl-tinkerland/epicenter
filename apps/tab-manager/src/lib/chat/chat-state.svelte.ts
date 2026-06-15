@@ -10,7 +10,7 @@
  * ./persistence.ts). A new conversation is an in-memory draft until its
  * first message lands, so empty chats are never stored. Titles and
  * recency derive from the messages themselves; the only stored metadata
- * is the per-conversation provider/model pick.
+ * is the per-conversation model pick.
  *
  * Background streaming is free: each conversation has its own chat
  * instance. Switching away from a streaming conversation doesn't stop it.
@@ -19,11 +19,12 @@
  */
 
 import type { AuthClient } from '@epicenter/auth';
+import { createAiChatFetch } from '@epicenter/client';
 import { AiChatHttpError } from '@epicenter/constants/ai-chat-errors';
 import { APP_URLS } from '@epicenter/constants/vite';
-import { createAiChatFetch } from '@epicenter/svelte';
 import { createChat, fetchServerSentEvents } from '@tanstack/ai-svelte';
 import { SvelteMap } from 'svelte/reactivity';
+import { DEFAULT_MODEL } from '$lib/chat/models';
 import {
 	asConversationId,
 	type ConversationId,
@@ -35,13 +36,6 @@ import {
 	type ModelChoice,
 	setModelChoice,
 } from '$lib/chat/persistence';
-import {
-	AVAILABLE_PROVIDERS,
-	DEFAULT_MODEL,
-	DEFAULT_PROVIDER,
-	PROVIDER_MODELS,
-	type Provider,
-} from '$lib/chat/providers';
 import {
 	buildDeviceConstraints,
 	TAB_MANAGER_SYSTEM_PROMPT,
@@ -114,7 +108,6 @@ export function createAiChatState({
 					fetchClient: createAiChatFetch(auth.fetch),
 					body: {
 						data: {
-							provider: modelChoice?.provider ?? DEFAULT_PROVIDER,
 							model: modelChoice?.model ?? DEFAULT_MODEL,
 							systemPrompts: [
 								buildDeviceConstraints(deviceId),
@@ -162,25 +155,11 @@ export function createAiChatState({
 
 			// ── Model choice ──
 
-			get provider() {
-				return modelChoice?.provider ?? DEFAULT_PROVIDER;
-			},
-			set provider(value: string) {
-				const models = PROVIDER_MODELS[value as Provider];
-				rememberModelChoice({
-					provider: value,
-					model: models?.[0] ?? DEFAULT_MODEL,
-				});
-			},
-
 			get model() {
 				return modelChoice?.model ?? DEFAULT_MODEL;
 			},
 			set model(value: string) {
-				rememberModelChoice({
-					provider: modelChoice?.provider ?? DEFAULT_PROVIDER,
-					model: value,
-				});
+				rememberModelChoice({ model: value });
 			},
 
 			// ── Chat state (from createChat) ──
@@ -366,10 +345,7 @@ export function createAiChatState({
 		const id = generateConversationId();
 		const current = handles.get(activeConversationId);
 
-		modelChoices.set(id, {
-			provider: current?.provider ?? DEFAULT_PROVIDER,
-			model: current?.model ?? DEFAULT_MODEL,
-		});
+		modelChoices.set(id, { model: current?.model ?? DEFAULT_MODEL });
 		handles.set(id, createConversationHandle(id));
 		activeConversationId = id;
 		return id;
@@ -420,12 +396,6 @@ export function createAiChatState({
 
 		switchTo(conversationId: ConversationId) {
 			activeConversationId = conversationId;
-		},
-
-		availableProviders: AVAILABLE_PROVIDERS,
-
-		modelsForProvider(providerName: string): readonly string[] {
-			return PROVIDER_MODELS[providerName as Provider] ?? [];
 		},
 	};
 }

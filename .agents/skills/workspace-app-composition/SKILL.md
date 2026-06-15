@@ -163,7 +163,7 @@ The singleton lives in `src/lib/session.ts` (a plain `.ts` module, not
 re-exports `session.require` under an app-specific name.
 
 ```ts
-import { createSession } from '@epicenter/svelte';
+import { createSession } from '@epicenter/svelte/auth';
 import { auth } from '#platform/auth'; // fuji; flat-root apps import from $lib/platform/auth
 
 export const session = createSession({ /* auth + build */ });

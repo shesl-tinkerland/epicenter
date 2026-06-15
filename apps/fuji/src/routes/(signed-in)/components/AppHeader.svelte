@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AccountPopover } from '@epicenter/svelte/account-popover';
+	import { AccountPopover } from '@epicenter/app-shell/account-popover';
 	import { Button } from '@epicenter/ui/button';
 	import { GitHubButton, getStars } from '@epicenter/ui/github-button';
 	import { Kbd } from '@epicenter/ui/kbd';

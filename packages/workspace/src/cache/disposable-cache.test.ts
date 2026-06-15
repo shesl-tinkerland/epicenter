@@ -79,8 +79,8 @@ describe('throwing build closure', () => {
 		});
 
 		expect(() => cache.open('foo')).toThrow('boom');
-		expect(cache.has('foo')).toBe(false);
 		// The second attempt must run the closure again; no poisoned entry.
+		// `calls === 2` below proves the failed build left nothing cached.
 		const handle = cache.open('foo');
 		expect(calls).toBe(2);
 		expect(handle.ydoc.guid).toBe('foo');
@@ -111,30 +111,6 @@ describe('arbitrary fields flow through the handle', () => {
 		expect(a.body).toBe(b.body); // same reference under the hood
 		a[Symbol.dispose]();
 		b[Symbol.dispose]();
-	});
-});
-
-// ════════════════════════════════════════════════════════════════════════════
-// has()
-// ════════════════════════════════════════════════════════════════════════════
-
-describe('has()', () => {
-	test('returns false before open, true while held, false after teardown', () => {
-		const cache = makeYDocCache({ gcTime: 0 });
-		expect(cache.has('a')).toBe(false);
-		const h = cache.open('a');
-		expect(cache.has('a')).toBe(true);
-		h[Symbol.dispose]();
-		expect(cache.has('a')).toBe(false);
-	});
-
-	test('returns true during the gcTime grace window', async () => {
-		const cache = makeYDocCache({ gcTime: 50 });
-		const h = cache.open('a');
-		h[Symbol.dispose]();
-		expect(cache.has('a')).toBe(true);
-		await new Promise((r) => setTimeout(r, 80));
-		expect(cache.has('a')).toBe(false);
 	});
 });
 
@@ -311,8 +287,16 @@ describe('re-entrancy', () => {
 		// not a stale reference to the just-destroyed one.
 		expect(buildCount).toBe(2);
 		expect(reopenedHandle.buildIndex).toBe(2);
-		expect(cache.has('a')).toBe(true);
+
+		// The re-entrant entry is live and cached: re-opening reuses it, no rebuild.
+		const sameEntry = cache.open('a');
+		expect(buildCount).toBe(2);
+		sameEntry[Symbol.dispose]();
+
+		// gcTime: 0 tears the entry down on the last dispose; the next open rebuilds.
 		reopenedHandle[Symbol.dispose]();
-		expect(cache.has('a')).toBe(false);
+		const freshEntry = cache.open('a');
+		expect(buildCount).toBe(3);
+		freshEntry[Symbol.dispose]();
 	});
 });

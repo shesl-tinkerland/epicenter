@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { providerLabel } from '@epicenter/constants/ai-providers';
 	import { Skeleton } from '@epicenter/ui/skeleton';
 	import * as Table from '@epicenter/ui/table';
 	import { createQuery } from '@tanstack/svelte-query';
@@ -46,7 +47,7 @@
 						>{event.model ?? '-'}</Table.Cell
 					>
 					<Table.Cell class="text-xs text-muted-foreground">
-						{event.provider ?? '-'}
+						{event.provider ? providerLabel(event.provider) : '-'}
 					</Table.Cell>
 					<Table.Cell class="text-right tabular-nums">
 						{event.credits}

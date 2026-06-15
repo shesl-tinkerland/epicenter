@@ -93,9 +93,14 @@
 					{modelState.progress}%
 				</span>
 			</div>
-			<Button size="sm" variant="ghost" onclick={cancelDownload}>
+			<Button
+				size="sm"
+				variant="ghost"
+				onclick={cancelDownload}
+				disabled={modelState.cancelling}
+			>
 				<X class="size-4 mr-1" />
-				Cancel
+				{modelState.cancelling ? 'Cancelling…' : 'Cancel'}
 			</Button>
 		{:else if modelState.type === 'ready'}
 			{#if isActive}

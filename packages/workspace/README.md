@@ -204,7 +204,7 @@ import {
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createSession, type SignedIn } from '@epicenter/svelte/auth';
 import { auth } from '$lib/auth';
 import { createMyAppWorkspace } from '$lib/workspace';
 

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
-	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { CopyButton } from '@epicenter/ui/copy-button';
 	import { Skeleton } from '@epicenter/ui/skeleton';
 	import { Spinner } from '@epicenter/ui/spinner';
@@ -14,13 +13,13 @@
 	import { createMutation } from '@tanstack/svelte-query';
 	import type { AnyTaggedError } from 'wellcrafted/error';
 	import { deliverTranscriptionResult } from '$lib/operations/delivery';
+	import { deleteRecordingsWithConfirmation } from '$lib/operations/recordings';
 	import { sound } from '$lib/operations/sound';
 	import { report } from '$lib/report';
 	import { rpc } from '$lib/rpc';
 	import { recordings } from '$lib/state/recordings.svelte';
 	import { transformationRuns } from '$lib/state/transformation-runs.svelte';
 	import { createCopyFn } from '$lib/utils/createCopyFn';
-	import { recordingActions } from '$lib/utils/recording-actions';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import EditRecordingModal from './EditRecordingModal.svelte';
 	import TransformationPicker from './TransformationPicker.svelte';
@@ -168,7 +167,7 @@
 
 		<Button
 			tooltip="Delete recording"
-			onclick={() => recordingActions.deleteWithConfirmation(recording)}
+			onclick={() => deleteRecordingsWithConfirmation(recording)}
 			variant="ghost"
 			size="icon"
 		>

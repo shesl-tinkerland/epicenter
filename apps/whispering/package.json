@@ -1,7 +1,7 @@
 {
 	"name": "@epicenter/whispering",
 	"private": true,
-	"version": "7.11.0",
+	"version": "7.11.1",
 	"description": "Desktop and web speech-to-text with global shortcuts and AI transformations",
 	"exports": {
 		"./commands": "./src/lib/commands.ts",
@@ -36,10 +36,6 @@
 			"tauri": "./src/lib/recording-overlay/index.tauri.ts",
 			"default": "./src/lib/recording-overlay/index.browser.ts"
 		},
-		"#platform/sound": {
-			"tauri": "./src/lib/services/sound/index.tauri.ts",
-			"default": "./src/lib/services/sound/index.browser.ts"
-		},
 		"#platform/text": {
 			"tauri": "./src/lib/services/text/index.tauri.ts",
 			"default": "./src/lib/services/text/index.browser.ts"
@@ -66,17 +62,19 @@
 		"dev": "bun run dev:local",
 		"dev:local": "bun tauri dev --config '{\"identifier\": \"so.epicenter.whispering.dev\"}'",
 		"build": "NODE_ENV=production vite build",
+		"check": "bun run typecheck",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"bindings:tauri": "cargo test --manifest-path src-tauri/Cargo.toml export_types",
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"typecheck:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"tauri": "tauri",
-		"deploy": "bun run build && wrangler deploy"
+		"deploy": "wrangler deploy"
 	},
 	"license": "AGPL-3.0-or-later",
 	"devDependencies": {
 		"@epicenter/ui": "workspace:*",
+		"@epicenter/vite-config": "workspace:*",
 		"@types/bun": "catalog:",
 		"@lucide/svelte": "catalog:",
 		"@sveltejs/adapter-static": "catalog:",
@@ -85,7 +83,6 @@
 		"@tailwindcss/typography": "catalog:",
 		"@tailwindcss/vite": "catalog:",
 		"@tauri-apps/cli": "catalog:",
-		"@types/dompurify": "^3.2.0",
 		"@types/js-yaml": "^4.0.9",
 		"mode-watcher": "catalog:",
 		"svelte": "catalog:",
@@ -105,11 +102,10 @@
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/field": "workspace:*",
 		"@epicenter/svelte": "workspace:*",
-		"@epicenter/util": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"@google/generative-ai": "^0.24.1",
 		"@mistralai/mistralai": "^1.9.18",
-		"@ricky0123/vad-web": "^0.0.24",
+		"@ricky0123/vad-web": "^0.0.30",
 		"@standard-schema/spec": "catalog:",
 		"@tanstack/svelte-query": "catalog:",
 		"@tanstack/svelte-table": "catalog:",
@@ -132,7 +128,7 @@
 		"bits-ui": "catalog:",
 		"date-fns": "catalog:",
 		"dexie": "^4.0.11",
-		"dompurify": "^3.3.1",
+		"dompurify": "^3.4.10",
 		"elevenlabs": "^1.59.0",
 		"groq-sdk": "^0.25.0",
 		"idb": "^8.0.3",

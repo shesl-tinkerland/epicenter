@@ -1,8 +1,7 @@
 {
 	"name": "@epicenter/constants",
 	"description": "Shared URLs, ports, and version info for the Epicenter monorepo",
-	"private": true,
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"imports": {
 		"#*": [
@@ -13,9 +12,9 @@
 	"exports": {
 		"./apps": "./src/apps.ts",
 		"./auth": "./src/auth.ts",
-		"./oauth": "./src/oauth.ts",
+		"./oauth-clients": "./src/oauth-clients.ts",
+		"./oauth-seed": "./src/oauth-seed.ts",
 		"./vite": "./src/vite.ts",
-		"./vite-config": "./src/vite-config.ts",
 		"./versions": "./src/versions.ts",
 		"./ai-chat-errors": "./src/ai-chat-errors.ts",
 		"./ai-providers": "./src/ai-providers.ts",
@@ -28,18 +27,20 @@
 	},
 	"devDependencies": {
 		"@better-auth/oauth-provider": "catalog:",
+		"@types/bun": "catalog:",
+		"@tanstack/ai-gemini": "catalog:",
+		"@tanstack/ai-openai": "catalog:",
 		"@types/node": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
 	},
 	"dependencies": {
 		"@epicenter/identity": "workspace:*",
-		"@tanstack/ai-gemini": "catalog:",
-		"@tanstack/ai-openai": "catalog:",
 		"arktype": "catalog:",
 		"wellcrafted": "catalog:"
 	},
 	"scripts": {
+		"test": "bun test",
 		"typecheck": "tsc --noEmit"
 	},
 	"license": "AGPL-3.0-or-later"

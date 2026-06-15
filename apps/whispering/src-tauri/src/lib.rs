@@ -29,6 +29,9 @@ use download::{cancel_download, download_file, DownloadManager};
 pub mod markdown;
 use markdown::write_markdown_files;
 
+pub mod media;
+use media::{pause_active_media, resume_media};
+
 // Desktop global keyboard trigger backend (rdev listener + binding matcher).
 // Built in isolation in Wave 2; the FE registrar swap and listener start-up
 // land in Wave 3. Desktop-only because rdev is a desktop-only dependency.
@@ -66,6 +69,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_transcription_state,
             download_file,
             cancel_download,
+            pause_active_media,
+            resume_media,
             keyboard::commands::set_keyboard_shortcuts,
             keyboard::commands::set_keyboard_capturing,
             keyboard::commands::start_keyboard_listener,

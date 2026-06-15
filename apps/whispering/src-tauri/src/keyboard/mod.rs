@@ -12,14 +12,13 @@
 //! - `rdev_map` the only rdev-coupled code: `rdev::Key` -> matcher `Input`
 //! - `event`    the wire payload emitted to the FE
 //!
-//! Wave 2 built this module in isolation. Wave 3 wired it in: the
-//! `set_keyboard_shortcuts` command pushes the user's bindings and the FE
-//! registrar dispatches the emitted events. Wave 6 added the start lifecycle:
-//! the FE calls `start_keyboard_listener` once it knows global shortcuts are
-//! allowed (macOS Accessibility granted, or any non-macOS desktop), so the
-//! listener is never spawned before `rdev::listen` can actually tap the
-//! keyboard. This mirrors `cjpais/Handy`, which gates the listener on the
-//! frontend's permission check rather than polling `listen` from Rust.
+//! Wiring: the `set_keyboard_shortcuts` command pushes the user's bindings and
+//! the FE registrar dispatches the emitted events. The FE calls
+//! `start_keyboard_listener` once it knows global shortcuts are allowed (macOS
+//! Accessibility granted, or any non-macOS desktop), so the listener is never
+//! spawned before `rdev::listen` can actually tap the keyboard. This mirrors
+//! `cjpais/Handy`, which gates the listener on the frontend's permission check
+//! rather than polling `listen` from Rust.
 
 pub mod commands;
 pub mod event;
@@ -88,8 +87,8 @@ impl KeyboardListener {
     }
 
     /// Replace the full set of registered bindings. Called from the FE registrar
-    /// (Wave 3) whenever the user's configured global shortcuts change. Poisoned
-    /// lock is swallowed: a panicked matcher thread should not take the app down.
+    /// whenever the user's configured global shortcuts change. Poisoned lock is
+    /// swallowed: a panicked matcher thread should not take the app down.
     pub fn set_bindings(&self, bindings: Vec<(String, KeyBinding)>) {
         if let Ok(mut matcher) = self.matcher.lock() {
             matcher.set_bindings(bindings);
@@ -148,21 +147,27 @@ impl KeyboardListener {
                     let Some(input) = rdev_map::classify(key) else {
                         return;
                     };
-                    let Ok(mut matcher) = matcher.lock() else {
-                        return;
-                    };
-                    let triggers = matcher.on_event(edge, input);
-                    // In capture mode the recorder wants the live held combo, not
-                    // command triggers (which `on_event` suppresses anyway).
-                    if matcher.is_capturing() {
-                        let binding = matcher.held_binding();
-                        drop(matcher);
-                        let _ = ShortcutCaptureEvent { binding }.emit_to(&app, MAIN_WINDOW);
-                    } else {
-                        drop(matcher);
-                        for trigger in triggers {
-                            let _ = trigger.emit_to(&app, MAIN_WINDOW);
+
+                    // Hold the lock only to resolve the event; emit after dropping
+                    // it so a subscriber callback can never deadlock the listener.
+                    let triggers = {
+                        let Ok(mut matcher) = matcher.lock() else {
+                            return;
+                        };
+                        let triggers = matcher.on_event(edge, input);
+                        // In capture mode the recorder wants the live held combo,
+                        // not command triggers (which `on_event` suppresses).
+                        if matcher.is_capturing() {
+                            let binding = matcher.held_binding();
+                            drop(matcher);
+                            let _ = ShortcutCaptureEvent { binding }.emit_to(&app, MAIN_WINDOW);
+                            return;
                         }
+                        triggers
+                    };
+
+                    for trigger in triggers {
+                        let _ = trigger.emit_to(&app, MAIN_WINDOW);
                     }
                 });
                 if let Err(error) = result {

@@ -1,6 +1,6 @@
 {
 	"name": "@epicenter/server",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"private": true,
 	"type": "module",
 	"description": "Shared Hono server for Epicenter cloud and self-hosted shared-wiki deployments.",

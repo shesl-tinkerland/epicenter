@@ -10,7 +10,10 @@ import type { Key, KeyBinding, Modifier } from '$lib/tauri/commands';
  * (`keys: Key[]`) and the stored shape (`keys: string[]`, validated structurally
  * in device-config and by name in Rust), so the same helpers serve both.
  */
-type BindingLike = { modifiers: Modifier[]; keys: readonly string[] };
+export type BindingLike = {
+	modifiers: readonly Modifier[];
+	keys: readonly string[];
+};
 
 const MODIFIER_LABELS_APPLE: Record<Modifier, string> = {
 	ctrl: '⌃',
@@ -90,6 +93,26 @@ export function keyBindingToLabel(
 /** A binding with no modifiers and no keys can never fire; treat it as unset. */
 export function isEmptyBinding(binding: BindingLike): boolean {
 	return binding.modifiers.length === 0 && binding.keys.length === 0;
+}
+
+/** Whether every modifier and key of `subset` is also present in `superset`. */
+function isContainedBy(subset: BindingLike, superset: BindingLike): boolean {
+	return (
+		subset.modifiers.every((m) => superset.modifiers.includes(m)) &&
+		subset.keys.every((k) => superset.keys.includes(k))
+	);
+}
+
+/**
+ * Whether two gestures overlap: one is a subset of the other (including equal).
+ * The rdev matcher fires on exact set equality with no prefix resolution, so an
+ * overlapping pair is unusable: the shorter gesture fires first and shadows the
+ * longer. The recorder refuses to save a gesture that overlaps another, which is
+ * why a key bound to one gesture (such as push-to-talk's Fn) cannot appear in
+ * any other.
+ */
+export function bindingsOverlap(a: BindingLike, b: BindingLike): boolean {
+	return isContainedBy(a, b) || isContainedBy(b, a);
 }
 
 const MANUAL_MODIFIER_ALIASES: Record<string, Modifier> = {

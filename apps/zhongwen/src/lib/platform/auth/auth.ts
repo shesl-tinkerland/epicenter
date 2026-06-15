@@ -1,6 +1,6 @@
 import { createWebStoragePersistedAuthStorage } from '@epicenter/auth';
 import { createBrowserOAuthLauncher } from '@epicenter/auth/oauth-launchers';
-import { EPICENTER_ZHONGWEN_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth';
+import { EPICENTER_ZHONGWEN_OAUTH_CLIENT_ID } from '@epicenter/constants/oauth-clients';
 import { APP_URLS } from '@epicenter/constants/vite';
 import { createOAuthAppAuth } from '@epicenter/svelte/auth';
 

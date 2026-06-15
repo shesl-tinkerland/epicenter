@@ -1,7 +1,7 @@
 {
 	"name": "@epicenter/tab-manager",
 	"description": "Browser extension for managing tabs with workspace sync and AI chat",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"private": true,
 	"exports": {
@@ -20,7 +20,9 @@
 		"postinstall": "wxt prepare"
 	},
 	"dependencies": {
+		"@epicenter/app-shell": "workspace:*",
 		"@epicenter/auth": "workspace:*",
+		"@epicenter/client": "workspace:*",
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/field": "workspace:*",
 		"@epicenter/svelte": "workspace:*",
@@ -35,7 +37,7 @@
 		"arktype": "catalog:",
 		"better-auth": "catalog:",
 		"clsx": "catalog:",
-		"dompurify": "^3.3.3",
+		"dompurify": "^3.4.10",
 		"marked": "catalog:",
 		"mode-watcher": "^1.1.0",
 		"svelte-sonner": "^1.1.0",
@@ -57,7 +59,7 @@
 		"tailwindcss": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:",
-		"wxt": "^0.20.8"
+		"wxt": "^0.20.26"
 	},
 	"license": "AGPL-3.0-or-later"
 }

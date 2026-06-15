@@ -5,7 +5,6 @@ import { parseInZone } from './parse.js';
 const LA = 'America/Los_Angeles' as IanaTimeZone;
 const NY = 'America/New_York' as IanaTimeZone;
 const TOKYO = 'Asia/Tokyo' as IanaTimeZone;
-const UTC = 'UTC' as IanaTimeZone;
 
 describe('parseInZone', () => {
 	it('returns no suggestions for empty input', () => {
@@ -68,25 +67,5 @@ describe('parseInZone', () => {
 		});
 		expect(inLA[0]!.date.toISOString()).toBe('2026-05-25T19:00:00.000Z');
 		expect(inTokyo[0]!.date.toISOString()).toBe('2026-05-25T19:00:00.000Z');
-	});
-
-	it('filters out suggestions outside [min, max]', () => {
-		// "tomorrow at 5pm" in UTC resolves to 2026-05-26T17:00:00Z.
-		const referenceNow = new Date('2026-05-25T17:00:00Z');
-		const minAfter = parseInZone({
-			text: 'tomorrow at 5pm',
-			referenceNow,
-			timeZone: UTC,
-			min: new Date('2026-05-27T00:00:00Z'),
-		});
-		expect(minAfter).toEqual([]);
-
-		const maxBefore = parseInZone({
-			text: 'tomorrow at 5pm',
-			referenceNow,
-			timeZone: UTC,
-			max: new Date('2026-05-26T00:00:00Z'),
-		});
-		expect(maxBefore).toEqual([]);
 	});
 });

@@ -12,7 +12,7 @@
 		PROVIDERS,
 	} from '$lib/services/transcription/providers';
 	import {
-		cancelManualRecording,
+		cancelRecording,
 		stopManualRecording,
 		stopVadRecording,
 	} from '$lib/operations/recording';
@@ -128,7 +128,7 @@
 			(event) => {
 				if (!overlayStatus) return;
 				if (overlayStatus.mode === 'manual') {
-					if (event.payload === 'cancel') void cancelManualRecording();
+					if (event.payload === 'cancel') void cancelRecording();
 					else void stopManualRecording();
 					return;
 				}

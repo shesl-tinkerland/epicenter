@@ -20,7 +20,7 @@ import type { CommandBinding, KeyBinding } from '$lib/tauri/commands';
 const DEFAULT_LOCAL_SHORTCUTS = {
 	pushToTalk: 'p',
 	toggleManualRecording: ' ',
-	cancelManualRecording: 'c',
+	cancelRecording: 'c',
 	toggleVadRecording: 'v',
 	openTransformationPicker: 't',
 	runTransformationOnClipboard: 'r',

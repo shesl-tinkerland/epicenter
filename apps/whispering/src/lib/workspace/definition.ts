@@ -189,6 +189,7 @@ const sound = {
 	'sound.vadStop': defineKv(field.boolean(), () => true),
 	'sound.transcriptionComplete': defineKv(field.boolean(), () => true),
 	'sound.transformationComplete': defineKv(field.boolean(), () => true),
+	'sound.pauseMediaDuringRecording': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
@@ -224,13 +225,16 @@ const ui = {
 } as const;
 
 /**
- * Recording retention policy. `maxCount` is stored as an integer: the old
- * settings schema used `string.digits` for localStorage; the workspace uses
- * the semantically correct numeric type.
+ * Recording retention policy. `retention.strategy` is the source of truth for
+ * how many recordings to keep: `keep-forever` (all), `limit-count` (the newest
+ * `maxCount`), or `keep-none` (zero). `maxCount` only applies under
+ * `limit-count`; it stays `>= 1` so the original "0 means never save" overload
+ * can never be persisted again. "Keep zero" lives in the strategy enum, not in
+ * a sentinel count: `keep-none` maps to a runtime count of 0 without storing 0.
  */
 const dataRetention = {
 	'retention.strategy': defineKv(
-		field.select(['keep-forever', 'limit-count']),
+		field.select(['keep-forever', 'limit-count', 'keep-none']),
 		() => 'keep-forever' as const,
 	),
 	'retention.maxCount': defineKv(field.integer({ minimum: 1 }), () => 100),
@@ -312,7 +316,10 @@ const shortcuts = {
 		nullable(field.string()),
 		(): string | null => ' ',
 	),
-	'shortcut.cancelManualRecording': defineKv(
+	// Renamed from `shortcut.cancelManualRecording` (cancel now aborts manual or
+	// VAD capture, so the "manual" qualifier is gone). No migration: pre-release,
+	// the old key is simply orphaned and this falls back to its default.
+	'shortcut.cancelRecording': defineKv(
 		nullable(field.string()),
 		(): string | null => 'c',
 	),

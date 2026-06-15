@@ -1,5 +1,5 @@
 import {
-	cancelManualRecording,
+	cancelRecording,
 	startManualRecording,
 	stopManualRecording,
 	toggleManualRecording,
@@ -60,10 +60,10 @@ export const commands = [
 		callback: () => toggleManualRecording(),
 	},
 	{
-		id: 'cancelManualRecording',
+		id: 'cancelRecording',
 		title: 'Cancel recording',
 		on: ['Pressed'],
-		callback: () => cancelManualRecording(),
+		callback: () => cancelRecording(),
 	},
 	{
 		id: 'toggleVadRecording',

@@ -1,7 +1,8 @@
 import type { AuthClient } from '@epicenter/auth';
+import { createAiChatFetch } from '@epicenter/client';
 import { AiChatHttpError } from '@epicenter/constants/ai-chat-errors';
 import { APP_URLS } from '@epicenter/constants/vite';
-import { createAiChatFetch, fromTable } from '@epicenter/svelte';
+import { fromTable } from '@epicenter/svelte';
 import { actionsToAiTools } from '@epicenter/workspace/ai';
 import { createChat, fetchServerSentEvents } from '@tanstack/ai-svelte';
 import {
@@ -14,12 +15,7 @@ import {
 } from 'opensidian';
 import type { OpensidianBrowser } from 'opensidian/browser';
 import { SvelteMap } from 'svelte/reactivity';
-import {
-	DEFAULT_MODEL,
-	DEFAULT_PROVIDER,
-	PROVIDER_MODELS,
-	type Provider,
-} from '$lib/chat/providers';
+import { DEFAULT_MODEL } from '$lib/chat/models';
 import {
 	buildGlobalSkillsPrompt,
 	buildVaultSkillsPrompt,
@@ -28,17 +24,6 @@ import {
 import { toPersistedParts, toUiMessage } from '$lib/chat/ui-message';
 import { searchParams } from '$lib/search-params.svelte';
 import type { SkillState } from '$lib/state/skill-state.svelte';
-
-/**
- * Narrow a persisted provider string to the Provider union. The column is a
- * plain string in the durable schema, so rows written by builds with a
- * different provider list fall back to the default.
- */
-function getProviderValue(value: string | undefined): Provider {
-	return value !== undefined && value in PROVIDER_MODELS
-		? (value as Provider)
-		: DEFAULT_PROVIDER;
-}
 
 type SessionAiTools = ReturnType<
 	typeof actionsToAiTools<OpensidianBrowser['collaboration']['actions']>
@@ -72,7 +57,6 @@ export function createAiChatState({
 			parentId: null,
 			sourceMessageId: null,
 			systemPrompt: null,
-			provider: DEFAULT_PROVIDER,
 			model: DEFAULT_MODEL,
 			createdAt: now,
 			updatedAt: now,
@@ -116,7 +100,6 @@ export function createAiChatState({
 					fetchClient: createAiChatFetch(auth.fetch),
 					body: {
 						data: {
-							provider: metadata?.provider ?? DEFAULT_PROVIDER,
 							model: metadata?.model ?? DEFAULT_MODEL,
 							systemPrompts: [
 								OPENSIDIAN_SYSTEM_PROMPT,
@@ -174,17 +157,6 @@ export function createAiChatState({
 
 			get title() {
 				return metadata?.title ?? 'New Chat';
-			},
-
-			get provider() {
-				return getProviderValue(metadata?.provider);
-			},
-			set provider(value: Provider) {
-				const models = PROVIDER_MODELS[value];
-				updateConversation(conversationId, {
-					provider: value,
-					model: models[0] ?? DEFAULT_MODEL,
-				});
 			},
 
 			get model() {
@@ -359,7 +331,6 @@ export function createAiChatState({
 			parentId: null,
 			sourceMessageId: null,
 			systemPrompt: null,
-			provider: active?.provider ?? DEFAULT_PROVIDER,
 			model: active?.model ?? DEFAULT_MODEL,
 			createdAt: now,
 			updatedAt: now,
@@ -389,15 +360,6 @@ export function createAiChatState({
 			return handles.get(activeConversationId)?.isLoading ?? false;
 		},
 
-		get provider() {
-			return handles.get(activeConversationId)?.provider ?? DEFAULT_PROVIDER;
-		},
-		set provider(value: Provider) {
-			const active = handles.get(activeConversationId);
-			if (!active) return;
-			active.provider = value;
-		},
-
 		get model() {
 			return handles.get(activeConversationId)?.model ?? DEFAULT_MODEL;
 		},
@@ -405,10 +367,6 @@ export function createAiChatState({
 			const active = handles.get(activeConversationId);
 			if (!active) return;
 			active.model = value;
-		},
-
-		modelsForProvider(providerName: string): readonly string[] {
-			return PROVIDER_MODELS[providerName as Provider] ?? [];
 		},
 
 		sendMessage(content: string) {

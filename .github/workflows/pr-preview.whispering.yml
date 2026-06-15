@@ -15,6 +15,9 @@ name: PR Preview Builds
 # - All workflow runs for the same PR share the same concurrency group (keyed by PR number)
 # - When a new run starts, GitHub Actions automatically cancels previous runs in that group
 # - The 'closed' trigger activates a fast dummy job that joins the concurrency group and triggers cancellation
+#
+# The shared toolchain/dependency setup lives in .github/actions/setup-whispering-build
+# so this preview workflow and release.whispering.yml configure the build identically.
 
 on:
   pull_request:
@@ -68,18 +71,16 @@ jobs:
             rustTargets: 'x86_64-apple-darwin'
 
           # Linux on Blacksmith: GA drop-in runner, same base image as GitHub-hosted
-          # ubuntu-24.04. `os: 'linux'` still drives every apt/Vulkan/FUSE step.
+          # ubuntu-24.04. `os: 'linux'` still drives every linux-specific setup step.
           - platform: 'blacksmith-8vcpu-ubuntu-2404'
             os: 'linux'
             tauriArgs: ''
             artifactSuffix: 'linux'
             rustTargets: ''
 
-          # Windows on Blacksmith: PREVIEW-ONLY beta-runner spike to cut the ~22m
-          # github-hosted build time. Windows Server 2025 image ships VS Build Tools
-          # 2022 (satisfies the MSVC dev-cmd step); Vulkan is still installed by the
-          # step below. `os: 'windows'` keeps driving every Windows-specific step.
-          # Release stays on github-hosted `windows-latest` until this is proven.
+          # Windows preview builds on Blacksmith (~6m vs ~22m github-hosted). The
+          # image ships VS Build Tools 2022 but no LLVM and no Vulkan SDK; the setup
+          # action installs both. Release builds Windows on github-hosted windows-latest.
           - platform: 'blacksmith-8vcpu-windows-2025'
             os: 'windows'
             tauriArgs: ''
@@ -90,89 +91,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install create-dmg (macOS only)
-        if: ${{ matrix.os == 'macos' }}
-        run: brew install create-dmg
-
-      - name: install dependencies (ubuntu only)
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev
-
-      # Linux Vulkan SDK installation (required for whisper-cpp GPU acceleration on Linux)
-      - name: Install Vulkan SDK (Ubuntu)
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.290-noble.list https://packages.lunarg.com/vulkan/1.3.290/lunarg-vulkan-1.3.290-noble.list
-          sudo apt update
-          sudo apt install -y vulkan-sdk mesa-vulkan-drivers
-
-      - name: Install Vulkan SDK (Windows)
-        if: ${{ matrix.os == 'windows' }}
-        shell: pwsh
-        env:
-          VULKAN_SDK_VERSION: 1.3.290.0
-        run: |
-          $installer = Join-Path $env:RUNNER_TEMP "VulkanSDK-$env:VULKAN_SDK_VERSION.exe"
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/VulkanSDK-$env:VULKAN_SDK_VERSION-Installer.exe" -OutFile $installer
-          Start-Process -FilePath $installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
-          "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION" >> $env:GITHUB_ENV
-          "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\Bin" >> $env:GITHUB_PATH
-
-      # No msvc-dev-cmd step: cargo and the cc crate locate the MSVC toolchain
-      # via vswhere at build time, so sourcing vcvars is unnecessary for the x64
-      # build (Handy ships the same whisper-rs-sys on x64 Windows without it).
-      # Dropping it also avoids the unmaintained, node20-only action.
-      - name: Configure Windows native build
-        if: ${{ matrix.os == 'windows' }}
-        shell: pwsh
-        run: |
-          $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
-          $targetDir = Join-Path $drive "t"
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          "CARGO_TARGET_DIR=$targetDir" >> $env:GITHUB_ENV
-
-      # whisper-rs-sys runs bindgen, which needs libclang. GitHub-hosted
-      # windows-latest preinstalls LLVM; the Blacksmith Windows image does not,
-      # so install it and point bindgen at it via LIBCLANG_PATH. Pin the version
-      # so a future LLVM release cannot silently break bindgen, matching the
-      # exact-version discipline of the Vulkan SDK step above.
-      - name: Install LLVM (Windows, libclang for bindgen)
-        if: ${{ matrix.os == 'windows' }}
-        shell: pwsh
-        run: |
-          choco install llvm --version=22.1.7 --no-progress -y
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-
-      - name: setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Whispering build
+        uses: ./.github/actions/setup-whispering-build
         with:
-          bun-version-file: "package.json"
-
-      - name: setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: lts/*
-
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rustTargets }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './apps/whispering/src-tauri -> target'
-          # Windows redirects CARGO_TARGET_DIR to a short drive-root path outside this workspace.
-          cache-targets: ${{ matrix.os != 'windows' }}
-
-      - name: install frontend dependencies
-        run: bun install
-
-      - name: Build frontend
-        run: bun --filter @epicenter/whispering build
+          os: ${{ matrix.os }}
+          rust-targets: ${{ matrix.rustTargets }}
+          windows-runner: ${{ matrix.platform }}
 
       # macOS Intel only: provision a dynamically linked x86_64 ONNX Runtime and
       # bundle it into the .app. The `ort` crate (2.0.0-rc.12, via transcribe-rs)
@@ -238,42 +162,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $workspaceBundleDir | Out-Null
           Copy-Item -Path (Join-Path $bundleDir "*") -Destination $workspaceBundleDir -Recurse -Force
 
-      - name: Install FUSE for AppImage processing
+      - name: Process AppImage (Linux only)
         if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fuse libfuse2
-
-      - name: Remove libwayland-client.so from AppImage
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          APPIMAGE_PATH=$(find apps/whispering/src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -1)
-
-          if [ -n "$APPIMAGE_PATH" ]; then
-            echo "Processing AppImage: $APPIMAGE_PATH"
-            chmod +x "$APPIMAGE_PATH"
-            cd "$(dirname "$APPIMAGE_PATH")"
-            APPIMAGE_NAME=$(basename "$APPIMAGE_PATH")
-            "./$APPIMAGE_NAME" --appimage-extract
-
-            echo "Removing libwayland-client.so files..."
-            find squashfs-root -name "libwayland-client.so*" -type f -delete
-
-            echo "Files remaining in lib directories:"
-            find squashfs-root -name "lib*" -type d | head -5 | while read dir; do
-              echo "Contents of $dir:"
-              ls "$dir" | grep -E "(wayland|fuse)" || echo "  No wayland/fuse libraries found"
-            done
-
-            wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-            chmod +x appimagetool-x86_64.AppImage
-            ARCH=x86_64 ./appimagetool-x86_64.AppImage --no-appstream squashfs-root "$APPIMAGE_NAME"
-            rm -rf squashfs-root appimagetool-x86_64.AppImage
-
-            echo "libwayland-client.so removed from AppImage successfully"
-          else
-            echo "No AppImage found to process"
-          fi
+        uses: ./.github/actions/process-whispering-appimage
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

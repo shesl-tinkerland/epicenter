@@ -7,7 +7,6 @@
  */
 
 import { join } from 'node:path';
-import { EPICENTER_API_URL } from '@epicenter/constants/apps';
 import { defineActions, defineWorkspace } from '@epicenter/workspace';
 import { defineSessionMount } from '@epicenter/workspace/daemon';
 import {
@@ -26,6 +25,11 @@ import { createTabManager } from './src/lib/workspace/definition.js';
 export type TabManagerMountOptions = {
 	/** Enable per-materializer Git autosave for markdown output. */
 	git?: GitAutosaveConfig;
+	/**
+	 * Base URL of the Epicenter cloud API used for sync.
+	 * Defaults to `process.env.EPICENTER_API_URL`, falling back to the hosted API.
+	 */
+	baseURL?: string;
 };
 
 export function tabManager(opts: TabManagerMountOptions = {}) {
@@ -33,6 +37,10 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 		name: 'tab-manager',
 		open(ctx) {
 			const { epicenterRoot, mount } = ctx;
+			const baseURL =
+				opts.baseURL ||
+				process.env.EPICENTER_API_URL ||
+				'https://api.epicenter.so';
 
 			const workspace = createTabManager({ keyring: ctx.session.keyring });
 
@@ -68,7 +76,7 @@ export function tabManager(opts: TabManagerMountOptions = {}) {
 			});
 
 			const infrastructure = attachMountInfrastructure(workspace.ydoc, ctx, {
-				baseURL: EPICENTER_API_URL,
+				baseURL,
 				actions,
 				materializers: [sqlite, markdown],
 			});

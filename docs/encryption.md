@@ -60,7 +60,7 @@ Keys come through `/api/session`.
 Cold-boot offline keeps the cached `{ ownerId, keyring }` so the workspace can decrypt local Yjs data without a network roundtrip; the bearer is not attached to outbound requests until `/api/session` re-confirms the cell in this runtime.
 The workspace does not hold an independently mutable copy of the keys. `createWorkspace` takes a `keyring` callback and calls it once at construction; `attachLocalStorage` takes the same callback and also calls it exactly once at attach. Each encrypted store keeps the keyring derived at its `createWorkspace` boundary. Browser app session modules receive a flat `SignedIn` payload from `createSession`; that payload carries the lazy keyring reader and the stable owner:
 ```ts
-import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createSession, type SignedIn } from '@epicenter/svelte/auth';
 import { createDeviceId } from '@epicenter/workspace';
 
 export const session = createSession({
@@ -142,7 +142,7 @@ The reviewed code still does not show an explicit in-memory key wipe inside `cre
 The closest Bitwarden analogy is lock, not logout: Bitwarden documents unlock as using encrypted data already stored on disk and lock as deleting decrypted vault data and the account encryption key from memory. Bitwarden separately documents that logout wipes PIN settings. See [Understand Log In vs. Unlock](https://bitwarden.com/help/understand-log-in-vs-unlock/) and [Unlock With PIN](https://bitwarden.com/help/unlock-with-pin/).
 The logout path is owned by the per-app session module. `createSession` reconciles `auth.state` against the live workspace: sign-out disposes the workspace, and same-owner updates are a no-op at the session boundary. A different owner publishes a `signed-out` gap first, which disposes the current payload before the new owner mounts:
 ```ts
-import { createSession, type SignedIn } from '@epicenter/svelte';
+import { createSession, type SignedIn } from '@epicenter/svelte/auth';
 import { createDeviceId } from '@epicenter/workspace';
 
 export const session = createSession({
