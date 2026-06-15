@@ -23,6 +23,7 @@
 	import { Button } from '@epicenter/ui/button';
 	import * as Chat from '@epicenter/ui/chat';
 	import { toast } from '@epicenter/ui/sonner';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { generateId } from '@epicenter/workspace';
 	import {
 		appendUserMessage,
@@ -406,8 +407,13 @@
 			{#if canRetry}
 				<Button size="sm" variant="outline" onclick={retry}>Retry</Button>
 			{/if}
-			<Button size="sm" variant="ghost" onclick={() => (dismissedError = true)}>
-				✕
+			<Button
+				size="sm"
+				variant="ghost"
+				aria-label="Dismiss"
+				onclick={() => (dismissedError = true)}
+			>
+				<XIcon class="size-3.5" />
 			</Button>
 		</div>
 	{:else if isInterrupted}
