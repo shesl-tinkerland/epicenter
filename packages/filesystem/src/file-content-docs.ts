@@ -1,4 +1,4 @@
-import { docGuid } from '@epicenter/workspace';
+import { type DocGuid, docGuid } from '@epicenter/workspace';
 import type { FileId } from './ids.js';
 
 export function fileContentDocGuid({
@@ -7,7 +7,7 @@ export function fileContentDocGuid({
 }: {
 	workspaceId: string;
 	fileId: FileId;
-}): string {
+}): DocGuid {
 	return docGuid({
 		workspaceId,
 		collection: 'files',

@@ -2,6 +2,8 @@ import type { OwnerId } from '@epicenter/identity';
 import { ROOM_ROUTE } from '@epicenter/sync';
 import * as Y from 'yjs';
 import type { AuthedFetch } from '../shared/types.js';
+import { createContentDoc } from './content-doc.js';
+import type { DocGuid } from './doc-guid.js';
 
 /**
  * Bound for a one-shot room HTTP request. A hung relay must not stall the caller
@@ -15,7 +17,7 @@ type RoomHttpTarget = {
 	fetch: AuthedFetch;
 	baseURL: string;
 	ownerId: OwnerId;
-	guid: string;
+	guid: DocGuid;
 };
 
 /**
@@ -41,7 +43,7 @@ async function getRoomDoc({
 		);
 	}
 	const snapshot = new Uint8Array(await snapshotResponse.arrayBuffer());
-	const ydoc = new Y.Doc({ guid, gc: true });
+	const ydoc = createContentDoc(guid);
 	if (snapshot.byteLength > 0) Y.applyUpdateV2(ydoc, snapshot);
 	return ydoc;
 }

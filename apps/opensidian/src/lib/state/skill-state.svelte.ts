@@ -8,12 +8,12 @@ import {
 	attachBroadcastChannel,
 	attachIndexedDb,
 	attachPlainText,
+	createContentDoc,
 	createDisposableCache,
 	onLocalUpdate,
 } from '@epicenter/workspace';
 import type { OpensidianBrowser } from 'opensidian/browser';
 import { Ok, tryAsync } from 'wellcrafted/result';
-import * as Y from 'yjs';
 
 /** A global skill loaded from the @epicenter/skills workspace. */
 type GlobalSkill = { name: string; instructions: string };
@@ -161,13 +161,12 @@ function openGlobalSkills() {
 	attachBroadcastChannel(doc.ydoc);
 
 	const instructionsDocs = createDisposableCache((skillId: string) => {
-		const ydoc = new Y.Doc({
-			guid: skillInstructionsDocGuid({
+		const ydoc = createContentDoc(
+			skillInstructionsDocGuid({
 				workspaceId: doc.ydoc.guid,
 				skillId,
 			}),
-			gc: true,
-		});
+		);
 		onLocalUpdate(ydoc, () =>
 			doc.tables.skills.update(skillId, { updatedAt: Date.now() }),
 		);
@@ -183,13 +182,12 @@ function openGlobalSkills() {
 	});
 
 	const referenceDocs = createDisposableCache((referenceId: string) => {
-		const ydoc = new Y.Doc({
-			guid: referenceContentDocGuid({
+		const ydoc = createContentDoc(
+			referenceContentDocGuid({
 				workspaceId: doc.ydoc.guid,
 				referenceId,
 			}),
-			gc: true,
-		});
+		);
 		onLocalUpdate(ydoc, () =>
 			doc.tables.references.update(referenceId, { updatedAt: Date.now() }),
 		);

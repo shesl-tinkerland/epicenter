@@ -25,6 +25,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
 	attachPlainText,
+	createContentDoc,
 	defineActions,
 	defineMutation,
 	generateId,
@@ -37,7 +38,6 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { Ok, tryAsync } from 'wellcrafted/result';
-import * as Y from 'yjs';
 import { parseSkillMd } from './parse.js';
 import { referenceContentDocGuid } from './reference-content-docs.js';
 import { serializeSkillMd } from './serialize.js';
@@ -79,10 +79,9 @@ export function openSkillsNode({ workspaceId }: { workspaceId: string }) {
 	const { tables } = doc;
 
 	function openInstructionsDoc(skillId: string) {
-		const ydoc = new Y.Doc({
-			guid: skillInstructionsDocGuid({ workspaceId, skillId }),
-			gc: true,
-		});
+		const ydoc = createContentDoc(
+			skillInstructionsDocGuid({ workspaceId, skillId }),
+		);
 		onLocalUpdate(ydoc, () =>
 			tables.skills.update(skillId, { updatedAt: Date.now() }),
 		);
@@ -97,10 +96,9 @@ export function openSkillsNode({ workspaceId }: { workspaceId: string }) {
 	}
 
 	function openReferenceDoc(referenceId: string) {
-		const ydoc = new Y.Doc({
-			guid: referenceContentDocGuid({ workspaceId, referenceId }),
-			gc: true,
-		});
+		const ydoc = createContentDoc(
+			referenceContentDocGuid({ workspaceId, referenceId }),
+		);
 		onLocalUpdate(ydoc, () =>
 			tables.references.update(referenceId, { updatedAt: Date.now() }),
 		);

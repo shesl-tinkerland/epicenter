@@ -10,11 +10,17 @@ import { describe, expect, test } from 'bun:test';
 import { asOwnerId } from '@epicenter/identity';
 import * as Y from 'yjs';
 import type { AuthedFetch } from '../shared/types.js';
+import { docGuid } from './doc-guid.js';
 import { readRoomOverHttp } from './http-room-sync.js';
 
 const baseURL = 'https://api.test';
 const ownerId = asOwnerId('owner-1');
-const guid = 'content-doc-1';
+const guid = docGuid({
+	workspaceId: 'epicenter-test',
+	collection: 'entries',
+	rowId: 'content-doc-1',
+	field: 'content',
+});
 
 /** A fake relay: serves `snapshot` on GET, records POSTs. */
 function fakeRelay({

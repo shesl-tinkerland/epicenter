@@ -21,6 +21,7 @@ import {
 	type ActionRegistry,
 	attachLocalStorage,
 	attachRichText,
+	createContentDoc,
 	createDisposableCache,
 	DateTimeString,
 	type DeviceId,
@@ -30,7 +31,7 @@ import {
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 import { createFuji, type EntryId, entryContentDocGuid } from './index';
 
 export function openFujiBrowser({
@@ -78,7 +79,7 @@ export function openFujiBrowser({
 	});
 
 	const entryBodies = createDisposableCache((id: EntryId) => {
-		const ydoc = new Y.Doc({ guid: entryContentDocGuid(id), gc: true });
+		const ydoc = createContentDoc(entryContentDocGuid(id));
 		// Sync is opened for its side effect; the collaboration handle is
 		// orphaned on purpose, teardown cascades from `ydoc.destroy()` below.
 		const { idb: bodyIdb } = wire(ydoc, { actions: {} });

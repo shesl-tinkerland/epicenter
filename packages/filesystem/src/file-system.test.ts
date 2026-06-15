@@ -12,12 +12,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
 	attachTimeline,
+	createContentDoc,
 	createDisposableCache,
 	createWorkspace,
 	onLocalUpdate,
 } from '@epicenter/workspace';
 import { Bash } from 'just-bash';
-import * as Y from 'yjs';
 import { fileContentDocGuid } from './file-content-docs.js';
 import { attachYjsFileSystem, type YjsFileSystem } from './file-system.js';
 import { type FileId, generateFileId } from './ids.js';
@@ -36,10 +36,9 @@ function setup() {
 	};
 	const contentDocs = createDisposableCache(
 		(fileId: FileId) => {
-			const contentYdoc = new Y.Doc({
-				guid: fileContentDocGuid({ workspaceId: ws.id, fileId }),
-				gc: true,
-			});
+			const contentYdoc = createContentDoc(
+				fileContentDocGuid({ workspaceId: ws.id, fileId }),
+			);
 			onLocalUpdate(contentYdoc, () =>
 				ws.tables.files.update(fileId, { updatedAt: Date.now() }),
 			);

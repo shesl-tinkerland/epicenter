@@ -13,6 +13,7 @@
  * import {
  *   attachIndexedDb,
  *   attachRichText,
+ *   createContentDoc,
  *   createDeviceId,
  *   createDisposableCache,
  *   createWorkspace,
@@ -24,7 +25,6 @@
  * import { field } from '@epicenter/field';
  * import type { AuthClient } from '@epicenter/auth';
  * import type { OwnerId } from '@epicenter/identity';
- * import * as Y from 'yjs';
  *
  * const posts = defineTable({
  *   id: field.string(),
@@ -56,19 +56,19 @@
  *   actions: {},
  * });
  *
- * // Content docs are per-row child Y.Docs constructed inline. Sub-doc
- * // primitives (attachRichText, etc.) take a raw Y.Doc, not a workspace.
+ * // Content docs are per-row child Y.Docs built with `createContentDoc` from a
+ * // composed `docGuid`. Sub-doc primitives (attachRichText, etc.) take a raw
+ * // Y.Doc, not a workspace.
  * const noteBodyDocs = createDisposableCache(
  *   (noteId: string) => {
- *     const bodyYdoc = new Y.Doc({
- *       guid: docGuid({
+ *     const bodyYdoc = createContentDoc(
+ *       docGuid({
  *         workspaceId: workspace.ydoc.guid,
  *         collection: 'posts',
  *         rowId: noteId,
  *         field: 'body',
  *       }),
- *       gc: true,
- *     });
+ *     );
  *     const bodyIdb = attachIndexedDb(bodyYdoc);
  *     const bodySync = openCollaboration(bodyYdoc, {
  *       url: roomWsUrl({
@@ -171,6 +171,7 @@ export { attachLocalStorage } from './document/attach-local-storage.js';
 export { attachPlainText } from './document/attach-plain-text.js';
 export { attachRichText } from './document/attach-rich-text.js';
 export { attachTimeline } from './document/attach-timeline/index.js';
+export { createContentDoc } from './document/content-doc.js';
 export { defineKv } from './document/define-kv.js';
 export { defineTable } from './document/define-table.js';
 export {

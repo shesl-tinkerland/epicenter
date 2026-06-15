@@ -32,6 +32,7 @@ import { field } from '@epicenter/field';
 import {
 	createWorkspace,
 	DateTimeString,
+	type DocGuid,
 	defineActions,
 	defineMutation,
 	defineQuery,
@@ -349,7 +350,7 @@ export type FujiWorkspace = ReturnType<typeof createFuji>;
  * Browser editors, daemon materializers, and wipe paths reach this same
  * function so every layer points at the same Y.Doc identity.
  */
-export function entryContentDocGuid(entryId: EntryId): string {
+export function entryContentDocGuid(entryId: EntryId): DocGuid {
 	return docGuid({
 		workspaceId: FUJI_ID,
 		collection: 'entries',

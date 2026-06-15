@@ -17,6 +17,7 @@
 import type { SignedIn } from '@epicenter/svelte/auth';
 import {
 	attachLocalStorage,
+	createContentDoc,
 	createDisposableCache,
 	type DeviceId,
 	defineWorkspace,
@@ -24,7 +25,6 @@ import {
 	roomWsUrl,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
-import * as Y from 'yjs';
 import {
 	type ConversationId,
 	createZhongwen,
@@ -64,10 +64,9 @@ export function openZhongwenBrowser({
 
 	const conversationDocs = createDisposableCache(
 		(conversationId: ConversationId) => {
-			const ydoc = new Y.Doc({
-				guid: zhongwenConversationDocGuid(conversationId),
-				gc: true,
-			});
+			const ydoc = createContentDoc(
+				zhongwenConversationDocGuid(conversationId),
+			);
 			const childIdb = attachLocalStorage(ydoc, {
 				server: signedIn.server,
 				ownerId: signedIn.ownerId,

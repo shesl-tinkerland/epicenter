@@ -1,4 +1,4 @@
-import { docGuid } from '@epicenter/workspace';
+import { type DocGuid, docGuid } from '@epicenter/workspace';
 
 export function referenceContentDocGuid({
 	workspaceId,
@@ -6,7 +6,7 @@ export function referenceContentDocGuid({
 }: {
 	workspaceId: string;
 	referenceId: string;
-}): string {
+}): DocGuid {
 	return docGuid({
 		workspaceId,
 		collection: 'references',

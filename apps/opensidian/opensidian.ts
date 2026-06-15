@@ -22,8 +22,10 @@ import {
 } from '@epicenter/filesystem';
 import {
 	attachTimeline,
+	createContentDoc,
 	createDisposableCache,
 	createWorkspace,
+	type DocGuid,
 	defineActions,
 	defineTable,
 	defineWorkspace,
@@ -36,7 +38,6 @@ import {
 } from '@epicenter/workspace';
 import { Type } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
-import * as Y from 'yjs';
 
 export const OPENSIDIAN_ID = 'epicenter-opensidian';
 
@@ -165,10 +166,7 @@ export function createOpensidian(opts: { keyring: () => Keyring }) {
 		kv: {},
 	});
 	const fileContentDocs = createDisposableCache((fileId: FileId) => {
-		const childYdoc = new Y.Doc({
-			guid: opensidianFileContentDocGuid(fileId),
-			gc: true,
-		});
+		const childYdoc = createContentDoc(opensidianFileContentDocGuid(fileId));
 
 		onLocalUpdate(childYdoc, () =>
 			workspace.tables.files.update(fileId, { updatedAt: Date.now() }),
@@ -202,7 +200,7 @@ export type OpensidianWorkspace = ReturnType<typeof createOpensidian>;
  * function so every layer points at the same Y.Doc identity. Thin wrapper
  * around {@link fileContentDocGuid} that pins the workspace id.
  */
-export function opensidianFileContentDocGuid(fileId: FileId): string {
+export function opensidianFileContentDocGuid(fileId: FileId): DocGuid {
 	return fileContentDocGuid({
 		workspaceId: OPENSIDIAN_ID,
 		fileId,

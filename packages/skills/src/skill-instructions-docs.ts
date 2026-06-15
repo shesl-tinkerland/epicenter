@@ -1,4 +1,4 @@
-import { docGuid } from '@epicenter/workspace';
+import { type DocGuid, docGuid } from '@epicenter/workspace';
 
 export function skillInstructionsDocGuid({
 	workspaceId,
@@ -6,7 +6,7 @@ export function skillInstructionsDocGuid({
 }: {
 	workspaceId: string;
 	skillId: string;
-}): string {
+}): DocGuid {
 	return docGuid({
 		workspaceId,
 		collection: 'skills',

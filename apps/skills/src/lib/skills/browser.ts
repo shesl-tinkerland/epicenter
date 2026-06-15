@@ -7,11 +7,11 @@ import {
 	attachBroadcastChannel,
 	attachIndexedDb,
 	attachPlainText,
+	createContentDoc,
 	createDisposableCache,
 	onLocalUpdate,
 } from '@epicenter/workspace';
 import { clearDocument } from 'y-indexeddb';
-import * as Y from 'yjs';
 import { createSkills } from './index.js';
 
 export function openSkillsBrowser() {
@@ -20,13 +20,12 @@ export function openSkillsBrowser() {
 	attachBroadcastChannel(doc.ydoc);
 
 	const instructionsDocs = createDisposableCache((skillId: string) => {
-		const ydoc = new Y.Doc({
-			guid: skillInstructionsDocGuid({
+		const ydoc = createContentDoc(
+			skillInstructionsDocGuid({
 				workspaceId: doc.ydoc.guid,
 				skillId,
 			}),
-			gc: true,
-		});
+		);
 		onLocalUpdate(ydoc, () =>
 			doc.tables.skills.update(skillId, { updatedAt: Date.now() }),
 		);
@@ -46,13 +45,12 @@ export function openSkillsBrowser() {
 		};
 	});
 	const referenceDocs = createDisposableCache((referenceId: string) => {
-		const ydoc = new Y.Doc({
-			guid: referenceContentDocGuid({
+		const ydoc = createContentDoc(
+			referenceContentDocGuid({
 				workspaceId: doc.ydoc.guid,
 				referenceId,
 			}),
-			gc: true,
-		});
+		);
 		onLocalUpdate(ydoc, () =>
 			doc.tables.references.update(referenceId, { updatedAt: Date.now() }),
 		);

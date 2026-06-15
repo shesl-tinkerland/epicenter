@@ -17,9 +17,11 @@
 import { field } from '@epicenter/field';
 import {
 	attachRichText,
+	createContentDoc,
 	createDisposableCache,
 	createWorkspace,
 	DateTimeString,
+	type DocGuid,
 	defineActions,
 	defineMutation,
 	defineTable,
@@ -33,7 +35,6 @@ import {
 } from '@epicenter/workspace';
 import Type from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
-import * as Y from 'yjs';
 
 export const HONEYCRISP_ID = 'epicenter-honeycrisp';
 
@@ -134,10 +135,7 @@ export function createHoneycrisp(opts: { keyring: () => Keyring }) {
 	});
 	const { tables } = workspace;
 	const noteBodyDocs = createDisposableCache((noteId: NoteId) => {
-		const childYdoc = new Y.Doc({
-			guid: noteBodyDocGuid(noteId),
-			gc: true,
-		});
+		const childYdoc = createContentDoc(noteBodyDocGuid(noteId));
 		const body = attachRichText(childYdoc);
 
 		onLocalUpdate(childYdoc, () => {
@@ -195,7 +193,7 @@ export type HoneycrispWorkspace = ReturnType<typeof createHoneycrisp>;
  * Browser editors, daemon materializers, and wipe paths reach this same
  * function so every layer points at the same Y.Doc identity.
  */
-export function noteBodyDocGuid(noteId: NoteId): string {
+export function noteBodyDocGuid(noteId: NoteId): DocGuid {
 	return docGuid({
 		workspaceId: HONEYCRISP_ID,
 		collection: 'notes',
