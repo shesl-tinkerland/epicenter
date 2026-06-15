@@ -2,7 +2,7 @@
 	import * as Chat from '@epicenter/ui/chat';
 	import type { ChatDocMessage } from '@epicenter/workspace/ai';
 	import type { Vocabulary } from '@epicenter/zhongwen';
-	import AssistantMessagePart from './AssistantMessagePart.svelte';
+	import MessageContent from './MessageContent.svelte';
 
 	type Props = {
 		message: ChatDocMessage;
@@ -21,17 +21,15 @@
 <Chat.Bubble variant={isUser ? 'sent' : 'received'} data-message-id={message.id}>
 	<Chat.BubbleMessage>
 		<!-- Text-only by design: zhongwen chat docs carry a single Y.Text per
-			message; there are no tool or media parts to dispatch on. -->
-		{#if isUser}
-			{message.text}
-		{:else}
-			<AssistantMessagePart
-				content={message.text}
-				{showPinyin}
-				{highlightVocab}
-				{words}
-			/>
-		{/if}
+			message; there are no tool or media parts to dispatch on. The learner's
+			own lines are literal text (markdown off); both roles get the lens. -->
+		<MessageContent
+			content={message.text}
+			markdown={!isUser}
+			{showPinyin}
+			{highlightVocab}
+			{words}
+		/>
 	</Chat.BubbleMessage>
 </Chat.Bubble>
 {#if message.finish?.kind === 'cancelled'}

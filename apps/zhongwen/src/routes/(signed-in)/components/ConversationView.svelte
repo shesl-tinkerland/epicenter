@@ -67,8 +67,8 @@
 
 	const zhongwen = requireZhongwen();
 
-	// The lens reads the live dictionary to paint words onto assistant messages.
-	// Reactive so bumping a word's comfort recolors it in place.
+	// The lens reads the live dictionary to paint tracked words onto every message,
+	// the AI's and the learner's. Reactive so bumping a word's comfort recolors it.
 	const vocabularyMap = fromTable(zhongwen.tables.vocabulary);
 	const vocabularyWords = $derived([...vocabularyMap.values()]);
 
