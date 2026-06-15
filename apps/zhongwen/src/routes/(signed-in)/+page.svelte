@@ -180,8 +180,12 @@
 					size="icon"
 					onclick={() => (highlightVocab.current = !highlightVocab.current)}
 					aria-pressed={highlightVocab.current}
-					aria-label="Toggle vocabulary highlights"
-					tooltip={highlightVocab.current ? 'Hide words' : 'Show words'}
+					aria-label={
+						highlightVocab.current
+							? 'Hide vocabulary highlights'
+							: 'Show vocabulary highlights'
+					}
+					tooltip={highlightVocab.current ? 'Hide highlights' : 'Show highlights'}
 				>
 					<HighlighterIcon />
 				</Button>
