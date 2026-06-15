@@ -86,7 +86,7 @@ There will be a dedicated vocab app later, its own deployable, following this sa
 4. The review queue (the query above) + per-mastery intervals; dueAt advances on review; newWordsPerDay pacing.
 5. The lens over the live transcript doc: generalize showPinyin to a vocab-highlight channel colored by mastery, plus tap-to-gloss.
 6. Highlight-to-add capture from the chat doc (adds at mastery 0, dueAt now).
-7. CC-CEDICT offline gloss + segmentation (its own size/license gate). Pronunciation later, per the research subpage.
+7. Tap-to-gloss via the model, no CC-CEDICT and no segmenter: tappable highlight spans + a "What's this?" action on the step-6 selection toolbar. See "Step 7 collapsed" below. Pronunciation later, per the research subpage.
 ```
 
 ### Revised success criteria
@@ -209,6 +209,56 @@ Deferred, with triggers:
 - **Re-add reschedule in chat.** Selecting a word you already have just toasts "already in your words". The bulk-import flow offers bump/reset on a duplicate; the same could surface here. Trigger: re-capturing a known word to reschedule it feels wanted.
 - **Tap-to-add (no drag).** Once segmentation exists, an untracked word can be a single-tap add, lighter than a selection. Folds in with step 7.
 - **Capturing from your own messages.** The selection listener already covers the whole chat, including user bubbles, so this works today; it is called out only because highlighting the learner's own words (the lens over user text) is still deferred to the reflection-roster follow-up.
+
+### Step 7 collapsed: selection is the gloss-unit, no dictionary and no segmenter (2026-06-14)
+
+Step 7 as drawn ("CC-CEDICT offline gloss + segmentation") was the last build-order item and the only one behind a size/license gate. A grounding pass collapsed it to nearly nothing by asking what segmentation was ever load-bearing for. None of its three consumers actually need it:
+
+- **Capture (add a word) already shipped** in step 6 as a free-text selection. The human draws the word boundary; segmentation was only ever going to make that a single tap instead of a drag, an ergonomic upgrade, not a capability.
+- **The lens highlight** only paints *tracked* words, which `findVocabMatches` already finds by longest-match over the personal list. Segmentation would fix a few ambiguous-substring edge cases; marginal.
+- **Gloss** is the only genuinely new feature, and a *model* gloss needs no clean boundary. The model is contextual: hand it a sloppy or over-long span (or one character plus its sentence) and it names the actual word and gives the meaning in *this* context, which a static bilingual dictionary cannot.
+
+So both the bundled dictionary and the segmenter fall out. What replaces them is a primitive already in the app: **the selection is the universal unit, the capture-unit and the gloss-unit at once.** Three properties make that hold without a segmenter:
+
+```txt
+human draws the boundary   (selection)      no algorithm has to guess word edges
+model is contextual        (gloss source)   tolerates a sloppy span, finds the word itself
+deletion is cheap          (commit 5d7f84c1e)  a wrong capture is one tap to undo
+```
+
+This is the same trade the rest of the spec keeps making: reversibility over upfront-correctness machinery. Segmentation is upfront correctness; human boundary + forgiving model + cheap undo is the reversible version.
+
+**What step 7 becomes (two surfaces, both half-built):**
+
+- *Tracked words*: `highlight.ts` already wraps them in `<span>`s with an exact boundary (they are dictionary entries). Make the span tappable for a contextual model gloss in a popover. No new structure, a click handler and a popover.
+- *Untracked text*: the step-6 selection toolbar already floats on a selection with one "Add" button. Add a second action, "What's this?", that glosses the selection with the model. Same gesture, one more button. The model also soft-validates: select 中国人 sloppily and it can answer "that is 中国 plus 人."
+
+**How much it collapses:**
+
+```txt
+step 7 as drawn                      step 7 collapsed
+─────────────────────────────       ──────────────────────────────
+CC-CEDICT (2-4MB, CC-BY-SA)    ->    deleted (model glosses, contextually)
+a segmenter / Intl.Segmenter   ->    deleted (selection is the boundary)
+tap-to-add via segmentation    ->    already shipped (step 6 selection)
+tap-to-gloss                   ->    tappable spans + one toolbar button
+offline gloss                  ->    moot (the chat is online by nature)
+size / license gate            ->    gone
+```
+
+The one honest cost is single-tap-to-add ergonomics: every untracked capture stays a drag-select. Two things soften it. Browsers already snap selection to a CJK word for free using their own ICU segmenter (double-click on desktop, long-press on touch), so "tap a word" is largely a platform affordance we do not ship. And the toolbar shows the boundary before you commit, so over-selection is caught in the moment.
+
+**Refusals (moved here from step 7's scope, with triggers):**
+
+| Candidate | Refusal | User loss | Trigger to revisit |
+| --- | --- | --- | --- |
+| CC-CEDICT bundled dictionary | The model is the gloss source and gives the meaning *in context*, which a static dictionary cannot; its offline/exact virtue is moot because the chat is online by nature. Deletes a 2-4MB CC-BY-SA asset, a parser, and the license gate | No offline gloss; no instant local lookup (mitigate: pinyin-pro renders the reading instantly, the meaning streams after; cache looked-up glosses) | You want exact, offline, deterministic gloss across the whole list and will pay the bundle and the license |
+| A segmenter (CC-CEDICT-backed or `Intl.Segmenter`) | All three consumers are covered without it: capture by selection, highlight by personal-list longest-match, gloss by a boundary-agnostic model. Selection is the capture- and gloss-unit | Single-tap-add (drag-select instead), softened by browser-native word selection | Single-tap-add ergonomics feel missing; then `Intl.Segmenter` is the native, zero-asset way to add it as polish |
+
+Deferred, with triggers:
+
+- **Gloss caching / persistence.** The first version can call the model per tap. If repeat taps feel slow or wasteful, cache `word -> gloss` in memory or persist a tiny gloss field. Trigger: re-glossing the same word feels redundant.
+- **Pronunciation (STT/TTS/tone).** Unchanged from the research subpage; a later rung, never gating the core loop.
 
 ## How to read this spec
 
