@@ -21,17 +21,20 @@
 </script>
 
 <Sidebar.Root collapsible="icon">
-	<Sidebar.Header>
+	<Sidebar.Header class="border-b p-2">
 		<Sidebar.Menu>
 			<Sidebar.MenuItem>
 				<Sidebar.MenuButton
 					size="lg"
+					class="group-data-[collapsible=icon]:justify-center"
 					onclick={onCreate}
 					tooltipContent="New conversation"
 					aria-label="New conversation"
 				>
 					<MessageSquarePlusIcon class="size-4" />
-					<span>New Conversation</span>
+					<span class="group-data-[collapsible=icon]:hidden">
+						New Conversation
+					</span>
 				</Sidebar.MenuButton>
 			</Sidebar.MenuItem>
 		</Sidebar.Menu>
@@ -39,18 +42,22 @@
 
 	<Sidebar.Content>
 		<Sidebar.Group>
-			<Sidebar.GroupLabel>Conversations</Sidebar.GroupLabel>
+			<Sidebar.GroupLabel>Recent Chats</Sidebar.GroupLabel>
 			<Sidebar.GroupContent>
 				<Sidebar.Menu>
 					{#each conversations as conv (conv.id)}
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton
 								isActive={conv.id === activeConversationId}
+								class="group-data-[collapsible=icon]:justify-center"
 								onclick={() => onSwitch(conv.id)}
 								tooltipContent={conv.title}
+								aria-label={conv.title}
 							>
 								<MessageSquareTextIcon class="size-4" />
-								<span>{conv.title}</span>
+								<span class="group-data-[collapsible=icon]:hidden">
+									{conv.title}
+								</span>
 							</Sidebar.MenuButton>
 							<Sidebar.MenuAction
 								showOnHover
