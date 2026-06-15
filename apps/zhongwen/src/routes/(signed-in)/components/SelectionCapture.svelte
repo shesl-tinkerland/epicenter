@@ -1,24 +1,36 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
+	import LanguagesIcon from '@lucide/svelte/icons/languages';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 
 	/**
-	 * Highlight-to-add capture: select a stretch of Chinese inside the chat and a
-	 * floating button offers to add it to the dictionary. Until CC-CEDICT
-	 * segmentation (step 7) exists, an untracked run has no word boundaries to tap,
-	 * so the learner draws the boundary with a text selection and we capture
-	 * exactly what they picked. `onAdd` owns the dedup (re-adding an existing word
-	 * is a no-op there), so this component only decides when to offer the button.
+	 * Selection toolbar over the chat: select a short stretch of Chinese and a
+	 * floating bar offers to add it to the dictionary or gloss it. The learner
+	 * draws the boundary by selecting (there is no segmenter; selection is the
+	 * capture- and gloss-unit), so a wrong pick is just re-selected or deleted.
+	 * `onAdd` owns the dedup; `onGloss` opens the contextual meaning card.
 	 */
 	let {
 		root,
 		onAdd,
+		onGloss,
 	}: {
 		root: HTMLElement | undefined;
 		onAdd: (text: string) => void;
+		onGloss: (gloss: {
+			text: string;
+			context: string;
+			x: number;
+			y: number;
+		}) => void;
 	} = $props();
 
-	let capture = $state<{ text: string; x: number; y: number } | null>(null);
+	let capture = $state<{
+		text: string;
+		context: string;
+		x: number;
+		y: number;
+	} | null>(null);
 
 	// Offer capture only for a short, Han-script selection that lives inside the
 	// chat (not the input or header). The cap keeps a stray paragraph-drag from
@@ -38,17 +50,36 @@
 			return;
 		}
 		const range = selection.getRangeAt(0);
-		if (!root.contains(range.commonAncestorContainer)) {
+		const container = range.commonAncestorContainer;
+		if (!root.contains(container)) {
 			capture = null;
 			return;
 		}
+		// The sentence the selection sits in, so a gloss reads it in context. Only
+		// assistant messages carry it; selecting elsewhere just glosses the word.
+		const element =
+			container instanceof Element ? container : container.parentElement;
+		const context =
+			element
+				?.closest('[data-gloss-context]')
+				?.getAttribute('data-gloss-context') ?? '';
 		const rect = range.getBoundingClientRect();
-		capture = { text, x: rect.left + rect.width / 2, y: rect.top };
+		capture = { text, context, x: rect.left + rect.width / 2, y: rect.top };
 	}
 
 	function add() {
 		if (!capture) return;
 		onAdd(capture.text);
+		clear();
+	}
+
+	function gloss() {
+		if (!capture) return;
+		onGloss(capture);
+		clear();
+	}
+
+	function clear() {
 		capture = null;
 		window.getSelection()?.removeAllRanges();
 	}
@@ -65,14 +96,23 @@
 
 {#if capture}
 	<div
-		class="fixed z-50 -translate-x-1/2 -translate-y-full pb-1"
+		class="fixed z-50 flex -translate-x-1/2 -translate-y-full gap-1 pb-1"
 		style="left: {capture.x}px; top: {capture.y}px"
 	>
-		<!-- Keep the selection alive: a plain mousedown on the button would collapse
-			it, firing selectionchange and unmounting this button before the click. -->
+		<!-- Keep the selection alive: a plain mousedown on a button would collapse
+			it, firing selectionchange and unmounting the bar before the click. -->
 		<Button size="sm" onpointerdown={(event) => event.preventDefault()} onclick={add}>
 			<PlusIcon class="size-3.5" />
 			Add {capture.text}
+		</Button>
+		<Button
+			size="sm"
+			variant="secondary"
+			onpointerdown={(event) => event.preventDefault()}
+			onclick={gloss}
+		>
+			<LanguagesIcon class="size-3.5" />
+			What's this?
 		</Button>
 	</div>
 {/if}

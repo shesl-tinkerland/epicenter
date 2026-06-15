@@ -322,15 +322,22 @@
 		const context =
 			span.closest('[data-gloss-context]')?.getAttribute('data-gloss-context') ??
 			'';
-		const row = readRow();
 		const rect = span.getBoundingClientRect();
+		showGloss({ text, context, x: rect.left + rect.width / 2, y: rect.top });
+	}
+
+	/**
+	 * Open the gloss card for a word or phrase. Both entry points feed it: a tap on
+	 * a lens-highlighted word (openGloss) and the "What's this?" action on a free
+	 * selection (SelectionCapture). The provider/model are read here so the card
+	 * stays a dumb renderer of one already-resolved request.
+	 */
+	function showGloss(at: { text: string; context: string; x: number; y: number }) {
+		const row = readRow();
 		gloss = {
-			text,
-			context,
+			...at,
 			provider: row?.provider ?? ZHONGWEN_DEFAULT_PROVIDER,
 			model: row?.model ?? ZHONGWEN_DEFAULT_MODEL,
-			x: rect.left + rect.width / 2,
-			y: rect.top,
 		};
 	}
 </script>
@@ -410,7 +417,11 @@
 	onBump={bumpMastery}
 />
 
-<SelectionCapture root={chatListEl ?? undefined} onAdd={captureWord} />
+<SelectionCapture
+	root={chatListEl ?? undefined}
+	onAdd={captureWord}
+	onGloss={showGloss}
+/>
 
 {#if gloss}
 	<GlossPopover
