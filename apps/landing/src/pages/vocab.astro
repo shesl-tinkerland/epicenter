@@ -11,7 +11,7 @@ const app = getApp('vocab')!;
 
 <BaseLayout
 	title="Vocab: build your vocabulary, a word at a time"
-	description="Vocab is a planned Epicenter app: a focused way to build your vocabulary in any language, saving every word you learn as ordinary files in a folder you own."
+	description="Vocab is a planned Epicenter app: a focused way to study GRE, English, and Zhongwen words, saving every word you learn as ordinary files in a folder you own."
 >
 	<Fragment slot="head">
 		<Font cssVariable="--font-fraunces" preload />
@@ -21,7 +21,7 @@ const app = getApp('vocab')!;
 		<AppSwitcher />
 		<AppPageHeader app={app}>
 			<Fragment slot="action">
-				<a class="cta cta-outline" href={app.repo}>See the zhongwen experiment</a>
+				<a class="cta cta-outline" href={app.repo}>See the Zhongwen experiment</a>
 			</Fragment>
 		</AppPageHeader>
 
@@ -30,9 +30,9 @@ const app = getApp('vocab')!;
 				<p class="eyebrow">Planned</p>
 				<h2 class="font-display mt-4">A vocabulary trail from the words you actually meet.</h2>
 				<p>
-					Vocab is a planned Epicenter app, not a product you can install.
-					The vision is simple: when a word shows up in conversation, save it
-					into a file you can keep studying from.
+					Vocab is a planned Epicenter app, not a product you can install. The
+					vision is simple: when a word shows up in reading, GRE prep, or a
+					Zhongwen conversation, save it into a file you can keep studying from.
 				</p>
 				<p>
 					The seed is Zhongwen, an early Chinese-English chat experiment in the
@@ -50,25 +50,48 @@ const app = getApp('vocab')!;
 				</p>
 			</div>
 
-			<div class="vocab-card demo-window" aria-label="A conversation word saved into vocab/spanish.md">
+			<div
+				class="vocab-card demo-window"
+				aria-label="English and Zhongwen vocabulary words saved as Markdown files"
+			>
 				<div class="demo-titlebar">
 					<span class="demo-dot"></span><span class="demo-dot"></span
 					><span class="demo-dot"></span>
 					<span class="demo-title">planned sketch</span>
 				</div>
 				<div class="vocab-body">
-					<div class="chat-bubble from-them">
-						<p>Nos vemos luego.</p>
+					<div class="capture-stack">
+						<div class="capture-card">
+							<p class="source-label">GRE note</p>
+							<p class="capture-text">The witness stayed obdurate.</p>
+							<div class="word-chip">
+								<span>obdurate</span>
+								<small>stubborn</small>
+							</div>
+						</div>
+						<div class="capture-card quiet-card">
+							<p class="source-label">Zhongwen chat</p>
+							<p class="capture-text">Review this after class: fuxi.</p>
+							<div class="word-chip">
+								<span>fuxi</span>
+								<small>review</small>
+							</div>
+						</div>
 					</div>
-					<div class="word-chip">
-						<span>luego</span>
-						<small>later</small>
+					<div class="save-arrow" aria-hidden="true">
+						<span></span><span></span>
 					</div>
-					<div class="save-arrow" aria-hidden="true"></div>
-					<div class="vocab-file">
-						<p class="file-path">vocab/spanish.md</p>
-						<p><strong>luego</strong>: later</p>
-						<p class="muted">Heard in conversation</p>
+					<div class="file-shelf">
+						<div class="vocab-file">
+							<p class="file-path">vocab/english.md</p>
+							<p><strong>obdurate</strong>: stubbornly refusing to change</p>
+							<p class="muted">Saved from reading</p>
+						</div>
+						<div class="vocab-file">
+							<p class="file-path">vocab/zhongwen.md</p>
+							<p><strong>fuxi</strong>: review</p>
+							<p class="muted">Saved from Zhongwen</p>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -106,26 +129,41 @@ const app = getApp('vocab')!;
 	}
 
 	.vocab-body {
-		padding: 1.3rem;
+		padding: 1.1rem;
 		background:
 			linear-gradient(180deg, #fffdf8, rgb(250 245 236 / 86%)),
 			radial-gradient(circle at 80% 12%, rgb(188 63 29 / 10%), transparent 34%);
 	}
 
-	.chat-bubble {
-		width: fit-content;
-		max-width: 100%;
+	.capture-stack {
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.capture-card {
 		border: 1px solid var(--line);
 		border-radius: 14px;
 		background: var(--paper);
-		padding: 0.8rem 0.95rem;
+		padding: 0.85rem;
 		color: var(--ink);
-		font-size: 0.95rem;
 		line-height: 1.5;
 	}
 
-	.from-them {
-		margin-left: auto;
+	.quiet-card {
+		margin-left: 2rem;
+		background: #fffaf0;
+	}
+
+	.source-label {
+		margin-bottom: 0.35rem;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+
+	.capture-text {
+		font-size: 0.92rem;
 	}
 
 	.word-chip {
@@ -133,8 +171,7 @@ const app = getApp('vocab')!;
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 1rem;
-		width: 11rem;
-		margin: 1rem auto 0;
+		margin-top: 0.65rem;
 		border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
 		border-radius: 999px;
 		background: #fffdf8;
@@ -152,11 +189,22 @@ const app = getApp('vocab')!;
 	}
 
 	.save-arrow {
-		width: 2px;
-		height: 2.1rem;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+		width: 72%;
 		margin: 0.75rem auto;
-		background: linear-gradient(180deg, var(--accent), transparent);
 		opacity: 0.55;
+	}
+
+	.save-arrow span {
+		height: 2rem;
+		border-right: 1px solid var(--accent);
+	}
+
+	.file-shelf {
+		display: grid;
+		gap: 0.75rem;
 	}
 
 	.vocab-file {
@@ -178,5 +226,15 @@ const app = getApp('vocab')!;
 
 	.muted {
 		color: var(--ink-soft);
+	}
+
+	@media (max-width: 720px) {
+		.quiet-card {
+			margin-left: 0;
+		}
+
+		.save-arrow {
+			width: 58%;
+		}
 	}
 </style>

@@ -57,12 +57,12 @@ export const APPS: AppEntry[] = [
 		// code yet. It will be built on the zhongwen experiment (the repo link).
 		slug: 'vocab',
 		name: 'Vocab',
-		tagline: 'Build your vocabulary in any language, a word at a time.',
+		tagline: 'Study GRE, English, and Zhongwen words, a file at a time.',
 		status: 'planned',
 		icon: 'languages',
 		href: '/vocab',
 		repo: `${GITHUB}/zhongwen`,
-		exampleFile: 'spanish.md',
+		exampleFile: 'english.md',
 	},
 ];
 
