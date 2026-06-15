@@ -1,0 +1,14 @@
+/* Warm paper, ink, one ember accent. The landing brand palette, shared by
+   the ecosystem shell and every app page so they read as one site. These are
+   additive custom properties; they only apply where an element opts in with
+   var(--paper) etc., so they do not disturb the style-vega tokens from
+   @epicenter/ui used elsewhere. */
+:root {
+	--paper: #faf5ec;
+	--paper-deep: #f2ead9;
+	--ink: #26221a;
+	--ink-soft: #6f675a;
+	--accent: #bc3f1d;
+	--accent-deep: #9c3215;
+	--line: #e2d8c2;
+}

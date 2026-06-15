@@ -1,0 +1,72 @@
+---
+// Shared header for an app's own page: icon, name, status, one line, and a
+// primary action. Live apps get the single "Download now" anchor (handled by
+// the page, passed in as a slot); others get "Follow the build".
+import type { AppEntry } from '../../lib/apps';
+import AppIcon from './AppIcon.astro';
+import StatusBadge from './StatusBadge.astro';
+
+type Props = { app: AppEntry };
+const { app } = Astro.props;
+const hasAction = Astro.slots.has('action');
+---
+
+<header class="mx-auto max-w-3xl px-6 pt-16 pb-10 text-center md:pt-24">
+	<span class="head-icon"><AppIcon name={app.icon} /></span>
+	<div class="mt-5 flex items-center justify-center gap-3">
+		<h1 class="font-display head-name">{app.name}</h1>
+		<StatusBadge status={app.status} />
+	</div>
+	<p class="sub mx-auto mt-5 max-w-xl">{app.tagline}</p>
+	<div class="mt-8 flex flex-col items-center gap-3">
+		{hasAction ? <slot name="action" /> : (
+			<a class="cta cta-outline" href={app.repo}>Follow the build</a>
+		)}
+	</div>
+</header>
+
+<style>
+	.head-icon :global(svg) {
+		width: 2.4rem;
+		height: 2.4rem;
+		color: var(--accent);
+	}
+
+	.head-name {
+		font-size: clamp(2.4rem, 6vw, 3.5rem);
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		line-height: 1.05;
+	}
+
+	.sub {
+		font-size: clamp(1.05rem, 2vw, 1.2rem);
+		line-height: 1.6;
+		color: var(--ink-soft);
+	}
+
+	.cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		padding: 0.85rem 1.8rem;
+		font-size: 1rem;
+		font-weight: 600;
+		text-decoration: none;
+		transition:
+			transform 150ms ease,
+			background-color 150ms ease,
+			color 150ms ease;
+	}
+
+	.cta-outline {
+		border: 1.5px solid var(--accent);
+		color: var(--accent-deep);
+	}
+
+	.cta-outline:hover {
+		background: var(--accent);
+		color: var(--paper);
+	}
+</style>

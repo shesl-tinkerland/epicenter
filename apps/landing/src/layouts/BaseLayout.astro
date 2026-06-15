@@ -1,5 +1,8 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import '@epicenter/ui/app.css';
+import '../styles/theme.css';
+import '../styles/landing.css';
 import PostHog from '../components/posthog.astro';
 
 export type Props = {
@@ -32,6 +35,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 		<meta name="twitter:description" content={description}>
 		<link rel="canonical" href={canonical}>
 		<title>{title}</title>
+		<ClientRouter />
+		<script is:inline>
+			document.documentElement.classList.add('js');
+		</script>
 		<slot name="head" />
 		<PostHog />
 	</head>

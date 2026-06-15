@@ -1,7 +1,7 @@
 # Landing Page Public Realignment
 
 **Date**: 2026-06-12
-**Status**: Implemented (pending owner assets: founder letter text, demo recording)
+**Status**: Superseded by `specs/20260614T180000-landing-ecosystem-realignment.md` (2026-06-14). The root is now the Epicenter ecosystem, not a Whispering funnel; the Whispering hero, capture demo, and "types into any app" beats moved to `/whispering`. This spec's research (taste corpus, marketer pass) and copy remain useful and were carried forward. Do not revert the root to a single-app page.
 **Owner**: Braden
 **Branch**: `landing/public-realignment`
 

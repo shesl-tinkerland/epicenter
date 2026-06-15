@@ -10,14 +10,20 @@ One folder on your disk is the whole product:
 
 ```txt
 ~/workspace/
-|-- apps/         read-only Markdown projections of live app state
-|-- .epicenter/   machine state; ignore it
-|-- journal/      yours forever
-|-- ideas/        yours forever
-`-- publish/      yours forever
+|-- journal/       yours forever
+|-- ideas/         yours forever
+|-- whispering/    Epicenter app root
+|   |-- epicenter.config.ts
+|   `-- standup.md
+|-- honeycrisp/    Epicenter app root
+|   |-- epicenter.config.ts
+|   `-- meeting-notes.md
+`-- vocab/         Epicenter app root
+    |-- epicenter.config.ts
+    `-- spanish.md
 ```
 
-You speak a thought into Whispering and it lands in `apps/whispering/` as Markdown. You save tabs, draft entries, capture whatever, each through a purpose-built app, and every capture becomes a file you can grep. An agent reads the same files, queries the SQLite mirrors with plain SQL, and when it needs to change app state it goes through the same gate you do: `epicenter run <mount>.<action>`, validated against the app's schema. Nothing mutates by editing generated files; the projection is one-way on purpose.
+You speak a thought into Whispering and it lands in `whispering/` as Markdown. You save tabs, draft entries, capture whatever, each through a purpose-built app folder, and every capture becomes a file you can grep. An agent reads the same files, queries the SQLite mirrors with plain SQL, and when it needs to change app state it goes through the same gate you do: `epicenter run <mount>.<action>`, validated against the app's schema. Nothing mutates by editing generated files; the projection is one-way on purpose.
 
 The loop is capture, curate, keep. App output is a disposable inbox, regenerable from the CRDT at any time. What matters graduates into folders you own: ordinary Markdown, tracked in git, still yours after every app in this repo is gone.
 
@@ -47,7 +53,7 @@ The developer cut, for `@epicenter/workspace` and other toolkit surfaces (npm, p
 
 The public cut, for epicenter.so and other general-audience surfaces:
 
-> Apps come and go. Your files shouldn't. Epicenter apps save everything you make as ordinary files in a folder on your computer, so what matters to you outlives every app that made it.
+> Purpose-built apps, one folder you own. Epicenter is a growing family of small apps that each do one job and save everything you make as ordinary files on your computer. Apps come and go. Your files shouldn't.
 
 The developer and public cuts are the only cuts with their own framing. The developer cut exists because npm readers evaluate an API, not a product. The public cut exists because epicenter.so readers are not evaluating an architecture: it restates the one-line cut with the vocabulary translated. Markdown, SQLite, local-first, CRDT, and Yjs stay out of public heroes; on a public surface the mechanism appears below the fold, after the benefit it guarantees, never as the headline. Everything else derives from the user-facing cuts above.
 
@@ -70,7 +76,7 @@ Every shipped surface longer than one line carries exactly one proof line, state
 - you can install it today
 - macOS, Windows, and Linux, somewhere on the surface (platform badges or adjacent copy count)
 
-Roadmap language stays out of heroes. "A refresh built on the workspace is in progress" and "being built in public" are Status-section sentences; in a hero they hedge the only shipped product and tell a first-time reader to wait.
+On the public root, the ecosystem and where it is going are the subject, governed by status staging: unshipped apps may be named only with a truthful status badge (Live, In progress, or Planned), each provable in the repo, and the surface must keep exactly one Live download anchor (Whispering) so the vision never floats free of something a reader can install today. Roadmap language still stays out of an individual app's hero: on a single app's page, lead with the shipped product, not its future. "A refresh built on the workspace is in progress" and "being built in public" hedge a shipped product when they sit in its hero; keep them to the app's status copy.
 
 ## Earned Vocabulary
 

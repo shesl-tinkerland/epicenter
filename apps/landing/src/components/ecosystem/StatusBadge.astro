@@ -1,0 +1,60 @@
+---
+// Honest maturity marker for an app. "Live" is the only one that implies a
+// download; the others say "we are building this in the open".
+import { STATUS_LABEL, type AppStatus } from '../../lib/apps';
+
+type Props = { status: AppStatus };
+const { status } = Astro.props;
+---
+
+<span class:list={['badge', status]}>
+	{status !== 'planned' && <span class="dot" aria-hidden="true"></span>}
+	{STATUS_LABEL[status]}
+</span>
+
+<style>
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.18rem 0.6rem;
+		border-radius: 999px;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		border: 1px solid var(--line);
+		color: var(--ink-soft);
+		background: color-mix(in srgb, var(--paper) 60%, transparent);
+	}
+
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--ink-soft);
+	}
+
+	/* Live: ember, with a soft pulse to read as "shipping now". */
+	.badge.live {
+		color: var(--accent-deep);
+		border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+	}
+
+	.badge.live .dot {
+		background: var(--accent);
+		animation: pulse 1.8s ease-in-out infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.badge.live .dot {
+			animation: none;
+		}
+	}
+
+	@keyframes pulse {
+		50% {
+			opacity: 0.35;
+		}
+	}
+</style>

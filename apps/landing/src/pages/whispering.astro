@@ -1,15 +1,11 @@
 ---
+import { Font } from 'astro:assets';
 import { VERSION } from '@epicenter/constants/versions';
-import { Button } from '@epicenter/ui/button';
-import * as Card from '@epicenter/ui/card';
 import {
 	Apple as AppleIcon,
-	ArrowRight as ArrowRightIcon,
 	Check as CheckIcon,
-	ChevronDown as ChevronDownIcon,
-	Download as DownloadIcon,
-	ExternalLink as ExternalLinkIcon,
-	Github as GithubIcon,
+	FileText as FileTextIcon,
+	Folder as FolderIcon,
 	Globe as GlobeIcon,
 	Lightbulb as LightbulbIcon,
 	Lock as LockIcon,
@@ -18,968 +14,751 @@ import {
 	Terminal as TerminalIcon,
 	Zap as ZapIcon,
 } from '@lucide/astro';
-import GitHubStars from '../components/whispering/GitHubStars.astro';
-import MicrophoneHero from '../components/whispering/MicrophoneHero.svelte';
-import OSDetector from '../components/whispering/OSDetector.svelte';
+import AppPageHeader from '../components/ecosystem/AppPageHeader.astro';
+import AppSwitcher from '../components/ecosystem/AppSwitcher.astro';
+import { getApp } from '../lib/apps';
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const app = getApp('whispering')!;
+const year = new Date().getFullYear();
+const releasesUrl = 'https://github.com/EpicenterHQ/epicenter/releases/latest';
+const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
+const discordUrl = 'https://go.epicenter.so/discord';
+const webUrl = 'https://whispering.epicenter.so';
 
 const features = [
 	{
-		icon: ZapIcon,
-		title: 'Multiple Providers',
-		description:
-			'Choose between cloud (Groq, OpenAI) or local (Speaches) models',
+		icon: MicIcon,
+		title: 'Hold a key, speak',
+		description: 'A shortcut from anywhere on your system. Release, and the words type themselves at your cursor.',
 	},
 	{
-		icon: MicIcon,
-		title: 'Keyboard Shortcuts',
-		description: 'Press shortcut, speak, get text anywhere on your system',
+		icon: ZapIcon,
+		title: 'Your choice of engine',
+		description: 'Fast and cheap in the cloud (Groq, OpenAI, ElevenLabs) or fully local and offline with Speaches.',
 	},
 	{
 		icon: LightbulbIcon,
-		title: 'AI Processing',
-		description: 'Format text, fix grammar, create custom workflows',
+		title: 'Clean up as you go',
+		description: 'Optional AI steps fix grammar, reformat, or run a custom workflow on what you just said.',
 	},
 	{
 		icon: LockIcon,
-		title: 'Privacy First',
-		description: 'Local storage, direct provider APIs, no middleman servers',
+		title: 'No middleman',
+		description: 'Audio goes straight to the provider on your own API key, or never leaves your machine at all.',
 	},
 ];
 
-const pricingData = [
-	{
-		provider: 'Groq (Distil)',
-		perHour: '$0.02',
-		lightUse: '$0.20/month',
-		heavyUse: '$1.80/month',
-		subscription: '$10-30/month',
-		highlight: false,
-	},
-	{
-		provider: 'Groq (Large)',
-		perHour: '$0.04',
-		lightUse: '$0.40/month',
-		heavyUse: '$3.60/month',
-		subscription: '$10-30/month',
-		highlight: false,
-	},
-	{
-		provider: 'Local (Speaches)',
-		perHour: '$0.00',
-		lightUse: 'Free',
-		heavyUse: 'Free',
-		subscription: '$10-30/month',
-		highlight: false,
-	},
-];
-
-const faqItems = [
-	{
-		question: 'How is this different from other transcription apps?',
-		answer:
-			"We're one of the few truly open source transcription apps with this level of polish. Unlike closed-source alternatives, you get complete transparency: see exactly where your audio goes, audit the code, and maintain full control. No middleman servers collecting your data—your audio goes directly to providers using your API keys, or stays completely local with Speaches. You own the tool, not rent access to it.",
-	},
-	{
-		question: 'Can I use it completely free?',
-		answer:
-			"Absolutely! You have multiple free options: Use Speaches for completely local transcription (no internet, no API keys, completely private), use Groq's generous free tier (multiple hours of transcription daily), or bring your own API key. Many users never pay anything. The app itself is free and open source forever.",
-	},
-	{
-		question: 'Is my data secure?',
-		answer:
-			'Absolutely. Your recordings stay on your device. When using cloud providers, audio goes directly to them using your API key. When using local models, everything stays on your machine. No middleman servers, no data collection, no vendor lock-in.',
-	},
-	{
-		question: 'Which providers are supported?',
-		answer:
-			'For cloud: Groq (fastest and cheapest), OpenAI Whisper, and ElevenLabs. For local: Speaches runs completely offline. You choose based on your needs—speed or privacy. More providers are added based on community feedback.',
-	},
-	{
-		question: 'Is Whispering suitable for long recordings?',
-		answer:
-			'Whispering is optimized for quick transcriptions with keyboard shortcuts. For extended recording sessions, we recommend using a dedicated recording app first, then processing the audio with Whispering.',
-	},
+const pricing = [
+	{ provider: 'Groq (Distil)', perHour: '$0.02', light: '$0.20/mo', heavy: '$1.80/mo' },
+	{ provider: 'Groq (Large)', perHour: '$0.04', light: '$0.40/mo', heavy: '$3.60/mo' },
+	{ provider: 'Local (Speaches)', perHour: '$0.00', light: 'Free', heavy: 'Free' },
 ];
 
 const downloads = [
+	{ platform: 'macOS', icon: AppleIcon, primary: { label: 'Apple Silicon', url: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg` }, secondary: { label: 'Intel', url: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64.dmg` } },
+	{ platform: 'Windows', icon: MonitorIcon, primary: { label: 'Download .msi', url: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64_en-US.msi` } },
+	{ platform: 'Linux', icon: TerminalIcon, primary: { label: 'View releases', url: releasesUrl } },
+	{ platform: 'Web app', icon: GlobeIcon, primary: { label: 'Open in browser', url: webUrl } },
+];
+
+const faq = [
 	{
-		platform: 'macOS',
-		description: 'Native app for all Macs',
-		icon: AppleIcon,
-		isMacOS: true,
-		appleSiliconUrl: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_aarch64.dmg`,
-		intelUrl: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64.dmg`,
+		q: 'Can I use it completely free?',
+		a: 'Yes. Run Speaches for fully local transcription with no internet and no API keys, or use a provider\'s free tier. Many people never pay anything, and the app itself is free and open source forever.',
 	},
 	{
-		platform: 'Windows',
-		description: 'Windows 10/11',
-		icon: MonitorIcon,
-		url: `https://github.com/EpicenterHQ/epicenter/releases/download/v${VERSION}/Whispering_${VERSION}_x64_en-US.msi`,
-		extension: '.msi',
+		q: 'Where does my audio go?',
+		a: 'Local models keep everything on your machine. Cloud models send audio straight to the provider using your own API key. There is no Whispering server in the middle collecting anything.',
 	},
 	{
-		platform: 'Linux',
-		description: 'All distributions',
-		icon: TerminalIcon,
-		url: 'https://github.com/EpicenterHQ/epicenter/releases',
-		extension: 'View Releases',
-		isReleases: true,
+		q: 'How is this different from other transcription apps?',
+		a: 'Most are closed-source and charge a subscription on top of the provider cost. Whispering is open source: read the code, trace your data, and pay providers directly at cost.',
 	},
 	{
-		platform: 'Web App',
-		description: 'Try in your browser',
-		icon: GlobeIcon,
-		url: 'https://whispering.epicenter.so',
-		extension: 'Try Now',
-		isWebApp: true,
+		q: 'Which providers are supported?',
+		a: 'Cloud: Groq (fastest and cheapest), OpenAI Whisper, and ElevenLabs. Local: Speaches, fully offline. More are added based on what people ask for.',
 	},
 ];
 ---
 
 <BaseLayout
-	title="Whispering - Open Source Transcription"
-	description="Truly open source transcription you control. Local or cloud, always transparent. No middleman markup."
+	title="Whispering: talk instead of type"
+	description="Whispering is a free, open-source speech-to-text app. Hold a key, speak, and the words land wherever your cursor is. Everything you capture saves as a plain file in a folder you own. macOS, Windows, and Linux."
 >
-	<main>
-		<!-- Hero Section -->
-		<section class="grid-hero pt-12 pb-20 lg:pb-32 relative overflow-hidden">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 hero-content">
-				<div class="text-center max-w-5xl mx-auto">
-					<!-- Microphone Animation -->
-					<MicrophoneHero client:load />
+	<Fragment slot="head">
+		<Font cssVariable="--font-fraunces" preload />
+	</Fragment>
 
-					<!-- Headlines -->
-					<div class="mb-10 lg:mb-12 animate-fade-up space-y-4 lg:space-y-6">
-						<!-- Headline -->
-						<h1
-							class="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight"
-						>
-							Transparent transcription, truly yours
-						</h1>
+	<main class="page">
+		<AppSwitcher />
 
-						<!-- Subheading -->
-						<p
-							class="text-lg sm:text-xl lg:text-2xl font-medium text-foreground/85 max-w-3xl mx-auto"
-						>
-							Open-source transcription you actually own. No black boxes.
-						</p>
+		<AppPageHeader app={app}>
+			<Fragment slot="action">
+				<a class="cta cta-solid" data-download href={releasesUrl}>
+					Download Whispering, free
+				</a>
+				<a class="cta cta-quiet" href={webUrl}>Try it in your browser</a>
+				<p class="fineprint">Free and open source. macOS, Windows, and Linux.</p>
+			</Fragment>
+		</AppPageHeader>
 
-						<!-- Support line -->
-						<p
-							class="text-sm sm:text-base lg:text-lg text-foreground/65 max-w-2xl mx-auto"
-						>
-							See exactly where your audio goes. Local or cloud, always
-							transparent.
+		<!-- The capture demo: speak on the left, a file lands on the right -->
+		<section>
+			<div class="mx-auto max-w-3xl px-6 pb-24 md:pb-28">
+				<figure class="cap reveal w-full">
+					<div class="cap-panel cap-mic">
+						<div class="cap-rec"><span class="cap-dot"></span> Listening</div>
+						<p class="cap-text" data-typed>
+							Just left the office, traffic is slow on the bridge. I should be
+							there by seven.
 						</p>
 					</div>
-
-					<!-- CTA Buttons -->
-					<div
-						class="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up px-4 sm:px-0"
-					>
-						<!-- Primary CTA -->
-						<OSDetector client:load />
-
-						<!-- Secondary CTA -->
-						<Button
-							href="https://whispering.epicenter.so"
-							target="_blank"
-							variant="outline"
-							size="lg"
-							class="w-full sm:w-auto min-w-[200px] min-h-[48px] font-semibold"
-						>
-							<ExternalLinkIcon class="w-5 h-5 mr-2" />
-							Try Whispering Web Version
-						</Button>
+					<div class="cap-arrow" aria-hidden="true">&#8594;</div>
+					<div class="cap-panel demo-window">
+						<div class="demo-titlebar">
+							<span class="demo-dot"></span><span class="demo-dot"></span
+							><span class="demo-dot"></span>
+							<span class="demo-title">my-brain</span>
+						</div>
+						<div class="ns-tree">
+							<div class="ns-row"><FolderIcon /> whispering/</div>
+							<div class="ns-row i1 ns-file cap-file">
+								<FileTextIcon /> standup.md
+							</div>
+						</div>
 					</div>
+				</figure>
+				<p class="cap-caption mono-caption mt-6 text-center">
+					Hold your shortcut and speak.
+				</p>
+			</div>
+		</section>
 
-					<!-- Setup Guide Link -->
-					<div class="mt-6 text-center animate-fade-in">
-						<a
-							href="https://www.youtube.com/watch?v=1jYgBMrfVZs"
-							class="inline-flex items-center text-sm text-foreground/65 hover:text-foreground transition-colors group"
-						>
-							Watch 5-minute setup guide
-							<ArrowRightIcon
-								class="w-3 h-3 ml-1 group-hover:translate-x-0.5 transition-transform"
-							/>
-						</a>
+		<!-- It types into whatever app you're in -->
+		<section class="band">
+			<div class="mx-auto max-w-4xl px-6 py-24 text-center md:py-32">
+				<p class="eyebrow reveal">Works where you already work</p>
+				<h2 class="font-display reveal mt-4 text-balance">
+					It types into whatever app you're in.
+				</h2>
+				<p class="sub reveal mx-auto mt-6 max-w-2xl">
+					No special window, no copy-paste. Hold your shortcut, talk, and the
+					words land at your cursor: email, docs, chat, your editor.
+				</p>
+				<figure class="reveal mx-auto mt-12 w-full max-w-xl text-left">
+					<div class="demo-window">
+						<div class="demo-titlebar">
+							<span class="demo-dot"></span><span class="demo-dot"></span
+							><span class="demo-dot"></span>
+							<span class="demo-title">New Message</span>
+						</div>
+						<div class="demo-field"><span>To:</span> Sam</div>
+						<div class="demo-field"><span>Subject:</span> Running late</div>
+						<p class="demo-body" data-typed>
+							Just left the office, traffic is slow on the bridge. I should be
+							there by seven. Want me to grab dinner on the way?
+						</p>
+						<div class="demo-hint">
+							<span class="demo-mic"></span>
+							<span
+								>Hold your shortcut and talk. Release, and the words type
+								themselves.</span
+							>
+						</div>
+					</div>
+					<figcaption class="fineprint mt-3 text-center">
+						Simulated. It works the same in any text field.
+					</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<!-- Why: no black box -->
+		<section>
+			<div class="mx-auto max-w-4xl px-6 py-24 md:py-32">
+				<div class="grid items-center gap-12 lg:grid-cols-2">
+					<div>
+						<h2 class="font-display reveal text-balance">
+							Transcription without the black box.
+						</h2>
+						<p class="sub reveal mt-6">
+							Most transcription apps are closed-source and charge a monthly
+							markup on top of the real cost. Whispering is open: see the code,
+							trace your data, and pay providers directly.
+						</p>
+						<ul class="why-list reveal mt-8">
+							<li><CheckIcon /> Use your own API keys</li>
+							<li><CheckIcon /> Pay providers directly, at cost</li>
+							<li><CheckIcon /> Or run fully local, for free</li>
+						</ul>
+					</div>
+					<div class="cost-card reveal">
+						<div class="cost-big font-display">$0&ndash;5</div>
+						<div class="cost-unit">per month, typical use</div>
+						<div class="cost-was">instead of $10&ndash;30/mo for a subscription</div>
 					</div>
 				</div>
 			</div>
+		</section>
 
-			<!-- Floating GitHub Star Button -->
+		<!-- Features -->
+		<section class="band">
+			<div class="mx-auto max-w-5xl px-6 py-24 md:py-32">
+				<h2 class="font-display reveal text-center text-balance">
+					Everything you need, nothing you don't.
+				</h2>
+				<div class="grid reveal mt-12 gap-5 sm:grid-cols-2">
+					{
+						features.map((f) => {
+							const Icon = f.icon;
+							return (
+								<div class="feature">
+									<span class="feature-icon"><Icon /></span>
+									<h3 class="font-display feature-title">{f.title}</h3>
+									<p class="feature-desc">{f.description}</p>
+								</div>
+							);
+						})
+					}
+				</div>
+			</div>
+		</section>
+
+		<!-- Pricing -->
+		<section id="pricing">
+			<div class="mx-auto max-w-3xl px-6 py-24 text-center md:py-32">
+				<p class="eyebrow reveal">How is it free?</p>
+				<h2 class="font-display reveal mt-4 text-balance">
+					You pay the engine, not us.
+				</h2>
+				<p class="sub reveal mx-auto mt-6 max-w-2xl">
+					The app is free and open source. If you use a cloud model, you pay that
+					provider directly, usually cents per hour. If you use a local model, you
+					pay nothing at all.
+				</p>
+				<div class="price-card reveal mt-10 text-left">
+					<table class="price-table">
+						<thead>
+							<tr><th>Provider</th><th>Per hour</th><th>Light use</th><th>Heavy use</th></tr>
+						</thead>
+						<tbody>
+							{
+								pricing.map((row) => (
+									<tr>
+										<td>{row.provider}</td>
+										<td class="price-strong">{row.perHour}</td>
+										<td>{row.light}</td>
+										<td>{row.heavy}</td>
+									</tr>
+								))
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</section>
+
+		<!-- Sync (moved off root): optional, self-host or hosted -->
+		<section class="band">
+			<div class="mx-auto max-w-3xl px-6 py-24 text-center md:py-32">
+				<p class="eyebrow reveal">Sync, when you want it</p>
+				<h2 class="font-display reveal mt-4 text-balance">
+					Your folder on every device.
+				</h2>
+				<p class="sub reveal mx-auto mt-6 max-w-2xl">
+					Sync is optional and off by default. Turn it on and your folder appears
+					on every device, encrypted so only you can read it. The sync server is
+					open source, so you can run it yourself and hold your own keys, or let
+					us run it for you.
+				</p>
+				<p class="reveal mt-8">
+					<a class="cta cta-outline" href={githubUrl}>Self-host the sync server</a>
+				</p>
+			</div>
+		</section>
+
+		<!-- Download -->
+		<section id="download">
+			<div class="mx-auto max-w-5xl px-6 py-24 md:py-32">
+				<h2 class="font-display reveal text-center text-balance">
+					Download Whispering.
+				</h2>
+				<p class="sub reveal mx-auto mt-5 max-w-xl text-center">
+					Free, open source, and ready tonight.
+				</p>
+				<div class="grid reveal mt-12 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+					{
+						downloads.map((d) => {
+							const Icon = d.icon;
+							return (
+								<div class="dl">
+									<span class="dl-icon"><Icon /></span>
+									<h3 class="font-display dl-name">{d.platform}</h3>
+									<a class="cta cta-solid dl-cta" href={d.primary.url}>
+										{d.primary.label}
+									</a>
+									{d.secondary && (
+										<a class="dl-secondary" href={d.secondary.url}>
+											{d.secondary.label}
+										</a>
+									)}
+								</div>
+							);
+						})
+					}
+				</div>
+				<p class="fineprint mt-10 text-center">
+					Version {VERSION} &middot; about 22MB &middot;
+					<a class="nav-link" href={releasesUrl}>all releases</a>
+				</p>
+			</div>
+		</section>
+
+		<!-- FAQ -->
+		<section class="band">
+			<div class="mx-auto max-w-3xl px-6 py-24 md:py-32">
+				<h2 class="font-display reveal text-center text-balance">
+					Common questions.
+				</h2>
+				<div class="reveal mt-12 flex flex-col gap-3">
+					{
+						faq.map((item) => (
+							<details class="faq">
+								<summary>{item.q}</summary>
+								<p>{item.a}</p>
+							</details>
+						))
+					}
+				</div>
+			</div>
+		</section>
+
+		<footer class="band footer-band">
 			<div
-				id="floating-github-button"
-				class="fixed top-4 right-4 z-50 transition-all duration-300"
+				class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-12 text-sm md:flex-row"
 			>
-				<Button
-					href="https://github.com/EpicenterHQ/epicenter"
-					target="_blank"
-					variant="secondary"
-					size="sm"
-					class="github-star-button bg-background/90 backdrop-blur-md hover:bg-background border shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105 lg:min-w-[140px]"
-				>
-					<GithubIcon
-						class="github-icon w-4 h-4 lg:mr-2 transition-all duration-300"
-					/>
-					<span
-						class="github-text hidden lg:inline transition-opacity duration-300"
-						>Star us on GitHub</span
-					>
-					<GitHubStars />
-				</Button>
-			</div>
-		</section>
-
-		<!-- Video Demo Section -->
-		<section class="py-24 bg-background">
-			<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="text-center mb-16 space-y-4 animate-on-scroll">
-					<h2 class="text-3xl lg:text-4xl font-bold tracking-tight">Demo</h2>
-					<p class="text-lg text-foreground/70 max-w-2xl mx-auto">
-						Complete setup guide in 5 minutes
-					</p>
-				</div>
-
-				<div class="max-w-4xl mx-auto">
-					<div
-						class="aspect-video bg-muted rounded-xl overflow-hidden shadow-lg transform transition-all duration-300 hover:scale-[1.01] hover:shadow-xl cursor-pointer"
-					>
-						<iframe
-							src="https://www.youtube.com/embed/1jYgBMrfVZs?controls=1&showinfo=0&rel=0&modestbranding=1&color=white"
-							title="Whispering Setup Guide"
-							allow="
-								accelerometer;
-								autoplay;
-								clipboard-write;
-								encrypted-media;
-								gyroscope;
-								picture-in-picture;
-							"
-							allowfullscreen
-							class="w-full h-full border-0"
-						> </iframe>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		<!-- Value Proposition -->
-		<section class="py-24 bg-muted/50">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-					<div class="space-y-8">
-						<div class="space-y-6">
-							<h2
-								class="text-3xl lg:text-4xl font-bold leading-tight tracking-tight"
-							>
-								Transcription without the black box
-							</h2>
-							<p class="text-lg text-foreground/70 leading-relaxed">
-								Most transcription apps are closed-source mysteries charging
-								10-100x markup. Whispering is truly open: see the code, trace
-								your data, pay providers directly.
-							</p>
-						</div>
-
-						<div class="space-y-4">
-							<div class="flex items-center space-x-4">
-								<div
-									class="w-6 h-6 bg-muted rounded-full flex items-center justify-center shrink-0"
-								>
-									<CheckIcon class="w-4 h-4 text-foreground" />
-								</div>
-								<span class="text-lg font-medium">Use your own API keys</span>
-							</div>
-							<div class="flex items-center space-x-4">
-								<div
-									class="w-6 h-6 bg-muted rounded-full flex items-center justify-center shrink-0"
-								>
-									<CheckIcon class="w-4 h-4 text-foreground" />
-								</div>
-								<span class="text-lg font-medium">Pay providers directly</span>
-							</div>
-							<div class="flex items-center space-x-4">
-								<div
-									class="w-6 h-6 bg-muted rounded-full flex items-center justify-center shrink-0"
-								>
-									<CheckIcon class="w-4 h-4 text-foreground" />
-								</div>
-								<span class="text-lg font-medium">Save up to 90% on costs</span>
-							</div>
-						</div>
-					</div>
-
-					<Card.Root
-						class="p-8 lg:p-10 hover:shadow-lg transition-all duration-300 animate-on-scroll border-0 shadow-sm"
-					>
-						<div class="text-center space-y-6">
-							<div class="space-y-2">
-								<div class="text-4xl lg:text-5xl font-bold counter-animation">
-									$0-5
-								</div>
-								<div class="text-foreground/70 text-base">per month</div>
-								<div class="text-sm text-foreground/50 line-through">
-									Instead of $10-30/month
-								</div>
-							</div>
-							<div class="bg-muted border border-border rounded-lg p-4">
-								<div class="text-foreground font-medium text-base mb-1">
-									Save $120-360/year
-								</div>
-								<div class="text-foreground/70 text-sm">
-									Based on typical usage
-								</div>
-							</div>
-						</div>
-					</Card.Root>
-				</div>
-			</div>
-		</section>
-
-		<!-- Features Section -->
-		<section id="features" class="py-24 bg-background">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="text-center mb-20 space-y-6">
-					<h2 class="text-3xl lg:text-5xl font-bold">Everything you need</h2>
-					<p class="text-xl text-foreground/75 max-w-3xl mx-auto">
-						Everything you need in transcription software you actually own
-					</p>
-				</div>
-
-				<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-					{features.map((feature, index) => {
-							const Icon = feature.icon;
-							return (
-								<Card.Root
-									class={`group stagger-item cursor-default text-center transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg stagger-delay-${index} border-0 shadow-sm`}
-								>
-									<Card.Header>
-										<div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 transition-colors duration-300 group-hover:bg-primary/20">
-											<Icon class="h-8 w-8 text-primary transition-transform duration-300 group-hover:scale-110" />
-										</div>
-										<Card.Title class="text-xl transition-colors duration-300 group-hover:text-primary">
-											{feature.title}
-										</Card.Title>
-									</Card.Header>
-									<Card.Content>
-										<Card.Description class="leading-relaxed">
-											{feature.description}
-										</Card.Description>
-									</Card.Content>
-								</Card.Root>
-							);
-						})}
-				</div>
-			</div>
-		</section>
-
-		<!-- Pricing Section -->
-		<section id="pricing" class="py-24 bg-muted/50">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="text-center mb-16 space-y-6">
-					<h2 class="text-3xl lg:text-5xl font-bold">Transparent pricing</h2>
-					<p class="text-xl text-foreground/75 max-w-3xl mx-auto">
-						Start local for free, scale to cloud at cost. No middleman markup.
-					</p>
-				</div>
-
-				<Card.Root
-					class="max-w-6xl mx-auto overflow-hidden hover:shadow-lg transition-all duration-200 border-0 shadow-sm"
-				>
-					<div class="overflow-x-auto">
-						<table class="w-full">
-							<thead class="bg-muted">
-								<tr>
-									<th class="px-6 py-5 text-left font-semibold text-base">
-										Provider
-									</th>
-									<th class="px-6 py-5 text-left font-semibold text-base">
-										Per Hour
-									</th>
-									<th class="px-6 py-5 text-left font-semibold text-base">
-										Light Use
-									</th>
-									<th class="px-6 py-5 text-left font-semibold text-base">
-										Heavy Use
-									</th>
-									<th class="px-6 py-5 text-left font-semibold text-base">
-										Subscription
-									</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-border">
-								{pricingData.map((row) => (
-										<tr
-											class="hover:bg-muted/50"
-											style="transition: all 0.2s ease"
-										>
-											<td class="px-6 py-5 font-medium">{row.provider}</td>
-											<td class="px-6 py-5 font-bold text-2xl">
-												{row.perHour}
-											</td>
-											<td class="px-6 py-5 text-foreground/75">
-												{row.lightUse}
-											</td>
-											<td class="px-6 py-5 text-foreground/75">
-												{row.heavyUse}
-											</td>
-											<td class="px-6 py-5 text-foreground/60 line-through">
-												{row.subscription}
-											</td>
-										</tr>
-									))}
-							</tbody>
-						</table>
-					</div>
-				</Card.Root>
-			</div>
-		</section>
-
-		<!-- Download Section -->
-		<section id="download" class="py-24 bg-background">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="text-center mb-16 space-y-6">
-					<h2 class="text-3xl lg:text-5xl font-bold">
-						Download for all platforms
-					</h2>
-					<p class="text-xl text-foreground/75 max-w-3xl mx-auto">
-						Native desktop application with cross-platform support
-					</p>
-				</div>
-
-				<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-					{downloads.map((download, index) => {
-							const Icon = download.icon;
-							return (
-								<Card.Root
-									class={`group stagger-item text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg stagger-delay-${index} border-0 shadow-sm`}
-								>
-									<Card.Header>
-										<div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 transition-all duration-300 group-hover:rotate-3 group-hover:bg-primary/20">
-											<Icon class="h-8 w-8 text-primary transition-transform duration-300 group-hover:scale-110" />
-										</div>
-										<Card.Title class="text-xl transition-colors duration-300 group-hover:text-primary">
-											{download.platform}
-										</Card.Title>
-										<Card.Description>{download.description}</Card.Description>
-									</Card.Header>
-									<Card.Content>
-										{download.isMacOS ? (
-											<div class="space-y-2">
-												<Button
-													href={download.appleSiliconUrl}
-													class="min-h-[40px] w-full transition-shadow duration-300 group-hover:shadow-md"
-													size="sm"
-												>
-													<DownloadIcon class="mr-1.5 h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-y-0.5" />
-													Apple Silicon
-												</Button>
-												<Button
-													href={download.intelUrl}
-													variant="secondary"
-													class="min-h-[40px] w-full transition-shadow duration-300 group-hover:shadow-md"
-													size="sm"
-												>
-													<DownloadIcon class="mr-1.5 h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-y-0.5" />
-													Intel
-												</Button>
-											</div>
-										) : download.isWebApp ? (
-											<Button
-												href={download.url}
-												variant="secondary"
-												class="min-h-[44px] w-full transition-shadow duration-300 group-hover:shadow-md"
-											>
-												<ExternalLinkIcon class="mr-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-12" />
-												{download.extension}
-											</Button>
-										) : download.isReleases ? (
-											<Button
-												href={download.url}
-												variant="outline"
-												class="min-h-[44px] w-full transition-shadow duration-300 group-hover:shadow-md"
-											>
-												<ExternalLinkIcon class="mr-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-12" />
-												{download.extension}
-											</Button>
-										) : (
-											<Button
-												href={download.url}
-												class="min-h-[44px] w-full transition-shadow duration-300 group-hover:shadow-md"
-											>
-												<DownloadIcon class="mr-2 h-4 w-4 transition-transform duration-300 group-hover:translate-y-1" />
-												Download {download.extension}
-											</Button>
-										)}
-									</Card.Content>
-								</Card.Root>
-							);
-						})}
-				</div>
-
-				<!-- Version info -->
-				<div class="text-center mt-12">
-					<Card.Root class="inline-block border-0 shadow-sm">
-						<Card.Content class="px-6 py-4">
-							<div
-								class="flex flex-wrap items-center justify-center gap-4 lg:gap-6 text-foreground/70"
-							>
-								<span class="font-medium">Version {VERSION}</span>
-								<span class="hidden sm:inline">•</span>
-								<span>~22MB Install</span>
-								<span class="hidden sm:inline">•</span>
-								<a
-									href="https://www.youtube.com/watch?v=1jYgBMrfVZs"
-									class="text-primary hover:text-primary/80 font-medium transition-colors"
-								>
-									Setup Guide →
-								</a>
-							</div>
-						</Card.Content>
-					</Card.Root>
-				</div>
-			</div>
-		</section>
-
-		<!-- FAQ Section -->
-		<section class="py-24 bg-muted/50">
-			<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="text-center mb-16 space-y-4">
-					<h2 class="text-3xl lg:text-4xl font-bold tracking-tight">FAQ</h2>
-					<p class="text-lg text-foreground/70">
-						Common questions about Whispering
-					</p>
-				</div>
-
-				<div class="space-y-6">
-					{faqItems.map((item) => (
-							<Card.Root class="border-0 shadow-sm transition-all duration-200 hover:shadow-md">
-								<Card.Header>
-									<details class="group">
-										<summary class="flex cursor-pointer items-center justify-between font-semibold text-lg">
-											<span>{item.question}</span>
-											<ChevronDownIcon class="ml-4 h-5 w-5 shrink-0 text-foreground/60 transition-transform group-open:rotate-180" />
-										</summary>
-										<Card.Description class="mt-6 leading-relaxed">
-											{item.answer}
-										</Card.Description>
-									</details>
-								</Card.Header>
-							</Card.Root>
-						))}
-				</div>
-			</div>
-		</section>
-
-		<!-- Final CTA Section -->
-		<section class="py-24 bg-background">
-			<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-				<Card.Root
-					class="bg-primary text-primary-foreground p-12 lg:p-16 border-0 shadow-lg"
-				>
-					<div class="space-y-8">
-						<div class="space-y-4">
-							<h2 class="text-3xl lg:text-4xl font-bold tracking-tight">
-								Get started
-							</h2>
-							<p class="text-lg opacity-90 max-w-2xl mx-auto">
-								Free, open source transcription with your choice of providers
-							</p>
-						</div>
-
-						<div
-							class="flex flex-col sm:flex-row items-center justify-center gap-4"
-						>
-							<Button
-								href="https://github.com/EpicenterHQ/epicenter/releases"
-								size="lg"
-								variant="secondary"
-								class="min-w-[180px] min-h-[48px]"
-							>
-								<DownloadIcon class="w-4 h-4 mr-2" />
-								Download Now
-							</Button>
-							<Button
-								href="https://whispering.epicenter.so"
-								size="lg"
-								class="min-w-[180px] min-h-[48px] bg-white/10 border-2 border-white text-white hover:bg-white hover:text-primary"
-							>
-								<ExternalLinkIcon class="w-4 h-4 mr-2" />
-								Try Whispering on Web
-							</Button>
-						</div>
-
-						<div
-							class="flex flex-wrap items-center justify-center gap-6 lg:gap-8 opacity-80 pt-4"
-						>
-							<div class="flex items-center space-x-2">
-								<CheckIcon class="w-4 h-4" />
-								<span class="text-sm font-medium">No signup required</span>
-							</div>
-							<div class="flex items-center space-x-2">
-								<CheckIcon class="w-4 h-4" />
-								<span class="text-sm font-medium">Open-source</span>
-							</div>
-							<div class="flex items-center space-x-2">
-								<CheckIcon class="w-4 h-4" />
-								<span class="text-sm font-medium">Privacy first</span>
-							</div>
-						</div>
-					</div>
-				</Card.Root>
-			</div>
-		</section>
-
-		<!-- Footer -->
-		<footer class="bg-muted border-t">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-				<div class="text-center space-y-8">
-					<!-- Logo -->
-					<div class="flex items-center justify-center space-x-3">
-						<div class="text-2xl">🎙️</div>
-						<span class="text-xl font-semibold">Whispering</span>
-					</div>
-
-					<p class="text-foreground/75 max-w-md mx-auto">
-						Truly open source transcription. Built with ❤️ for transparency.
-					</p>
-
-					<!-- Open Source Info -->
-					<div class="flex flex-col items-center gap-4">
-						<a
-							href="https://github.com/EpicenterHQ/epicenter/tree/main/apps/whispering"
-							class="inline-flex items-center text-foreground/65 hover:text-foreground font-medium transition-colors group text-sm"
-						>
-							<GithubIcon
-								class="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform"
-							/>
-							View on GitHub
-							<GitHubStars />
-						</a>
-					</div>
-
-					<!-- Copyright -->
-					<div class="text-foreground/65 text-sm border-t pt-8">
-						© {new Date().getFullYear()} Whispering. AGPL-3.0 License. Built for
-						the open source community.
-					</div>
+				<p class="fineprint">
+					© {year} Epicenter. Open source under the AGPL-3.0 license.
+				</p>
+				<div class="flex flex-wrap justify-center gap-x-7 gap-y-3">
+					<a class="nav-link" href="/">Epicenter</a>
+					<a class="nav-link" href={app.repo}>Source</a>
+					<a class="nav-link" href={githubUrl}>GitHub</a>
+					<a class="nav-link" href={discordUrl}>Discord</a>
 				</div>
 			</div>
 		</footer>
 	</main>
 </BaseLayout>
 
-<script is:inline>
-	// Simple intersection observer for scroll animations
-	document.addEventListener('DOMContentLoaded', () => {
-		const observerOptions = {
-			threshold: 0.1,
-			rootMargin: '0px 0px -50px 0px',
+<script is:inline define:vars={{ version: VERSION }}>
+	document.addEventListener('astro:page-load', () => {
+		const motionOK = matchMedia(
+			'(prefers-reduced-motion: no-preference)',
+		).matches;
+
+		// OS-detected download. The static href already points at the releases
+		// page, so this only ever upgrades the link.
+		const ua = navigator.userAgent.toLowerCase();
+		const asset = (file) =>
+			`https://github.com/EpicenterHQ/epicenter/releases/download/v${version}/${file}`;
+		let downloadHref = null;
+		if (ua.includes('mac'))
+			downloadHref = asset(`Whispering_${version}_aarch64.dmg`);
+		else if (ua.includes('win'))
+			downloadHref = asset(`Whispering_${version}_x64_en-US.msi`);
+		if (downloadHref)
+			for (const a of document.querySelectorAll('a[data-download]'))
+				a.href = downloadHref;
+
+		// CSS hides animated elements; JS reveals them. Run fn once, when seen.
+		const inView = (el, fn, threshold = 0.15) => {
+			if (!el) return;
+			const io = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((e) => e.isIntersecting)) {
+						io.disconnect();
+						fn();
+					}
+				},
+				{ threshold },
+			);
+			io.observe(el);
 		};
 
-		const observer = new IntersectionObserver((entries) => {
-			entries.forEach((entry) => {
-				if (entry.isIntersecting) {
-					entry.target.classList.add('visible');
-				}
+		const reveal = (el, from, ms = 600) =>
+			el.animate([from, { opacity: 1, filter: 'none', transform: 'none' }], {
+				duration: ms,
+				easing: 'cubic-bezier(0.2, 0.6, 0.2, 1)',
+				fill: 'forwards',
 			});
-		}, observerOptions);
 
-		// Observe stagger items
-		document.querySelectorAll('.stagger-item').forEach((el) => {
-			observer.observe(el);
-		});
-
-		// Observe scroll animations
-		document.querySelectorAll('.animate-on-scroll').forEach((el) => {
-			observer.observe(el);
-		});
-
-		// Floating GitHub button scroll behavior
-		const floatingButton = document.getElementById('floating-github-button');
-		const button = floatingButton?.querySelector('.github-star-button');
-		const text = floatingButton?.querySelector('.github-text');
-		const icon = floatingButton?.querySelector('.github-icon');
-
-		if (floatingButton && button && text && icon) {
-			let lastScrollY = 0;
-			let ticking = false;
-
-			function updateButtonState() {
-				const scrollY = window.scrollY;
-				const isScrolled = scrollY > 100; // Start transition after 100px scroll
-
-				if (isScrolled) {
-					// Compact state
-					floatingButton.classList.add('scrolled');
-					button.classList.add('compact');
-					text.style.opacity = '0';
-					text.style.maxWidth = '0';
-					icon.classList.remove('lg:mr-2');
-					icon.classList.add('mr-0');
-					floatingButton.style.opacity = '0.85';
-				} else {
-					// Full state
-					floatingButton.classList.remove('scrolled');
-					button.classList.remove('compact');
-					text.style.opacity = '1';
-					text.style.maxWidth = '150px';
-					icon.classList.add('lg:mr-2');
-					icon.classList.remove('mr-0');
-					floatingButton.style.opacity = '1';
-				}
-
-				lastScrollY = scrollY;
-				ticking = false;
+		// Type a sentence into el, character by character.
+		const type = (el, done) => {
+			const text =
+				el.getAttribute('data-text') ||
+				el.textContent.trim().replace(/\s+/g, ' ');
+			el.setAttribute('data-text', text);
+			if (!motionOK) {
+				el.textContent = text;
+				done && done();
+				return;
 			}
-
-			function requestTick() {
-				if (!ticking) {
-					requestAnimationFrame(updateButtonState);
-					ticking = true;
+			el.classList.add('typing');
+			el.textContent = '';
+			let i = 0;
+			const tick = () => {
+				el.textContent = text.slice(0, (i += 1));
+				if (i < text.length) setTimeout(tick, 36 + Math.random() * 44);
+				else {
+					el.classList.remove('typing');
+					done && done();
 				}
-			}
+			};
+			tick();
+		};
 
-			window.addEventListener('scroll', requestTick, { passive: true });
+		for (const el of document.querySelectorAll('.reveal'))
+			inView(el, () =>
+				motionOK
+					? reveal(el, { opacity: 0, transform: 'translateY(16px)' })
+					: null,
+			);
 
-			// Initial state
-			updateButtonState();
+		// Capture demo: speak, and the words become a file you own.
+		const capText = document.querySelector('.cap-text[data-typed]');
+		if (capText) {
+			const file = document.querySelector('.cap-file');
+			const rec = document.querySelector('.cap-rec');
+			const caption = document.querySelector('.cap-caption');
+			inView(capText.closest('.cap'), () => {
+				if (motionOK && rec) rec.classList.add('on');
+				type(capText, () => {
+					rec && rec.classList.remove('on');
+					if (caption)
+						caption.textContent = 'Release. The words become a file you own.';
+					if (file && motionOK)
+						reveal(file, { opacity: 0, transform: 'translateX(-16px)' });
+				});
+			}, 0.4);
 		}
+
+		// Anywhere section: the email types itself when scrolled into view.
+		const email = document.querySelector('.demo-body[data-typed]');
+		if (email) inView(email, () => type(email), 0.4);
 	});
 </script>
 
 <style>
-	html {
-		scroll-behavior: smooth;
-	}
-
-	.glass-effect {
-		backdrop-filter: blur(20px);
-		background: rgba(255, 255, 255, 0.8);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-		transition: all 0.3s ease;
-	}
-
-	.grid-hero {
-		background-image:
-			linear-gradient(to right, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
-			linear-gradient(to bottom, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
-		background-size: 40px 40px;
-		position: relative;
-		min-height: 100vh;
-		display: flex;
+	/* Capture demo (speak -> file) */
+	.cap {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		gap: clamp(0.8rem, 3vw, 2rem);
 		align-items: center;
 	}
 
-	.grid-hero::before {
+	.cap-panel {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+	}
+
+	.cap-mic {
+		padding: 1.2rem 1.3rem;
+		box-shadow: 0 12px 32px rgb(38 34 26 / 8%);
+		text-align: left;
+	}
+
+	.cap-rec {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.78rem;
+		color: var(--ink-soft);
+		margin-bottom: 0.7rem;
+	}
+
+	.cap-dot {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--line);
+	}
+
+	.cap-rec.on .cap-dot {
+		background: var(--accent);
+		animation: pulse 1.4s ease-in-out infinite;
+	}
+
+	.cap-text {
+		font-size: 1rem;
+		line-height: 1.6;
+		min-height: 5rem;
+	}
+
+	.cap-arrow {
+		font-size: 1.7rem;
+		color: var(--ink-soft);
+	}
+
+	.cap-file {
+		background: rgb(188 63 29 / 7%);
+		border-radius: 5px;
+	}
+
+	@keyframes pulse {
+		50% {
+			opacity: 0.35;
+		}
+	}
+
+	/* Email demo */
+	.demo-field {
+		padding: 0.55rem 1.1rem;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.9rem;
+	}
+
+	.demo-field span {
+		color: var(--ink-soft);
+		margin-right: 0.35rem;
+	}
+
+	.demo-body {
+		padding: 1.1rem;
+		min-height: 6.5rem;
+		font-size: 1rem;
+		line-height: 1.6;
+	}
+
+	.demo-body.typing::after,
+	.cap-text.typing::after {
 		content: "";
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: radial-gradient(
-			ellipse at center,
-			transparent 0%,
-			transparent 40%,
-			rgba(248, 250, 252, 0.8) 70%,
-			rgba(248, 250, 252, 1) 100%
-		);
-		pointer-events: none;
-	}
-
-	.grid-hero::after {
-		content: "";
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: linear-gradient(
-			to bottom,
-			rgba(248, 250, 252, 0) 0%,
-			rgba(248, 250, 252, 0.1) 80%,
-			rgba(248, 250, 252, 1) 100%
-		);
-		pointer-events: none;
-	}
-
-	.hero-content {
-		position: relative;
-		z-index: 10;
-	}
-
-	.text-gradient {
-		background: linear-gradient(135deg, #0f172a, #334155);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
 		display: inline-block;
+		width: 2px;
+		height: 1em;
+		margin-left: 2px;
+		vertical-align: -0.15em;
+		background: var(--accent);
+		animation: blink 1s steps(1) infinite;
 	}
 
-	/* Navigation link hover effect - only for nav menu links */
-	nav a[href^="#"] {
-		position: relative;
-	}
-
-	nav a[href^="#"]::after {
-		content: "";
-		position: absolute;
-		bottom: 0;
-		left: 50%;
-		width: 0;
-		height: 2px;
-		background: currentColor;
-		transition: all 0.3s ease;
-		transform: translateX(-50%);
-	}
-
-	nav a[href^="#"]:hover::after {
-		width: 100%;
-	}
-
-	/* Button hover enhancements */
-	button,
-	a[href] {
-		transition: all 0.2s ease;
-	}
-
-	/* Feature card animations */
-	@keyframes fade-up {
-		from {
-			opacity: 0;
-			transform: translateY(20px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	@keyframes fade-in {
-		from {
+	@keyframes blink {
+		50% {
 			opacity: 0;
 		}
-		to {
-			opacity: 1;
-		}
 	}
 
-	@keyframes slide-in {
-		from {
-			opacity: 0;
-			transform: translateX(-20px);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(0);
-		}
+	.demo-hint {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.7rem 1.1rem;
+		border-top: 1px solid var(--line);
+		font-size: 0.8rem;
+		color: var(--ink-soft);
 	}
 
-	.animate-fade-up {
-		animation: fade-up 0.6s ease-out;
+	.demo-mic {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--accent);
+		animation: pulse 1.6s ease-in-out infinite;
 	}
 
-	.animate-fade-in {
-		animation: fade-in 0.8s ease-out;
+	/* Why list + cost card */
+	.why-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.8rem;
+		font-size: 1.05rem;
 	}
 
-	.animate-on-scroll {
-		opacity: 0;
-		transform: translateY(20px);
-		transition: all 0.6s ease-out;
+	.why-list li {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
 	}
 
-	.animate-on-scroll.visible {
-		opacity: 1;
-		transform: translateY(0);
+	.why-list :global(svg) {
+		width: 1.2rem;
+		height: 1.2rem;
+		color: var(--accent);
+		flex: none;
 	}
 
-	/* Stagger animation for cards */
-	.stagger-item {
-		opacity: 0;
-		transform: translateY(20px);
+	.cost-card {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 16px;
+		padding: 2.5rem;
+		text-align: center;
+		box-shadow: 0 12px 32px rgb(38 34 26 / 8%);
 	}
 
-	.stagger-item.visible {
-		animation: fade-up 0.6s ease-out forwards;
+	.cost-big {
+		font-size: 3.5rem;
+		font-weight: 600;
+		color: var(--accent-deep);
+		line-height: 1;
 	}
 
-	.stagger-item:nth-child(1) {
-		animation-delay: 0ms;
-	}
-	.stagger-item:nth-child(2) {
-		animation-delay: 100ms;
-	}
-	.stagger-item:nth-child(3) {
-		animation-delay: 200ms;
-	}
-	.stagger-item:nth-child(4) {
-		animation-delay: 300ms;
+	.cost-unit {
+		margin-top: 0.5rem;
+		color: var(--ink);
 	}
 
-	/* FAQ smooth transitions */
-	details summary {
-		cursor: pointer;
-		transition: color 0.2s ease;
+	.cost-was {
+		margin-top: 0.75rem;
+		font-size: 0.9rem;
+		color: var(--ink-soft);
+		text-decoration: line-through;
 	}
 
-	details summary:hover {
-		color: var(--primary);
+	/* Features */
+	.feature {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 16px;
+		padding: 1.6rem;
 	}
 
-	details[open] summary svg {
-		transition: transform 0.3s ease;
+	.feature-icon :global(svg) {
+		width: 1.6rem;
+		height: 1.6rem;
+		color: var(--accent);
 	}
 
-	/* Counter animation */
-	@keyframes count-up {
-		from {
-			opacity: 0;
-			transform: scale(0.8);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
+	.feature-title {
+		margin-top: 0.8rem;
+		font-size: 1.25rem;
+		font-weight: 600;
 	}
 
-	.counter-animation {
-		animation: count-up 0.6s ease-out;
+	.feature-desc {
+		margin-top: 0.5rem;
+		color: var(--ink-soft);
+		line-height: 1.55;
 	}
 
-	/* Floating GitHub button styles */
-	.github-text {
-		transition: all 0.3s ease;
+	/* Pricing table */
+	.price-card {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 16px;
 		overflow: hidden;
-		white-space: nowrap;
-		max-width: 150px;
 	}
 
-	.github-star-button.compact {
-		min-width: auto;
-		padding: 0.5rem;
+	.price-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.95rem;
 	}
 
-	#floating-github-button.scrolled {
-		transform: scale(0.9);
+	.price-table th {
+		text-align: left;
+		padding: 1rem 1.2rem;
+		background: var(--paper-deep);
+		font-weight: 600;
+		font-size: 0.85rem;
 	}
 
-	.github-icon {
-		flex-shrink: 0;
+	.price-table td {
+		padding: 1rem 1.2rem;
+		border-top: 1px solid var(--line);
+		color: var(--ink-soft);
 	}
 
-	/* Ensure smooth transitions on mobile */
-	@media (max-width: 1023px) {
-		.github-text {
-			display: none;
+	.price-strong {
+		color: var(--ink);
+		font-weight: 600;
+		font-size: 1.05rem;
+	}
+
+	/* Downloads */
+	.dl {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.6rem;
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 16px;
+		padding: 1.6rem 1.2rem;
+		text-align: center;
+	}
+
+	.dl-icon :global(svg) {
+		width: 1.8rem;
+		height: 1.8rem;
+		color: var(--accent);
+	}
+
+	.dl-name {
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+
+	.dl-cta {
+		margin-top: 0.4rem;
+		width: 100%;
+		padding: 0.7rem 1rem;
+		font-size: 0.9rem;
+	}
+
+	.dl-secondary {
+		font-size: 0.85rem;
+		color: var(--ink-soft);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.dl-secondary:hover {
+		color: var(--ink);
+	}
+
+	/* FAQ */
+	.faq {
+		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 1.1rem 1.3rem;
+	}
+
+	.faq summary {
+		cursor: pointer;
+		font-weight: 600;
+		list-style: none;
+	}
+
+	.faq summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.faq p {
+		margin-top: 0.8rem;
+		color: var(--ink-soft);
+		line-height: 1.6;
+	}
+
+	@media (max-width: 640px) {
+		.cap {
+			grid-template-columns: 1fr;
 		}
 
-		.github-star-button.compact {
-			padding: 0.4rem;
+		.cap-arrow {
+			transform: rotate(90deg);
+			justify-self: center;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.demo-mic,
+		.cap-rec.on .cap-dot {
+			animation: none;
 		}
 	}
 </style>

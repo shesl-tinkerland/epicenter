@@ -1,0 +1,318 @@
+/* Shared landing surface styles. The warm-paper visual language used by the
+   ecosystem root and every app page, so they read as one site. Class-based and
+   scoped under .page so the blog (which has no .page wrapper) is untouched.
+   Tokens come from theme.css. */
+
+.page {
+	background: var(--paper);
+	color: var(--ink);
+}
+
+.font-display {
+	font-family: var(--font-fraunces, Georgia, serif);
+}
+
+.page h1 {
+	font-size: clamp(2.8rem, 8vw, 5.25rem);
+	font-weight: 600;
+	line-height: 1.03;
+	letter-spacing: -0.02em;
+}
+
+.page h2 {
+	font-size: clamp(2.1rem, 5.5vw, 3.5rem);
+	font-weight: 550;
+	line-height: 1.08;
+	letter-spacing: -0.015em;
+}
+
+.sub {
+	font-size: clamp(1.05rem, 2vw, 1.25rem);
+	line-height: 1.65;
+	color: var(--ink-soft);
+}
+
+.eyebrow {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.8rem;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.fineprint {
+	font-size: 0.85rem;
+	color: var(--ink-soft);
+}
+
+.mono-caption {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.85rem;
+	color: var(--ink-soft);
+}
+
+.band {
+	background: var(--paper-deep);
+	border-top: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+}
+
+.footer-band {
+	border-bottom: none;
+}
+
+.nav-link {
+	color: var(--ink-soft);
+	text-decoration: none;
+	transition: color 150ms ease;
+}
+
+.nav-link:hover {
+	color: var(--ink);
+}
+
+/* CTAs */
+.cta {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	padding: 0.9rem 1.9rem;
+	font-size: 1rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition:
+		transform 150ms ease,
+		box-shadow 150ms ease,
+		background-color 150ms ease,
+		color 150ms ease;
+}
+
+.cta-solid {
+	background: var(--accent);
+	color: var(--paper);
+	box-shadow: 0 2px 0 var(--accent-deep);
+}
+
+.cta-solid:hover {
+	background: var(--accent-deep);
+	transform: translateY(-1px);
+	box-shadow: 0 3px 0 var(--accent-deep);
+}
+
+.cta-solid:active {
+	transform: translateY(1px);
+	box-shadow: none;
+}
+
+.cta-quiet {
+	color: var(--ink);
+	text-decoration: underline;
+	text-underline-offset: 4px;
+	text-decoration-color: var(--accent);
+}
+
+.cta-quiet:hover {
+	color: var(--accent);
+}
+
+.cta-outline {
+	border: 1.5px solid var(--accent);
+	color: var(--accent-deep);
+}
+
+.cta-outline:hover {
+	background: var(--accent);
+	color: var(--paper);
+}
+
+/* Hero load stagger: pure CSS, runs with or without JS */
+.hero-step {
+	opacity: 0;
+	animation: rise 0.7s ease-out forwards;
+	animation-delay: calc(var(--step) * 110ms);
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Finder-style window (folder + demos) */
+.demo-window {
+	background: #fffdf8;
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	box-shadow:
+		0 1px 2px rgb(38 34 26 / 6%),
+		0 12px 32px rgb(38 34 26 / 8%);
+	overflow: hidden;
+}
+
+.demo-titlebar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0.7rem 1rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.demo-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--line);
+}
+
+.demo-title {
+	margin-left: 0.5rem;
+	font-size: 0.8rem;
+	color: var(--ink-soft);
+}
+
+/* Folder tree */
+.ns-tree {
+	padding: 1.1rem 1.2rem;
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.85rem;
+}
+
+.ns-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.18rem 0;
+	color: var(--ink);
+}
+
+.ns-row svg {
+	width: 1em;
+	height: 1em;
+	color: var(--ink-soft);
+	flex: none;
+}
+
+.i1 {
+	padding-left: 1.3rem;
+}
+
+.i2 {
+	padding-left: 2.6rem;
+}
+
+.ns-file {
+	color: var(--ink-soft);
+}
+
+.ns-managed {
+	color: #8a8173;
+	font-size: 0.82rem;
+}
+
+.ns-managed svg {
+	color: #a09687;
+}
+
+.ns-caption {
+	min-height: 1.2em;
+}
+
+/* The export gag */
+.gag-btn {
+	font-size: clamp(1.6rem, 4.5vw, 2.6rem);
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: var(--ink);
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	border-radius: 18px;
+	padding: 1.3rem 2.8rem;
+	cursor: pointer;
+	box-shadow: 0 6px 0 var(--ink);
+	transition:
+		transform 120ms ease,
+		box-shadow 120ms ease,
+		color 200ms ease,
+		border-color 200ms ease;
+}
+
+.gag-btn:hover {
+	transform: translateY(2px);
+	box-shadow: 0 4px 0 var(--ink);
+}
+
+.gag-btn:active {
+	transform: translateY(6px);
+	box-shadow: 0 0 0 var(--ink);
+}
+
+.gag-btn.done {
+	color: var(--accent);
+	border-color: var(--accent);
+	box-shadow: 0 6px 0 var(--accent);
+	animation: stamp 350ms ease;
+}
+
+@keyframes stamp {
+	0% {
+		transform: scale(1.06) rotate(-1deg);
+	}
+	100% {
+		transform: scale(1) rotate(0);
+	}
+}
+
+/* Without JS the punchline prints below the button. With JS the click puts it
+   on the button itself, so the static line stays hidden. */
+.gag-fallback {
+	margin-top: 1rem;
+	font-size: 1.2rem;
+	font-style: italic;
+	color: var(--accent);
+}
+
+html.js .gag-fallback {
+	visibility: hidden;
+}
+
+/* Animated elements start hidden only when JS can reveal them and motion is
+   allowed. JS reveals each with the Web Animations API, whose forwards fill
+   outranks these rules. Without JS, or with reduced motion, all visible. */
+@media (prefers-reduced-motion: no-preference) {
+	html.js .reveal,
+	html.js .ns-tree [data-step],
+	html.js .cap-file {
+		opacity: 0;
+	}
+}
+
+/* The founder letter */
+.letter {
+	font-family: var(--font-fraunces, Georgia, serif);
+	font-size: 1.15rem;
+	line-height: 1.9;
+	color: var(--ink);
+}
+
+.letter p + p {
+	margin-top: 1.1rem;
+}
+
+.letter-sign {
+	font-style: italic;
+	font-size: 1.4rem;
+	margin-top: 1.6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hero-step {
+		animation: none;
+		opacity: 1;
+	}
+}

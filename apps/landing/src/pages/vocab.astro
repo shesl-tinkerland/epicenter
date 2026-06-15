@@ -1,0 +1,116 @@
+---
+import { Font } from 'astro:assets';
+import AppPageHeader from '../components/ecosystem/AppPageHeader.astro';
+import AppSwitcher from '../components/ecosystem/AppSwitcher.astro';
+import { getApp } from '../lib/apps';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const app = getApp('vocab')!;
+const year = new Date().getFullYear();
+const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
+const discordUrl = 'https://go.epicenter.so/discord';
+---
+
+<BaseLayout
+	title="Vocab: build your vocabulary, a word at a time"
+	description="Vocab is an Epicenter app in progress: a focused way to build your vocabulary in any language, saving every word you learn as ordinary files in a folder you own."
+>
+	<Fragment slot="head">
+		<Font cssVariable="--font-fraunces" preload />
+	</Fragment>
+
+	<main class="page">
+		<AppSwitcher />
+		<AppPageHeader app={app} />
+
+		<section class="mx-auto max-w-2xl px-6 pb-28 md:pb-36">
+			<div class="prose-body">
+				<p>
+					Vocab is a focused way to build your vocabulary in another language.
+					Meet a new word in conversation, save it, and let it come back to you
+					until it sticks.
+				</p>
+				<p>
+					It grows out of an early Chinese-English chat experiment in the repo,
+					reshaped around one job: turning the words you encounter into a
+					vocabulary you actually keep.
+				</p>
+				<p>
+					Like every Epicenter app, the words you learn land in a folder on your
+					computer as plain files, so your vocabulary is yours to keep, export,
+					or study with any other tool.
+				</p>
+				<p class="status-note">
+					It is still being built in the open. There is nothing to install yet.
+					Follow along while it takes shape.
+				</p>
+			</div>
+		</section>
+
+		<footer class="band footer-band">
+			<div
+				class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-12 text-sm md:flex-row"
+			>
+				<p class="fineprint">
+					© {year} Epicenter. Open source under the AGPL-3.0 license.
+				</p>
+				<div class="flex flex-wrap justify-center gap-x-7 gap-y-3">
+					<a class="nav-link" href={app.repo}>Source</a>
+					<a class="nav-link" href={githubUrl}>GitHub</a>
+					<a class="nav-link" href={discordUrl}>Discord</a>
+					<a class="nav-link" href="/blog">Blog</a>
+				</div>
+			</div>
+		</footer>
+	</main>
+</BaseLayout>
+
+<style>
+	.page {
+		background: var(--paper);
+		color: var(--ink);
+	}
+
+	:global(.font-display) {
+		font-family: var(--font-fraunces, Georgia, serif);
+	}
+
+	.prose-body {
+		font-size: 1.15rem;
+		line-height: 1.8;
+		color: var(--ink);
+	}
+
+	.prose-body p + p {
+		margin-top: 1.1rem;
+	}
+
+	.status-note {
+		margin-top: 1.6rem;
+		color: var(--ink-soft);
+	}
+
+	.band {
+		background: var(--paper-deep);
+		border-top: 1px solid var(--line);
+	}
+
+	.footer-band {
+		border-bottom: none;
+	}
+
+	.fineprint {
+		font-size: 0.85rem;
+		color: var(--ink-soft);
+	}
+
+	.nav-link {
+		color: var(--ink-soft);
+		text-decoration: none;
+		transition: color 150ms ease;
+	}
+
+	.nav-link:hover {
+		color: var(--ink);
+	}
+</style>

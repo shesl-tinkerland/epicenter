@@ -1,0 +1,111 @@
+---
+// The persistent ecosystem switcher. Looks and behaves like tabs: one row of
+// the apps plus the Epicenter home. Marked transition:persist so that, once
+// ClientRouter is enabled, the bar stays fixed while the page body cross-fades
+// between routes. Without view transitions it is a plain styled nav.
+import { APPS } from '../../lib/apps';
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const isActive = (href: string) =>
+	href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
+
+const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
+---
+
+<nav class="switch" transition:persist transition:name="app-switcher">
+	<div class="switch-inner mx-auto max-w-6xl">
+		<a href="/" class="brand font-display" aria-current={isActive('/') ? 'page' : undefined}>
+			Epicenter
+		</a>
+		<div class="tabs">
+			{
+				APPS.map((app) => (
+					<a
+						href={app.href}
+						class:list={['tab', { on: isActive(app.href) }]}
+						aria-current={isActive(app.href) ? 'page' : undefined}
+					>
+						{app.name}
+					</a>
+				))
+			}
+		</div>
+		<a class="ext" href={githubUrl}>GitHub</a>
+	</div>
+</nav>
+
+<style>
+	.switch {
+		position: sticky;
+		top: 0;
+		z-index: 50;
+		background: color-mix(in srgb, var(--paper) 88%, transparent);
+		backdrop-filter: blur(10px);
+		border-bottom: 1px solid var(--line);
+	}
+
+	.switch-inner {
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		padding: 0.7rem 1.5rem;
+	}
+
+	.brand {
+		font-size: 1.15rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--ink);
+		text-decoration: none;
+	}
+
+	.tabs {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-right: auto;
+		overflow-x: auto;
+	}
+
+	.tab {
+		padding: 0.4rem 0.85rem;
+		border-radius: 999px;
+		font-size: 0.9rem;
+		color: var(--ink-soft);
+		text-decoration: none;
+		white-space: nowrap;
+		transition:
+			color 140ms ease,
+			background-color 140ms ease;
+	}
+
+	.tab:hover {
+		color: var(--ink);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+
+	.tab.on {
+		color: var(--accent-deep);
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		font-weight: 600;
+	}
+
+	.ext {
+		font-size: 0.9rem;
+		color: var(--ink-soft);
+		text-decoration: none;
+	}
+
+	.ext:hover {
+		color: var(--ink);
+	}
+
+	@media (max-width: 640px) {
+		.brand {
+			display: none;
+		}
+		.ext {
+			display: none;
+		}
+	}
+</style>

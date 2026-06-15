@@ -1,0 +1,22 @@
+---
+// Resolves an app's icon name (from the registry) to a Lucide component, so
+// the registry stays plain data and consumers do not each import icons.
+import {
+	Languages as LanguagesIcon,
+	Mic as MicIcon,
+	NotebookPen as NotebookPenIcon,
+} from '@lucide/astro';
+import type { AppEntry } from '../../lib/apps';
+
+type Props = { name: AppEntry['icon']; class?: string };
+const { name, class: className } = Astro.props;
+
+const ICONS = {
+	mic: MicIcon,
+	'notebook-pen': NotebookPenIcon,
+	languages: LanguagesIcon,
+} as const;
+const Icon = ICONS[name];
+---
+
+<Icon class={className} />
