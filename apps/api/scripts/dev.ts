@@ -35,9 +35,9 @@ if (auth.exitCode !== 0 || !auth.stdout.toString().trim()) {
 const wrangler =
 	await Bun.$`infisical run --silent --env=dev --path=/api -- bun x wrangler dev --var ${`API_PUBLIC_ORIGIN:${localUrl(APPS.API)}`}`
 		.cwd(apiRoot)
-		// Dev narrows the public auth origin to localhost with Wrangler's --var
-		// override, derived from the same APPS source as the dashboard proxy and
-		// OAuth seed. Production bakes PRODUCTION_API_URL in worker/index.ts.
+		// Dev narrows the public auth origin to localhost. Required auth
+		// bindings, including GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, come
+		// from Infisical's dev environment through process.env.
 		.nothrow();
 
 process.exit(wrangler.exitCode);

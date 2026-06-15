@@ -71,7 +71,7 @@ Infisical injects `DATABASE_URL` (and any other secrets) before the command runs
 
 You might expect a parallel `dev:remote` that wraps `wrangler dev` with `infisical run`. There isn't one, by design. A development server pointing at production data is a category error: there's no use case for it that isn't better served by either (a) running real migrations against prod via `db:migrate:remote`, or (b) deploying.
 
-The bare `dev` script is the single sensible local workflow. It still requires Infisical login because the API needs dev secrets like API keys and the auth secret, but it never touches production data at runtime: Wrangler's Hyperdrive binding (`localConnectionString` from `wrangler.jsonc`) routes the connection to local Postgres. Required secrets come from the Infisical-spawned `process.env`, and the local public origin is passed with `wrangler dev --var API_PUBLIC_ORIGIN:http://localhost:8787`; no `.dev.vars` file is produced.
+The bare `dev` script is the single sensible local workflow. It still requires Infisical login because the API needs dev bindings like API keys, auth secrets, and the Google OAuth client id, but it never touches production data at runtime: Wrangler's Hyperdrive binding (`localConnectionString` from `wrangler.jsonc`) routes the connection to local Postgres. Required secrets come from the Infisical-spawned `process.env`, and the local public origin is passed with `wrangler dev --var API_PUBLIC_ORIGIN:http://localhost:8787`; no `.dev.vars` file is produced.
 
 ```json
 "dev": "bun scripts/dev.ts"

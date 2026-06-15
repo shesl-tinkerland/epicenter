@@ -28,7 +28,6 @@
 	// overrides it via `API_PUBLIC_ORIGIN` (apps/api/scripts/dev.ts). This keeps
 	// a single source of truth in TypeScript instead of a duplicated string.
 	"vars": {
-		"GOOGLE_CLIENT_ID": "702083743841-820rm0nhf9kslmvqcikecgkmku5agbbi.apps.googleusercontent.com",
 		"ADMIN_USER_IDS": ""
 	},
 	// --- KV: Session cache (Better Auth SecondaryStorage) ---
@@ -68,6 +67,10 @@
 			// encryption keys via HKDF. Format: "version:secret,version:secret" (e.g.
 			// "2:newBase64,1:oldBase64"). Generate each secret with: openssl rand -base64 32
 			"ENCRYPTION_SECRETS",
+			// GOOGLE_CLIENT_ID is public OAuth metadata, not a secret, but it is
+			// deployment-owned config. Keep it with the matching secret so local
+			// dev and production cannot accidentally share a checked-in client id.
+			"GOOGLE_CLIENT_ID",
 			"GOOGLE_CLIENT_SECRET",
 			// House AI keys are required here even though the library types them
 			// as optional bindings: hosted credits are billed against house-key
