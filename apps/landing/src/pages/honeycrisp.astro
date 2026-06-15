@@ -19,29 +19,91 @@ const app = getApp('honeycrisp')!;
 
 	<main class="page">
 		<AppSwitcher />
-		<AppPageHeader app={app} />
+		<AppPageHeader app={app}>
+			<Fragment slot="action">
+				<a class="cta cta-outline" href={app.repo}>See source and demo</a>
+			</Fragment>
+		</AppPageHeader>
 
-		<section class="mx-auto max-w-2xl px-6 pb-28 md:pb-36">
+		<section class="mx-auto grid max-w-6xl gap-12 px-6 pb-24 md:grid-cols-[0.95fr_1.05fr] md:items-center md:pb-32">
 			<div class="prose-body">
-				<p>
-					Honeycrisp is a notes app that works offline first and syncs when it
-					can. Write a note on your laptop, keep writing on your phone, and the
-					two come together without conflicts or a sync button to babysit.
+				<p class="eyebrow">In progress</p>
+				<h2 class="font-display mt-4">Write wherever you are. Keep the note as a file.</h2>
+				<p class="mt-6">
+					Honeycrisp is the notes app being built around the Epicenter folder.
+					Start meeting notes on your laptop, keep writing offline on another
+					device, and let the edits converge when sync comes back.
 				</p>
 				<p>
-					Like every Epicenter app, what you write lands in a folder on your
-					computer as plain files, so your notes are yours whether or not
-					Honeycrisp sticks around.
+					The important bit is not the app chrome. It is the output:
+					<code>honeycrisp/meeting-notes.md</code>, an ordinary file in a folder
+					you control.
 				</p>
 				<p class="status-note">
-					It is still being built in the open. There is nothing to install yet.
-					If the idea sounds right, watch it come together, or open two browser
-					tabs in the source and try the live demo.
+					Honeycrisp is not installable yet. The repo has the app code, rich-text
+					editor, note state, and browser runtime; today the honest link is the
+					source and demo.
 				</p>
+			</div>
+
+			<div class="honey-visual" aria-label="Two Honeycrisp note panes syncing into a Markdown file">
+				<div class="note-pane note-left">
+					<div class="note-top">
+						<span class="device-dot"></span>
+						<span>Laptop</span>
+					</div>
+					<p class="note-title">Meeting notes</p>
+					<p>Budget review</p>
+					<p>Owners for launch checklist</p>
+					<p class="writing-line">Next: sync plan</p>
+				</div>
+
+				<div class="note-pane note-right">
+					<div class="note-top">
+						<span class="device-dot"></span>
+						<span>Tablet offline</span>
+					</div>
+					<p class="note-title">Meeting notes</p>
+					<p>Questions for design review</p>
+					<p class="writing-line">Add screenshots before Friday</p>
+				</div>
+
+				<div class="sync-path" aria-hidden="true"></div>
+
+				<div class="file-card demo-window">
+					<div class="demo-titlebar">
+						<span class="demo-dot"></span><span class="demo-dot"></span
+						><span class="demo-dot"></span>
+						<span class="demo-title">my-brain</span>
+					</div>
+					<div class="file-body">
+						<p class="file-path">honeycrisp/meeting-notes.md</p>
+						<div class="file-line wide"></div>
+						<div class="file-line"></div>
+						<div class="file-line short"></div>
+					</div>
+				</div>
 			</div>
 		</section>
 
-		<AppFooter sourceHref={app.repo} />
+		<section class="band">
+			<div class="mx-auto grid max-w-5xl gap-8 px-6 py-16 md:grid-cols-3">
+				<div class="fact">
+					<p class="fact-label">Local first</p>
+					<p>Write without treating the network as the source of truth.</p>
+				</div>
+				<div class="fact">
+					<p class="fact-label">Sync later</p>
+					<p>Edits from two places converge instead of making you pick a copy.</p>
+				</div>
+				<div class="fact">
+					<p class="fact-label">Files stay</p>
+					<p>Notes materialize as Markdown in the folder you already own.</p>
+				</div>
+			</div>
+		</section>
+
+		<AppFooter sourceHref={app.repo} sourceLabel="Source and demo" />
 	</main>
 </BaseLayout>
 
@@ -52,12 +114,177 @@ const app = getApp('honeycrisp')!;
 		color: var(--ink);
 	}
 
+	.prose-body h2 {
+		font-size: clamp(2rem, 4vw, 3.1rem);
+		letter-spacing: 0;
+	}
+
 	.prose-body p + p {
 		margin-top: 1.1rem;
+	}
+
+	.prose-body code {
+		border: 1px solid var(--line);
+		border-radius: 0.35rem;
+		background: #fffdf8;
+		padding: 0.08rem 0.35rem;
+		font-size: 0.92em;
 	}
 
 	.status-note {
 		margin-top: 1.6rem;
 		color: var(--ink-soft);
+	}
+
+	.honey-visual {
+		position: relative;
+		min-height: 34rem;
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		background:
+			linear-gradient(135deg, rgb(255 253 248 / 92%), rgb(242 234 217 / 74%)),
+			radial-gradient(circle at 20% 20%, rgb(188 63 29 / 14%), transparent 32%);
+		box-shadow:
+			0 1px 2px rgb(38 34 26 / 6%),
+			0 24px 70px rgb(38 34 26 / 10%);
+		overflow: hidden;
+	}
+
+	.note-pane {
+		position: absolute;
+		width: min(17rem, 58%);
+		border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+		border-radius: 14px;
+		background: #fffdf8;
+		padding: 1rem;
+		box-shadow: 0 14px 34px rgb(38 34 26 / 10%);
+		font-size: 0.9rem;
+		line-height: 1.55;
+		color: var(--ink-soft);
+	}
+
+	.note-left {
+		top: 2.2rem;
+		left: 1.5rem;
+		transform: rotate(-2deg);
+	}
+
+	.note-right {
+		top: 7.5rem;
+		right: 1.4rem;
+		transform: rotate(2deg);
+	}
+
+	.note-top {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin-bottom: 0.8rem;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.72rem;
+		color: var(--ink-soft);
+		text-transform: uppercase;
+	}
+
+	.device-dot {
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 999px;
+		background: var(--accent);
+	}
+
+	.note-title {
+		margin-bottom: 0.75rem;
+		color: var(--ink);
+		font-weight: 650;
+		font-size: 1.05rem;
+	}
+
+	.writing-line {
+		color: var(--accent-deep);
+	}
+
+	.sync-path {
+		position: absolute;
+		left: 24%;
+		right: 24%;
+		top: 45%;
+		height: 2px;
+		background: linear-gradient(90deg, transparent, var(--accent), transparent);
+		opacity: 0.45;
+	}
+
+	.file-card {
+		position: absolute;
+		left: 50%;
+		bottom: 2rem;
+		width: min(24rem, calc(100% - 3rem));
+		transform: translateX(-50%);
+	}
+
+	.file-body {
+		padding: 1.2rem;
+	}
+
+	.file-path {
+		margin-bottom: 1rem;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.86rem;
+		color: var(--accent-deep);
+	}
+
+	.file-line {
+		height: 0.7rem;
+		width: 72%;
+		border-radius: 999px;
+		background: var(--line);
+		margin-top: 0.65rem;
+	}
+
+	.file-line.wide {
+		width: 92%;
+	}
+
+	.file-line.short {
+		width: 46%;
+	}
+
+	.fact {
+		font-size: 0.98rem;
+		line-height: 1.65;
+		color: var(--ink-soft);
+	}
+
+	.fact-label {
+		margin-bottom: 0.35rem;
+		font-family: var(--font-fraunces, Georgia, serif);
+		font-size: 1.25rem;
+		font-weight: 650;
+		color: var(--ink);
+	}
+
+	@media (max-width: 720px) {
+		.honey-visual {
+			min-height: 31rem;
+		}
+
+		.note-pane {
+			width: calc(100% - 3rem);
+		}
+
+		.note-left,
+		.note-right {
+			left: 1.5rem;
+			right: auto;
+			transform: none;
+		}
+
+		.note-right {
+			top: 9.6rem;
+		}
+
+		.sync-path {
+			display: none;
+		}
 	}
 </style>

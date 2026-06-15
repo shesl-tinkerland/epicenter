@@ -25,27 +25,52 @@ const app = getApp('vocab')!;
 			</Fragment>
 		</AppPageHeader>
 
-		<section class="mx-auto max-w-2xl px-6 pb-28 md:pb-36">
+		<section class="mx-auto grid max-w-5xl gap-10 px-6 pb-24 md:grid-cols-[1.05fr_0.95fr] md:items-center md:pb-32">
 			<div class="prose-body">
+				<p class="eyebrow">Planned</p>
+				<h2 class="font-display mt-4">A vocabulary trail from the words you actually meet.</h2>
 				<p>
-					Vocab is a focused way to build your vocabulary in another language.
-					Meet a new word in conversation, save it, and let it come back to you
-					until it sticks.
+					Vocab is a planned Epicenter app, not a product you can install.
+					The vision is simple: when a word shows up in conversation, save it
+					into a file you can keep studying from.
 				</p>
 				<p>
-					It grows out of an early Chinese-English chat experiment in the repo,
-					reshaped around one job: turning the words you encounter into a
-					vocabulary you actually keep.
+					The seed is Zhongwen, an early Chinese-English chat experiment in the
+					repo. Vocab would take that learning loop and make the durable object
+					smaller: one word, one note, one language folder.
 				</p>
 				<p>
-					Like every Epicenter app, the words you learn land in a folder on your
-					computer as plain files, so your vocabulary is yours to keep, export,
-					or study with any other tool.
+					Like the rest of Epicenter, the point is ownership. A word you learn
+					should become something you can grep, review, edit, or carry into
+					another tool.
 				</p>
 				<p class="status-note">
-					This is planned, not installable. The closest thing in the repo today
-					is the zhongwen experiment it will grow from.
+					There is no Vocab app code yet. The honest artifact today is the
+					Zhongwen experiment it may grow from.
 				</p>
+			</div>
+
+			<div class="vocab-card demo-window" aria-label="A conversation word saved into vocab/spanish.md">
+				<div class="demo-titlebar">
+					<span class="demo-dot"></span><span class="demo-dot"></span
+					><span class="demo-dot"></span>
+					<span class="demo-title">planned sketch</span>
+				</div>
+				<div class="vocab-body">
+					<div class="chat-bubble from-them">
+						<p>Nos vemos luego.</p>
+					</div>
+					<div class="word-chip">
+						<span>luego</span>
+						<small>later</small>
+					</div>
+					<div class="save-arrow" aria-hidden="true"></div>
+					<div class="vocab-file">
+						<p class="file-path">vocab/spanish.md</p>
+						<p><strong>luego</strong>: later</p>
+						<p class="muted">Heard in conversation</p>
+					</div>
+				</div>
 			</div>
 		</section>
 
@@ -60,12 +85,98 @@ const app = getApp('vocab')!;
 		color: var(--ink);
 	}
 
+	.prose-body h2 {
+		font-size: clamp(2rem, 4vw, 3rem);
+		letter-spacing: 0;
+	}
+
 	.prose-body p + p {
 		margin-top: 1.1rem;
 	}
 
 	.status-note {
 		margin-top: 1.6rem;
+		color: var(--ink-soft);
+	}
+
+	.vocab-card {
+		max-width: 28rem;
+		margin-inline: auto;
+		opacity: 0.96;
+	}
+
+	.vocab-body {
+		padding: 1.3rem;
+		background:
+			linear-gradient(180deg, #fffdf8, rgb(250 245 236 / 86%)),
+			radial-gradient(circle at 80% 12%, rgb(188 63 29 / 10%), transparent 34%);
+	}
+
+	.chat-bubble {
+		width: fit-content;
+		max-width: 100%;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		background: var(--paper);
+		padding: 0.8rem 0.95rem;
+		color: var(--ink);
+		font-size: 0.95rem;
+		line-height: 1.5;
+	}
+
+	.from-them {
+		margin-left: auto;
+	}
+
+	.word-chip {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		width: 11rem;
+		margin: 1rem auto 0;
+		border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+		border-radius: 999px;
+		background: #fffdf8;
+		padding: 0.5rem 0.8rem;
+		color: var(--accent-deep);
+		box-shadow: 0 8px 22px rgb(38 34 26 / 8%);
+	}
+
+	.word-chip span {
+		font-weight: 700;
+	}
+
+	.word-chip small {
+		color: var(--ink-soft);
+	}
+
+	.save-arrow {
+		width: 2px;
+		height: 2.1rem;
+		margin: 0.75rem auto;
+		background: linear-gradient(180deg, var(--accent), transparent);
+		opacity: 0.55;
+	}
+
+	.vocab-file {
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: #fffdf8;
+		padding: 1rem;
+		font-size: 0.92rem;
+		line-height: 1.55;
+		color: var(--ink);
+	}
+
+	.file-path {
+		margin-bottom: 0.75rem;
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 0.8rem;
+		color: var(--accent-deep);
+	}
+
+	.muted {
 		color: var(--ink-soft);
 	}
 </style>

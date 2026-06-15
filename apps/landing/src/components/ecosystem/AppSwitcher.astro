@@ -14,7 +14,12 @@ const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
 
 <nav class="switch" transition:persist transition:name="app-switcher">
 	<div class="switch-inner mx-auto max-w-6xl">
-		<a href="/" class="brand font-display" aria-current={isActive('/') ? 'page' : undefined}>
+		<a
+			href="/"
+			class="brand font-display"
+			data-switch-home
+			aria-current={isActive('/') ? 'page' : undefined}
+		>
 			Epicenter
 		</a>
 		<div class="tabs">
@@ -22,6 +27,7 @@ const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
 				APPS.map((app) => (
 					<a
 						href={app.href}
+						data-switch-link
 						class:list={['tab', { on: isActive(app.href) }]}
 						aria-current={isActive(app.href) ? 'page' : undefined}
 					>
@@ -121,3 +127,33 @@ const githubUrl = 'https://github.com/EpicenterHQ/epicenter';
 		}
 	}
 </style>
+
+<script>
+	const syncSwitcher = () => {
+		const path = location.pathname.replace(/\/$/, '') || '/';
+		const home = document.querySelector<HTMLAnchorElement>('[data-switch-home]');
+		if (home) {
+			if (path === '/') {
+				home.setAttribute('aria-current', 'page');
+			} else {
+				home.removeAttribute('aria-current');
+			}
+		}
+
+		for (const link of Array.from(
+			document.querySelectorAll<HTMLAnchorElement>('[data-switch-link]'),
+		)) {
+			const href = link.getAttribute('href') ?? '';
+			const active =
+				href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
+			link.classList.toggle('on', active);
+			if (active) {
+				link.setAttribute('aria-current', 'page');
+			} else {
+				link.removeAttribute('aria-current');
+			}
+		}
+	};
+
+	document.addEventListener('astro:page-load', syncSwitcher);
+</script>
