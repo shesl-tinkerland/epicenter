@@ -4,6 +4,7 @@ import {
 	type TranscriptionProviderEntry,
 } from '$lib/services/transcription/provider-ui';
 import { deviceConfig } from '$lib/state/device-config.svelte';
+import { secrets } from '$lib/state/secrets.svelte';
 import { settings } from '$lib/state/settings.svelte';
 
 function hasValue(value: string) {
@@ -38,19 +39,23 @@ export function getSelectedTranscriptionService():
 }
 
 /**
- * Checks if a transcription service has all required configuration. The
- * required key is the provider's own config key (apiKey / endpoint / model),
- * read straight from its registry entry.
+ * Whether a transcription service is usable right now. The required key is the
+ * provider's own config key (apiKey / endpoint / model), read from its registry
+ * entry. A cloud provider's key is a secret read through the credential facade,
+ * so "usable" means `available`: both `missing` and `locked` return false (a
+ * locked vault holds the key but cannot hand it over). The locked case is
+ * differentiated only in {@link getTranscriptionReadiness}'s message, not as
+ * a separate "configured" state, since every caller of this asks "can I use it".
  *
  * @param service - The transcription service to check
- * @returns true if the service is properly configured, false otherwise
+ * @returns true if the service is usable, false otherwise
  */
 export function isTranscriptionServiceConfigured(
 	service: TranscriptionProviderEntry,
 ): boolean {
 	switch (service.location) {
 		case 'cloud':
-			return hasValue(deviceConfig.get(service.apiKeyConfigKey));
+			return secrets.get(service.apiKeyConfigKey).status === 'available';
 		case 'self-hosted':
 			return (
 				hasValue(deviceConfig.get(service.endpointConfigKey)) &&
@@ -59,6 +64,19 @@ export function isTranscriptionServiceConfigured(
 		case 'local':
 			return hasValue(deviceConfig.get(service.modelConfigKey));
 	}
+}
+
+/**
+ * Whether a cloud service is unusable because its key sits in a locked vault
+ * rather than being unset. Only cloud keys are secrets; self-hosted and local
+ * config lives on the device and is never locked. Drives the "configured but
+ * locked" readiness message, telling the user to unlock rather than to add a key.
+ */
+function isCloudSecretLocked(service: TranscriptionProviderEntry): boolean {
+	return (
+		service.location === 'cloud' &&
+		secrets.get(service.apiKeyConfigKey).status === 'locked'
+	);
 }
 
 export type TranscriptionReadiness = {
@@ -100,13 +118,15 @@ export function getTranscriptionReadiness(): TranscriptionReadiness {
 	}
 
 	if (!isRuntimeConfigured) {
-		const primaryIssue = (
-			{
-				cloud: `Add your ${service.label} API key.`,
-				'self-hosted': `Set your ${service.label} endpoint and model ID.`,
-				local: `Download or select a ${service.label} model.`,
-			} as const
-		)[service.location];
+		const primaryIssue = isCloudSecretLocked(service)
+			? `Unlock your secret vault to use ${service.label}.`
+			: (
+					{
+						cloud: `Add your ${service.label} API key.`,
+						'self-hosted': `Set your ${service.label} endpoint and model ID.`,
+						local: `Download or select a ${service.label} model.`,
+					} as const
+				)[service.location];
 
 		return {
 			service,

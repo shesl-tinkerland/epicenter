@@ -8,8 +8,12 @@ import {
 import { Err, isErr, Ok, type Result } from 'wellcrafted/result';
 import type { InferenceProviderId } from '$lib/constants/inference';
 import { services } from '$lib/services';
-import type { DeviceConfigKey } from '$lib/state/device-config.svelte';
+import type {
+	DeviceConfigKey,
+	SecretKey,
+} from '$lib/state/device-config.svelte';
 import { deviceConfig } from '$lib/state/device-config.svelte';
+import { secrets } from '$lib/state/secrets.svelte';
 import { transformationRuns } from '$lib/state/transformation-runs.svelte';
 import { transformationHasWork } from '$lib/state/transformations.svelte';
 import { asTemplateString, interpolateTemplate } from '$lib/utils/template';
@@ -72,7 +76,8 @@ const COMPLETION_PROVIDERS = {
 				baseUrl?: string;
 			}) => Promise<Result<string, { message: string }>>;
 		};
-		apiKeyConfigKey: DeviceConfigKey;
+		/** The provider's API key: a secret, routed through `secrets.get`. */
+		apiKeyConfigKey: SecretKey;
 		/** Device config key for the endpoint; null when not configurable. */
 		endpointConfigKey: DeviceConfigKey | null;
 	}
@@ -85,7 +90,7 @@ const COMPLETION_PROVIDERS = {
  * use your own key.
  */
 export function getProviderConfigKeys(provider: InferenceProviderId): {
-	apiKeyConfigKey: DeviceConfigKey;
+	apiKeyConfigKey: SecretKey;
 	endpointConfigKey: DeviceConfigKey | null;
 } {
 	const { apiKeyConfigKey, endpointConfigKey } = COMPLETION_PROVIDERS[provider];
@@ -128,7 +133,7 @@ function applyReplacements(
  * then call the prompt's backend with its model. Keys, model names, and URLs are
  * pasted strings, so trim once here: a trailing space fails the request opaquely.
  */
-function runPrompt(
+async function runPrompt(
 	input: string,
 	prompt: TransformationPrompt,
 ): Promise<Result<string, { message: string }>> {
@@ -143,8 +148,25 @@ function runPrompt(
 
 	const config = COMPLETION_PROVIDERS[prompt.inferenceProvider];
 
+	// The API key is a secret: read it from the credential facade, which routes to
+	// the device or the (locked) vault. A missing or locked key is a user-actionable
+	// failure raised here, before the provider runs with a blank key. `locked` is
+	// unreachable until the vault sync UI ships (wave 6); handled now so this call
+	// site already covers every read state.
+	const apiKey = secrets.get(config.apiKeyConfigKey);
+	if (apiKey.status === 'missing') {
+		return Err({
+			message: `Add your ${prompt.inferenceProvider} API key in settings.`,
+		});
+	}
+	if (apiKey.status === 'locked') {
+		return Err({
+			message: `Unlock your secret vault to use ${prompt.inferenceProvider}.`,
+		});
+	}
+
 	return config.service.complete({
-		apiKey: deviceConfig.get(config.apiKeyConfigKey).trim(),
+		apiKey: apiKey.value.trim(),
 		model: prompt.model.trim(),
 		baseUrl: config.endpointConfigKey
 			? deviceConfig.get(config.endpointConfigKey).trim() || undefined

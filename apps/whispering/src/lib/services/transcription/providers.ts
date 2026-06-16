@@ -16,7 +16,10 @@
  * join live in `./provider-ui.ts` (icons being the one field heavy enough to
  * pollute that import).
  */
-import type { DeviceConfigKey } from '$lib/state/device-config.svelte';
+import type {
+	DeviceConfigKey,
+	SecretKey,
+} from '$lib/state/device-config.svelte';
 
 type Capabilities = { supportsPrompt: boolean; supportsLanguage: boolean };
 type CloudModel = { name: string; description: string; cost: string };
@@ -28,7 +31,12 @@ type CloudProvider = {
 	capabilities: Capabilities;
 	models: readonly CloudModel[];
 	defaultModel: string;
-	apiKeyConfigKey: DeviceConfigKey;
+	/**
+	 * The provider's API key: a secret, so it routes through the credential
+	 * facade (`secrets.get`), not raw `deviceConfig`. `SecretKey` (not the wider
+	 * `DeviceConfigKey`) makes that structural, per ADR 0004.
+	 */
+	apiKeyConfigKey: SecretKey;
 	/**
 	 * The settings key holding this provider's model selection. Constrained to
 	 * the leaf shape `transcription.${string}.model`, not a precise union of the
