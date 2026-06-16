@@ -14,7 +14,7 @@
  */
 
 import type { SignedIn } from '@epicenter/svelte/auth';
-import type { DeviceId } from '@epicenter/workspace';
+import type { NodeId } from '@epicenter/workspace';
 import { zhongwenWorkspace } from './zhongwen.js';
 
 /**
@@ -23,10 +23,10 @@ import { zhongwenWorkspace } from './zhongwen.js';
  */
 export function openZhongwenBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
-	return zhongwenWorkspace.connect({ ...signedIn, deviceId });
+	return zhongwenWorkspace.connect({ ...signedIn, nodeId });
 }

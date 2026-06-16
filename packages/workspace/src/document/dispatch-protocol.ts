@@ -46,7 +46,7 @@ function ResultSchema<T extends TSchema, E extends TSchema>(t: T, e: E) {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Caller -> relay: route this call to device `to`, correlated by `id`.
+ * Caller -> relay: route this call to node `to`, correlated by `id`.
  *
  * `input` is optional on the wire because `JSON.stringify` drops `undefined`,
  * so no-input actions arrive without the field. The schema matches that

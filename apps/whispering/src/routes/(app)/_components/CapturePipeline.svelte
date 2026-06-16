@@ -1,5 +1,4 @@
 <script lang="ts">
-	import * as ButtonGroup from '@epicenter/ui/button-group';
 	import type { Snippet } from 'svelte';
 
 	let {
@@ -9,12 +8,16 @@
 	} = $props();
 </script>
 
-<div class="flex w-full items-center justify-between gap-3">
-	<span class="text-xs font-medium text-muted-foreground/75">Pipeline</span>
-	<ButtonGroup.Root
-		aria-label="Capture pipeline"
-		class="rounded-md bg-muted/25 p-0.5"
-	>
-		{@render children()}
-	</ButtonGroup.Root>
+<!--
+	The capture controls: input device, transcription model, post-processing.
+	The model is the one setting people hunt for, so its selector renders as a
+	labeled pill that stretches between the two icon bookends; the device and
+	transformation stay compact icons (their labels live in hover tooltips).
+-->
+<div
+	class="flex w-full items-center gap-1.5"
+	role="group"
+	aria-label="Capture pipeline"
+>
+	{@render children()}
 </div>

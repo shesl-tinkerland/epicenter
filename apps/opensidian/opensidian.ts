@@ -10,7 +10,7 @@
  * schema.
  *
  * Composition lives elsewhere:
- *  - `apps/opensidian/opensidian.browser.ts` -> `openOpensidianBrowser({ signedIn, deviceId })`
+ *  - `apps/opensidian/opensidian.browser.ts` -> `openOpensidianBrowser({ signedIn, nodeId })`
  *  - `apps/opensidian/mount.ts`                      -> `opensidian()` mount factory
  */
 

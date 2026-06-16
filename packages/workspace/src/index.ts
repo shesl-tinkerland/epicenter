@@ -5,8 +5,8 @@
  * text, timeline, and an action registry to a `Y.Doc`, then wires the
  * result to IndexedDB persistence and WebSocket sync via
  * `openCollaboration`. `openCollaboration` also consumes the
- * server-owned presence channel and exposes the live-device surface
- * (`devices.list()`) plus socket-backed `dispatch()` for cross-device calls.
+ * server-owned presence channel and exposes the live-peer surface
+ * (`peers.list()`) plus socket-backed `dispatch()` for cross-node calls.
  *
  * @example
  * ```typescript
@@ -50,15 +50,15 @@ export {
 } from './shared/actions';
 
 // ════════════════════════════════════════════════════════════════════════════
-// DEVICE IDENTITY
+// NODE IDENTITY
 // ════════════════════════════════════════════════════════════════════════════
 
-export type { DeviceId } from './document/device-id.js';
+export type { NodeId } from './document/node-id.js';
 export {
-	asDeviceId,
-	createDeviceId,
-	createDeviceIdAsync,
-} from './document/device-id.js';
+	asNodeId,
+	createNodeId,
+	createNodeIdAsync,
+} from './document/node-id.js';
 
 // Daemon, config, and Epicenter-root surfaces are node-only (they resolve real
 // paths or sit on the mount contract) and ship from `@epicenter/workspace/node`
@@ -133,7 +133,7 @@ export {
 	type OpenWebSocketFn,
 	openCollaboration,
 } from './document/open-collaboration.js';
-export type { PresenceDevice } from './document/presence-protocol.js';
+export type { Peer } from './document/presence-protocol.js';
 export {
 	type BaseRow,
 	type InferTableRow,
@@ -148,7 +148,7 @@ export {
 } from './document/table.js';
 // Transport URL builder.
 //
-// `roomWsUrl({ baseURL, ownerId, guid, deviceId })` builds the WebSocket
+// `roomWsUrl({ baseURL, ownerId, guid, nodeId })` builds the WebSocket
 // URL for the partitioned `/api/owners/:ownerId/rooms/:roomId` endpoint. The
 // same single URL form is used in both personal and shared modes. Both browser
 // apps and the daemon use this one builder.

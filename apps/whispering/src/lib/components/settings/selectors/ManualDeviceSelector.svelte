@@ -45,7 +45,7 @@
 				{...props}
 				tooltip={manualRecorderConfig.deviceId
 					? 'Change microphone'
-					: 'Select microphone'}
+					: 'Choose microphone'}
 				role="combobox"
 				aria-expanded={combobox.open}
 				variant="ghost"

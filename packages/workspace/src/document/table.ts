@@ -175,7 +175,7 @@ export type TableReadError = TableParseError | TableNewerWriterError;
  * Surfaced by `set()`. Whole-row writes stamp this binary's latest `_v` and
  * always win local LWW (the monotonic clock guarantees a fresh timestamp), so
  * a stale binary writing over a newer-owned row would silently destroy data on
- * every synced device. The guard refuses rows stamped by a newer schema
+ * every synced node. The guard refuses rows stamped by a newer schema
  * version ({@link TableNewerWriterError}).
  *
  * `bulkSet()` and `clear()` report the same refusals as

@@ -6,6 +6,7 @@
 	import { cn } from '@epicenter/ui/utils';
 	import CaptionsIcon from '@lucide/svelte/icons/captions';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import MicIcon from '@lucide/svelte/icons/mic';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -49,6 +50,29 @@
 			? !isSelectedServiceReady
 			: !!selectedService && !isSelectedServiceReady,
 	);
+
+	// The pipeline trigger surfaces the active model as text, so it reads at a
+	// glance instead of relying on a hover tooltip. Falls back to a prompt when
+	// nothing usable is configured.
+	const pipelineLabel = $derived(
+		selectedService ? selectedService.label : 'Choose model',
+	);
+
+	// The pipeline pill already shows the model name, so its tooltip describes the
+	// action (parallel with the mic and transformation triggers) rather than
+	// echoing the visible value. The standalone switcher keeps the value, since
+	// there it is the brand icon, not text, that is on screen.
+	const triggerTooltip = $derived.by(() => {
+		if (triggerVariant === 'pipeline') {
+			return selectedService
+				? 'Change transcription model'
+				: 'Choose transcription model';
+		}
+		if (!selectedService) return 'Select transcription service';
+		return selectedService.location === 'cloud'
+			? `${selectedService.label} - ${getSelectedModelNameOrUrl(selectedService)}`
+			: selectedService.label;
+	});
 
 	function getSelectedServiceId() {
 		return settings.get('transcription.service');
@@ -126,25 +150,33 @@
 		{#snippet child({ props })}
 			<Button
 				{...props}
-				class={cn('relative', className)}
-				tooltip={selectedService
-					? `${selectedService.label}${
-							selectedService.location === 'cloud'
-								? ` - ${getSelectedModelNameOrUrl(selectedService)}`
-								: ''
-						}`
-					: 'Select transcription service'}
+				class={cn(
+					'relative',
+					triggerVariant === 'pipeline' && 'min-w-0 flex-1 justify-start',
+					className,
+				)}
+				tooltip={triggerTooltip}
 				role="combobox"
 				aria-expanded={combobox.open}
 				variant="ghost"
-				size="icon"
+				size={triggerVariant === 'pipeline' ? 'default' : 'icon'}
 			>
 				{#if triggerVariant === 'pipeline'}
-					<CaptionsIcon
+					{#if selectedService}
+						{@render renderServiceIcon(selectedService)}
+					{:else}
+						<CaptionsIcon class="size-4 shrink-0 text-warning" />
+					{/if}
+					<span
 						class={cn(
-							'size-5',
-							isSelectedServiceReady ? 'text-green-500' : 'text-warning',
+							'truncate text-sm font-medium',
+							!isSelectedServiceReady && 'text-warning',
 						)}
+					>
+						{pipelineLabel}
+					</span>
+					<ChevronDownIcon
+						class="ml-auto size-3.5 shrink-0 text-muted-foreground/70"
 					/>
 				{:else if selectedService}
 					<div
@@ -160,7 +192,7 @@
 				{:else}
 					<MicIcon class="size-4 text-muted-foreground" />
 				{/if}
-				{#if showConfigurationWarning}
+				{#if showConfigurationWarning && triggerVariant === 'standalone'}
 					<span
 						class="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-warning before:absolute before:left-0 before:top-0 before:h-full before:w-full before:rounded-full before:bg-warning/50 before:animate-ping"
 					></span>

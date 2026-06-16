@@ -1,15 +1,15 @@
 /**
- * `epicenter peers`: live-device view of who's connected right now.
+ * `epicenter peers`: live-node view of who's connected right now.
  *
- * Shows the device id needed to target a peer with `run --peer`.
- * The relay carries only `deviceId` on the wire; product-level
+ * Shows the node id needed to target a peer with `run --peer`.
+ * The relay carries only `nodeId` on the wire; product-level
  * display names live in app-owned state and are out of scope here.
  *
  * `epicenter peers` requires a running daemon for the discovered Epicenter root.
  * Without `daemon up`, the handler errors with a hint pointing at
  * `epicenter daemon up`.
  *
- * Prints `no peers connected` to stderr when no peers are connected (text
+ * Prints `no peers connected` to stderr when every workspace is empty (text
  * mode only; JSON mode always emits a valid array, even if empty).
  */
 
@@ -51,18 +51,14 @@ function emit(rows: PeerSnapshot[], format: OutputFormat | undefined): void {
 		return;
 	}
 
-	const [first] = rows;
-	if (!first) {
+	if (rows.length === 0) {
 		console.error('no peers connected');
 		return;
 	}
 
-	// One daemon serves one mount, so every row shares its mount name: print it
-	// once as the canonical app identity, then the connected devices.
-	console.log(first.mount);
 	console.table(
 		rows
-			.map((snap) => ({ deviceId: snap.deviceId }))
-			.sort((a, b) => a.deviceId.localeCompare(b.deviceId)),
+			.map((snap) => ({ nodeId: snap.nodeId }))
+			.sort((a, b) => a.nodeId.localeCompare(b.nodeId)),
 	);
 }

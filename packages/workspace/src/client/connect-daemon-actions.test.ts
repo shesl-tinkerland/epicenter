@@ -29,7 +29,6 @@ describe('connectDaemonActions', () => {
 		let caught: unknown;
 		try {
 			await connectDaemonActions({
-				mount: 'demo',
 				epicenterRoot: root as EpicenterRoot,
 			});
 		} catch (err) {

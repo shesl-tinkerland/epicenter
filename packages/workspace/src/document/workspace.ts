@@ -252,7 +252,7 @@ export type ConnectedWorkspace<
  *
  * `actions` is required, not optional: a runtime builder is exactly where
  * browser-only actions get layered onto the base registry, and that returned
- * registry is the one collaboration serves for cross-device dispatch. Returning
+ * registry is the one collaboration serves for cross-node dispatch. Returning
  * `{ actions: workspace.actions }` (the base, unchanged) is the explicit way to
  * say "no new actions" — there is no implicit fallback to guess at.
  */
@@ -389,7 +389,7 @@ export function createWorkspace<
  *   connect(connection, compose) The browser preset plus a runtime layer. `compose`
  *                                runs after the doc and child docs are built but
  *                                before collaboration wires, so the action registry
- *                                it returns is the one served for cross-device
+ *                                it returns is the one served for cross-node
  *                                dispatch. That ordering is why `compose` is a
  *                                callback here, not a step you run after `connect()`.
  *

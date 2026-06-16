@@ -7,14 +7,14 @@
 	import { os } from '#platform/os';
 	import { tauri } from '#platform/tauri';
 	import { whispering } from '#platform/whispering';
-	import {
-		type DeviceConfigKey,
-		deviceConfig,
-	} from '$lib/state/device-config.svelte';
+	import type { Command } from '$lib/commands';
+	import { deviceConfig } from '$lib/state/device-config.svelte';
 	import type { KeyBinding } from '$lib/tauri/commands';
 	import { createPressedKeys } from '$lib/utils/createPressedKeys.svelte';
 	import { keyBindingToLabel } from '$lib/utils/key-binding';
 	import {
+		getGlobalShortcutKey,
+		getLocalShortcutKey,
 		resetGlobalShortcuts,
 		resetLocalShortcuts,
 	} from '$lib/operations/shortcuts';
@@ -43,17 +43,16 @@
 			});
 
 	/** The definition default for a local shortcut, formatted for display. */
-	function localDefault(commandId: string): string | null {
-		const getDefault = whispering.settings.getDefault as (
-			key: string,
-		) => unknown;
-		return (getDefault(`shortcut.${commandId}`) as string | null) ?? null;
+	function localDefault(commandId: Command['id']): string | null {
+		return whispering.settings.getDefault(getLocalShortcutKey(commandId)) ?? null;
 	}
 
 	/** The definition default for a global shortcut, formatted for display. */
-	function globalDefault(commandId: string): string | null {
+	function globalDefault(commandId: Command['id']): string | null {
+		// Stored bindings are validated as plain strings; the IPC `KeyBinding` types
+		// `keys` as the Rust `Key` vocabulary, so the cast bridges that boundary.
 		const binding = deviceConfig.getDefault(
-			`shortcuts.global.${commandId}` as DeviceConfigKey,
+			getGlobalShortcutKey(commandId),
 		) as KeyBinding | null;
 		return binding ? keyBindingToLabel(binding, os.isApple) : null;
 	}

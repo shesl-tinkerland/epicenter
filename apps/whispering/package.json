@@ -96,6 +96,7 @@
 		"typescript": "catalog:",
 		"vite": "catalog:",
 		"vite-plugin-devtools-json": "^1.0.0",
+		"vite-plugin-static-copy": "^4.1.1",
 		"wrangler": "catalog:"
 	},
 	"type": "module",

@@ -13,7 +13,7 @@
  * causality. The state vector grows with the count of distinct scripts
  * that mutate, not the count of invocations.
  *
- * Distinct from the wire-level `deviceId: string` the relay routes by:
+ * Distinct from the wire-level `nodeId: string` the relay routes by:
  * this is the Y.Doc CRDT identifier (a number Yjs stamps into every
  * update), not the WebSocket connection identity.
  *

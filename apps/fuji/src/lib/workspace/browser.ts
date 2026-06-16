@@ -14,17 +14,17 @@
  */
 
 import type { SignedIn } from '@epicenter/svelte/auth';
-import type { DeviceId } from '@epicenter/workspace';
+import type { NodeId } from '@epicenter/workspace';
 import { fujiWorkspace } from './index.js';
 
 export function openFujiBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
-	return fujiWorkspace.connect({ ...signedIn, deviceId });
+	return fujiWorkspace.connect({ ...signedIn, nodeId });
 }
 
 export type FujiBrowser = ReturnType<typeof openFujiBrowser>;

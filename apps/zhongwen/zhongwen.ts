@@ -12,7 +12,7 @@
  *
  * Composition lives elsewhere:
  *  - `apps/zhongwen/zhongwen.browser.ts`
- *      → `openZhongwenBrowser({ signedIn, deviceId })`
+ *      → `openZhongwenBrowser({ signedIn, nodeId })`
  *  - `apps/zhongwen/mount.ts` → `zhongwen()` mount factory
  */
 

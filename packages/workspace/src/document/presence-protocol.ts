@@ -1,13 +1,13 @@
 /**
- * Presence wire protocol: the relay-owned device list, plus the one frame the
- * device sends to publish its own manifest.
+ * Presence wire protocol: the relay-owned peer list, plus the one frame the
+ * node sends to publish its own manifest.
  *
  * The relay owns presence (its `connections` map is the source of truth) and
- * broadcasts the FULL device list on every membership or manifest change. The
+ * broadcasts the FULL peer list on every membership or manifest change. The
  * client stores the latest list verbatim: there is no delta protocol and no
  * client-side reassembly, the frame IS the state.
  *
- * The wire carries each device's full action manifest so the receiver can
+ * The wire carries each peer's full action manifest so the receiver can
  * render affordances, validate input schemas, or hand the manifest to an AI
  * tool layer with no second round trip. Manifests are opaque to the relay: it
  * stores and forwards them as bytes, never inspects their shape.
@@ -36,34 +36,34 @@ export const ActionManifestSchema = Type.Record(
 );
 
 /**
- * One device's entry on the wire.
+ * One peer's entry on the wire.
  *
- * `deviceId` routes dispatches; `connectedAt` lets receivers render an
- * "online since" affordance; `actions` is the device's published manifest, or
- * `{}` if the device has not (yet) published one.
+ * `nodeId` routes dispatches; `connectedAt` lets receivers render an
+ * "online since" affordance; `actions` is the peer's published manifest, or
+ * `{}` if the peer has not (yet) published one.
  */
-export const PresenceDeviceSchema = Type.Object({
-	deviceId: Type.String(),
+export const PeerSchema = Type.Object({
+	nodeId: Type.String(),
 	connectedAt: Type.Number(),
 	actions: ActionManifestSchema,
 });
-export type PresenceDevice = Static<typeof PresenceDeviceSchema>;
+export type Peer = Static<typeof PeerSchema>;
 
 /**
- * Server -> client: full set of currently-connected devices, pushed on every
- * membership or manifest change. `devices` always excludes the receiver's
+ * Server -> client: full set of currently-connected peers, pushed on every
+ * membership or manifest change. `peers` always excludes the receiver's
  * own install: the relay computes the list per-recipient so the client never
  * has to filter self.
  */
 export const PresenceFrameSchema = Type.Object({
 	type: Type.Literal('presence'),
-	devices: Type.Array(PresenceDeviceSchema),
+	peers: Type.Array(PeerSchema),
 });
 export type PresenceFrame = Static<typeof PresenceFrameSchema>;
 
 /**
- * Client -> server: publish this device's action manifest. The relay stores
- * the manifest against the sending socket's deviceId and rebroadcasts
+ * Client -> server: publish this node's action manifest. The relay stores
+ * the manifest against the sending socket's nodeId and rebroadcasts
  * presence so peers see the update. Sent once on connect; re-sent if the
  * local action registry changes.
  */
@@ -81,6 +81,6 @@ export const checkPresenceFrame = Compile(PresenceFrameSchema);
 
 /**
  * Pre-compiled validator for inbound `presence_publish` frames. Used by the
- * relay to validate device-supplied manifests before storing.
+ * relay to validate peer-supplied manifests before storing.
  */
 export const checkPresencePublishFrame = Compile(PresencePublishFrameSchema);

@@ -19,7 +19,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -72,6 +72,27 @@ function sessionMount(name: string): string {
 			? (${RUNTIME})
 			: ({ inactive: true, reason: 'sign in to enable ${name}' }),
 	}`;
+}
+
+/**
+ * A config whose mount writes its `ctx.nodeId` to `captured-node-id` so a
+ * test can assert the identity the runtime received without exporting it
+ * through the result.
+ */
+function captureNodeIdConfig(name: string): string {
+	return `import { writeFileSync } from 'node:fs';
+		import { join } from 'node:path';
+		export default {
+			name: '${name}',
+			open: (ctx) => {
+				writeFileSync(join(ctx.epicenterRoot, 'captured-node-id'), ctx.nodeId);
+				return ${RUNTIME};
+			},
+		};\n`;
+}
+
+function readCapturedNodeId(root: string): string {
+	return readFileSync(join(root, 'captured-node-id'), 'utf8');
 }
 
 describe('openEpicenterRoot', () => {
@@ -170,6 +191,40 @@ describe('openEpicenterRoot', () => {
 		expect(await Bun.file(join(epicenterRoot, '.epicenter')).exists()).toBe(
 			false,
 		);
+	});
+
+	test('hands the mount a durable node id, stable across reopen', async () => {
+		writeConfig(captureNodeIdConfig('alpha'));
+
+		expect(
+			(await openEpicenterRoot({ epicenterRoot, auth: null })).data?.status,
+		).toBe('started');
+		const first = readCapturedNodeId(epicenterRoot);
+		expect(first).toMatch(/^[a-z0-9]{16}$/);
+
+		// A second open (a daemon restart) reuses the persisted id.
+		expect(
+			(await openEpicenterRoot({ epicenterRoot, auth: null })).data?.status,
+		).toBe('started');
+		expect(readCapturedNodeId(epicenterRoot)).toBe(first);
+	});
+
+	test('gives two roots of the same app distinct node ids', async () => {
+		writeConfig(captureNodeIdConfig('alpha'));
+		await openEpicenterRoot({ epicenterRoot, auth: null });
+		const idA = readCapturedNodeId(epicenterRoot);
+
+		const otherRoot = mkdtempSync(join(tmpdir(), 'open-epicenter-root-'));
+		try {
+			writeFileSync(
+				join(otherRoot, 'epicenter.config.ts'),
+				captureNodeIdConfig('alpha'),
+			);
+			await openEpicenterRoot({ epicenterRoot: otherRoot, auth: null });
+			expect(readCapturedNodeId(otherRoot)).not.toBe(idA);
+		} finally {
+			rmSync(otherRoot, { recursive: true, force: true });
+		}
 	});
 
 	test('returns a structured claim error before opening the mount', async () => {

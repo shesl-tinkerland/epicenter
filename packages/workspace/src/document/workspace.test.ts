@@ -14,7 +14,7 @@ import { attachPlainText } from './attach-plain-text.js';
 import type { ConnectionConfig } from './connect-doc.js';
 import { defineKv } from './define-kv.js';
 import { defineTable } from './define-table.js';
-import { asDeviceId } from './device-id.js';
+import { asNodeId } from './node-id.js';
 import { createWorkspace, defineWorkspace } from './workspace.js';
 
 Object.assign(globalThis, { indexedDB, IDBKeyRange });
@@ -38,7 +38,7 @@ const connection: ConnectionConfig = {
 	ownerId: asOwnerId('owner-1'),
 	openWebSocket: fakeWebSocket,
 	onReconnectSignal: () => () => {},
-	deviceId: asDeviceId('device-1'),
+	nodeId: asNodeId('node-1'),
 };
 
 const notesDefinition = defineTable({
@@ -274,9 +274,9 @@ describe('defineWorkspace', () => {
 			// untouched.
 			workspace.tables.notes.update('note-1', { updatedAt: PAST });
 			const remote = new Y.Doc();
-			remote.getText('content').insert(0, 'from another device');
+			remote.getText('content').insert(0, 'from another node');
 			Y.applyUpdate(body.ydoc, Y.encodeStateAsUpdate(remote));
-			expect(body.read()).toContain('from another device');
+			expect(body.read()).toContain('from another node');
 			expect(workspace.tables.notes.get('note-1').data?.updatedAt).toBe(PAST);
 		} finally {
 			workspace[Symbol.dispose]();

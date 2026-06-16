@@ -1,20 +1,15 @@
 /**
  * Daemon-side handler for `/run`.
  *
- * A daemon serves the one mount its `epicenter.config.ts` declares. The action
- * path still carries that mount as its first segment (`<mount>.<action_key>`):
- * the mount name is the canonical app identity, stable across folder renames, so
- * a path stays self-describing wherever it is typed, logged, or copied. The
- * handler verifies the path's mount segment against the served mount, then picks
- * one of two execution targets by `peer`:
+ * One entry point, two execution targets selected by `peer`:
  *
  *   `peer` absent  -> local run: this daemon's action registry decides action
  *                     existence, then `invokeAction` executes the handler.
  *   `peer` present -> peer run: the recipient peer decides action existence,
  *                     and the relay owns reachability.
  *
- * Peer runs address devices by `deviceId` directly; the relay routes to the
- * most-recently-connected socket for that device. If the relay has no live
+ * Peer runs address nodes by `nodeId` directly; the relay routes to the
+ * most-recently-connected socket for that node. If the relay has no live
  * socket for the target, dispatch resolves with `RecipientOffline`, surfaced
  * here as `PeerNotFound`; any other dispatch error is forwarded under
  * `RemoteCallFailed`.
@@ -35,7 +30,6 @@ import { Ok, type Result } from 'wellcrafted/result';
 import type { SyncStatus } from '../document/internal/sync-supervisor.js';
 import { invokeAction, isActionInputError } from '../shared/actions.js';
 import { type PeerSyncStatus, RunError } from './action-errors.js';
-import { joinDaemonActionPath, parseDaemonActionPath } from './action-path.js';
 import type { RunRequest } from './app.js';
 import type { DaemonServedMount } from './types.js';
 
@@ -43,46 +37,30 @@ import type { DaemonServedMount } from './types.js';
 export const DEFAULT_PEER_WAIT_MS = 5000;
 
 export async function executeRun(
-	mount: DaemonServedMount | null,
+	mountRuntime: DaemonServedMount,
 	{ actionPath, input: actionInput, peer }: RunRequest,
 ): Promise<Result<unknown, RunError>> {
-	const { mount: requestedMount, localPath } =
-		parseDaemonActionPath(actionPath);
-
-	if (mount === null) {
-		return RunError.UsageError({
-			message: `This daemon has no active mount, so "${actionPath}" cannot run. The mount may be signed out; check \`epicenter list\`.`,
-		});
-	}
-
-	if (requestedMount !== mount.mount) {
-		return RunError.UsageError({
-			message: `This daemon serves mount "${mount.mount}", not "${requestedMount}". Did you mean "${joinDaemonActionPath(mount.mount, localPath)}", or are you in the wrong Epicenter folder?`,
-		});
-	}
-
 	if (peer === undefined) {
-		return runLocal(mount, actionPath, localPath, actionInput);
+		return runLocal(mountRuntime, actionPath, actionInput);
 	}
-	const collaboration = mount.runtime.collaboration;
+	const collaboration = mountRuntime.runtime.collaboration;
 	if (!collaboration) {
 		return RunError.UsageError({
-			message: `Mount "${mount.mount}" does not expose collaboration, so "${actionPath}" cannot run on peer "${peer.to}".`,
+			message: `This daemon does not expose collaboration, so "${actionPath}" cannot run on peer "${peer.to}".`,
 		});
 	}
-	return runOnPeer(collaboration, localPath, actionInput, peer);
+	return runOnPeer(collaboration, actionPath, actionInput, peer);
 }
 
 /** Local run: this daemon's registry is the authority for action existence. */
 async function runLocal(
 	mountRuntime: DaemonServedMount,
 	actionPath: string,
-	localPath: string,
 	actionInput: unknown,
 ): Promise<Result<unknown, RunError>> {
-	const action = mountRuntime.runtime.actions[localPath];
+	const action = mountRuntime.runtime.actions[actionPath];
 	if (!action) {
-		const descendants = daemonActionSuggestionLines(mountRuntime, localPath);
+		const descendants = daemonActionSuggestionLines(mountRuntime, actionPath);
 		if (descendants.length > 0) {
 			return RunError.UsageError({
 				message: `"${actionPath}" is not a runnable action.`,
@@ -91,7 +69,7 @@ async function runLocal(
 		}
 		return RunError.UsageError({
 			message: `"${actionPath}" is not defined.`,
-			suggestions: daemonActionNearestSiblingLines(mountRuntime, localPath),
+			suggestions: daemonActionNearestSiblingLines(mountRuntime, actionPath),
 		});
 	}
 
@@ -182,10 +160,7 @@ function daemonActionSuggestionLines(
 ): string[] {
 	return Object.entries(mountRuntime.runtime.actions)
 		.filter(([path]) => !prefix || path.startsWith(prefix))
-		.map(
-			([path, action]) =>
-				`  ${joinDaemonActionPath(mountRuntime.mount, path)}  (${action.type})`,
-		);
+		.map(([path, action]) => `  ${path}  (${action.type})`);
 }
 
 function daemonActionNearestSiblingLines(

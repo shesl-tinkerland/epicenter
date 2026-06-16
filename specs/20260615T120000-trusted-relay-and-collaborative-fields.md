@@ -72,6 +72,21 @@ A blind relay cannot follow a child id stored in a parent doc (it can't read the
 
 Audit of `createEncryptedYkvLww` (`packages/workspace/src/shared/y-keyvalue/y-keyvalue-lww-encrypted.ts`): it encrypts cell *values* at the CRDT boundary (`set` encrypts into the Y.Array, `get`/observer decrypts). It does NOT provide transport encryption (that is TLS on the WebSocket, a separate layer) and does NOT provide conflict resolution (that is the inner `YKeyValueLww`, which stays). Deleting the wrapper loses only: at-rest value encryption (server-blindness), the keyring, and the "unreadable cell" failure class. The bare `YKeyValueLww` is already a drop-in (`workspace.ts:193-196`).
 
+### Finding 5: the home anchor path works as topology, not encryption
+
+Throwaway spike: `/Users/braden/Code/epicenter-anchor-experiment` (local only, not monorepo product code).
+
+What passed on 2026-06-15:
+
+- A MacBook on phone hotspot synced a `yrs` document to a Mac Studio home anchor over Iroh 1.0.
+- The Studio anchor persisted the CRDT state across restart and kept a stable peer identity via `anchor.key`.
+- A JS/Yjs client produced update bytes that Rust/yrs accepted and carried to the anchor.
+- A live JS/Yjs runtime used a Rust sidecar over stdio JSON lines; Rust owned Iroh, JS kept app/Yjs semantics, and the anchor persisted both live JS edits after restart.
+
+**Key finding**: self-custody does not require restoring value-level CRDT encryption. It requires changing who operates the always-on trusted peer. The home anchor can be that peer.
+
+**Implication**: "cloudless" should be treated as a deployment topology, not a separate data model. The same Yjs document model and child-doc runtime can sync to Epicenter Cloud, a self-hosted Worker, or a home anchor. The product fork is transport, pairing, and custody UX, not table/schema semantics.
+
 ### Encryption matrix (what each layer protects, after this change)
 
 | Layer | Provider | Status after change |
@@ -180,6 +195,7 @@ The custody fork and the keyring are the two largest subtractions. The keyring d
 | At-rest encryption location | 3 taste | Infra (platform/KMS), not the wrapper | Server-held key makes the wrapper pure cost; infra at-rest is simpler and has no keyring |
 | Identity: derived vs stored id | Resolved | Derived-only for now | Derived 1:1 makes the trusted sweep safe (row exists iff child referenced); stored-id 1:N deferred until a real case forces it |
 | Child-doc deletion | 3 taste | `delete()` drops the reference; offline server mark-and-sweep reclaims | Real-time CRDT cascade is the hard problem; trust lets the server GC offline (no races). Accept transient orphans (privacy not the moat) |
+| Native self-custody transport | 1 evidence | JS/Yjs app plus Rust/Iroh sidecar | Spike proved live JS update flow through a Rust sidecar to a home anchor with restart persistence; keep app semantics in TypeScript and native reachability in Rust |
 
 ## Branch action
 
@@ -222,6 +238,13 @@ The custody fork and the keyring are the two largest subtractions. The keyring d
 - [ ] **5.1** `DELETE-room` verb on the smart-relay contract, idempotent (deleting an absent room is a no-op).
 - [ ] **5.2** Server mark-and-sweep: read parents, compute referenced child guids, delete unreferenced child DOs. Runnable as the same admin script that clears old encrypted data (2.0).
 - [ ] **5.3** (Optional) client load-time prune of local IDB docs with no parent reference.
+
+### Phase 6: Cloudless anchor track (separate from child-doc delivery)
+- [ ] **6.1** Promote the Iroh sidecar spike into a real transport prototype that speaks `@epicenter/sync` frames, not the spike's demo text doc.
+- [ ] **6.2** Multiplex rooms over one sidecar process: `{ roomId, update }` in, `{ roomId, update }` out, with connection-status events.
+- [ ] **6.3** Define pairing: how a device learns and trusts the home anchor's Iroh peer id, how revocation works, and where the stable device identity lives.
+- [ ] **6.4** Define custody UX: Epicenter Cloud anchor, self-hosted Worker, or home anchor are choices of trusted peer, not different document formats.
+- [ ] **6.5** Defer browser-direct networking. Browsers remain relay-bound leaves unless they run inside a native shell or speak to a local sidecar.
 
 ## Edge Cases
 
@@ -268,12 +291,14 @@ The custody fork and the keyring are the two largest subtractions. The keyring d
 
 - Stored-id reconciliation (prune dangling child ids): folded into the server mark-and-sweep (Phase 5.2); the same pass that reclaims orphans also drops references to docs that never existed.
 - Derived summary cells (last-message preview materialized back to SQL): opportunistic; only if a list view needs it.
+- Cloudless home anchor: validated enough to keep as a product track, but not required for the trusted-relay / child-doc implementation. Keep it separate until the sidecar speaks the real `@epicenter/sync` protocol.
 
 ## Decisions Log
 
 - `.childDocs()` declaration surface (Open Question 1): coupled, derived-only builder method chained after `.migrate()`, table-scoped, never versioned. Positional arg rejected (collides with the version tuple); stored-id and any top-level abstraction deferred until a real 1:N case.
   Revisit when: a real 1:N, nested, or relocatable child-doc case appears.
 - DELETE-room: deferred from Phase 1 to Phase 5. It is the sweep's deletion primitive, not a standalone storage-cost win, so it ships with its only consumer.
+- Home-anchor sidecar: keep as the native self-custody transport direction. The spike proved reachability, JS/Yjs to Rust/yrs update compatibility, live sidecar update flow, and restart persistence. Revisit the bridge mechanism after room multiplexing; stdio is a test bridge, not a final product commitment.
 
 ## Success Criteria
 
@@ -283,6 +308,7 @@ The custody fork and the keyring are the two largest subtractions. The keyring d
 - [ ] Server-side AI (`doc-generation.ts`) works unchanged against the restored relay.
 - [ ] One `session.childDocs` runtime; per-app cache closures gone.
 - [ ] Bodies are `childDoc(attachRichText)` / `childDoc(attachPlainText)`; delete cascades with no orphaned IDB store or live room.
+- [ ] Home-anchor work stays protocol-compatible: no app schema, table materializer, or child-doc semantics move into Rust.
 - [ ] `field.*` palette unchanged; no `field.richText()` member; no `defineDocument` contract.
 - [ ] Zhongwen transcript runs on the shared runtime (declared or manual) and cascades on conversation delete.
 

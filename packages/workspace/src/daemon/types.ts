@@ -15,7 +15,7 @@ import type { Result } from 'wellcrafted/result';
 import type { DispatchError, DispatchRequest } from '../document/dispatch.js';
 import type { SyncStatus } from '../document/internal/sync-supervisor.js';
 import type { Collaboration } from '../document/open-collaboration.js';
-import type { PresenceDevice } from '../document/presence-protocol.js';
+import type { Peer } from '../document/presence-protocol.js';
 import type { ActionRegistry } from '../shared/actions.js';
 import type { MaybePromise } from '../shared/types.js';
 
@@ -24,8 +24,8 @@ import type { MaybePromise } from '../shared/types.js';
  * peer `/run`.
  */
 type DaemonServedCollaboration = {
-	devices: {
-		list(): PresenceDevice[];
+	peers: {
+		list(): Peer[];
 	};
 	status: SyncStatus;
 	dispatch(req: DispatchRequest): Promise<Result<unknown, DispatchError>>;
@@ -60,7 +60,7 @@ export type DaemonRuntime = {
 	readonly actions: ActionRegistry;
 
 	/**
-	 * Optional hosted collaboration. Identity, sync status, live-device
+	 * Optional hosted collaboration. Identity, sync status, live-node
 	 * presence, and peer dispatch live here when the mount participates in a
 	 * collaborative Yjs workspace.
 	 */

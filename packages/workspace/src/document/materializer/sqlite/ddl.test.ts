@@ -61,7 +61,10 @@ describe('generateDdl', () => {
 		);
 	});
 
-	test('maps instant fields to TEXT for lexicographic time ordering', () => {
+	test('maps field.instant() to TEXT for lexicographic time ordering', () => {
+		// `field.instant()` emits a string schema carrying `date-time` format and
+		// the fixed-width instant pattern. The materialized column must be TEXT so
+		// the canonical UTC instants sort lexicographically = chronologically.
 		const sql = generateDdl(
 			'posts',
 			objectSchema({ createdAt: field.instant() }, ['createdAt']),

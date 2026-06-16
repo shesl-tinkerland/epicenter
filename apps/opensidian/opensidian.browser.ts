@@ -22,10 +22,10 @@ import {
 } from '@epicenter/filesystem';
 import type { SignedIn } from '@epicenter/svelte/auth';
 import {
-	type DeviceId,
 	defineActions,
 	defineMutation,
 	defineQuery,
+	type NodeId,
 } from '@epicenter/workspace';
 import { Bash } from 'just-bash';
 import Type from 'typebox';
@@ -34,12 +34,12 @@ import { opensidianWorkspace } from './opensidian.js';
 
 export function openOpensidianBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
-	return opensidianWorkspace.connect({ ...signedIn, deviceId }, (workspace) => {
+	return opensidianWorkspace.connect({ ...signedIn, nodeId }, (workspace) => {
 		const { ydoc, tables } = workspace;
 		// The runtime bumps `files.updatedAt` on local body edits (declared via
 		// `touch` on the files table), so these openers read/write the content

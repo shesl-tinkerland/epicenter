@@ -1,304 +1,118 @@
 # Action Dispatch
 
-> **Note**: "Suspended" terminology was renamed to "saved" in the codebase. References below use the original names.
-
-How to invoke actions across runtimes using YJS as the transport layer.
+How one node invokes an action that lives on another node, using the relay as the router.
 
 ## The Problem
 
 In an Epicenter workspace, actions run locally. But some actions are runtime-specific:
 
-- **Browser extension**: `closeTab`, `openTab`: requires `browser.tabs.*` API
-- **Desktop app (Tauri)**: `readLocalFile`, `showNotification`: requires OS access
-- **CLI**: Can connect to the Y.Doc but has no browser APIs
+- **Browser extension**: `tabs_close`, `tabs_open`: requires the `browser.tabs.*` API
+- **Desktop app (Tauri)**: `read_local_file`, `show_notification`: requires OS access
+- **CLI daemon**: connects to the Y.Doc but has no browser APIs
 
-This is not just cross-device: it's cross-runtime. A CLI tool and a browser extension on the same machine need to communicate. The challenge: the browser extension can't accept incoming connections. It can only connect outward to sync servers.
+This is not just cross-node, it's cross-runtime. A CLI daemon and a browser extension on the same machine may need to call each other's actions. The catch: a browser extension cannot accept incoming connections. It can only connect outward to the sync relay.
 
-## The Solution: Requests Table
+## The Solution: Relay-Mediated Dispatch
 
-Use the Y.Doc itself as a message bus. Since all clients already sync via Yjs, add a `requests` table to the workspace. Any client can write a request targeting a specific device, and that device processes it.
+Both nodes are already connected to the same authorized sync room over one WebSocket. Dispatch reuses that socket. The relay, which already sees every connection, routes a call from the caller to the target and the response back.
+
+One WebSocket carries two frame surfaces:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Y.Doc Root                                                   │
-│                                                              │
-│   tables/              <- Existing data                      │
-│   ├── posts                                                  │
-│   └── users                                                  │
-│                                                              │
-│   requests/            <- Action dispatch (per-workspace)    │
-│   └── { requestId -> Request }                               │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+binary WS frames  ->  standard y-protocols SYNC (the CRDT data)
+text WS frames    ->  presence (who is online) and dispatch (call a peer)
 ```
 
-No new connections needed. The same sync providers that replicate your data also handle dispatch.
+No requests table, no extra Y.Doc state, no second connection. Dispatch is a live request/response over the same socket that syncs the data. If the target is offline the call fails fast instead of being queued.
 
 ## Terminology
 
-| Term        | Definition                                                  |
-| ----------- | ----------------------------------------------------------- |
-| **Action**  | A defined operation (query or mutation) that can be invoked |
-| **Request** | A request to invoke an action on a target device            |
-| **Device**  | Any runtime (browser, server, CLI) with a stable `deviceId` |
+| Term         | Definition                                                          |
+| ------------ | ------------------------------------------------------------------- |
+| **Action**   | A defined `query` or `mutation` that can be invoked                  |
+| **Node**     | Any runtime (browser, extension, Tauri window, CLI daemon) with a stable `nodeId` |
+| **Peer**     | Another node, from the perspective of the one reading presence      |
+| **Dispatch** | Calling an action on a target peer over the relay                   |
 
-Actions are what you define. Requests are how you invoke them remotely.
+The wire carries only `nodeId`. Product-level display names live in app-owned state, never on the relay.
 
-## Three Concerns, Three Mechanisms
+## Presence: Server-Owned
 
-| Concern                                 | Mechanism                   | Why                                     |
-| --------------------------------------- | --------------------------- | --------------------------------------- |
-| **Discovery** (what can a device do?)   | Static workspace definition | Serializable JSON, loaded at build time |
-| **Presence** (who is online right now?) | Awareness protocol          | Ephemeral, auto-cleanup on disconnect   |
-| **Dispatch** (do this on that device)   | Requests table              | Durable within TTL, request/response    |
+Presence is owned by the relay, not assembled by clients. The relay's connection map is the source of truth. On every membership or manifest change it pushes each client the full peer list as a `presence` text frame.
 
-### Awareness: Identity Only
+- The list is computed per recipient and excludes the recipient's own node, so a client never filters itself.
+- Multi-tab connections for one `nodeId` are deduped (newest wins by `connectedAt`).
+- There is no delta protocol: the frame IS the state. The client stores the latest list verbatim.
 
-Awareness carries the minimum needed for presence detection:
-
-```typescript
-awareness.setLocalState({
-	deviceId,
-	type: 'browser-extension', // or 'desktop', 'server', 'cli'
-});
-```
-
-No action schemas, no capabilities. Just identity and device type.
-
-**Why not put action schemas in awareness?**
-
-- Awareness uses `JSON.stringify(fullState)` per update: no delta encoding
-- Every heartbeat (15s) re-sends the full payload
-- Action schemas are static: they don't change at runtime
-- Workspace definitions already provide this information
-
-### Action Discovery: Static Definitions
-
-Workspace definitions are already serializable JSON. Any client that imports the definition knows what actions exist and their input schemas. For runtime introspection (a generic tool that doesn't import the definition), serialize the definition to JSON and fetch it once.
-
-## Request Shape
-
-Flat and generic. State is derived from timestamps, not stored as an enum:
+Each entry is a `Peer`:
 
 ```typescript
-type Request = {
-	id: string;
-	targetDeviceId: string;
-	action: string;
-	input: unknown;
-	createdAt: number;
-	expiresAt: number;
-	respondedAt: number | null;
-	output: unknown | null;
+type Peer = {
+	nodeId: string; // routing address for dispatch
+	connectedAt: number; // for an "online since" affordance
+	actions: ActionManifest; // the peer's published action manifest, or {} if none yet
 };
 ```
 
-**State is derived:**
+A node publishes its own manifest with a `presence_publish` text frame: once on every (re)connect, and again if its local action registry changes. The relay stores the manifest against the socket and rebroadcasts presence. Manifests are opaque to the relay (stored and forwarded as bytes, never inspected), so the receiver gets each peer's action schemas with no second round trip and can render affordances or hand them to an AI tool layer directly.
 
-- **Pending**: `respondedAt === null && Date.now() < expiresAt`
-- **Responded**: `respondedAt !== null`
-- **Expired**: `respondedAt === null && Date.now() >= expiresAt`
-
-No `status` enum needed. Two timestamps tell the full story.
-
-## Stale Request Protection
-
-The critical safety requirement: a device that reconnects after being offline must NOT execute old requests. No surprise tab closures.
-
-**Layer 1: Awareness gate (pre-dispatch)**
-
-Before writing a request, check awareness. If the target isn't online, reject immediately. Don't write the request.
+Read presence through the collaboration handle:
 
 ```typescript
-const states = awareness.getStates();
-const targetOnline = [...states.values()].some(
-	(s) => s.deviceId === targetDeviceId,
-);
-
-if (!targetOnline) {
-	return { error: { message: 'Target device is offline' } };
-}
-```
-
-**Layer 2: TTL (post-dispatch safety net)**
-
-Every request has an `expiresAt` (default: 30 seconds). The target device skips anything past expiry.
-
-```typescript
-if (Date.now() > request.expiresAt) {
-	requestsTable.update({
-		id: request.id,
-		respondedAt: Date.now(),
-		output: { error: 'expired' },
-	});
-	continue;
-}
-```
-
-Together: the awareness gate prevents writing requests to offline devices, and the TTL prevents execution if the device went offline after the request was written.
-
-## Device Identity
-
-Every device needs a stable identity for request routing.
-
-### Browsers / Extensions
-
-Generate a persistent UUID on first load:
-
-```typescript
-function getDeviceId(): string {
-	let id = localStorage.getItem('epicenter-device-id');
-	if (!id) {
-		id = crypto.randomUUID();
-		localStorage.setItem('epicenter-device-id', id);
-	}
-	return id;
-}
-```
-
-### Servers
-
-Use Tailscale identity if available, otherwise fall back to hostname:
-
-```typescript
-import os from 'os';
-import { $ } from 'bun';
-
-async function getServerDeviceId(): Promise<string> {
-	if (process.env.EPICENTER_DEVICE_ID) {
-		return process.env.EPICENTER_DEVICE_ID;
-	}
-
-	const { stdout, exitCode } = await $`tailscale status --json`
-		.nothrow()
-		.quiet();
-
-	if (exitCode === 0) {
-		const parsed = JSON.parse(stdout.toString());
-		const tailscaleId = parsed.Self?.ID;
-		if (tailscaleId) {
-			return `tailscale-${tailscaleId}`;
-		}
-	}
-
-	return `server-${os.hostname()}`;
-}
-```
-
-## Request Flow
-
-```
-Sender                          Target Device
-   │                                    │
-   │ 0. Check awareness: is target online?
-   │    If not -> fail immediately      │
-   │                                    │
-   │ 1. Write request                   │
-   │    respondedAt: null               │
-   │    expiresAt: now + 30s            │
-   │─────────────YJS sync──────────────>│
-   │                                    │
-   │                            2. Observe new request
-   │                               targetDeviceId === myDeviceId? Y
-   │                               Expired? N
-   │                                    │
-   │                            3. Execute action locally
-   │                                    │
-   │                            4. Write response
-   │                               respondedAt: Date.now()
-   │                               output: { data: {...} }
-   │<─────────────YJS sync─────────────│
-   │                                    │
-   │ 5. Observe response                │
-   │    respondedAt !== null            │
-   │    Resolve promise with output     │
-   │                                    │
-```
-
-Since requests are explicitly targeted and we check awareness first, there's no race condition: only one device will ever process each request.
-
-## Cleanup
-
-Responded and expired requests accumulate in the Y.Doc. Purge periodically:
-
-```typescript
-function purgeRequests(requestsTable) {
-	const RETENTION = 5 * 60 * 1000; // 5 minutes
-	const now = Date.now();
-
-	for (const req of requestsTable.scan().rows) {
-		if (req.respondedAt !== null && now - req.respondedAt > RETENTION) {
-			requestsTable.delete({ id: req.id });
-		}
-		if (req.respondedAt === null && now > req.expiresAt) {
-			requestsTable.delete({ id: req.id });
-		}
-	}
-}
-```
-
-Run on a timer or piggyback on an existing periodic task.
-
-## Scope: Per-Workspace, Opt-In
-
-Not every workspace needs dispatch. A notes workspace has no runtime-specific actions. Adding a `requests` table is an explicit choice:
-
-> Historical note: the example below uses an older workspace definition shape.
-> Current apps put actions in the bundle returned by `create<App>()`
-> and pass that registry to `openCollaboration()` or
-> `attachMountInfrastructure()`. Treat the request-table idea as architectural
-> background, not current setup code.
-
-```typescript
-const tabManager = defineWorkspace({
-	id: 'tab-manager',
-	tables: {
-		tabs,
-		windows,
-		devices,
-		savedTabs,
-		requests, // Opt-in to dispatch
-	},
-	kv: {},
+collaboration.peers.list(); // current peers (Peer[])
+const unsubscribe = collaboration.peers.subscribe((peers) => {
+	// called on every membership or manifest change
 });
 ```
 
-The request schema is the same across workspaces. What varies is the `action` names and `input` shapes: those come from the workspace's action definitions.
+## Dispatch: Request/Response Over Text Frames
 
-## Integration with Existing Architecture
+A call is one `dispatch({ to, action, input })`. The relay routes it to the most-recently-connected open socket for `to` and returns the result:
 
-This pattern layers on top of the existing sync architecture:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Transport: YJS WebSocket Sync (existing)                     │
-│                                                              │
-│   Y.Doc State:                                               │
-│   - tables/     -> data                                      │
-│   - requests/   -> action dispatch (opt-in)                  │
-│                                                              │
-│   Awareness:                                                 │
-│   - deviceId    -> stable identity                           │
-│   - type        -> browser/server/cli                        │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+```typescript
+const result = await collaboration.dispatch({
+	to: targetNodeId,
+	action: 'tabs_close',
+	input: { tabIds: [42] },
+	signal: AbortSignal.timeout(5000), // optional caller-side wait budget
+});
 ```
 
-No new connections needed. The same sync providers that replicate your data also handle dispatch.
+Four frames cross the relay for one call:
 
-## When to Use This vs HTTP
+```
+Caller                  Relay                   Target peer
+  │                       │                          │
+  │  dispatch_request     │                          │
+  │  { id, to, action }   │                          │
+  │──────────────────────>│  pick newest open        │
+  │                       │  socket for `to`         │
+  │                       │  dispatch_inbound        │
+  │                       │─────────────────────────>│
+  │                       │                   run action locally
+  │                       │  dispatch_response       │
+  │                       │<─────────────────────────│
+  │  dispatch_result      │                          │
+  │<──────────────────────│                          │
+  │  resolve / reject      │                          │
+```
 
-| Use HTTP                     | Use Requests Table               |
-| ---------------------------- | -------------------------------- |
-| Browser -> Server (standard) | Any runtime -> Browser extension |
-| Public API endpoints         | Cross-runtime on same Y.Doc      |
-| High-throughput operations   | Targeted device operations       |
-| External clients             | Anything connected to workspace  |
+The target decides whether the action exists: the relay never inspects action names, it only routes by `nodeId` within the already authorized room. Identity is the `nodeId` bound to each socket at WebSocket upgrade (see [Node Identity](./node-identity.md)); there is no server-stamped connection id on the wire.
 
-For browser -> server, HTTP is simpler. Use the requests table when you need to reach a runtime that can't accept incoming connections.
+### Offline and Timeout
+
+If the relay has no live socket for `to`, it answers the caller immediately with `RecipientOffline` rather than queuing anything. A bounded timer guards the in-flight case: if the recipient never replies, the relay answers `RecipientOffline` so the caller's promise always settles. The optional `signal` is the caller-side wait budget; the relay enforces its own ceiling independently.
+
+There is no stale-request hazard to design around: dispatch is live, so a node that was offline never wakes up to a backlog of old calls. The failure mode is a fast `RecipientOffline`, not a surprise execution.
+
+## Where This Runs
+
+- **In an app (browser, extension, Tauri):** `openCollaboration(...)` returns the `collaboration` handle with `peers` and `dispatch` above.
+- **On the CLI daemon:** the same handle is surfaced as two commands. `epicenter peers` prints `collaboration.peers.list()`; `epicenter run <mount>.<action> --peer <nodeId>` calls `collaboration.dispatch(...)`. A peer that is not reachable surfaces as `PeerNotFound` (the daemon's name for `RecipientOffline`).
 
 ## Related Documentation
 
-- [Device Identity](./device-identity.md): How devices identify themselves
-- [Network Topology](./network-topology.md): Connection patterns
-- [SYNC_ARCHITECTURE.md](../../SYNC_ARCHITECTURE.md): Multi-device sync details
+- [Node Identity](./node-identity.md): what a node is and how `nodeId` is resolved and routed
+- [Network Topology](./network-topology.md): connection patterns
+- [SYNC_ARCHITECTURE.md](../../SYNC_ARCHITECTURE.md): multi-node sync details
+- [Security](./security.md): network security model

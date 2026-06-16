@@ -7,12 +7,12 @@
  * § "Acceptance criteria". Each line below cites the criterion and the test
  * that exercises it (or the infra gap that blocks coverage).
  *
- *   [ok] `daemon up` prints "online (mount=...)" on stderr,
+ *   [ok] `daemon up` prints "online (<mount>)" on stderr,
  *        followed by the initial peers snapshot.
  *        Covered by `daemon up lifecycle: online banner + peers snapshot + clean exit`.
  *   [ok] Ctrl-C / SIGTERM exits cleanly with no orphan socket / metadata.
  *        Covered by the same test, which asserts files are gone post-shutdown.
- *   [ok] `epicenter daemon ps` lists the running daemon (deviceId / pid / uptime).
+ *   [ok] `epicenter daemon ps` lists the running daemon (pid / uptime).
  *        Covered by `ps lists the running daemon while up is alive`.
  *   [ok] `epicenter daemon logs -C <p>` tails the rotating log (default 50 lines).
  *        Covered by `logs prints recent lines from the daemon's log file`.
@@ -36,10 +36,6 @@
  *        § "Wave 8 isn't a commit"). The lifecycle tests below stand in for
  *        that coverage, exercising every CLI verb against a fixture with fake
  *        peer attachments.
- *   [gap] DeviceId in the banner reflects the real peer.
- *        Infra gap: `up.ts § pickDeviceId` returns `'<unknown>'` because
- *        the mount's collaboration doesn't expose self awareness post-connect.
- *        Reported in Wave 5; out of scope here.
  */
 
 import { describe, expect, test } from 'bun:test';

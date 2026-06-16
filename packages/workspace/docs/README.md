@@ -8,8 +8,8 @@ Technical documentation for the Epicenter package.
 docs/
 ├── architecture/       # System architecture
 │   ├── network-topology.md    # Node types, connections
-│   ├── device-identity.md     # Server URLs, identity
-│   ├── action-dispatch.md     # Cross-device RPC via YJS
+│   ├── node-identity.md     # Server URLs, identity
+│   ├── action-dispatch.md     # Cross-node RPC via YJS
 │   └── security.md            # Security model
 │
 ├── blobs/              # Blob sync system
@@ -26,8 +26,8 @@ docs/
 ### Architecture
 
 - **[Network Topology](./architecture/network-topology.md)**: How devices connect (clients, servers, mesh)
-- **[Device Identity](./architecture/device-identity.md)**: Server URLs and identity management
-- **[Action Dispatch](./architecture/action-dispatch.md)**: Cross-device action invocation via YJS command mailbox
+- **[Node Identity](./architecture/node-identity.md)**: Server URLs and identity management
+- **[Action Dispatch](./architecture/action-dispatch.md)**: Cross-node action invocation via YJS command mailbox
 - **[Security](./architecture/security.md)**: Tailscale, content-addressing, threat model
 
 ### Blob System
@@ -45,6 +45,6 @@ Deep-dives into implementation details:
 
 ## Related Files
 
-- [SYNC_ARCHITECTURE.md](../SYNC_ARCHITECTURE.md): Multi-device Yjs sync architecture
+- [SYNC_ARCHITECTURE.md](../SYNC_ARCHITECTURE.md): Multi-node Yjs sync architecture
 - [README.md](../README.md): Package overview and API reference
 - [AGENTS.md](../AGENTS.md): Development guidelines

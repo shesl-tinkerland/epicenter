@@ -25,6 +25,7 @@ import {
 	defineActions,
 	defineMutation,
 	defineQuery,
+	type NodeId,
 	wipeLocalStorage,
 } from '@epicenter/workspace';
 import Type from 'typebox';
@@ -36,7 +37,6 @@ import {
 import { Err, Ok, tryAsync } from 'wellcrafted/result';
 import {
 	createTabManager,
-	type DeviceId,
 	generateBookmarkId,
 	generateSavedTabId,
 } from '$lib/workspace/definition';
@@ -81,17 +81,17 @@ export type SaveCloseFailed = Extract<TabError, { name: 'SaveCloseFailed' }>;
 
 /**
  * Build the tab-manager binding. Synchronous: callers must resolve the
- * device id before invoking (the extension's device id comes from
+ * node id before invoking (the extension's node id comes from
  * `chrome.storage.local` via `createDeviceProfile()` in `device.ts`).
  *
  * Consumers gate UI render on `tabManager.idb.whenLoaded`.
  */
 export function openTabManagerBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
 	const workspace = createTabManager();
 	const { tables } = workspace;
@@ -102,14 +102,14 @@ export function openTabManagerBrowser({
 	});
 
 	return {
-		deviceId,
+		nodeId,
 		...workspace,
 		idb,
 		actions: defineActions({
 			devices_list: defineQuery({
 				title: 'List Devices',
 				description:
-					'List all synced devices with their names, browsers, and online status.',
+					'List all synced devices with their names, browsers, and last-seen times.',
 				handler: () => {
 					const devices = tables.devices.scan().rows;
 					return {
@@ -197,7 +197,7 @@ export function openTabManagerBrowser({
 					close: Type.Optional(Type.Boolean()),
 				}),
 				handler: async ({ tabIds, close }) => {
-					const sourceDeviceId = deviceId;
+					const sourceNodeId = nodeId;
 					const results = await Promise.allSettled(
 						tabIds.map((id) => browser.tabs.get(id)),
 					);
@@ -212,7 +212,7 @@ export function openTabManagerBrowser({
 							title: tab.title || 'Untitled',
 							favIconUrl: tab.favIconUrl ?? null,
 							pinned: tab.pinned ?? false,
-							sourceDeviceId,
+							sourceNodeId,
 							savedAt: InstantString.now(),
 						});
 					}
@@ -321,14 +321,14 @@ export function openTabManagerBrowser({
 					pinned: Type.Boolean(),
 				}),
 				handler: async ({ browserTabId, url, title, favIconUrl, pinned }) => {
-					const sourceDeviceId = deviceId;
+					const sourceNodeId = nodeId;
 					tables.savedTabs.set({
 						id: generateSavedTabId(),
 						url,
 						title,
 						favIconUrl: favIconUrl ?? null,
 						pinned,
-						sourceDeviceId,
+						sourceNodeId,
 						savedAt: InstantString.now(),
 					});
 					// The save (Y.Doc write) always succeeded by here. The close
@@ -425,14 +425,14 @@ export function openTabManagerBrowser({
 							removedCount: allMatching.length,
 						};
 					}
-					const sourceDeviceId = deviceId;
+					const sourceNodeId = nodeId;
 					tables.bookmarks.set({
 						id: generateBookmarkId(),
 						url,
 						title,
 						favIconUrl: favIconUrl ?? null,
 						description: null,
-						sourceDeviceId,
+						sourceNodeId,
 						createdAt: InstantString.now(),
 					});
 					return { action: 'added' as const, removedCount: 0 };

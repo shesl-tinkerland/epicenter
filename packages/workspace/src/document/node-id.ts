@@ -1,18 +1,18 @@
 /**
- * Device id helper plus the branded `DeviceId` type.
+ * Node id helper plus the branded `NodeId` type.
  *
- * A device id is a stable string that identifies one Epicenter app on one
+ * A node id is a stable string that identifies one Epicenter app on one
  * persistent storage scope. Browser tabs sharing localStorage share an id;
  * separate browsers, the extension, Tauri windows, and the CLI daemon each
  * get distinct ids because their storage scopes are distinct. The id is
  * generated on first call and persisted in the supplied storage; subsequent
  * calls return the persisted value.
  *
- * "Device" is the user-facing word the presence UI uses (`PresenceDevice`).
+ * "Node" is the identity concept behind a presence entry (`Peer`).
  * The id behind it is what the relay routes by and what every consumer reads.
  *
- * Device ids are claimed by the client and only the client knows them. They
- * are passed to `openCollaboration` as the `deviceId` config field, stamped
+ * Node ids are claimed by the client and only the client knows them. They
+ * are passed to `openCollaboration` as the `nodeId` config field, stamped
  * onto the WebSocket upgrade URL (the relay binds the id to the socket at
  * upgrade and stores it on the socket attachment for the lifetime of the
  * connection: no round-trip validation), and echoed as the `from` field on
@@ -24,23 +24,23 @@ import { generateId } from '../shared/id.js';
 
 /**
  * Branded string identifying one Epicenter app on one persistent storage
- * scope (one "device" in the user-facing presence vocabulary). Generated
- * by {@link createDeviceId} or
- * {@link createDeviceIdAsync}; brand prevents accidental mixing with
+ * scope (one "node" in the user-facing presence vocabulary). Generated
+ * by {@link createNodeId} or
+ * {@link createNodeIdAsync}; brand prevents accidental mixing with
  * unrelated string ids (UserId, OwnerId, room ids, etc.).
  *
  * At trusted call sites that receive a known `string`, brand it with
- * {@link asDeviceId}.
+ * {@link asNodeId}.
  */
-export type DeviceId = string & Brand<'DeviceId'>;
+export type NodeId = string & Brand<'NodeId'>;
 
 /**
- * Syntactic sugar for `value as DeviceId`. The function body is a single
+ * Syntactic sugar for `value as NodeId`. The function body is a single
  * typed cast; the constrained `string` parameter is what earns it over a
  * raw `as` (callers can't accidentally widen to `unknown`). The only place
- * in the codebase where `as DeviceId` should appear.
+ * in the codebase where `as NodeId` should appear.
  */
-export const asDeviceId = (value: string): DeviceId => value as DeviceId;
+export const asNodeId = (value: string): NodeId => value as NodeId;
 
 /** Storage primitive that mirrors the synchronous Web Storage shape. */
 export type SimpleStorage = {
@@ -54,30 +54,26 @@ export type AsyncStorage = {
 	setItem(key: string, value: string): Promise<void>;
 };
 
-const KEY = 'epicenter.device.id';
+const KEY = 'epicenter.node.id';
 
-/** Read or lazily generate the device id from synchronous storage. */
-export function createDeviceId({
-	storage,
-}: {
-	storage: SimpleStorage;
-}): DeviceId {
+/** Read or lazily generate the node id from synchronous storage. */
+export function createNodeId({ storage }: { storage: SimpleStorage }): NodeId {
 	const existing = storage.getItem(KEY);
-	if (existing) return asDeviceId(existing);
-	const fresh = generateId<DeviceId>();
+	if (existing) return asNodeId(existing);
+	const fresh = generateId<NodeId>();
 	storage.setItem(KEY, fresh);
-	return asDeviceId(fresh);
+	return asNodeId(fresh);
 }
 
-/** Read or lazily generate the device id from async storage. */
-export async function createDeviceIdAsync({
+/** Read or lazily generate the node id from async storage. */
+export async function createNodeIdAsync({
 	storage,
 }: {
 	storage: AsyncStorage;
-}): Promise<DeviceId> {
+}): Promise<NodeId> {
 	const existing = await storage.getItem(KEY);
-	if (existing) return asDeviceId(existing);
-	const fresh = generateId<DeviceId>();
+	if (existing) return asNodeId(existing);
+	const fresh = generateId<NodeId>();
 	await storage.setItem(KEY, fresh);
-	return asDeviceId(fresh);
+	return asNodeId(fresh);
 }

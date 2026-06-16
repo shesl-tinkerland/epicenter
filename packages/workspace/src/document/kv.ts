@@ -8,9 +8,9 @@
  * invalid stored bytes are left untouched until an explicit write repairs them.
  */
 
-import { type Static, type TSchema } from 'typebox';
+import type { Static, TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { type KvStoreChange, type ObservableKvStore } from './y-keyvalue/index';
+import type { KvStoreChange, ObservableKvStore } from './y-keyvalue/index';
 
 // ════════════════════════════════════════════════════════════════════════════
 // KV RESULT TYPES

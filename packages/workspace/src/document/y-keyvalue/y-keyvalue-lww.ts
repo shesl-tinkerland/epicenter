@@ -11,7 +11,7 @@
  * | Scenario | Use `YKeyValue` | Use `YKeyValueLww` |
  * |----------|-----------------|-------------------|
  * | Real-time collab | Yes | Either |
- * | Offline-first, multi-device | No | Yes |
+ * | Offline-first, multi-node | No | Yes |
  * | Clock sync unreliable | Yes | No |
  * | Need "latest edit wins" | No | Yes |
  *
@@ -39,7 +39,7 @@
  * Uses a monotonic clock that guarantees:
  * - Local writes always have increasing timestamps (no same-millisecond collisions)
  * - Clock regression is handled (ignores backward jumps)
- * - Cross-device convergence by adopting higher timestamps from synced entries
+ * - Cross-node convergence by adopting higher timestamps from synced entries
  *
  * ```typescript
  * // Simplified logic:
@@ -49,7 +49,7 @@
  * ```
  *
  * Tracks the maximum timestamp from both local writes and remote synced entries.
- * Devices with slow clocks "catch up" after syncing, preventing their writes from
+ * Nodes with slow clocks "catch up" after syncing, preventing their writes from
  * losing to stale timestamps.
  *
  * ## Tiebreaker
@@ -60,7 +60,7 @@
  *
  * ## Storage Complexity
  *
- * With `gc:true` (the default), storage is `O(active data) + O(unique devices)`.
+ * With `gc:true` (the default), storage is `O(active data) + O(unique nodes)`.
  * Deleted entries, overwritten values, and edit history are garbage collected into
  * compact GC structs. A store with 20 active keys stays at roughly the same size
  * whether it was created yesterday or has processed 52,000 operations. The only
@@ -125,14 +125,14 @@
  * - `bulkSet`: 1000 (observer conflict resolution is the bottleneck)
  * - `bulkDelete`: 2500 (Yjs linked-list deletion is the bottleneck)
  *
- * The observer's conflict resolution logic is shared with multi-device sync. When
+ * The observer's conflict resolution logic is shared with multi-node sync. When
  * two clients set the same key while offline, the observer resolves that conflict
  * using the same entryIndexMap and DEDUP_ORIGIN path that `bulkSet` uses.
  *
  * ## Limitations
  *
- * - Future clock dominance: If a device's clock is far in the future, its writes dominate
- *   indefinitely. All devices adopt the highest timestamp seen, so writes won't catch up
+ * - Future clock dominance: If a node's clock is far in the future, its writes dominate
+ *   indefinitely. All nodes adopt the highest timestamp seen, so writes won't catch up
  *   until wall-clock reaches that point. Rare with NTP, but be aware in environments with
  *   unreliable time sync.
  * @example
@@ -187,7 +187,7 @@ export type YKeyValueLwwEntry<T> = { key: string; val: T; ts: number };
  * ## What triggers conflicts
  *
  * 1. `bulkSet()`: pushes entries without deleting old ones, observer resolves
- * 2. Multi-device sync: two clients set the same key offline, observer resolves
+ * 2. Multi-node sync: two clients set the same key offline, observer resolves
  * 3. Constructor initial dedup: runs before observer is registered, doesn't need this
  *
  * Note: `set()` eagerly deletes via `deleteEntryByKey` so the observer sees no
@@ -294,12 +294,12 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	/**
 	 * Last timestamp used for monotonic clock.
 	 *
-	 * **Primary purpose**: Ensures rapid writes on the SAME device get sequential timestamps,
+	 * **Primary purpose**: Ensures rapid writes on the SAME node get sequential timestamps,
 	 * preventing same-millisecond collisions where two writes would get identical timestamps.
 	 *
 	 * Tracks the highest timestamp seen from BOTH local writes and remote synced entries.
 	 * This ensures:
-	 * 1. **Same-millisecond writes on same device**: Always get unique, sequential timestamps
+	 * 1. **Same-millisecond writes on same node**: Always get unique, sequential timestamps
 	 *    - Write at t=1000 → ts=1000
 	 *    - Write at t=1000 (same ms!) → ts=1001 (incremented)
 	 *    - Write at t=1000 (same ms!) → ts=1002 (incremented again)
@@ -307,11 +307,11 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 * 2. **Clock regression**: If system clock goes backward (NTP adjustment), continue
 	 *    incrementing from lastTimestamp instead of going backward
 	 *
-	 * 3. **Self-healing from clock skew**: After syncing with devices that have faster clocks,
+	 * 3. **Self-healing from clock skew**: After syncing with nodes that have faster clocks,
 	 *    adopt their higher timestamps so future local writes win conflicts
-	 *    - Example: Device A's clock at 1000ms syncs entry from Device B with ts=5000ms
-	 *    - Device A's lastTimestamp becomes 5000, next write uses 5001 (not 1001)
-	 *    - Prevents Device A from writing "old" timestamps that would lose to Device B
+	 *    - Example: Node A's clock at 1000ms syncs entry from Node B with ts=5000ms
+	 *    - Node A's lastTimestamp becomes 5000, next write uses 5001 (not 1001)
+	 *    - Prevents Node A from writing "old" timestamps that would lose to Node B
 	 */
 	private lastTimestamp = 0;
 
@@ -362,7 +362,7 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 			// Track max timestamp for monotonic clock (including remote entries)
 			// This ensures our next local write will have a higher timestamp than
 			// any entry we've seen, preventing us from writing "old" timestamps
-			// that would lose conflicts to devices with faster clocks
+			// that would lose conflicts to nodes with faster clocks
 			if (entry.ts > this.lastTimestamp) this.lastTimestamp = entry.ts;
 		}
 
@@ -557,7 +557,7 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 * Generate a monotonic timestamp for local writes.
 	 *
 	 * **Core guarantee**: Returns a timestamp that is ALWAYS strictly greater than the
-	 * previous one, ensuring sequential ordering of writes on this device.
+	 * previous one, ensuring sequential ordering of writes on this node.
 	 *
 	 * Handles three edge cases:
 	 * 1. **Same-millisecond writes** (primary use case):
@@ -571,7 +571,7 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 *    instead of going backward (maintains monotonicity)
 	 *
 	 * 3. **Post-sync convergence**:
-	 *    After syncing entries with higher timestamps from other devices,
+	 *    After syncing entries with higher timestamps from other nodes,
 	 *    local writes continue from the highest timestamp seen (self-healing)
 	 *
 	 * Algorithm:
@@ -678,7 +678,7 @@ export class YKeyValueLww<T> implements ObservableKvStore<T>, Disposable {
 	 * which builds an `entryIndexMap` (Map<Entry, index>) from one `toArray()` call
 	 * and resolves each conflict with an O(1) Map lookup. Total: O(n).
 	 *
-	 * The observer's conflict resolution already exists for multi-device sync.
+	 * The observer's conflict resolution already exists for multi-node sync.
 	 * When two clients set the same key offline, `bulkSet` reuses that exact same path.
 	 *
 	 * ## When to use

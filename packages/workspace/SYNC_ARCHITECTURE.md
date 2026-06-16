@@ -1,6 +1,6 @@
-# Multi-Device Sync Architecture
+# Multi-Node Sync Architecture
 
-Epicenter replicates a `Y.Doc` across many devices over a WebSocket relay. Yjs's CRDT semantics keep every replica eventually consistent regardless of message order or how many devices are connected. The relay is a dumb pipe: it moves bytes, never executes business logic.
+Epicenter replicates a `Y.Doc` across many nodes over a WebSocket relay. Yjs's CRDT semantics keep every replica eventually consistent regardless of message order or how many nodes are connected. The relay is a dumb pipe: it moves bytes, never executes business logic.
 
 This document describes the runtime: the one public primitive (`openCollaboration`), the handle it returns, and how the wire is organized.
 
@@ -17,7 +17,7 @@ import {
 } from '@epicenter/workspace';
 
 const collaboration = openCollaboration(ydoc, {
-    url: roomWsUrl({ baseURL, ownerId, guid: ydoc.guid, deviceId }),
+    url: roomWsUrl({ baseURL, ownerId, guid: ydoc.guid, nodeId }),
     waitFor: idb.whenLoaded,
     openWebSocket: auth.openWebSocket,
     onReconnectSignal: auth.onStateChange,
@@ -29,13 +29,13 @@ const collaboration = openCollaboration(ydoc, {
 // Local invocation: direct function call against the registry.
 await collaboration.actions.tabs_close({ tabIds: [1, 2] });
 
-// Remote invocation: pick an online device, dispatch to it over the relay.
-const phone = collaboration.devices
+// Remote invocation: pick an online peer, dispatch to it over the relay.
+const phone = collaboration.peers
     .list()
-    .find((d) => d.deviceId === 'phone');
+    .find((peer) => peer.nodeId === 'phone');
 if (phone) {
     const { data, error } = await collaboration.dispatch({
-        to: phone.deviceId,
+        to: phone.nodeId,
         action: 'tabs_close',
         input: { tabIds: [1, 2] },
         signal: AbortSignal.timeout(5_000),
@@ -57,11 +57,11 @@ Content docs (rich-text bodies, attachments, anything nested that syncs independ
 | `whenDisposed`    | Resolves once the supervisor exits and the socket closes           |
 | `onStatusChange`  | Subscribe to status changes; returns unsubscribe                   |
 | `reconnect`       | Manually wake the supervisor (resets backoff)                      |
-| `devices`         | `list()` / `subscribe()` over the server-owned presence channel    |
-| `dispatch`        | Fire a cross-device call over the relay socket                     |
+| `peers`         | `list()` / `subscribe()` over the server-owned presence channel    |
+| `dispatch`        | Fire a cross-node call over the relay socket                     |
 | `[Symbol.dispose]`| Sugar for `ydoc.destroy()`; cascades through every attachment      |
 
-`devices.list()` returns `PresenceDevice[]`, where each device carries `{ deviceId, connectedAt, actions }`. `actions` is the device's published `ActionManifest` (the metadata-only projection of its `ActionRegistry`), suitable for rendering UI affordances, validating input against schemas, or feeding an AI tool layer.
+`peers.list()` returns `Peer[]`, where each peer carries `{ nodeId, connectedAt, actions }`. `actions` is the peer's published `ActionManifest` (the metadata-only projection of its `ActionRegistry`), suitable for rendering UI affordances, validating input against schemas, or feeding an AI tool layer.
 
 ## The wire: one socket, three channels
 
@@ -87,24 +87,24 @@ The relay tracks live WebSocket connections in a `connections` Map. That map is 
 ```ts
 type PresenceFrame = {
     type: 'presence';
-    devices: PresenceDevice[];
+    peers: Peer[];
 };
 
-type PresenceDevice = {
-    deviceId: string;
+type Peer = {
+    nodeId: string;
     connectedAt: number;
     actions: ActionManifest;   // Record<string, ActionMeta>
 };
 ```
 
-- The frame is sent to a freshly-upgraded socket, and rebroadcast to every other socket whenever a device joins, leaves, or republishes its manifest.
-- `devices` is computed per recipient with the receiver's own install excluded, so the client stores it verbatim.
+- The frame is sent to a freshly-upgraded socket, and rebroadcast to every other socket whenever a peer joins, leaves, or republishes its manifest.
+- `peers` is computed per recipient with the receiver's own install excluded, so the client stores it verbatim.
 - Multi-tab same-install collapses to one row (newest-wins by `connectedAt`); a graceful tab handoff produces no wire-visible transition (300 ms debounce).
-- A close code of `4401` (permanent auth failure) bypasses the debounce: peers see the device drop immediately.
+- A close code of `4401` (permanent auth failure) bypasses the debounce: the dropped peer disappears from everyone else's list immediately.
 
 There is no delta protocol. The relay owns the whole truth and ships the whole truth on every change; the client never reassembles `added` / `removed` events.
 
-Devices publish their own manifest with one client-to-server frame on every (re)connect:
+Nodes publish their own manifest with one client-to-server frame on every (re)connect:
 
 ```ts
 type PresencePublishFrame = {
@@ -125,7 +125,7 @@ Cursor and selection sync, when they arrive, bring Awareness back, used for what
 
 ### Dispatch plane (text, in-band)
 
-A cross-device call rides text frames on the same socket as presence and sync. The wire is four correlated frames:
+A cross-node call rides text frames on the same socket as presence and sync. The wire is four correlated frames:
 
 ```ts
 caller -> relay:     { type: 'dispatch_request',  id, to, action, input }
@@ -181,29 +181,29 @@ Because the relay answers reachability inline (its `connections` Map decides, on
 
 ```ts
 const { data } = await collaboration.dispatch({
-    to: phone.deviceId,
+    to: phone.nodeId,
     action: 'tabs_close',
     input: { tabIds: [1, 2] },
 });
 const closed = data as { tabIds: number[] };
 ```
 
-With manifests on the presence wire, that narrowing is *runtime-verifiable*: walk `device.actions` and confirm the action key exists before dispatching. The wire payload is the ground truth.
+With manifests on the presence wire, that narrowing is *runtime-verifiable*: walk `node.actions` and confirm the action key exists before dispatching. The wire payload is the ground truth.
 
 The recipient side is `runInboundDispatch`: the supervisor routes inbound text frames to it, it looks up the action in the local registry, runs it, and emits the `dispatch_response`. A content doc with `actions: {}` always replies `ActionNotFound`.
 
 ## URLs and routing
 
-A cloud document is owned by the authenticated `OwnerId` and addressed by its own `ydoc.guid`. The client builds the URL from `(baseURL, ownerId, guid, deviceId)`:
+A cloud document is owned by the authenticated `OwnerId` and addressed by its own `ydoc.guid`. The client builds the URL from `(baseURL, ownerId, guid, nodeId)`:
 
 ```ts
 roomWsUrl({
     baseURL: 'https://api.epicenter.so',
     ownerId,
     guid: ydoc.guid,
-    deviceId,
+    nodeId,
 });
-// -> wss://api.epicenter.so/api/owners/<ownerId>/rooms/<guid>?deviceId=<id>
+// -> wss://api.epicenter.so/api/owners/<ownerId>/rooms/<guid>?nodeId=<id>
 ```
 
 In personal mode `ownerId` equals the signed-in user's id; in shared mode it is
@@ -221,7 +221,7 @@ This is the consumer Google Docs model and the first of three account layers, in
 - **Layer 2 (future)**: shared-drive content. A shared-wiki deployment uses `ownerId === 'shared'` so content survives a departing user.
 - **Layer 3 (future)**: tenancy and billing. An organization groups user accounts for one invoice and admin policy; it never owns a document.
 
-`deviceId` is appended as a query parameter (`?deviceId=`) on every connect, including reconnects. It is a routing label stamped on the socket at upgrade, not an auth principal: the relay authorizes the room from the token, and within that room `deviceId` only decides which socket dispatch is delivered to.
+`nodeId` is appended as a query parameter (`?nodeId=`) on every connect, including reconnects. It is a routing label stamped on the socket at upgrade, not an auth principal: the relay authorizes the room from the token, and within that room `nodeId` only decides which socket dispatch is delivered to.
 
 `/owners/:ownerId/rooms/:room` is the single cloud sync route shape (personal: `:ownerId` is the user id; shared: `:ownerId === 'shared'`). Browser apps and the workspace daemon both build their URL with `roomWsUrl`.
 
@@ -282,4 +282,4 @@ cycleController    aborts on reconnect(); kills the current iteration only
 
 ## Mental model in one paragraph
 
-`openCollaboration(ydoc, config)` is the one collaboration primitive: it opens a single WebSocket to the relay, runs the Yjs binary sync protocol, publishes its own action manifest at connect via `presence_publish`, mirrors the relay's server-owned presence channel into `devices` (including each device's manifest), and runs inbound dispatch frames against the local `actions` registry. Cross-device calls go out through `dispatch(...)`, which rides the same socket as text frames and answers with a typed `Result<unknown, DispatchError>`. The relay is a dumb pipe: it merges Yjs updates (eventually consistent CRDT semantics, no admission control), tracks the live connections Map (source of truth for who is here), and forwards dispatch text frames (it never executes them). Presence is the relay's `connections` Map, not Yjs Awareness; dispatch is in-band text on the sync socket, not HTTP. Content docs use the same primitive with `actions: {}`.
+`openCollaboration(ydoc, config)` is the one collaboration primitive: it opens a single WebSocket to the relay, runs the Yjs binary sync protocol, publishes its own action manifest at connect via `presence_publish`, mirrors the relay's server-owned presence channel into `peers` (including each peer's manifest), and runs inbound dispatch frames against the local `actions` registry. Cross-node calls go out through `dispatch(...)`, which rides the same socket as text frames and answers with a typed `Result<unknown, DispatchError>`. The relay is a dumb pipe: it merges Yjs updates (eventually consistent CRDT semantics, no admission control), tracks the live connections Map (source of truth for who is here), and forwards dispatch text frames (it never executes them). Presence is the relay's `connections` Map, not Yjs Awareness; dispatch is in-band text on the sync socket, not HTTP. Content docs use the same primitive with `actions: {}`.

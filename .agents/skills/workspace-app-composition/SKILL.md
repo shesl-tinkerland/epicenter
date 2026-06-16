@@ -87,7 +87,7 @@ add a `./browser` export to the rest for symmetry's sake.
 | Layer | File | Shape | Job | Returns |
 | --- | --- | --- | --- | --- |
 | Iso factory | `<app>.ts` / `workspace/index.ts` | A + B | `create<App>()`: pure doc construction | workspace (`ydoc`, tables, kv, actions) |
-| Browser factory | `<app>.browser.ts` / `workspace/browser.ts` | A + B | `open<App>Browser({ signedIn, deviceId })`: bind to browser persistence + sync | iso bundle plus IndexedDB/local storage, collaboration |
+| Browser factory | `<app>.browser.ts` / `workspace/browser.ts` | A + B | `open<App>Browser({ signedIn, nodeId })`: bind to browser persistence + sync | iso bundle plus IndexedDB/local storage, collaboration |
 | Extension / tauri factory | `<app>.extension.ts` etc. | B | bind to chrome.storage / Tauri APIs | iso bundle plus runtime resources |
 | Mount factory | `project.ts` / `workspace/project.ts` | A + B | `<app>(opts?)`: returns the `Mount` a project's `epicenter.config.ts` default-exports | `Mount` (node persistence, materializers) |
 | Session singleton | `src/lib/session.ts` | A | `createSession({ ... })`: owns workspace lifecycle, side effects | `session`, `session.require` |
@@ -133,16 +133,16 @@ Rules:
 
 ## Browser Factory
 
-`open<App>Browser({ signedIn, deviceId })` calls the iso factory, then attaches
+`open<App>Browser({ signedIn, nodeId })` calls the iso factory, then attaches
 local persistence and collaboration.
 
 ```ts
 export function openHoneycrispBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
 	const workspace = createHoneycrisp();
 	const idb = attachLocalStorage(workspace.ydoc, {

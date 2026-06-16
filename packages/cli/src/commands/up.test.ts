@@ -153,7 +153,7 @@ function writeRuntimeMount({
 			whenConnected: new Promise(() => {}),
 			status: { phase: 'connected' },
 			onStatusChange: () => () => {},
-			devices: {
+			peers: {
 				list: () => [],
 				subscribe: () => () => {},
 			},
@@ -195,7 +195,11 @@ describe('runUp: happy path', () => {
 		try {
 			expect(existsSync(metadataPathFor(workDir))).toBe(true);
 			expect(handle.metadata.pid).toBe(process.pid);
-			expect(handle.mount?.mount).toBe('demo');
+			expect(handle.opened.status).toBe('started');
+			if (handle.opened.status !== 'started') {
+				throw new Error('expected started mount');
+			}
+			expect(handle.opened.entry.mount).toBe('demo');
 			expect(
 				readFileSync(join(workDir, 'epicenter.config.ts'), 'utf8'),
 			).toContain('export default demo');
@@ -241,14 +245,15 @@ describe('runUp: happy path', () => {
 		);
 		try {
 			const client = daemonClient(socketPathFor(workDir));
-			const manifest = expectOk(await client.list());
-			expect(Object.keys(manifest)).toEqual(['mirror.sync']);
-			expect(manifest['mirror.sync']?.description).toBe('Sync local mirror');
+			const snapshot = expectOk(await client.list());
+			expect(snapshot.mount).toBe('mirror');
+			expect(Object.keys(snapshot.actions)).toEqual(['sync']);
+			expect(snapshot.actions.sync?.description).toBe('Sync local mirror');
 			expect(expectOk(await client.peers())).toEqual([]);
 			expect(
 				expectOk(
 					await client.run({
-						actionPath: 'mirror.sync',
+						actionPath: 'sync',
 						input: null,
 					}),
 				),
@@ -272,17 +277,18 @@ describe('runUp: failure cleanup', () => {
 		);
 
 		try {
-			expect(handle.mount).toBeNull();
-			expect(handle.inactive).toEqual({
-				mount: 'demo',
-				reason: 'sign in to enable demo',
+			expect(handle.opened).toEqual({
+				status: 'inactive',
+				entry: { mount: 'demo', reason: 'sign in to enable demo' },
 			});
-			// The daemon still binds its socket: a signed-out daemon is running,
-			// it just has nothing to serve yet.
-			expect(await pingDaemon(socketPathFor(workDir), 1000)).toBe(true);
+			// Inactive means no runtime exists, so there is no action server.
+			expect(await pingDaemon(socketPathFor(workDir), 1000)).toBe(false);
+			expect(existsSync(metadataPathFor(workDir))).toBe(false);
 		} finally {
 			await handle.teardown();
 		}
+		const lease = expectOk(claimDaemonLease(workDir));
+		lease.release();
 	});
 
 	test('surfaces non-session auth errors and releases the lease', async () => {

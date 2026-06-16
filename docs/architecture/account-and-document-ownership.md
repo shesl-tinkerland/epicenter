@@ -65,7 +65,7 @@ guid.
 ```
 route     /api/owners/:ownerId/rooms/:room   (both modes)
 DO name   owners/${ownerId}/rooms/${room}    (room = ydoc.guid)
-builder   roomWsUrl({ baseURL, ownerId, guid: ydoc.guid, deviceId })
+builder   roomWsUrl({ baseURL, ownerId, guid: ydoc.guid, nodeId })
 ```
 
 The DO partition is `owners/<ownerId>` in both modes. In personal mode

@@ -1,6 +1,6 @@
 # @epicenter/cli
 
-> Introspect and invoke `defineQuery` / `defineMutation` actions exposed by configured mounts, locally or on a currently online peer.
+> Introspect and invoke `defineQuery` / `defineMutation` actions exposed by the configured mount, locally or on a currently online peer.
 
 Each verb is a one-line shell shortcut for one workspace primitive:
 
@@ -11,7 +11,7 @@ Each verb is a one-line shell shortcut for one workspace primitive:
    Enumerate     | list       | Object.entries(runtime.actions)             |
    Invoke        | run        | local daemon invoke                         |
    Dispatch      | run --peer | relay dispatch to a live peer               |
-   Presence      | peers      | collaboration.devices.list()                |
+   Presence      | peers      | collaboration.peers.list()                  |
                  +------------+---------------------------------------------+
 
  Supporting systems: auth (machine session), daemon (process lifecycle)
@@ -123,9 +123,7 @@ Use scripts for anything beyond one-shot CLI calls:
 import { connectDaemonActions } from "@epicenter/workspace/node";
 import type { FujiActions } from "@epicenter/fuji";
 
-const fuji = await connectDaemonActions<FujiActions>({
-  mount: "fuji",
-});
+const fuji = await connectDaemonActions<FujiActions>();
 
 await fuji.entries_update({ id, tags: ["triaged"] });
 ```

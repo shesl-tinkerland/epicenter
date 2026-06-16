@@ -9,7 +9,7 @@ import type { OwnerId } from '@epicenter/identity';
  * app opener actually consumes:
  *
  * - `openCollaboration(workspace.ydoc, { openWebSocket, onReconnectSignal })`
- * - `roomWsUrl({ baseURL, ownerId, guid, deviceId })`
+ * - `roomWsUrl({ baseURL, ownerId, guid, nodeId })`
  *
  * `server` and `baseURL` are both projected because `roomWsUrl` wants the
  * full origin (for the ws:// vs wss:// scheme) while local-storage partition

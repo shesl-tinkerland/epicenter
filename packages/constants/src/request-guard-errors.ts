@@ -13,8 +13,8 @@ import { defineErrors, type InferErrors } from 'wellcrafted/error';
  *     authenticated user is not admitted to this shared-wiki deployment.
  *   - `ForbiddenOrigin` (403): middleware-level CSRF refusal: origin
  *     missing or not in the trusted-origin allowlist.
- *   - `MissingDeviceId` (400): route-level input refusal: WebSocket
- *     upgrade is missing the required `deviceId` query parameter.
+ *   - `MissingNodeId` (400): route-level input refusal: WebSocket
+ *     upgrade is missing the required `nodeId` query parameter.
  *
  * Defined once in the shared constants package so server runtime and
  * any client SDK reference the same discriminated union. The server
@@ -41,7 +41,7 @@ import { defineErrors, type InferErrors } from 'wellcrafted/error';
  *     case 'OwnerMismatch':     // wrong URL for this signed-in user
  *     case 'NotAdmitted':       // signed in but not admitted
  *     case 'ForbiddenOrigin':   // CSRF: origin missing or not trusted
- *     case 'MissingDeviceId':   // WebSocket upgrade without ?deviceId=
+ *     case 'MissingNodeId':   // WebSocket upgrade without ?nodeId=
  *   }
  * }
  * ```
@@ -60,9 +60,9 @@ export const RequestGuardError = defineErrors({
 		message: 'Origin header is missing or not in the trusted-origin allowlist.',
 		status: 403 as const,
 	}),
-	MissingDeviceId: () => ({
+	MissingNodeId: () => ({
 		message:
-			'WebSocket upgrade is missing the required deviceId query parameter.',
+			'WebSocket upgrade is missing the required nodeId query parameter.',
 		status: 400 as const,
 	}),
 });

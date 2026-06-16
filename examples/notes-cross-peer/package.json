@@ -3,6 +3,9 @@
 	"version": "0.0.2",
 	"private": true,
 	"type": "module",
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
 	"dependencies": {
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/cli": "workspace:*",

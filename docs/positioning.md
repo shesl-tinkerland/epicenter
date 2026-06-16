@@ -40,7 +40,7 @@ The loop is capture, curate, keep. App output is a disposable inbox, regenerable
 
 The quiet bet: the properties that make a workspace durable for you are the same ones that make it legible to agents. Plain files are the context window. SQLite is the query surface. The action registry is the tool list. Epicenter is the workspace where you and your agents are co-writers under one set of rules.
 
-What we refuse to build is the strategy. No partial sync: a workspace is one full local replica, which is what lets Yjs carry it instead of a private protocol. No row-level permissions: the folder is the unit of sharing. No editing generated projections back into apps: one validated write path, for humans and agents alike. Each refusal pays for the simplicity of everything else.
+What we refuse to build is the strategy. No partial sync: a workspace is one full local replica, which is what lets Yjs carry it instead of a private protocol. No row-level permissions: the app corpus is the unit of sharing; the folder is a local projection and runtime site for that corpus. No editing generated projections back into apps: one validated write path, for humans and agents alike. Each refusal pays for the simplicity of everything else.
 
 ## The Spine
 

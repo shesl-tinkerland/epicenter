@@ -2,7 +2,7 @@
 
 A workspace definition is connection-free on purpose. `defineWorkspace({ id, tables, kv, actions })` names the tables, the KV slots, and the actions that need nothing but those. No IndexedDB, no WebSocket, no browser filesystem, no `signedIn` session. That is what lets one file be imported by the browser, the daemon, and the test runner without dragging any of their code along. The definition is the part that travels.
 
-`.open(connection, compose)` is where it lands in one environment. Connection data (`signedIn`, `deviceId`) only exists at runtime. A browser has a Yjs filesystem and `just-bash`; the daemon has `better-sqlite3` and a disk; a test has neither. The split between define and open is the isomorphism boundary drawn in time: define happens at build time and travels everywhere, open happens at runtime and commits to one place. You cannot merge them, because merging would force connection data, and the environment's imports, into the file everyone shares.
+`.open(connection, compose)` is where it lands in one environment. Connection data (`signedIn`, `nodeId`) only exists at runtime. A browser has a Yjs filesystem and `just-bash`; the daemon has `better-sqlite3` and a disk; a test has neither. The split between define and open is the isomorphism boundary drawn in time: define happens at build time and travels everywhere, open happens at runtime and commits to one place. You cannot merge them, because merging would force connection data, and the environment's imports, into the file everyone shares.
 
 Two files make this concrete. The definition imports nothing environmental:
 
@@ -20,8 +20,8 @@ The browser opener imports the browser:
 
 ```ts
 // opensidian.browser.ts  (imported only by the browser entry)
-export function openOpensidianBrowser({ signedIn, deviceId }) {
-  return opensidianWorkspace.open({ ...signedIn, deviceId }, (workspace) => {
+export function openOpensidianBrowser({ signedIn, nodeId }) {
+  return opensidianWorkspace.open({ ...signedIn, nodeId }, (workspace) => {
     const fs   = attachYjsFileSystem(workspace.ydoc, workspace.tables.files, ...);
     const bash = new Bash({ fs, cwd: '/' });
     const actions = defineActions({
@@ -56,13 +56,13 @@ The obvious alternative is to put the environment on the definition: `opensidian
 
 The callback inverts the dependency the right way. `opensidian.browser.ts` imports the browser, builds `fs` and `bash`, and hands a closure *in* to a definition that still imports nothing. The environment code stays in the environment file. The definition stays clean.
 
-There is a second reason the callback has to run *inside* `open()` rather than after it. Collaboration serves the action registry for cross-device dispatch, and collaboration wires up inside `open()`. A Tier 2 action that is not present by then is an action no other device can call. So the registry has to be final before `open()` finishes, which is exactly when the composer runs. The composer is not decoration on top of `open()`; it is the one window where an environment can add a served action before the wire closes.
+There is a second reason the callback has to run *inside* `open()` rather than after it. Collaboration serves the action registry for peer dispatch, and collaboration wires up inside `open()`. A Tier 2 action that is not present by then is an action no other peer can call. So the registry has to be final before `open()` finishes, which is exactly when the composer runs. The composer is not decoration on top of `open()`; it is the one window where an environment can add a served action before the wire closes.
 
 ## You cannot statically read what you cannot import
 
 This layout has a consequence worth stating plainly, because it looks like a limitation and is actually a law. You can enumerate Tier 1 actions anywhere: build a throwaway workspace, call the isomorphic builder, read the metadata. You cannot enumerate Tier 2 actions from a process that does not import their environment. Reading opensidian's `files_search` from a Node script would require loading the browser filesystem in Node, which is the precise thing isomorphism forbids.
 
-So there is no static, cross-environment list of every action. There cannot be. What there is instead is the runtime manifest: each device, in its own environment, projects its live registry to metadata (`toActionMeta`) and advertises it over awareness. The daemon `/list` route, AI tool discovery, and CLI flag generation all read that manifest, and they all run in the environment that has the actions. Every introspection need that physically can be served is served. The one that cannot be served is the one that would require importing two environments at once.
+So there is no static, cross-environment list of every action. There cannot be. What there is instead is the runtime manifest: each node, in its own environment, projects its live registry to metadata (`toActionMeta`) and advertises it over presence. The daemon `/list` route, AI tool discovery, and CLI flag generation all read that manifest, and they all run in the environment that has the actions. Every introspection need that physically can be served is served. The one that cannot be served is the one that would require importing two environments at once.
 
 ## Does open() earn the wrapper around it?
 
@@ -71,8 +71,8 @@ It is fair to look at `openOpensidianBrowser` calling `opensidianWorkspace.open`
 The wrapper's weight is proportional to the work. Opensidian's is 150 lines because the browser composition is real. Fuji's is three:
 
 ```ts
-export function openFujiBrowser({ signedIn, deviceId }) {
-  return fujiWorkspace.open({ ...signedIn, deviceId });
+export function openFujiBrowser({ signedIn, nodeId }) {
+  return fujiWorkspace.open({ ...signedIn, nodeId });
 }
 ```
 

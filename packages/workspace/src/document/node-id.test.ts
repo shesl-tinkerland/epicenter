@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	type AsyncStorage,
-	asDeviceId,
-	createDeviceId,
-	createDeviceIdAsync,
+	asNodeId,
+	createNodeId,
+	createNodeIdAsync,
 	type SimpleStorage,
-} from './device-id.js';
+} from './node-id.js';
 
 function makeMemoryStorage(
 	initial: Record<string, string> = {},
@@ -31,56 +31,56 @@ function makeAsyncMemoryStorage(
 	};
 }
 
-describe('createDeviceId', () => {
+describe('createNodeId', () => {
 	it('returns the existing value when storage already holds one', () => {
 		const storage = makeMemoryStorage({
-			'epicenter.device.id': 'preexisting-id',
+			'epicenter.node.id': 'preexisting-id',
 		});
-		expect(createDeviceId({ storage })).toBe(asDeviceId('preexisting-id'));
+		expect(createNodeId({ storage })).toBe(asNodeId('preexisting-id'));
 	});
 
 	it('generates and persists when storage is empty', () => {
 		const storage = makeMemoryStorage();
-		const fresh = createDeviceId({ storage });
+		const fresh = createNodeId({ storage });
 		expect(fresh).toMatch(/^[a-z0-9]{16}$/);
-		expect(storage.getItem('epicenter.device.id')).toBe(fresh);
+		expect(storage.getItem('epicenter.node.id')).toBe(fresh);
 	});
 
 	it('returns the same value on subsequent calls (idempotent)', () => {
 		const storage = makeMemoryStorage();
-		const first = createDeviceId({ storage });
-		const second = createDeviceId({ storage });
+		const first = createNodeId({ storage });
+		const second = createNodeId({ storage });
 		expect(second).toBe(first);
 	});
 
 	it('does not collide on independent storages', () => {
-		const a = createDeviceId({ storage: makeMemoryStorage() });
-		const b = createDeviceId({ storage: makeMemoryStorage() });
+		const a = createNodeId({ storage: makeMemoryStorage() });
+		const b = createNodeId({ storage: makeMemoryStorage() });
 		expect(a).not.toBe(b);
 	});
 });
 
-describe('createDeviceIdAsync', () => {
+describe('createNodeIdAsync', () => {
 	it('returns the existing value when storage already holds one', async () => {
 		const storage = makeAsyncMemoryStorage({
-			'epicenter.device.id': 'preexisting-id',
+			'epicenter.node.id': 'preexisting-id',
 		});
-		expect(await createDeviceIdAsync({ storage })).toBe(
-			asDeviceId('preexisting-id'),
+		expect(await createNodeIdAsync({ storage })).toBe(
+			asNodeId('preexisting-id'),
 		);
 	});
 
 	it('generates and persists when storage is empty', async () => {
 		const storage = makeAsyncMemoryStorage();
-		const fresh = await createDeviceIdAsync({ storage });
+		const fresh = await createNodeIdAsync({ storage });
 		expect(fresh).toMatch(/^[a-z0-9]{16}$/);
-		expect(await storage.getItem('epicenter.device.id')).toBe(fresh);
+		expect(await storage.getItem('epicenter.node.id')).toBe(fresh);
 	});
 
 	it('returns the same value on subsequent calls (idempotent)', async () => {
 		const storage = makeAsyncMemoryStorage();
-		const first = await createDeviceIdAsync({ storage });
-		const second = await createDeviceIdAsync({ storage });
+		const first = await createNodeIdAsync({ storage });
+		const second = await createNodeIdAsync({ storage });
 		expect(second).toBe(first);
 	});
 });

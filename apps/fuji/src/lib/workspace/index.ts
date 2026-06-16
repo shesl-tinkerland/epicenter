@@ -19,7 +19,7 @@
  * drags runtime code into a consumer.
  *
  * Composition lives elsewhere:
- *  - `src/lib/workspace/browser.ts` → `openFujiBrowser({ signedIn, deviceId })`
+ *  - `src/lib/workspace/browser.ts` → `openFujiBrowser({ signedIn, nodeId })`
  *  - `src/lib/workspace/mount.ts` → `fuji(opts?)` mount factory
  *  - `examples/fuji/epicenter.config.ts` → canonical Epicenter folder composition
  *

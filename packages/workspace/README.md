@@ -198,8 +198,8 @@ definition opener.
 
 ```typescript
 import {
-	createDeviceId,
-	type DeviceId,
+	createNodeId,
+	type NodeId,
 } from '@epicenter/workspace';
 import { createSession, type SignedIn } from '@epicenter/svelte/auth';
 import { auth } from '$lib/auth';
@@ -207,12 +207,12 @@ import { myAppWorkspace } from '$lib/workspace';
 
 export function openMyAppBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
-	return myAppWorkspace.connect({ ...signedIn, deviceId });
+	return myAppWorkspace.connect({ ...signedIn, nodeId });
 }
 
 export const session = createSession({
@@ -220,7 +220,7 @@ export const session = createSession({
 	build: (signedIn) =>
 		openMyAppBrowser({
 			signedIn,
-			deviceId: createDeviceId({ storage: localStorage }),
+			nodeId: createNodeId({ storage: localStorage }),
 		}),
 });
 ```
@@ -234,7 +234,7 @@ browser profile never see each other's data.
 
 `openCollaboration` remains the lower-level sync primitive behind this opener.
 It wraps the sync supervisor, mirrors the relay's server-owned presence channel
-as `collaboration.devices`, and runs inbound dispatch frames against the local
+as `collaboration.peers`, and runs inbound dispatch frames against the local
 action registry. See [SYNC_ARCHITECTURE.md](./SYNC_ARCHITECTURE.md) for the full
 model.
 
@@ -243,7 +243,7 @@ you call `.connect(...)`. Namespace it to your app (e.g. `epicenter.my-app`) to
 avoid collisions when multiple apps share the same IndexedDB origin. Cloud sync
 targets the single uniform shape `/api/owners/:ownerId/rooms/:roomId` in both
 modes: build the URL with
-`roomWsUrl({ baseURL, ownerId, guid: workspace.ydoc.guid, deviceId })`. A cloud
+`roomWsUrl({ baseURL, ownerId, guid: workspace.ydoc.guid, nodeId })`. A cloud
 doc is owned by the authenticated `OwnerId`, so the server resolves the Durable
 Object name `owners/${ownerId}/rooms/${room}` from the auth token (personal:
 `ownerId === userId`; shared: `ownerId === 'shared'`), with no workspace lookup.
@@ -414,7 +414,8 @@ Yjs supports multiple providers simultaneously. A phone can connect to desktop, 
 4. Await the right readiness signal before reading persisted state. There are two shapes here, and the choice is load-bearing:
    - **One subsystem to wait on.** Expose the subsystem (`idb`, `persistence`, ...) on the bundle root and let consumers reach through: `await bundle.idb.whenLoaded`. Do not alias `whenLoaded`/`whenReady` flat at the bundle root just to save a `.idb`; the alias lies about composition.
    - **Two or more subsystems to compose into one barrier.** Then `whenReady` earns its place: `whenReady: Promise.all([persistence.whenLoaded, unlock.whenChecked, sync.whenConnected])`. Because the field is typed `Promise<unknown>`, `Promise.all([...])` is assignable directly. Consumers `await bundle.whenReady`. The CLI's `run` command, migrations, `@epicenter/filesystem` ops, the sqlite-index materializer, and `{#await}` gates in editors all consume this aggregate.
-5. Read and write through `bundle.tables`, `bundle.kv`, `bundle.collaboration.devices` and `bundle.collaboration.dispatch` (for cross-device calls), and (for per-row content docs) whatever you exposed in the returned bundle.
+
+5. Read and write through `bundle.tables`, `bundle.kv`, `bundle.collaboration.peers` and `bundle.collaboration.dispatch` (for cross-node calls), and (for per-row content docs) whatever you exposed in the returned bundle.
 6. Iterate `Object.entries(bundle.actions)` and read each action's metadata (`type`, `title`, `description`, `input`) if you want to build adapters such as HTTP, CLI, or MCP.
 7. Dispose with `bundle[Symbol.dispose]()` for singletons or `handle[Symbol.dispose]()` for cache handles when you're done. Use `cache[Symbol.dispose]()` to flush every live entry.
 
@@ -626,18 +627,18 @@ Presence (which installs are connected right now) is not a client-defined
 schema. The relay owns it: it tracks live WebSocket connections and, on every
 connection change, pushes one `presence` text frame carrying the full list of
 connected installs. `openCollaboration` stores the latest list and exposes it
-as `collaboration.devices`:
+as `collaboration.peers`:
 
 ```typescript
-const online = workspace.collaboration.devices.list();
-// -> [{ deviceId: 'phone' }, { deviceId: 'laptop' }]
+const online = workspace.collaboration.peers.list();
+// -> [{ nodeId: 'phone' }, { nodeId: 'laptop' }]
 
-const unsubscribe = workspace.collaboration.devices.subscribe((devices) => {
-	console.log('online:', devices.map((device) => device.deviceId));
+const unsubscribe = workspace.collaboration.peers.subscribe((peers) => {
+	console.log('online:', peers.map((peer) => peer.nodeId));
 });
 ```
 
-Each entry is a `PresenceDevice` (`{ deviceId, connectedAt, actions }`);
+Each entry is a `Peer` (`{ nodeId, connectedAt, actions }`);
 the local install is excluded. Product-level data (display name, cursor,
 capability list) lives in app-owned tables, not on the presence wire. See
 [SYNC_ARCHITECTURE.md](./SYNC_ARCHITECTURE.md) for the full model.
@@ -904,7 +905,7 @@ import { field } from '@epicenter/field';
 import {
 	attachBroadcastChannel,
 	attachIndexedDb,
-	createDeviceId,
+	createNodeId,
 	createWorkspace,
 	defineTable,
 	openCollaboration,
@@ -934,13 +935,13 @@ function openTabs({
 	});
 	const idb = attachIndexedDb(workspace.ydoc);
 	attachBroadcastChannel(workspace.ydoc);
-	const deviceId = createDeviceId({ storage: localStorage });
+	const nodeId = createNodeId({ storage: localStorage });
 	const collaboration = openCollaboration(workspace.ydoc, {
 		url: roomWsUrl({
 			baseURL: 'https://api.epicenter.so',
 			ownerId,
 			guid: workspace.ydoc.guid,
-			deviceId,
+			nodeId,
 		}),
 		waitFor: idb.whenLoaded,
 		openWebSocket,
@@ -1431,7 +1432,7 @@ What the package does give you is the raw material a server adapter needs:
 - `toActionMeta(action)` to project an action to its wire-safe metadata
 - iterate with `Object.entries(actions)`
 - action metadata (`type`, `title`, `input`, `description`)
-- direct access to `bundle.tables`, `bundle.kv`, `bundle.collaboration.devices`, `bundle.collaboration.dispatch`, and per-row content factories
+- direct access to `bundle.tables`, `bundle.kv`, `bundle.collaboration.peers`, `bundle.collaboration.dispatch`, and per-row content factories
 
 If you want HTTP, CLI, or MCP on top, build or import an adapter around those primitives.
 
@@ -1569,16 +1570,16 @@ import {
 	type Collaboration,
 	DispatchError,
 	type DispatchRequest,
-	type PresenceDevice,
+	type Peer,
 } from '@epicenter/workspace';
 ```
 
-`openCollaboration` returns a `Collaboration`. Online devices (relay-owned presence, with each device's `deviceId`, `connectedAt`, and published `actions` manifest):
+`openCollaboration` returns a `Collaboration`. Online peers (relay-owned presence, with each peer's `nodeId`, `connectedAt`, and published `actions` manifest):
 
-- `collaboration.devices.list()`: `PresenceDevice[]`, the local install excluded
-- `collaboration.devices.subscribe(fn)`: returns an unsubscribe function
+- `collaboration.peers.list()`: `Peer[]`, the local install excluded
+- `collaboration.peers.subscribe(fn)`: returns an unsubscribe function
 
-Cross-device calls:
+Cross-node calls:
 
 - `collaboration.dispatch(req)`: `Promise<Result<unknown, DispatchError>>`
 

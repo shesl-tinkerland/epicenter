@@ -8,12 +8,12 @@
  * - `guid` is `encodeURIComponent`-encoded.
  * - Trailing slashes on `baseURL` are stripped.
  * - `http` origins become `ws`; `https` origins become `wss`.
- * - `deviceId` is appended as a query parameter.
+ * - `nodeId` is appended as a query parameter.
  */
 
 import { describe, expect, test } from 'bun:test';
 import { asOwnerId, SHARED_OWNER_ID } from '@epicenter/identity';
-import { asDeviceId } from './device-id.js';
+import { asNodeId } from './node-id.js';
 import { roomWsUrl } from './transport.js';
 
 describe('roomWsUrl', () => {
@@ -23,10 +23,10 @@ describe('roomWsUrl', () => {
 				baseURL: 'https://api.example.com',
 				ownerId: asOwnerId('alice'),
 				guid: 'epicenter-fuji',
-				deviceId: asDeviceId('client-1'),
+				nodeId: asNodeId('client-1'),
 			}),
 		).toBe(
-			'wss://api.example.com/api/owners/alice/rooms/epicenter-fuji?deviceId=client-1',
+			'wss://api.example.com/api/owners/alice/rooms/epicenter-fuji?nodeId=client-1',
 		);
 	});
 
@@ -36,10 +36,10 @@ describe('roomWsUrl', () => {
 				baseURL: 'https://shared.example.com',
 				ownerId: SHARED_OWNER_ID,
 				guid: 'epicenter-fuji',
-				deviceId: asDeviceId('client-1'),
+				nodeId: asNodeId('client-1'),
 			}),
 		).toBe(
-			'wss://shared.example.com/api/owners/shared/rooms/epicenter-fuji?deviceId=client-1',
+			'wss://shared.example.com/api/owners/shared/rooms/epicenter-fuji?nodeId=client-1',
 		);
 	});
 
@@ -49,10 +49,10 @@ describe('roomWsUrl', () => {
 				baseURL: 'https://api.example.com/',
 				ownerId: SHARED_OWNER_ID,
 				guid: 'a/b?c#d',
-				deviceId: asDeviceId('client-1'),
+				nodeId: asNodeId('client-1'),
 			}),
 		).toBe(
-			'wss://api.example.com/api/owners/shared/rooms/a%2Fb%3Fc%23d?deviceId=client-1',
+			'wss://api.example.com/api/owners/shared/rooms/a%2Fb%3Fc%23d?nodeId=client-1',
 		);
 	});
 
@@ -62,10 +62,10 @@ describe('roomWsUrl', () => {
 				baseURL: 'http://localhost:8787',
 				ownerId: SHARED_OWNER_ID,
 				guid: 'epicenter-fuji',
-				deviceId: asDeviceId('client-1'),
+				nodeId: asNodeId('client-1'),
 			}),
 		).toBe(
-			'ws://localhost:8787/api/owners/shared/rooms/epicenter-fuji?deviceId=client-1',
+			'ws://localhost:8787/api/owners/shared/rooms/epicenter-fuji?nodeId=client-1',
 		);
 	});
 });

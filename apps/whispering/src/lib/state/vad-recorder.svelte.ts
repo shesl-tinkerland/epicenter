@@ -44,6 +44,8 @@ const vadKeys = defineKeys({
 	devices: ['vad', 'devices'],
 });
 
+const VAD_ASSET_PATH = '/vad/';
+
 /**
  * Creates a Voice Activity Detection (VAD) recorder with reactive state.
  *
@@ -189,6 +191,14 @@ function createVadRecorder() {
 								if (onLevel) onLevel(computeFrameRms(frame));
 							},
 							model: 'v5',
+							baseAssetPath: VAD_ASSET_PATH,
+							// vad-web sets `ort.env.wasm.wasmPaths` to this base path before
+							// calling ortConfig, so the default onnxruntime-web build resolves
+							// /vad/ort-wasm-simd-threaded.{mjs,wasm} on its own.
+							onnxWASMBasePath: VAD_ASSET_PATH,
+							ortConfig: (ort) => {
+								ort.env.logLevel = 'error';
+							},
 						}),
 					catch: (error) => VadRecorderError.InitializeFailed({ cause: error }),
 				});

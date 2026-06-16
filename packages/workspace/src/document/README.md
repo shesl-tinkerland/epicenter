@@ -66,20 +66,20 @@ to open only the root doc or attach browser storage, sync, and runtime extras.
 ### Persistence + collaboration
 
 Auth belongs to the app. The browser opener receives the signed-in identity plus
-`deviceId`, then passes that connection into `definition.connect(connection)`.
+`nodeId`, then passes that connection into `definition.connect(connection)`.
 
 ```typescript
 import type { SignedIn } from '@epicenter/svelte/auth';
-import type { DeviceId } from '@epicenter/workspace';
+import type { NodeId } from '@epicenter/workspace';
 
 function openBlog({
   signedIn,
-  deviceId,
+  nodeId,
 }: {
   signedIn: SignedIn;
-  deviceId: DeviceId;
+  nodeId: NodeId;
 }) {
-  return blogWorkspace.connect({ ...signedIn, deviceId });
+  return blogWorkspace.connect({ ...signedIn, nodeId });
 }
 ```
 
@@ -128,4 +128,4 @@ Tests live in `*.test.ts` next to the implementation. Use `createWorkspace({ id:
 - `apps/fuji/src/lib/workspace/browser.ts`: IndexedDB + sync + server-owned presence
 - `apps/fuji/src/lib/workspace/mount.ts`: daemon materializers and per-row body doc reads
 - `packages/workspace/README.md`: quick start
-- `packages/workspace/SYNC_ARCHITECTURE.md`: multi-device sync design
+- `packages/workspace/SYNC_ARCHITECTURE.md`: multi-node sync design

@@ -11,7 +11,7 @@ Tailscale provides the primary network security layer:
 | Feature               | Protection                               |
 | --------------------- | ---------------------------------------- |
 | WireGuard encryption  | All traffic encrypted in transit         |
-| Device authentication | Only your devices can join your tailnet  |
+| Node authentication | Only your devices can join your tailnet  |
 | Private mesh          | Devices not exposed to public internet   |
 | ACLs                  | Can restrict which devices talk to which |
 
@@ -54,14 +54,14 @@ const provider = createSyncExtension({
 
 Server rejects connections without a valid key.
 
-##### Device Allowlist
+##### Node Allowlist
 
-Maintain a list of allowed device IDs:
+Maintain a list of allowed node IDs:
 
 ```typescript
 const ALLOWED_DEVICES = ['laptop-a-abc123', 'laptop-b-def456', 'phone-ghi789'];
 
-// Server validates device ID on connection
+// Server validates node ID on connection
 ```
 
 ##### End-to-End Encryption
@@ -110,10 +110,10 @@ Content-addressing provides tamper detection:
 
 | Threat                        | Mitigation                          |
 | ----------------------------- | ----------------------------------- |
-| Compromised device in tailnet | E2E encryption, device allowlist    |
-| Physical device access        | Device encryption, strong passwords |
-| Malicious software on device  | OS security, code signing           |
-| Insider with network access   | Pre-shared key, device allowlist    |
+| Compromised node in tailnet | E2E encryption, node allowlist    |
+| Physical node access        | Node encryption, strong passwords |
+| Malicious software on node  | OS security, code signing           |
+| Insider with network access   | Pre-shared key, node allowlist    |
 
 ## Recommendations by Use Case
 
@@ -126,7 +126,7 @@ RECOMMENDED:
 
 OPTIONAL:
 ○ Pre-shared key (extra layer)
-○ Device allowlist (audit trail)
+○ Node allowlist (audit trail)
 
 NOT NEEDED:
 ✗ Full authentication system
@@ -140,7 +140,7 @@ RECOMMENDED:
 ✅ Tailscale (private mesh)
 ✅ Content-addressing (integrity)
 ✅ Pre-shared key or auth tokens
-✅ Device allowlist
+✅ Node allowlist
 
 CONSIDER:
 ○ E2E encryption (for sensitive data)
@@ -220,5 +220,5 @@ The blob registry is public within the network. Anyone who can sync the Y.Doc ca
 ## Related Documentation
 
 - [Network Topology](./network-topology.md): Connection architecture
-- [Device Identity](./device-identity.md): How nodes identify themselves
+- [Node Identity](./node-identity.md): How nodes identify themselves via `nodeId`
 - [Blob Sync Protocol](../blobs/sync-protocol.md): Blob transfer security

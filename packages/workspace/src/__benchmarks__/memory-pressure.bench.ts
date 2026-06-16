@@ -4,7 +4,7 @@
  * Answers: "When do we hit memory walls? How much heap does a large doc consume?"
  *
  * Measures JavaScript heap usage at various document sizes. This is especially
- * relevant for lower-end devices (phones, tablets, cheap laptops) where memory
+ * relevant for lower-end nodes (phones, tablets, cheap laptops) where memory
  * is the constraint before CPU speed.
  *
  * Uses process.memoryUsage().heapUsed with forced GC between measurements

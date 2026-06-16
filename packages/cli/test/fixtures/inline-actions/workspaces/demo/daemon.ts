@@ -39,14 +39,14 @@ const actions = {
 };
 
 const collaboration = {
-	deviceId: 'fixture',
+	nodeId: 'fixture',
 	actions,
 	status: { phase: 'connected' as const },
 	whenConnected: Promise.resolve(),
 	whenDisposed: Promise.resolve(),
 	onStatusChange: () => () => {},
 	reconnect: () => {},
-	devices: {
+	peers: {
 		list: () => [],
 		subscribe: () => () => {},
 	},

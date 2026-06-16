@@ -18,5 +18,3 @@ declare global {
 		interface Env extends ServerBindings {}
 	}
 }
-
-export {};

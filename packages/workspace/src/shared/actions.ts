@@ -91,9 +91,9 @@ export type ActionMeta<
 
 /**
  * Wire schema for {@link ActionMeta}. Defines the single source of truth for
- * the metadata-only projection that crosses the wire (presence frame device
+ * the metadata-only projection that crosses the wire (presence frame node
  * manifests, daemon `/list` route, etc.). The `input` field is `Type.Object()`
- * with additional properties allowed because the device's local input schema
+ * with additional properties allowed because the node's local input schema
  * is itself a TypeBox/JSON Schema object; the wire validator only confirms
  * shape, not the inner schema's semantics.
  *

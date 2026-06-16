@@ -49,8 +49,8 @@
 				{...props}
 				class={cn('relative', className)}
 				tooltip={selectedTransformation
-					? 'Change post-processing transformation to run after your text is transcribed'
-					: 'Select a post-processing transformation to run after your text is transcribed'}
+					? 'Change transformation'
+					: 'Add a transformation'}
 				role="combobox"
 				aria-expanded={combobox.open}
 				variant="ghost"

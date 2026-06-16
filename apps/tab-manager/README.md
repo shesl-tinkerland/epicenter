@@ -52,14 +52,14 @@ Workspace ID: `epicenter-tab-manager`. Six tables:
 
 | Table | Key | Notable fields |
 |---|---|---|
-| `devices` | `DeviceId` | `name`, `lastSeen`, `browser` |
-| `savedTabs` | `SavedTabId` | `url`, `title`, `favIconUrl?`, `pinned`, `sourceDeviceId`, `savedAt` |
-| `bookmarks` | `BookmarkId` | `url`, `title`, `favIconUrl?`, `description?`, `sourceDeviceId`, `createdAt` |
+| `devices` | `NodeId` | `name`, `lastSeen`, `browser` |
+| `savedTabs` | `SavedTabId` | `url`, `title`, `favIconUrl?`, `pinned`, `sourceNodeId`, `savedAt` |
+| `bookmarks` | `BookmarkId` | `url`, `title`, `favIconUrl?`, `description?`, `sourceNodeId`, `createdAt` |
 | `conversations` | `ConversationId` | `title`, `parentId?`, `systemPrompt?`, `provider`, `model`, `createdAt`, `updatedAt` |
 | `chatMessages` | `ChatMessageId` | `conversationId`, `role`, `parts[]`, `createdAt` |
 | `toolTrust` | tool name | `trust: 'ask' \| 'always'` |
 
-Awareness entries carry `{ deviceId, client: "extension" | "desktop" | "cli" }` so you can see which devices are currently connected.
+Relay presence carries `nodeId`; Tab Manager maps that framework node to its app-owned `devices` table so the UI can show named browser devices.
 
 ---
 

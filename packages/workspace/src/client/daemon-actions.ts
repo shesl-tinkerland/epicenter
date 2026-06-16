@@ -5,13 +5,12 @@
  * daemon's local action registry over the unix socket via `client.run`.
  *
  * The proxy is one level: property access returns a function, calling that
- * function fires `client.run` with `${mount}.${path}`. `then` is masked at
+ * function fires `client.run` with the bare action key. `then` is masked at
  * the root so accidental `await workspace` does not turn it thenable.
  */
 
 import type { Result } from 'wellcrafted/result';
 import type { RunError } from '../daemon/action-errors.js';
-import { joinDaemonActionPath } from '../daemon/action-path.js';
 import type { DaemonClient, DaemonError } from '../daemon/client.js';
 import type { Action, ActionRegistry } from '../shared/actions.js';
 import type { Simplify } from '../shared/types.js';
@@ -59,7 +58,6 @@ export type DaemonActions<TActions> = Simplify<{
  */
 export function buildDaemonActions<TActions extends ActionRegistry>(
 	client: DaemonClient,
-	mount: string,
 ): DaemonActions<TActions> {
 	return new Proxy({} as Record<string, unknown>, {
 		get(_target, prop) {
@@ -67,7 +65,7 @@ export function buildDaemonActions<TActions extends ActionRegistry>(
 			if (prop === 'then') return undefined;
 			return (input?: unknown) =>
 				client.run({
-					actionPath: joinDaemonActionPath(mount, prop),
+					actionPath: prop,
 					input,
 				});
 		},

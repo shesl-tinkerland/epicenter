@@ -13,7 +13,7 @@
  * conflict resolution.
  *
  * **See also**: `y-keyvalue-lww.ts` for timestamp-based last-write-wins conflict resolution,
- * which is better suited for offline-first, multi-device scenarios where "latest edit wins"
+ * which is better suited for offline-first, multi-node scenarios where "latest edit wins"
  * semantics are desired.
  *
  * ## When to Use This vs YKeyValueLww
@@ -21,7 +21,7 @@
  * | Scenario | Use `YKeyValue` | Use `YKeyValueLww` |
  * |----------|-----------------|-------------------|
  * | Real-time collab (always online) | Yes | Either |
- * | Offline-first, multi-device | No | Yes |
+ * | Offline-first, multi-node | No | Yes |
  * | Clock sync unreliable | Yes | No |
  * | Need "latest edit wins" | No | Yes |
  * | Simpler implementation | Yes | No |

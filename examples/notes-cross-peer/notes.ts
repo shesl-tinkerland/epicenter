@@ -1,11 +1,11 @@
 /**
  * Shared workspace shape for the two-peer cross-peer sync repro.
  *
- * Each peer's mount module calls `openNotes(ctx-derived-args)` so both peers
- * agree on the workspace id, the table schema, and the action set; the only
- * thing that differs between peers is the `deviceId` (the mount ctx
- * default is `${mount}-daemon`, but cross-peer sync requires distinct
- * deviceIds for the same workspace, so each peer hard-codes its own).
+ * Each peer's mount module calls `openNotes` with its ctx `nodeId` so both
+ * peers agree on the workspace id, the table schema, and the action set; the
+ * only thing that differs between peers is the `nodeId`. The daemon resolves
+ * that id per Epicenter root, so the two peer folders get distinct ids
+ * automatically and neither peer has to hard-code an identity.
  */
 
 import { EPICENTER_API_URL } from '@epicenter/constants/apps';
@@ -16,6 +16,7 @@ import {
 	defineMutation,
 	defineQuery,
 	defineTable,
+	type NodeId,
 	type OnReconnectSignal,
 	type OpenWebSocketFn,
 	openCollaboration,
@@ -31,12 +32,12 @@ const Note = defineTable({
 });
 
 export function openNotes({
-	deviceId,
+	nodeId,
 	ownerId,
 	openWebSocket,
 	onReconnectSignal,
 }: {
-	deviceId: string;
+	nodeId: NodeId;
 	ownerId: OwnerId;
 	openWebSocket: OpenWebSocketFn;
 	onReconnectSignal: OnReconnectSignal;
@@ -49,18 +50,16 @@ export function openNotes({
 	const { ydoc, tables } = workspace;
 
 	const actions = {
-		notes: {
-			list: defineQuery({
-				description: 'List all notes',
-				handler: () => tables.notes.scan().rows,
-			}),
-			add: defineMutation({
-				description: 'Add a note',
-				input: Type.Object({ body: Type.String() }),
-				handler: ({ body }) =>
-					tables.notes.set({ id: crypto.randomUUID(), body }),
-			}),
-		},
+		list: defineQuery({
+			description: 'List all notes',
+			handler: () => tables.notes.scan().rows,
+		}),
+		add: defineMutation({
+			description: 'Add a note',
+			input: Type.Object({ body: Type.String() }),
+			handler: ({ body }) =>
+				tables.notes.set({ id: crypto.randomUUID(), body }),
+		}),
 	};
 
 	const collaboration = openCollaboration(ydoc, {
@@ -68,7 +67,7 @@ export function openNotes({
 			baseURL: EPICENTER_API_URL,
 			ownerId,
 			guid: ydoc.guid,
-			deviceId,
+			nodeId,
 		}),
 		openWebSocket,
 		onReconnectSignal,

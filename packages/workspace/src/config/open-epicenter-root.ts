@@ -7,7 +7,8 @@
  *
  *   1. `loadEpicenterConfig(epicenterRoot)` imports `epicenter.config.ts` and
  *      validates that its default export is a single `Mount` with a valid name.
- *   2. Claim the Epicenter folder's generated-state boundary.
+ *   2. Claim the Epicenter folder's generated-state boundary and resolve its
+ *      durable per-install node id (persisted under `.epicenter/`).
  *   3. Build the `MountSession` from the caller's auth client (or `null` when
  *      signed out: a logged-out daemon is a valid state), then open the mount
  *      with it.
@@ -38,6 +39,7 @@ import { Err, Ok, type Result, tryAsync, trySync } from 'wellcrafted/result';
 import { isInactive, type MountSession } from '../daemon/define-mount.js';
 import type { StartedMount } from '../daemon/types.js';
 import type { AuthedFetch, EpicenterRoot } from '../shared/types.js';
+import { resolveDaemonNodeId } from './daemon-node-id.js';
 import {
 	type EpicenterConfigError,
 	loadEpicenterConfig,
@@ -130,19 +132,28 @@ export async function openEpicenterRoot(
 		await loadEpicenterConfig(epicenterRoot);
 	if (configError !== null) return Err(configError);
 
+	// Claim the folder's machine state and resolve its durable node identity in
+	// one step: both write under `.epicenter/`, and a node id is just more
+	// machine state living there. The id is generated once and persisted, so it
+	// is stable across restarts, distinct per folder, and never derived from the
+	// path or the mount name (either of which would collide across machines).
 	const claimResult = trySync({
-		try: () => claimEpicenterFolder(epicenterRoot),
+		try: () => {
+			claimEpicenterFolder(epicenterRoot);
+			return resolveDaemonNodeId(epicenterRoot);
+		},
 		catch: (cause) =>
 			WorkspaceAppError.EpicenterFolderClaimFailed({ epicenterRoot, cause }),
 	});
 	if (claimResult.error !== null) return Err(claimResult.error);
+	const nodeId = claimResult.data;
 
-	// The session carries only auth-derived capabilities. Per-mount identity
-	// (clientID, device id) is derived from `epicenterRoot` / `mount` where it is
-	// used, not pinned here.
+	// The session carries only auth-derived capabilities; the node identity is
+	// auth-independent (a signed-out daemon still has one), so it rides on the
+	// context beside `epicenterRoot` and `mount`.
 	const session = buildMountSession(options.auth);
 
-	const ctx = { epicenterRoot, mount: mount.name, session };
+	const ctx = { epicenterRoot, mount: mount.name, nodeId, session };
 	const { data: result, error: openError } = await tryAsync({
 		try: () => Promise.resolve(mount.open(ctx)),
 		catch: (cause) =>

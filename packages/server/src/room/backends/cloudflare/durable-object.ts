@@ -159,11 +159,11 @@ export class Room extends DurableObject {
 	 * parsing Request/Response objects for binary payloads.
 	 *
 	 * Trusts the rooms route to have validated and stamped both `userId`
-	 * (from auth) and `deviceId` (from the client query, presence-checked
+	 * (from auth) and `nodeId` (from the client query, presence-checked
 	 * at the route boundary) onto the URL before forwarding. Together they
 	 * form the {@link Connection} stamped on the socket attachment for the
 	 * lifetime of the connection. `userId` is what presence carries to
-	 * peers; `deviceId` is the address `dispatch({ to })` routes to.
+	 * peers; `nodeId` is the address `dispatch({ to })` routes to.
 	 *
 	 * Cancels any pending compaction alarm: a new client just connected,
 	 * so compacting now would be wasteful.
@@ -179,8 +179,8 @@ export class Room extends DurableObject {
 
 		const url = new URL(request.url);
 		const rawUserId = url.searchParams.get('userId');
-		const deviceId = url.searchParams.get('deviceId');
-		if (!rawUserId || !deviceId) {
+		const nodeId = url.searchParams.get('nodeId');
+		if (!rawUserId || !nodeId) {
 			// Contract violation: the auth-gated rooms route is responsible
 			// for validating and stamping both params before forwarding.
 			// 500 (not 400) signals this is a server bug, not a client error.
@@ -200,11 +200,11 @@ export class Room extends DurableObject {
 		this.ctx.acceptWebSocket(server);
 
 		// Stash the connection attachment so presence survives hibernation. The
-		// device's published action manifest arrives later via `presence_publish`
+		// node's published action manifest arrives later via `presence_publish`
 		// and the core re-serializes the attachment when it does.
 		const attachment: Connection = {
 			userId,
-			deviceId,
+			nodeId,
 			connectedAt: Date.now(),
 			actions: {},
 		};

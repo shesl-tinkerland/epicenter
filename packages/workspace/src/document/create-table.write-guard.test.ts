@@ -4,7 +4,7 @@
  * Verifies that whole-row writes refuse to clobber rows stamped by a newer
  * schema version than this binary knows. Without the guard, a stale binary's
  * `set()` whole-row-overwrites a newer-schema row with a fresh LWW timestamp,
- * destroying newer-only columns on every synced device (the local monotonic
+ * destroying newer-only columns on every synced node (the local monotonic
  * clock guarantees the stale write wins LWW).
  *
  * Key behaviors:

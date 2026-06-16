@@ -24,7 +24,7 @@
  *
  * Excluded on purpose: `:` (illegal in macOS/Windows filenames), `/`, `_`,
  * spaces, uppercase, leading/trailing/double hyphens, and the Windows
- * reserved device names (`con`, `nul`, ...), any of which would break one of
+ * reserved node names (`con`, `nul`, ...), any of which would break one of
  * the five sinks.
  */
 export const SAFE_SEGMENT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -66,7 +66,7 @@ const WINDOWS_RESERVED = new Set([
 export function assertSafeSegment(value: string, label: string): void {
 	if (!SAFE_SEGMENT.test(value) || WINDOWS_RESERVED.has(value)) {
 		throw new Error(
-			`Invalid ${label}: ${JSON.stringify(value)}. A guid segment must be lowercase a-z and 0-9 with single internal hyphens (matching ${SAFE_SEGMENT}), contain no dots, and not be a reserved device name.`,
+			`Invalid ${label}: ${JSON.stringify(value)}. A guid segment must be lowercase a-z and 0-9 with single internal hyphens (matching ${SAFE_SEGMENT}), contain no dots, and not be a reserved node name.`,
 		);
 	}
 }

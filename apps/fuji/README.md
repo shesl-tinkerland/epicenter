@@ -43,7 +43,7 @@ Fuji's browser workspace is built once per signed-in session by `createSession`.
 ```ts
 import { openFujiBrowser } from "$lib/browser";
 import { createSession } from "@epicenter/svelte/auth";
-import { createDeviceId } from "@epicenter/workspace";
+import { createNodeId } from "@epicenter/workspace";
 import { auth } from "$lib/auth";
 
 export const session = createSession({
@@ -51,7 +51,7 @@ export const session = createSession({
   build: (signedIn) =>
     openFujiBrowser({
       signedIn,
-      deviceId: createDeviceId({ storage: localStorage }),
+      nodeId: createNodeId({ storage: localStorage }),
     }),
 });
 ```
@@ -61,12 +61,12 @@ Inside `openFujiBrowser`, the composition is now just the runtime connection:
 ```ts
 export function openFujiBrowser({
   signedIn,
-  deviceId,
+  nodeId,
 }: {
   signedIn: SignedIn;
-  deviceId: DeviceId;
+  nodeId: NodeId;
 }) {
-  return fujiWorkspace.connect({ ...signedIn, deviceId });
+  return fujiWorkspace.connect({ ...signedIn, nodeId });
 }
 ```
 

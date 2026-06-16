@@ -1,5 +1,5 @@
 /**
- * Tests for the live-device dispatch module.
+ * Tests for the live-node dispatch module.
  *
  * Covers the two pure pieces of dispatch:
  *

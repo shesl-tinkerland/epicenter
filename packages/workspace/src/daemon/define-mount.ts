@@ -13,16 +13,17 @@
  *     because it needs a signed-in `session` and there is none.
  *
  * There is no `local` vs `collaborative` kind. The context carries the Epicenter
- * root, the mount name, and a nullable `session`. A purely local mirror ignores
- * the session, a mount that wants the peer plane (presence + remote dispatch)
- * uses its socket. The session is `null` when machine auth is signed out, so
- * the logged-out case is always in front of the author.
+ * root, the mount name, a durable node id, and a nullable `session`. A purely
+ * local mirror ignores the session, a mount that wants the peer plane (presence
+ * + remote dispatch) uses its socket. The session is `null` when machine auth is
+ * signed out, so the logged-out case is always in front of the author.
  *
  * Most mounts need a session, so they declare with `defineSessionMount` and get
  * a guaranteed-non-null `session` plus an automatic `inactive` when signed out.
  */
 
 import type { OwnerId } from '@epicenter/identity';
+import type { NodeId } from '../document/node-id.js';
 import type {
 	OnReconnectSignal,
 	OpenWebSocketFn,
@@ -56,16 +57,20 @@ export type MountSession = {
  *
  * - `epicenterRoot` is the resolved Epicenter root (the folder that holds
  *   `epicenter.config.ts`). Disk-writing helpers derive every absolute path
- *   from it, and the deterministic Y.Doc `clientID` is `hashYDocClientId` of
- *   it.
+ *   from it.
  * - `mount` is the canonical mount name (`Mount.name`), pinned so handlers
- *   share one identifier with logs, local cache keys, and the conventional
- *   `<mount>-daemon` collaboration device id.
+ *   share one identifier with logs and local cache keys. It is a label, not an
+ *   identity seed: it never feeds the node id or the Y.Doc `clientID`.
+ * - `nodeId` is the durable per-install identity (generated once and persisted
+ *   under `.epicenter/`). It is the relay's routing id for presence and peer
+ *   dispatch, and the seed for the Y.Doc `clientID`. Auth-independent: present
+ *   even when signed out.
  * - `session` is the signed-in capability kit, or `null` when signed out.
  */
 export type MountContext = {
 	readonly epicenterRoot: EpicenterRoot;
 	readonly mount: string;
+	readonly nodeId: NodeId;
 	readonly session: MountSession | null;
 };
 

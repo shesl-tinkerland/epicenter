@@ -56,6 +56,7 @@
 </script>
 
 <script lang="ts">
+	import { mergeProps } from 'bits-ui';
 	import * as Tooltip from '../tooltip/index.js';
 
 	let {
@@ -73,6 +74,16 @@
 </script>
 
 {#snippet buttonContent(tooltipProps?: Record<string, unknown>)}
+	<!--
+		When this button is itself the child of another trigger (e.g. a
+		Popover.Trigger passes its props in via restProps), both sets of trigger
+		props land on one element. Spreading them sequentially clobbers colliding
+		event handlers, ids, and ref callbacks, which silently breaks the tooltip
+		anchor. mergeProps composes them instead. See bits-ui's merge-props util.
+	-->
+	{@const mergedProps = tooltipProps
+		? mergeProps(restProps, tooltipProps)
+		: restProps}
 	{#if href}
 		<!-- biome-ignore lint/a11y/useValidAriaRole: conditional role is valid -->
 		<a
@@ -83,8 +94,7 @@
 			aria-disabled={disabled}
 			role={disabled ? 'link' : undefined}
 			tabindex={disabled ? -1 : undefined}
-			{...tooltipProps}
-			{...restProps}
+			{...mergedProps}
 		>
 			{@render children?.()}
 		</a>
@@ -95,8 +105,7 @@
 			class={cn(buttonVariants({ variant, size }), className)}
 			{type}
 			{disabled}
-			{...tooltipProps}
-			{...restProps}
+			{...mergedProps}
 		>
 			{@render children?.()}
 		</button>

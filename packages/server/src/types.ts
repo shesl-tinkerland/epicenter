@@ -19,17 +19,17 @@ import type { Rooms } from './room/contracts.js';
  * Per-connection identity and runtime state, stamped onto the Cloudflare
  * Durable Object WebSocket attachment so presence survives hibernation.
  *
- * `deviceId` identifies one Epicenter app on one persistent storage scope
+ * `nodeId` identifies one Epicenter app on one persistent storage scope
  * (browser tab, Tauri window, extension service worker, CLI process; tabs
  * sharing localStorage share an id). The client generates and persists its
  * own; lifespan is the client's concern.
  *
  * `connectedAt` is stamped at upgrade time and surfaced in presence frames so
  * receivers can render an "online since" affordance and tie-break multi-tab
- * same-device (newest wins).
+ * same-node (newest wins).
  *
  * `actions` is the published action manifest for this socket. Starts as `{}`
- * at upgrade; updated to the device's manifest when `presence_publish` arrives.
+ * at upgrade; updated to the node's manifest when `presence_publish` arrives.
  * Relay treats the value as opaque (it forwards JSON to peers, never inspects).
  *
  * In personal mode every connection to a given DO shares the same `userId`
@@ -39,7 +39,7 @@ import type { Rooms } from './room/contracts.js';
  */
 export type Connection = {
 	userId: UserId;
-	deviceId: string;
+	nodeId: string;
 	connectedAt: number;
 	actions: ActionManifest;
 };

@@ -1,18 +1,18 @@
 /**
- * Live-device dispatch over the relay.
+ * Live-node dispatch over the relay.
  *
  * `runInboundDispatch()` is the recipient-side handler. The supervisor
  * routes text frames here; we look up `action` in the local registry,
  * invoke it, and emit the `dispatch_response` back over the same socket.
  *
  * Liveness is consumed via the server-owned presence channel (see
- * `presence-protocol.ts` and `Collaboration.devices`). This module no
+ * `presence-protocol.ts` and `Collaboration.peers`). This module no
  * longer carries a liveness reader: the relay's `connections` map is the
  * source of truth, and clients learn its contents from the relay's
  * `presence` full-list text frame.
  *
- * Identity and routing in one sentence: the relay maps `deviceId` to
- * "most-recently-connected open socket"; multi-tab same-device is
+ * Identity and routing in one sentence: the relay maps `nodeId` to
+ * "most-recently-connected open socket"; multi-tab same-node is
  * handled by positional newest-wins lookup at delivery time.
  *
  * @module

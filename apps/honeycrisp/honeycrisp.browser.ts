@@ -14,17 +14,17 @@
  */
 
 import type { SignedIn } from '@epicenter/svelte/auth';
-import type { DeviceId } from '@epicenter/workspace';
+import type { NodeId } from '@epicenter/workspace';
 import { honeycrispWorkspace } from './honeycrisp.js';
 
 export function openHoneycrispBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: DeviceId;
+	nodeId: NodeId;
 }) {
-	return honeycrispWorkspace.connect({ ...signedIn, deviceId });
+	return honeycrispWorkspace.connect({ ...signedIn, nodeId });
 }
 
 export type HoneycrispBrowser = ReturnType<typeof openHoneycrispBrowser>;

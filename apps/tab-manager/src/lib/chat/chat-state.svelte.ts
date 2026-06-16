@@ -103,14 +103,14 @@ export function createAiChatState({
 			persistence: chatPersistence,
 			tools: sessionAiTools.tools,
 			connection: fetchServerSentEvents(`${APP_URLS.API}/ai/chat`, async () => {
-				const deviceId = tabManager.deviceId;
+				const nodeId = tabManager.nodeId;
 				return {
 					fetchClient: createAiChatFetch(auth.fetch),
 					body: {
 						data: {
 							model: modelChoice?.model ?? DEFAULT_MODEL,
 							systemPrompts: [
-								buildDeviceConstraints(deviceId),
+								buildDeviceConstraints(nodeId),
 								TAB_MANAGER_SYSTEM_PROMPT,
 							],
 							tools: sessionAiTools.definitions,

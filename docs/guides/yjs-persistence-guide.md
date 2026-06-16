@@ -9,7 +9,7 @@
 > on Node/Bun, composed inline against the bundle returned by `createWorkspace`. See
 > [`packages/workspace/README.md`](../../packages/workspace/README.md) for the
 > Quick Start and [`packages/workspace/SYNC_ARCHITECTURE.md`](../../packages/workspace/SYNC_ARCHITECTURE.md)
-> for multi-device sync.
+> for multi-node sync.
 
 ## What is YJS?
 
@@ -17,7 +17,7 @@ YJS is a **CRDT (Conflict-free Replicated Data Type)** library. In Epicenter, YJ
 
 ## Current sync model
 
-The example below uses cloud sync: the client builds the URL with `roomWsUrl({ baseURL, ownerId, guid, deviceId })` and the server resolves the room from the auth token.
+The example below uses cloud sync: the client builds the URL with `roomWsUrl({ baseURL, ownerId, guid, nodeId })` and the server resolves the room from the auth token.
 
 Each app composes its workspace inline in a browser opener:
 
@@ -37,7 +37,7 @@ export function openMyApp() {
 	});
 	const idb = attachIndexedDb(workspace.ydoc);                  // local persistence
 	const collaboration = openCollaboration(workspace.ydoc, {     // sync + presence + dispatch
-		url: roomWsUrl({ baseURL: auth.baseURL, ownerId, guid: workspace.ydoc.guid, deviceId }),
+		url: roomWsUrl({ baseURL: auth.baseURL, ownerId, guid: workspace.ydoc.guid, nodeId }),
 		openWebSocket: auth.openWebSocket,
 		onReconnectSignal: auth.onStateChange,
 		waitFor: idb.whenLoaded,                                    // delta-only on reconnect

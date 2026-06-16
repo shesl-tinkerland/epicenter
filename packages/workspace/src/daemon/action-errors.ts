@@ -4,7 +4,7 @@
  * One union covers both execution targets, because the caller-facing concept
  * is one: run an action, locally or on a peer. The authorities still differ
  * inside the handler: a local run consults this daemon's action registry,
- * while a peer run lets the recipient device decide action existence and the
+ * while a peer run lets the recipient node decide action existence and the
  * relay own reachability.
  *
  * Remote call failures keep the remote client error intact so the CLI owns

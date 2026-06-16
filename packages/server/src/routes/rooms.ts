@@ -10,7 +10,7 @@
  * The Durable Object name is the owner-partitioned identifier produced by
  * {@link doName}; nothing here interpolates strings inline. The DO itself
  * is owner-blind: every connection is identified by the
- * `(userId, deviceId)` pair stamped onto its WebSocket attachment.
+ * `(userId, nodeId)` pair stamped onto its WebSocket attachment.
  *
  * Each HTTP/WS access pushes a fire-and-forget upsert into
  * `c.var.afterResponse` so the platform-level `durableObjectInstance`
@@ -138,18 +138,18 @@ const roomsApp = new Hono<Env>()
 			const room = c.var.rooms.get(name);
 
 			if (isWebSocketUpgrade(c)) {
-				// Validate deviceId presence at the route boundary so the DO
-				// can trust the URL has it. deviceId is the dispatch address
+				// Validate nodeId presence at the route boundary so the DO
+				// can trust the URL has it. nodeId is the dispatch address
 				// `dispatch({ to })` resolves against; a missing one would
 				// produce a presence-ghost connection (visible in presence
 				// frames but unreachable by dispatch).
-				if (!c.req.query('deviceId')) {
-					const err = RequestGuardError.MissingDeviceId();
+				if (!c.req.query('nodeId')) {
+					const err = RequestGuardError.MissingNodeId();
 					return c.json(err, err.error.status);
 				}
 
 				// Stamp userId from auth, overwriting any client-supplied
-				// value for safety. deviceId is the client's own identifier
+				// value for safety. nodeId is the client's own identifier
 				// so it rides through unchanged from c.req.url.
 				const url = new URL(c.req.url);
 				url.searchParams.set('userId', c.var.user.id);

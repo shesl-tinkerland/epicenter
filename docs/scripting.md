@@ -2,7 +2,7 @@
 
 A script is a Bun file that reads the local SQLite materializer and writes through `connectDaemonActions`. There is no `script.ts` recipe to copy. The daemon is the single writer; the script is a short-lived reader plus an IPC client.
 
-A mount name comes from the `Mount.name` of the single mount `epicenter.config.ts` default-exports, not from a project folder or a local module filename. One folder declares one mount, and the script addresses it with `connectDaemonActions({ mount })`.
+The Epicenter root is the folder that holds `epicenter.config.ts`. That config default-exports one `Mount`; one foreground daemon serves that mount over the root's Unix socket. The mount name is still the public action prefix for CLI display (`fuji.entries_update`), but scripts that already connect to a root call actions by their bare keys through `connectDaemonActions`.
 
 ## The whole shape
 
@@ -27,7 +27,6 @@ const urgent = db
 
 // writes: typed proxy over unix socket to the daemon
 const fuji = await connectDaemonActions<FujiActions>({
-  mount: "fuji",
   epicenterRoot,
 });
 for (const note of urgent) {
@@ -59,9 +58,9 @@ npm package).
 
 ## Writes: typed invoke through the daemon
 
-`connectDaemonActions<TActions>({ mount, epicenterRoot })` returns a typed proxy. `mount` is the mount name (`'fuji'` for the Fuji example); the proxy translates `fuji.entries_update({ ... })` into a `POST /run` over the daemon's Unix socket in the OS runtime directory. The daemon validates the input against the action's declared schema (invalid input comes back as a usage error), invokes the action in-process against the live Y.Doc, and returns a JSON `Result<T>`.
+`connectDaemonActions<TActions>({ epicenterRoot })` returns a typed proxy. The proxy translates `fuji.entries_update({ ... })` into a `POST /run` over the daemon's Unix socket in the OS runtime directory. The daemon validates the input against the action's declared schema (invalid input comes back as a usage error), invokes the action in-process against the live Y.Doc, and returns a JSON `Result<T>`.
 
-The mount name comes from the `Mount.name` of the single `Mount` default-exported by `epicenter.config.ts`. App factories like `fuji()` return a mount whose name is `fuji`.
+The mount name comes from the single `Mount.name` default-exported by `epicenter.config.ts`. App factories like `fuji()` return a mount whose name is `fuji`; the CLI uses that label when it renders or accepts `<mount>.<action>` paths.
 
 Two consequences fall out:
 

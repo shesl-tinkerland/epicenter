@@ -38,8 +38,8 @@
 			<Button
 				{...props}
 				tooltip={selectedDeviceId
-					? 'Change VAD recording device'
-					: 'Select a VAD recording device'}
+					? 'Change recording device'
+					: 'Choose recording device'}
 				role="combobox"
 				aria-expanded={combobox.open}
 				variant="ghost"

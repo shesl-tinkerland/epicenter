@@ -26,20 +26,18 @@ function makeStubClient() {
 	return { client, calls };
 }
 
-const WORKSPACE = 'demo';
-
 describe('buildDaemonActions workspace facade', () => {
 	test('action runs literal workspace path over /run', async () => {
 		const { client, calls } = makeStubClient();
 		// biome-ignore lint/suspicious/noExplicitAny: smoke test: shape is irrelevant
-		const workspace: any = buildDaemonActions(client, WORKSPACE);
+		const workspace: any = buildDaemonActions(client);
 
 		await workspace.entries_get('xyz');
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]!.method).toBe('run');
 		expect(calls[0]!.arg).toMatchObject({
-			actionPath: 'demo.entries_get',
+			actionPath: 'entries_get',
 			input: 'xyz',
 		});
 	});

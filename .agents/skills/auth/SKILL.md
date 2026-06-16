@@ -343,7 +343,7 @@ Use `auth.openWebSocket` for sync:
 
 ```ts
 const collaboration = openCollaboration(workspace.ydoc, {
-	url: roomWsUrl({ baseURL, ownerId, guid: workspace.ydoc.guid, deviceId }),
+	url: roomWsUrl({ baseURL, ownerId, guid: workspace.ydoc.guid, nodeId }),
 	waitFor: idb.whenLoaded,
 	openWebSocket: signedIn.openWebSocket,
 	onReconnectSignal: signedIn.onReconnectSignal,
@@ -434,7 +434,7 @@ export const session = createSession({
 				baseURL: signedIn.baseURL,
 				ownerId: signedIn.ownerId,
 				guid: workspace.ydoc.guid,
-				deviceId,
+				nodeId,
 			}),
 			waitFor: idb.whenLoaded,
 			openWebSocket: signedIn.openWebSocket,

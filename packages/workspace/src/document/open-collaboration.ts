@@ -9,10 +9,10 @@
  * Two wire surfaces ride one auth context:
  *
  *   binary WS frames  -> standard y-protocols SYNC.
- *   text WS frames    -> server -> client: presence (the full device list
- *                        including each device's action manifest, sent on
+ *   text WS frames    -> server -> client: presence (the full peer list
+ *                        including each peer's action manifest, sent on
  *                        every membership or manifest change);
- *                        client -> server: presence_publish (this device's
+ *                        client -> server: presence_publish (this node's
  *                        manifest, sent once per connect) and
  *                        dispatch_request / dispatch_response;
  *                        server -> client: dispatch_inbound / dispatch_result.
@@ -51,7 +51,7 @@ import {
 } from './internal/sync-supervisor.js';
 import {
 	checkPresenceFrame,
-	type PresenceDevice,
+	type Peer,
 	type PresencePublishFrame,
 } from './presence-protocol.js';
 
@@ -80,7 +80,7 @@ export type OpenCollaborationConfig<TActions extends ActionRegistry> = {
 	/**
 	 * WebSocket URL the supervisor connects to, used verbatim. Callers
 	 * build it via {@link roomWsUrl} (or any custom builder); the wire
-	 * `?deviceId=` query that the relay routes by lives in this URL.
+	 * `?nodeId=` query that the relay routes by lives in this URL.
 	 * `openCollaboration` does not parse, mutate, or augment it.
 	 */
 	url: string;
@@ -171,15 +171,15 @@ export function openCollaboration<TActions extends ActionRegistry>(
 		}
 	}
 
-	// Server-owned presence: the relay pushes the full device list as a
+	// Server-owned presence: the relay pushes the full peer list as a
 	// `presence` text frame on every membership or manifest change. Each entry
-	// carries the device's deviceId, connectedAt, and published action
+	// carries the peer's nodeId, connectedAt, and published action
 	// manifest. The client stores the latest list and notifies subscribers;
 	// there is no delta protocol and no client-side reassembly. The relay
-	// dedupes multi-tab same-device (newest-wins by connectedAt) and excludes
-	// the receiver's own device, so the client stores `devices` verbatim.
-	let remoteDevices: PresenceDevice[] = [];
-	const presenceListeners = new Set<(devices: PresenceDevice[]) => void>();
+	// dedupes multi-tab same-node (newest-wins by connectedAt) and excludes
+	// the receiver's own node, so the client stores `peers` verbatim.
+	let remotePeers: Peer[] = [];
+	const presenceListeners = new Set<(peers: Peer[]) => void>();
 
 	// Returns true if `text` was a recognized `presence` frame (and thus
 	// consumed); false if the caller should route it elsewhere (dispatch).
@@ -191,8 +191,8 @@ export function openCollaboration<TActions extends ActionRegistry>(
 			return false;
 		}
 		if (!checkPresenceFrame.Check(parsed)) return false;
-		remoteDevices = parsed.devices;
-		for (const listener of presenceListeners) listener(remoteDevices);
+		remotePeers = parsed.peers;
+		for (const listener of presenceListeners) listener(remotePeers);
 		return true;
 	}
 
@@ -228,7 +228,7 @@ export function openCollaboration<TActions extends ActionRegistry>(
 		openWebSocket: config.openWebSocket,
 		log: config.log,
 		// Text frames carry two unrelated server-to-client channels:
-		// presence (the full install list) and dispatch. Try presence first,
+		// presence (the full peer list) and dispatch. Try presence first,
 		// then caller-side dispatch results, then recipient-side inbound calls.
 		onTextFrame(text) {
 			if (handlePresenceFrame(text)) return;
@@ -243,7 +243,7 @@ export function openCollaboration<TActions extends ActionRegistry>(
 
 	const unsubscribeStatusListener = supervisor.onStatusChange((status) => {
 		if (status.phase === 'connected') {
-			// Publish this device's action manifest on every (re)connect. The
+			// Publish this node's action manifest on every (re)connect. The
 			// relay stores it against the new socket and rebroadcasts presence
 			// so peers see it.
 			supervisor.send(presencePublishFrame);
@@ -267,12 +267,12 @@ export function openCollaboration<TActions extends ActionRegistry>(
 		settlePendingDispatches(new Error('Dispatch connection disposed'));
 	});
 
-	// `devices` reads the latest relay-pushed presence list directly.
-	const devices = {
-		list(): PresenceDevice[] {
-			return remoteDevices;
+	// `peers` reads the latest relay-pushed presence list directly.
+	const peers = {
+		list(): Peer[] {
+			return remotePeers;
 		},
-		subscribe(fn: (devices: PresenceDevice[]) => void): () => void {
+		subscribe(fn: (peers: Peer[]) => void): () => void {
 			presenceListeners.add(fn);
 			return () => {
 				presenceListeners.delete(fn);
@@ -305,11 +305,11 @@ export function openCollaboration<TActions extends ActionRegistry>(
 		/** Restart the current connection cycle. */
 		reconnect: supervisor.reconnect,
 		/**
-		 * Online installs in this workspace, derived from the server-owned
+		 * Online peers in this workspace, derived from the server-owned
 		 * presence channel.
 		 */
-		get devices() {
-			return devices;
+		get peers() {
+			return peers;
 		},
 		/**
 		 * Fire a dispatch over the collaboration WebSocket. Always returns

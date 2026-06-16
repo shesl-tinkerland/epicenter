@@ -31,7 +31,7 @@ Self-hosting is functionally zero-knowledge against Epicenter, because Epicenter
 
 ## Where this is heading: the anchor
 
-Privacy stops being an encryption layer and becomes a topology choice. The direction, a separate future effort rather than anything in the code today, is Iroh: every device gets a public-key identity and opens a direct, end-to-end-encrypted QUIC connection addressed by that key. When two devices cannot connect directly, a relay forwards the sealed frames it cannot decode.
+Privacy stops being an encryption layer and becomes a topology choice. The direction, validated in a throwaway local spike but not product code yet, is Iroh: every device gets a public-key identity and opens a direct, end-to-end-encrypted QUIC connection addressed by that key. When two devices cannot connect directly, a relay forwards the sealed frames it cannot decode.
 
 The one place a server still has to be an endpoint is when your phone edits and your laptop is asleep: something always-on has to hold that update until the laptop wakes. That something is the anchor, and the anchor decrypts and stores. So "do we encrypt the data" becomes "who runs the anchor":
 
@@ -39,6 +39,8 @@ The one place a server still has to be an endpoint is when your phone edits and 
 - Trust Epicenter's anchor, the default, and we hold your data, the same promise as today.
 
 "Become the server" shrinks to "become the anchor": one always-on node instead of a whole auth-and-sync stack. The browser stays a relay-bound leaf (WASM, no UDP hole-punching), and the relay still cannot read the frames. Client-encrypted backup snapshots are the one place a sealed blob still earns its keep, and that primitive returns, minimal, when backup is built.
+
+The local spike proved the shape worth keeping: a Mac Studio home anchor persisted a CRDT doc reached from a MacBook on phone hotspot; a JS/Yjs runtime then used a Rust/Iroh sidecar to stream live updates into that anchor and hydrate them back. That does not solve pairing, auth, packaging, browser access, or room multiplexing. It does prove the important boundary: TypeScript can keep owning Yjs/app semantics while Rust only owns native reachability.
 
 ## Migration
 

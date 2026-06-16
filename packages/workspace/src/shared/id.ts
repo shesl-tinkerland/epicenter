@@ -10,7 +10,7 @@
  *
  * Because the property is the same everywhere, there is one generator,
  * {@link generateId}. Callers brand its output to taste (`Id`, `Guid`,
- * `DeviceId`, `FileId`, ...); the brand is the semantics, the generator
+ * `NodeId`, `FileId`, ...); the brand is the semantics, the generator
  * is the mechanism, and they are deliberately decoupled.
  *
  * The one genuine *secret* in the system, the public-asset URL token, is
@@ -75,7 +75,7 @@ export function Id(value: string): Id {
 
 /**
  * Branded string for a broader-scope identifier: workspace ids, derived
- * child-doc guids, device ids, file ids.
+ * child-doc guids, node ids, file ids.
  *
  * Same mechanism as {@link Id} (a collision-only public nanoid); the
  * distinct brand only documents that the value identifies something
@@ -90,14 +90,14 @@ export type Guid = string & Brand<'Guid'>;
  * ~82.7 bits, CSPRNG-backed via `nanoid`).
  *
  * This is the single id generator. Brand the result for the call site:
- * `generateId<Guid>()`, `generateId<DeviceId>()`, etc. It is not a secret;
+ * `generateId<Guid>()`, `generateId<NodeId>()`, etc. It is not a secret;
  * see the file overview for why access control is a separate layer.
  *
  * @returns A unique identifier, branded as {@link Id} by default.
  * @example
  * ```typescript
  * const rowId = generateId();              // Id
- * const deviceId = generateId<DeviceId>(); // DeviceId
+ * const nodeId = generateId<NodeId>(); // NodeId
  * ```
  */
 export function generateId<T extends string = Id>(): T {

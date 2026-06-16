@@ -1,5 +1,5 @@
 /**
- * Daemon server starter: build the app for started mounts and bind a unix
+ * Daemon server starter: build the app for one started mount and bind a unix
  * socket. The "build + bind" core extracted from the CLI's
  * `epicenter daemon up` command so any bun process (CLI, vault, embedded) can
  * stand up the daemon transport without depending on `@epicenter/cli`.
@@ -24,12 +24,8 @@ import { bindUnixSocket } from './unix-socket.js';
 export type DaemonServerOptions = {
 	/** Already-claimed daemon lease. */
 	lease: DaemonLease;
-	/**
-	 * The one mount served by the unix-socket app, or `null` when the mount is
-	 * inactive (signed out): the daemon still binds and answers `/ping`, an empty
-	 * `/list`, and empty `/peers`.
-	 */
-	mount: DaemonServedMount | null;
+	/** Mount served by the unix-socket app. */
+	mount: DaemonServedMount;
 };
 
 function createDaemonServer({
@@ -63,11 +59,10 @@ function createDaemonServer({
 export type DaemonServer = ReturnType<typeof createDaemonServer>;
 
 /**
- * Start a daemon server for the already-started mount (or `null` when the mount
- * is inactive). The caller must claim the daemon lease before mount startup;
- * this function owns only socket binding. The mount name is validated upstream
- * by `openEpicenterRoot` before the mount opens, so by the time it reaches here
- * it is already known-good.
+ * Start a daemon server for one already-started mount. The caller must claim the
+ * daemon lease before mount startup; this function owns only socket binding.
+ * Mount names are validated upstream by `openEpicenterRoot` before any mount
+ * opens, so by the time a mount reaches here it is already known-good.
  *
  * The lease (`lease.ts`) is the sole ownership primitive: holding it means no
  * other daemon is live, so any leftover socket file is stale and `Bun.serve`

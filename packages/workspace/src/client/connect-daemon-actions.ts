@@ -14,16 +14,14 @@
  * import { connectDaemonActions } from '@epicenter/workspace/node';
  * import type { FujiActions } from '@epicenter/fuji';
  *
- * const fuji = await connectDaemonActions<FujiActions>({
- *   mount: 'fuji',
- * });
+ * const fuji = await connectDaemonActions<FujiActions>();
  * await fuji.entries_update({ id, tags: ['untagged'] });
  * ```
  *
- * Daemon-scope calls (`peers`, `list`) live on `DaemonClient` directly:
- * construct one with `daemonClient(socketPathFor(epicenterRoot))` and call
- * `.peers()` / `.list()` against the same socket. They are not reachable
- * through this workspace handle.
+ * Daemon-scope calls (peers, list with the mount label) live on `DaemonClient`
+ * directly: construct one with `daemonClient(socketPathFor(epicenterRoot))` and
+ * call `.peers()` / `.list()` against the same socket. They are not
+ * reachable through this workspace handle.
  */
 
 import { getDaemon } from '../daemon/client.js';
@@ -35,10 +33,6 @@ import { findEpicenterRoot } from './find-epicenter-root.js';
 /**
  * Connect to a workspace's public actions hosted by a running daemon.
  *
- * `mount` is the `Mount.name` value from `epicenter.config.ts`. The daemon
- * prefixes each snake_case action key with `${mount}.`, then dispatches the
- * remaining key against that workspace.
- *
  * `epicenterRoot` defaults to walking up from `process.cwd()` for an
  * `epicenter.config.ts` file.
  *
@@ -48,10 +42,8 @@ import { findEpicenterRoot } from './find-epicenter-root.js';
  * lifecycle is the contract.
  */
 export async function connectDaemonActions<TActions extends ActionRegistry>({
-	mount,
 	epicenterRoot = findEpicenterRoot(),
 }: {
-	mount: string;
 	/**
 	 * The Epicenter root (the folder that holds `epicenter.config.ts`).
 	 * Defaults to the nearest ancestor of `process.cwd()`
@@ -59,8 +51,8 @@ export async function connectDaemonActions<TActions extends ActionRegistry>({
 	 * ancestor exists; pass an explicit `epicenterRoot` to opt out.
 	 */
 	epicenterRoot?: EpicenterRoot;
-}): Promise<DaemonActions<TActions>> {
+} = {}): Promise<DaemonActions<TActions>> {
 	const { data: client, error } = await getDaemon(epicenterRoot);
 	if (error) throw error;
-	return buildDaemonActions<TActions>(client, mount);
+	return buildDaemonActions<TActions>(client);
 }

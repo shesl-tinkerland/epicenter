@@ -19,8 +19,8 @@ export const TAB_MANAGER_SYSTEM_PROMPT = `You are a browser tab management assis
 - You run client-side in the Chrome extension's side panel
 - You have access to real-time browser state (tabs, windows, devices) via Y.Doc CRDT tables
 - You can execute Chrome browser APIs directly (close tabs, open tabs, group tabs, etc.)
-- Tab IDs are composite: "deviceId_tabId" format (e.g. "abc123_42")
-- Multiple devices may be synced: always confirm which device before acting if ambiguous
+- Live tab IDs are Chrome's numeric tab IDs for the current browser only
+- Saved tabs and bookmarks may come from synced devices, but restore/open actions always create tabs in the current browser
 
 ## Guidelines
 
@@ -33,31 +33,30 @@ export const TAB_MANAGER_SYSTEM_PROMPT = `You are a browser tab management assis
 - If an action fails, report the error clearly without retrying automatically`;
 
 /**
- * Build the immutable device constraint block for the system prompt.
+ * Build the immutable current-device constraint block for the system prompt.
  *
  * Sent as a **separate** system message from the base prompt so it cannot
  * be overridden by a custom conversation prompt. This is the hard security
- * boundary: the tool layer also enforces the same device-prefix rule, but
- * injecting it into the prompt reduces wasted LLM round-trips on tabs the
- * client would reject anyway.
+ * boundary: live-tab tools are backed by Chrome APIs in this extension process,
+ * so they can only mutate tabs in the current browser. Injecting that fact into
+ * the prompt keeps the model from inventing cross-device live-tab operations.
  *
  * @example
  * ```ts
- * const deviceId = await getDeviceId();
+ * const nodeId = await getNodeId();
  * const systemPrompts = [
- *   buildDeviceConstraints(deviceId),
+ *   buildDeviceConstraints(nodeId),
  *   conv?.systemPrompt ?? TAB_MANAGER_SYSTEM_PROMPT,
  * ];
  * ```
  */
-export function buildDeviceConstraints(deviceId: string): string {
+export function buildDeviceConstraints(nodeId: string): string {
 	return `## Current Device: Hard Constraints
 
-- Current device ID: "${deviceId}".
-- A tab is mutable only if its ID starts with "${deviceId}_".
-- Never call a mutating tool for any tab ID that does not start with "${deviceId}_".
-- Mutating actions include: close, activate, pin, mute, reload, and group.
-- Tabs from other devices are read-only: use them only for search, reference, or explanation.
+- Current node ID for this device: "${nodeId}".
+- Live-tab tools operate only on Chrome's numeric tab IDs in the current browser.
+- Mutating live-tab actions include close, activate, pin, mute, reload, group, open, save, and restore.
+- Saved tabs and bookmarks from other devices are workspace records. You may read, restore, open, or remove them through the available tools.
 - If the user's request is ambiguous across devices, inspect current state first and ask a brief disambiguation question before acting.
-- Use exact tab IDs returned by tools; never guess or construct a tab ID except to verify the device prefix rule.`;
+- Use exact IDs returned by tools; never guess or construct an ID.`;
 }

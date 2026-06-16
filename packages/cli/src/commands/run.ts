@@ -1,12 +1,13 @@
 /**
  * `epicenter run <mount.action_key> [input]`: invoke a `defineQuery` or
- * `defineMutation` by mount-prefixed action path through the local
+ * `defineMutation` by mount-prefixed CLI path through the local
  * `epicenter daemon up` daemon.
  *
  * `input` is JSON: inline positional, `@file.json` (curl convention), or stdin.
- * With `--peer <target>`, the daemon dispatches the run over the selected
- * mount's RPC channel to a remote peer instead of running locally; both
- * shapes are one `/run` request (the optional `peer` object selects the
+ * The CLI owns the `<mount>.` prefix for public addressing, then sends the
+ * daemon the bare action key. With `--peer <target>`, the daemon dispatches
+ * the run over its RPC channel to a remote peer instead of running locally;
+ * both shapes are one `/run` request (the optional `peer` object selects the
  * target and carries the wait budget).
  *
  * `epicenter run` requires a running daemon for the discovered Epicenter root.
@@ -84,10 +85,24 @@ export const runCommand = cmd({
 			return;
 		}
 
+		const { data: list, error: listError } = await daemon.list();
+		if (listError) {
+			fail(listError.message);
+			return;
+		}
+		const { data: actionPath, error: actionPathError } = resolveDaemonRunPath(
+			list.mount,
+			argv.action,
+		);
+		if (actionPathError) {
+			fail(actionPathError.message, { details: actionPathError.suggestions });
+			return;
+		}
+
 		// A `peer` key with an `undefined` value drops out of the JSON wire
 		// body, so a local run sends no peer fields at all.
 		const result = await daemon.run({
-			actionPath: argv.action,
+			actionPath,
 			input: actionInput,
 			peer:
 				argv.peer === undefined
@@ -97,6 +112,35 @@ export const runCommand = cmd({
 		renderRunResult(result, argv.format);
 	},
 });
+
+function resolveDaemonRunPath(
+	mount: string,
+	cliAction: string,
+): Result<string, { message: string; suggestions?: string[] }> {
+	const prefix = `${mount}.`;
+	if (cliAction.startsWith(prefix)) {
+		const localPath = cliAction.slice(prefix.length);
+		if (localPath.length > 0) return { data: localPath, error: null };
+		return {
+			data: null,
+			error: {
+				message: `"${cliAction}" is not a runnable action.`,
+				suggestions: [`  ${mount}.<action_key>`],
+			},
+		};
+	}
+
+	const requestedMount = cliAction.includes('.')
+		? cliAction.slice(0, cliAction.indexOf('.'))
+		: cliAction;
+	return {
+		data: null,
+		error: {
+			message: `No mount "${requestedMount}". Available: ${mount}`,
+			suggestions: [`  ${mount}`],
+		},
+	};
+}
 
 function renderRunResult(
 	result: Result<unknown, RunError | DaemonError>,

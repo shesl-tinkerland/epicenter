@@ -173,7 +173,7 @@ const provider2 = createSyncProvider({
 
 ## Offline Support
 
-Each device should use local persistence alongside network sync:
+Each node should use local persistence alongside network sync:
 
 ```typescript
 providers: {
@@ -193,6 +193,6 @@ When offline:
 
 ## Related Documentation
 
-- [Device Identity](./device-identity.md): How nodes identify themselves
+- [Node Identity](./node-identity.md): How nodes identify themselves
 - [Security](./security.md): Network security model
 - [Blob Sync](../blobs/README.md): How binary files sync across the network

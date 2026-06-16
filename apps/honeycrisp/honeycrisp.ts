@@ -10,7 +10,7 @@
  * canonical schema.
  *
  * Composition lives elsewhere:
- *  - `apps/honeycrisp/honeycrisp.browser.ts`  -> `openHoneycrispBrowser({ signedIn, deviceId })`
+ *  - `apps/honeycrisp/honeycrisp.browser.ts`  -> `openHoneycrispBrowser({ signedIn, nodeId })`
  *  - `apps/honeycrisp/mount.ts`  -> `honeycrisp(opts?)` mount factory
  */
 

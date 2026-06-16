@@ -17,7 +17,7 @@
  * the protocol level:
  *
  *   binary WS frames  -> standard y-protocols SYNC.
- *   text WS frames    -> live-device dispatch and the server-owned
+ *   text WS frames    -> live-node dispatch and the server-owned
  *                        presence channel (`presence`).
  *
  * Dispatch is relay-mediated and rides text frames: a caller's
@@ -63,7 +63,7 @@ import {
 } from '@epicenter/workspace/document/dispatch-protocol';
 import {
 	checkPresencePublishFrame,
-	type PresenceDevice,
+	type Peer,
 	type PresenceFrame,
 } from '@epicenter/workspace/document/presence';
 import * as decoding from 'lib0/decoding';
@@ -226,45 +226,43 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 	// ==========================================================================
 
 	/**
-	 * Deduped snapshot of currently-connected devices, newest-wins per
-	 * `deviceId`. Pass `exclude` to omit the caller's own socket; if the
-	 * caller's device still has other open sockets (multi-tab same-device
-	 * edge case), those siblings are excluded too. The result is "remote
-	 * devices" from the perspective of the receiver, sorted by
-	 * `deviceId` for deterministic output.
+	 * Deduped snapshot of currently-connected peers, newest-wins per
+	 * `nodeId`. Pass `exclude` to omit the caller's own socket; if the
+	 * caller's node still has other open sockets (multi-tab same-node
+	 * edge case), those siblings are excluded too. The result is the
+	 * "peers" from the perspective of the receiver, sorted by
+	 * `nodeId` for deterministic output.
 	 */
-	function snapshotDevices(exclude?: RoomSocket): PresenceDevice[] {
-		const excludeDevice = exclude
-			? connections.get(exclude)?.deviceId
-			: undefined;
-		const seen = new Map<string, PresenceDevice>();
+	function snapshotPeers(exclude?: RoomSocket): Peer[] {
+		const excludeNode = exclude ? connections.get(exclude)?.nodeId : undefined;
+		const seen = new Map<string, Peer>();
 		for (const [ws, attachment] of connections) {
 			if (ws === exclude) continue;
-			if (excludeDevice && attachment.deviceId === excludeDevice) {
+			if (excludeNode && attachment.nodeId === excludeNode) {
 				continue;
 			}
-			const existing = seen.get(attachment.deviceId);
+			const existing = seen.get(attachment.nodeId);
 			if (existing && existing.connectedAt >= attachment.connectedAt) continue;
-			seen.set(attachment.deviceId, {
-				deviceId: attachment.deviceId,
+			seen.set(attachment.nodeId, {
+				nodeId: attachment.nodeId,
 				connectedAt: attachment.connectedAt,
 				actions: attachment.actions,
 			});
 		}
 		return Array.from(seen.values()).sort((a, b) =>
-			a.deviceId.localeCompare(b.deviceId),
+			a.nodeId.localeCompare(b.nodeId),
 		);
 	}
 
 	/**
-	 * Count OPEN sockets currently associated with `deviceId`. Used to
-	 * detect the first socket for a device (on connect) and the last (on
+	 * Count OPEN sockets currently associated with `nodeId`. Used to
+	 * detect the first socket for a node (on connect) and the last (on
 	 * close): the two events that change room membership.
 	 */
-	function countDeviceSockets(deviceId: string): number {
+	function countNodeSockets(nodeId: string): number {
 		let count = 0;
 		for (const [, data] of connections) {
-			if (data.deviceId === deviceId) count++;
+			if (data.nodeId === nodeId) count++;
 		}
 		return count;
 	}
@@ -283,7 +281,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 				peer.send(
 					JSON.stringify({
 						type: 'presence',
-						devices: snapshotDevices(peer),
+						peers: snapshotPeers(peer),
 					} satisfies PresenceFrame),
 				);
 			} catch {
@@ -322,14 +320,14 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 	}
 
 	/**
-	 * Resolve a recipient `deviceId` to the most-recently-connected open
+	 * Resolve a recipient `nodeId` to the most-recently-connected open
 	 * socket, if any. `Map` iteration is insertion order, so the LAST
 	 * matching socket in a forward scan is the newest.
 	 */
-	function pickRecipient(deviceId: string): RoomSocket | null {
+	function pickRecipient(nodeId: string): RoomSocket | null {
 		let newest: RoomSocket | null = null;
 		for (const [ws, data] of connections) {
-			if (data.deviceId === deviceId && ws.readyState === WS_READY_OPEN) {
+			if (data.nodeId === nodeId && ws.readyState === WS_READY_OPEN) {
 				newest = ws;
 			}
 		}
@@ -439,7 +437,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 	}
 
 	/**
-	 * Device -> relay: publish this socket's action manifest. The relay stores
+	 * Node -> relay: publish this socket's action manifest. The relay stores
 	 * the manifest against the connection attachment, persists it via
 	 * `serializeAttachment` when the runtime supports hibernation, and
 	 * rebroadcasts presence so peers see the update. A malformed payload is
@@ -505,10 +503,10 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 		 * Register a newly-accepted socket and run the connect-time
 		 * presence flow.
 		 *
-		 * Sends the new socket its initial Yjs `SyncStep1` and a device
-		 * snapshot (the receiver's "remote devices"). If this is the FIRST
-		 * socket for `deviceId`, room membership changed, so peers are
-		 * rebroadcast the live list. Subsequent tabs of the same device
+		 * Sends the new socket its initial Yjs `SyncStep1` and a peer
+		 * snapshot (the receiver's "peers"). If this is the FIRST
+		 * socket for `nodeId`, room membership changed, so peers are
+		 * rebroadcast the live list. Subsequent tabs of the same node
 		 * leave the list unchanged and need no rebroadcast.
 		 *
 		 * A connect supersedes any pending debounced rebroadcast (the
@@ -518,9 +516,9 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 		 *   responsible for the runtime-specific accept (hibernation API
 		 *   or `Bun.serve` upgrade) before calling this.
 		 * @param connection - The connection attachment URL-stamped at
-		 *   upgrade. `deviceId` is the dispatch address; `userId`
+		 *   upgrade. `nodeId` is the dispatch address; `userId`
 		 *   is the auth principal; `connectedAt` and `actions` are mirrored
-		 *   on the wire so receivers can render device affordances.
+		 *   on the wire so receivers can render node affordances.
 		 */
 		addConnection(socket: RoomSocket, connection: Connection): void {
 			connections.set(socket, connection);
@@ -529,11 +527,11 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 			socket.send(
 				JSON.stringify({
 					type: 'presence',
-					devices: snapshotDevices(socket),
+					peers: snapshotPeers(socket),
 				} satisfies PresenceFrame),
 			);
 
-			if (countDeviceSockets(connection.deviceId) === 1) {
+			if (countNodeSockets(connection.nodeId) === 1) {
 				cancelPendingRebroadcast();
 				broadcastPresence(socket);
 			}
@@ -565,7 +563,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 					sendDispatchResult(
 						pending.callerWs,
 						id,
-						recipientOffline(data.deviceId),
+						recipientOffline(data.nodeId),
 					);
 				} else if (pending.callerWs === socket) {
 					clearTimeout(pending.timeout);
@@ -575,7 +573,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 
 			connections.delete(socket);
 
-			if (countDeviceSockets(data.deviceId) === 0) {
+			if (countNodeSockets(data.nodeId) === 0) {
 				if (code === CLOSE_CODE_AUTH_FAILED) {
 					cancelPendingRebroadcast();
 					broadcastPresence();

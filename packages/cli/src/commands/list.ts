@@ -1,11 +1,12 @@
 /**
  * `epicenter list [mount.action_key]`: render actions exposed by this root.
  *
- * The daemon returns mount-prefixed action paths for the one mount it serves.
- * The CLI only filters and renders that manifest.
+ * The daemon returns a mount label plus bare action keys. The CLI is the
+ * public-addressing edge: it prefixes those keys as `<mount>.<action>` before
+ * filtering and rendering.
  *
  * Per-peer schema introspection is a script concern. The CLI lists the local
- * daemon's mount-prefixed action surface only.
+ * daemon's mounted action surface only.
  *
  * `epicenter list` requires a running daemon for the discovered Epicenter root.
  * Without `daemon up`, the handler errors with a hint pointing at
@@ -28,7 +29,7 @@ import {
 
 export const listCommand = cmd({
 	command: 'list [path]',
-	describe: 'List the queries and mutations this daemon exposes',
+	describe: 'List exposed queries and mutations on this node, by mount',
 	builder: (yargs) =>
 		yargs
 			.positional('path', {
@@ -51,7 +52,7 @@ export const listCommand = cmd({
 });
 
 function renderResult(
-	result: Result<ActionManifest, DaemonError>,
+	result: Result<{ mount: string; actions: ActionManifest }, DaemonError>,
 	path: string,
 	format: OutputFormat | undefined,
 ): void {
@@ -69,10 +70,24 @@ function renderResult(
 		}
 	}
 	if (format) {
-		renderJson(result.data, path, format);
+		renderJson(toPrefixedManifest(result.data), path, format);
 		return;
 	}
-	renderText(result.data, path);
+	renderText(toPrefixedManifest(result.data), path);
+}
+
+function toPrefixedManifest({
+	mount,
+	actions,
+}: {
+	mount: string;
+	actions: ActionManifest;
+}): ActionManifest {
+	const manifest: ActionManifest = {};
+	for (const [path, meta] of Object.entries(actions)) {
+		manifest[`${mount}.${path}`] = meta;
+	}
+	return manifest;
 }
 
 function renderJson(
@@ -116,7 +131,7 @@ function renderText(entries: ActionManifest, path: string): void {
 		printActionDetail(path, leaf);
 		return;
 	}
-	printMountActions(subset);
+	printGroupedByMount(subset);
 }
 
 function filterByPath(entries: ActionManifest, path: string): ActionManifest {
@@ -148,21 +163,29 @@ function toActionDescriptor(
 
 /**
  * Action paths are exactly `mount.action_key` (mount names reject dots, action
- * keys are snake_case), and a daemon serves one mount, so every path shares the
- * mount segment. Print the mount name once as the canonical app identity, then
- * its actions indented underneath. Callers pass a non-empty manifest.
+ * keys are snake_case), so the manifest is two levels deep by construction.
+ * Render one mount header per group with its actions indented underneath.
  */
-function printMountActions(entries: ActionManifest): void {
-	const [firstPath = ''] = Object.keys(entries);
-	const mountDot = firstPath.indexOf('.');
-	const mount = mountDot === -1 ? firstPath : firstPath.slice(0, mountDot);
-
-	console.log(mount);
+function printGroupedByMount(entries: ActionManifest): void {
+	const byMount = new Map<string, [string, ActionManifest[string]][]>();
 	for (const [path, action] of Object.entries(entries)) {
 		const dot = path.indexOf('.');
-		const key = dot === -1 ? path : path.slice(dot + 1);
-		const desc = action.description ? `  ${action.description}` : '';
-		console.log(`  ${key}  (${action.type})${desc}`);
+		const mount = dot === -1 ? path : path.slice(0, dot);
+		const key = dot === -1 ? '' : path.slice(dot + 1);
+		const group = byMount.get(mount);
+		if (group) group.push([key, action]);
+		else byMount.set(mount, [[key, action]]);
+	}
+
+	let first = true;
+	for (const [mount, group] of byMount) {
+		if (!first) console.log('');
+		first = false;
+		console.log(mount);
+		for (const [key, action] of group) {
+			const desc = action.description ? `  ${action.description}` : '';
+			console.log(`  ${key}  (${action.type})${desc}`);
+		}
 	}
 }
 

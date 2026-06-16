@@ -12,7 +12,7 @@
 > points at the canonical sources:
 >
 > - **Quick Start**: [`packages/workspace/README.md`](../../packages/workspace/README.md)
-> - **Multi-device sync**: [`packages/workspace/SYNC_ARCHITECTURE.md`](../../packages/workspace/SYNC_ARCHITECTURE.md)
+> - **Multi-node sync**: [`packages/workspace/SYNC_ARCHITECTURE.md`](../../packages/workspace/SYNC_ARCHITECTURE.md)
 > - **Production wiring**: `apps/fuji/src/lib/workspace/browser.ts` (inline composition with per-row child docs), `apps/fuji/src/lib/session.ts` (session glue), `apps/tab-manager/src/lib/session.svelte.ts` (browser extension auth binding)
 
 ## Overview
@@ -23,7 +23,7 @@ On the client, `@epicenter/workspace` exposes the primitives directly: define yo
 
 ## Minimal cloud workspace shape
 
-This snippet shows a signed-in cloud workspace. The client builds the sync URL with `roomWsUrl({ baseURL, ownerId, guid, deviceId })`; the server resolves the room from the auth token, so the client never names a workspaceId.
+This snippet shows a signed-in cloud workspace. The client builds the sync URL with `roomWsUrl({ baseURL, ownerId, guid, nodeId })`; the server resolves the room from the auth token, so the client never names a workspaceId.
 
 The per-app browser opener is the single source of truth for "how this app mounts in a browser." `createWorkspace` builds the typed bundle in one call; every other `attach*` step is visible top-to-bottom against `workspace.ydoc`.
 
@@ -31,7 +31,7 @@ The per-app browser opener is the single source of truth for "how this app mount
 import { field } from '@epicenter/field';
 import {
 	attachLocalStorage,
-	createDeviceId,
+	createNodeId,
 	createWorkspace,
 	defineActions,
 	defineMutation,
@@ -80,10 +80,10 @@ function createMyApp() {
 
 export function openMyAppBrowser({
 	signedIn,
-	deviceId,
+	nodeId,
 }: {
 	signedIn: SignedIn;
-	deviceId: string;
+	nodeId: string;
 }) {
 	const workspace = createMyApp();
 
@@ -96,7 +96,7 @@ export function openMyAppBrowser({
 			baseURL: signedIn.baseURL,
 			ownerId: signedIn.ownerId,
 			guid: workspace.ydoc.guid,
-			deviceId,
+			nodeId,
 		}),
 		openWebSocket: signedIn.openWebSocket,
 		onReconnectSignal: signedIn.onReconnectSignal,
@@ -124,7 +124,7 @@ export const session = createSession({
 	build: (signedIn) => {
 		const workspace = openMyAppBrowser({
 			signedIn,
-			deviceId: createDeviceId({ storage: localStorage }),
+			nodeId: createNodeId({ storage: localStorage }),
 		});
 		return {
 			...workspace,
