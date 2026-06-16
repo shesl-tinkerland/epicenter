@@ -133,6 +133,17 @@ export function createVault({
 		whenReady,
 
 		/**
+		 * Subscribe to vault changes: fires on any update to the underlying doc (a
+		 * value written here, or one delivered over the relay later). Lets the
+		 * reactive facade invalidate its synchronous reads without reaching into the
+		 * doc itself, keeping the doc encapsulated here. Returns an unsubscribe.
+		 */
+		onChange(listener: () => void): () => void {
+			ydoc.on('update', listener);
+			return () => ydoc.off('update', listener);
+		},
+
+		/**
 		 * Provision a brand-new vault from a passphrase and unlock it. Generates the
 		 * master key, persists its wrapped form as plaintext metadata, and goes to
 		 * `unlocked`. The passphrase is taken as-is: gate weak ones at the call site.

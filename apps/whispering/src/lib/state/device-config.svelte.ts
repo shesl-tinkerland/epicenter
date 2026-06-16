@@ -61,18 +61,14 @@ export const DEFAULT_GLOBAL_BINDINGS = {
 // ── Per-key definitions ──────────────────────────────────────────────────────
 
 /**
- * Device-bound configuration definitions: secrets, hardware IDs, filesystem
- * paths, and global OS shortcuts that should NEVER sync across devices.
- *
- * Each key has its own schema and default value. Stored individually in
- * localStorage under the `whispering.device.{key}` prefix.
+ * The provider API keys: the device entries that are secrets. Grouped on their
+ * own so the secret set has a single source of truth. {@link SECRET_KEYS} is
+ * derived from these keys, and the secrets facade routes exactly this set between
+ * the device and the vault (ADR 0004/0005). Adding a provider key here makes it a
+ * device entry and a vault-migratable secret in one line; there is no second list
+ * to keep in step.
  */
-const DEVICE_DEFINITIONS = {
-	// ── Provider backends ─────────────────────────────────────────────
-	// One record per network backend: how this device reaches it.
-	// API keys are secrets and never sync. Empty `endpoint` means the
-	// provider's official API; Custom and Speaches have no official API,
-	// so their endpoints carry real defaults.
+const SECRET_DEFINITIONS = {
 	'providers.openai.apiKey': defineEntry(type('string'), ''),
 	'providers.anthropic.apiKey': defineEntry(type('string'), ''),
 	'providers.groq.apiKey': defineEntry(type('string'), ''),
@@ -82,6 +78,22 @@ const DEVICE_DEFINITIONS = {
 	'providers.mistral.apiKey': defineEntry(type('string'), ''),
 	'providers.openrouter.apiKey': defineEntry(type('string'), ''),
 	'providers.custom.apiKey': defineEntry(type('string'), ''),
+};
+
+/**
+ * Device-bound configuration definitions: secrets, hardware IDs, filesystem
+ * paths, and global OS shortcuts that should NEVER sync across devices.
+ *
+ * Each key has its own schema and default value. Stored individually in
+ * localStorage under the `whispering.device.{key}` prefix.
+ */
+const DEVICE_DEFINITIONS = {
+	// ── Provider backends ─────────────────────────────────────────────
+	// One record per network backend: how this device reaches it. API keys
+	// are secrets (grouped above as `SECRET_DEFINITIONS`) and never sync.
+	// Empty `endpoint` means the provider's official API; Custom and Speaches
+	// have no official API, so their endpoints carry real defaults.
+	...SECRET_DEFINITIONS,
 	'providers.openai.endpoint': defineEntry(type('string'), ''),
 	'providers.groq.endpoint': defineEntry(type('string'), ''),
 	'providers.custom.endpoint': defineEntry(
@@ -173,6 +185,15 @@ const DEVICE_DEFINITIONS = {
 
 type DeviceConfigDefs = typeof DEVICE_DEFINITIONS;
 export type DeviceConfigKey = keyof DeviceConfigDefs & string;
+
+/**
+ * The device entries that are secrets: provider API keys. The secrets facade
+ * routes exactly this set between the device and the vault (ADR 0004/0005).
+ * Derived from {@link SECRET_DEFINITIONS}, so it stays complete by construction;
+ * there is no parallel list to maintain.
+ */
+export type SecretKey = keyof typeof SECRET_DEFINITIONS & string;
+export const SECRET_KEYS = Object.keys(SECRET_DEFINITIONS) as SecretKey[];
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
