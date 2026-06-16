@@ -68,9 +68,12 @@ The greenfield fix is not a better transformation editor. It is deleting the
 How Whispering makes every transcript correct. Runs on its own after each
 transcription. Two mechanisms:
 
-- **Auto-cleanup**: one AI tidy pass. A toggle, on by default. The median user
-  never touches it. Its instruction ("Fix grammar and punctuation, keep my
-  wording.") is editable under advanced only.
+- **Auto-cleanup**: one AI tidy pass. A toggle, **on by default only when an AI
+  provider/key is already configured**; with no key it silently skips the AI
+  pass and delivers dictionary-corrected text (no surprise cost, no broken
+  first-run, magic once a key exists). The median user never touches the toggle.
+  Its instruction ("Fix grammar and punctuation, keep my wording.") is editable
+  under advanced only.
 - **Dictionary**: deterministic spelling fixes for the one thing AI cannot
   reliably get right, proper nouns and domain terms ("brayden" -> "Braden",
   "k8s" -> "Kubernetes"). Most users add a couple of rows and forget it exists.

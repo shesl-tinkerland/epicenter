@@ -21,8 +21,11 @@ Delete the `Transformation` concept and replace it with two:
 1. **Cleanup** (singular, automatic, never picked): makes every transcript
    correct after transcription. Two mechanisms, a deterministic **Dictionary**
    (proper-noun/term spellings; regex and spoken commands are advanced-only) and
-   one optional **auto-cleanup** AI tidy pass (a toggle, on by default). Cleanup
-   is dictation-specific because it is justified by noisy voice input.
+   one optional **auto-cleanup** AI tidy pass. Auto-cleanup is on by default only
+   when an AI provider/key is already configured; with no key it skips the AI
+   pass and delivers dictionary-corrected text (no surprise cost, no broken
+   first-run). Cleanup is dictation-specific because it is justified by noisy
+   voice input.
 
 2. **Format** (plural, manual, always picked): a library of named instructions,
    each `{ id, name, instructions, icon? }`, run from a picker over selected
