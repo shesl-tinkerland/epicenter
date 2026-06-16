@@ -3,7 +3,6 @@
 	import { type Command, commands } from '$lib/commands';
 	import { report } from '$lib/report';
 	import type { Tauri } from '#platform/tauri';
-	import { syncGlobalShortcutsWithSettings } from '$lib/operations/shortcuts';
 	import { deviceConfig } from '$lib/state/device-config.svelte';
 	import type { Key, KeyBinding, Modifier } from '$lib/tauri/commands';
 	import { os } from '#platform/os';
@@ -120,7 +119,6 @@
 
 	async function persist(next: KeyBinding) {
 		deviceConfig.set(`shortcuts.global.${command.id}`, next);
-		await syncGlobalShortcutsWithSettings();
 		report.success({
 			title: `Global shortcut set to ${keyBindingToLabel(next, os.isApple)}`,
 			description: `Press the shortcut to trigger "${command.title}"`,
@@ -130,7 +128,6 @@
 	async function clear() {
 		await stopCapture();
 		deviceConfig.set(`shortcuts.global.${command.id}`, null);
-		await syncGlobalShortcutsWithSettings();
 		report.success({
 			title: 'Global shortcut cleared',
 			description: `Set a new shortcut to trigger "${command.title}"`,

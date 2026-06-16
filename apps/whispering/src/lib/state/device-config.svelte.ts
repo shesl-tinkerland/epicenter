@@ -37,7 +37,7 @@ const globalBinding = type({
 // cancel gesture since classic Mac OS; Ctrl + Shift + . elsewhere); it carries a
 // modifier so it is safe to hold globally and registers like any other gesture
 // with no session gating. Transformation gestures ship unbound: opt-in only.
-// Exported so the reset path in register-commands shares this one source of truth.
+// Exported so the reset path in `$lib/operations/shortcuts` shares this one source of truth.
 const PUSH_TO_TALK_MODIFIERS: KeyBinding['modifiers'] = os.isApple
 	? ['fn']
 	: ['ctrl', 'meta'];

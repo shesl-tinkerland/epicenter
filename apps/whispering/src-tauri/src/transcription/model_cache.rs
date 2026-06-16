@@ -1,10 +1,10 @@
-use super::config::{Engine as EngineKind, TranscriptionConfig, UnloadPolicy};
+use super::config::{Engine as EngineKind, TranscriptionSpec, UnloadPolicy};
 use super::error::TranscriptionError;
 use super::events::{LocalModelState, ModelStateEvent, ModelStatus, UnloadReason};
 use log::{debug, info, warn};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
@@ -22,21 +22,24 @@ enum Engine {
     Moonshine(MoonshineModel),
 }
 
-/// The (path, identity, engine) triple is inseparable: engine X is always
-/// loaded from path Y, and `identity` fingerprints the bytes at Y at load time
-/// so the cache can notice the file changed underneath a stable path (a delete
-/// then re-download under the same name, or an external edit of the
-/// user-editable models folder). `None` identity means bytes could not be stat'd at load
-/// time, which never compares equal to a fresh read, so the cache reloads. One
-/// mutex slot holds all three.
-type Cached = Option<(PathBuf, Option<DiskIdentity>, Engine)>;
+/// Resident engine metadata. The identity fingerprints the bytes at load time
+/// so the cache can notice the file changed underneath a stable path.
+struct CachedEngine {
+    path: PathBuf,
+    disk_identity: Option<DiskIdentity>,
+    engine_kind: EngineKind,
+    model_name: String,
+    engine: Engine,
+}
+
+type Cached = Option<CachedEngine>;
 
 /// Owns the resident engine's lifecycle and the state observers see while it
-/// runs. Cache + ambient config + policy + status snapshot + lifecycle event
-/// emission all serve that one concern; they share the struct because they
-/// share the lifecycle.
+/// runs. The frontend owns transcription settings; this cache owns native
+/// mechanism: the loaded engine, unload policy clock, status, and lifecycle
+/// event emission.
 #[derive(Clone)]
-pub struct ModelManager {
+pub struct ModelCache {
     /// The currently-resident engine and the path it was loaded from. The
     /// mutex is held across `load` and the user closure inside `with_engine`
     /// so concurrent transcribe calls serialize (one engine fits in memory).
@@ -47,15 +50,12 @@ pub struct ModelManager {
     /// cache mutex during long inference.
     last_activity_ms: Arc<AtomicU64>,
 
-    /// Ambient configuration pushed by the FE via `set_transcription_config`.
-    /// Read by `transcribe()` to dispatch and by `snapshot()` to report
-    /// `(engine, model_name)` without touching the cache mutex.
-    config: Arc<RwLock<Option<TranscriptionConfig>>>,
+    /// Current unload policy for the idle watcher. The frontend reconciles this
+    /// value independently from the per-call transcription spec.
+    unload_policy: Arc<RwLock<UnloadPolicy>>,
 
-    /// Cache-independent status field for `snapshot()`. Mutated by load,
-    /// inference, and eviction paths; never held across a long operation.
-    /// The cache mutex stays held across inference, but `status` does not,
-    /// so snapshot never blocks behind a transcription.
+    /// Cache-independent status field. Mutated by load, inference, and
+    /// eviction paths; never held across a long operation.
     status: Arc<RwLock<ModelStatus>>,
 
     /// Handle used for `Emitter::emit` on the lifecycle event channel.
@@ -64,64 +64,24 @@ pub struct ModelManager {
     app: AppHandle,
 }
 
-impl ModelManager {
+impl ModelCache {
     pub fn new(app: AppHandle) -> Self {
         Self {
             cached: Arc::new(Mutex::new(None)),
             last_activity_ms: Arc::new(AtomicU64::new(now_millis())),
-            config: Arc::new(RwLock::new(None)),
+            unload_policy: Arc::new(RwLock::new(UnloadPolicy::DEFAULT)),
             status: Arc::new(RwLock::new(ModelStatus::Idle)),
             app,
         }
     }
 
-    // ── Ambient config ────────────────────────────────────────────────
+    // ── Runtime policy ────────────────────────────────────────────────
 
-    /// Push the FE-side configuration. This only stores state: the model
-    /// loads lazily on the next transcription, so there is no background
-    /// preload to race and no generation token to track. A changed
-    /// `(engine, model_name)` drops the now-stale resident model if the cache
-    /// is free; the next transcription loads the new selection from disk.
-    /// Other field changes (language, prompt, policy) take effect on the next
-    /// transcription with no reload.
-    pub fn set_transcription_config(&self, config: TranscriptionConfig) {
-        // Validate eagerly. This is a path check, not a model load, so it is
-        // cheap and surfaces a bad selection now instead of mid-transcription.
-        if let Err(message) = self.model_path_for(&config) {
-            warn!("[Transcription] rejected local model config: {}", message);
-            *self.write_config() = None;
-            self.evict(UnloadReason::ConfigChanged);
-            self.set_status(ModelStatus::Error {
-                message: message.clone(),
-            });
-            self.emit(ModelStateEvent::LoadingFailed {
-                state: self.snapshot(),
-                error: message,
-            });
-            return;
-        }
-
-        let model_changed = {
-            let mut guard = self.write_config();
-            let changed = guard.as_ref().is_none_or(|prev| {
-                prev.engine != config.engine || prev.model_name != config.model_name
-            });
-            *guard = Some(config);
-            changed
-        };
-
-        // A different model means the resident one is stale. Drop it (Idle,
-        // not loaded) so the FE reflects the new selection honestly; the next
-        // transcription loads it. `evict` skips a cache busy with an in-flight
-        // transcription, which the next transcription reloads anyway.
-        if model_changed {
-            self.evict(UnloadReason::ConfigChanged);
-        }
-        // Always notify: SelectionChanged is the FE's signal to refresh model
-        // identity displays even when the engine/path are the same.
-        self.emit(ModelStateEvent::SelectionChanged {
-            state: self.snapshot(),
-        });
+    pub fn set_unload_policy(&self, policy: UnloadPolicy) {
+        *self
+            .unload_policy
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = policy;
     }
 
     /// Resolve the configured model name to the absolute path inside the
@@ -131,8 +91,8 @@ impl ModelManager {
     /// canonicalize-and-contain check. Symlinked entries are deliberately
     /// honored; the link lives in the folder even when its target does not,
     /// and the engine loaders follow links natively.
-    fn model_path_for(&self, config: &TranscriptionConfig) -> Result<PathBuf, String> {
-        let name = config.model_name.as_str();
+    fn model_path_for(&self, spec: &TranscriptionSpec) -> Result<PathBuf, String> {
+        let name = spec.model_name.as_str();
         if name.is_empty() {
             return Err("No local model selected. Choose a model in settings.".to_string());
         }
@@ -149,7 +109,7 @@ impl ModelManager {
             .map_err(|e| format!("resolve app data directory: {}", e))?;
         let path = app_data_dir
             .join("models")
-            .join(engine_models_dir(config.engine))
+            .join(engine_models_dir(spec.engine))
             .join(name);
         if !path.exists() {
             return Err(format!(
@@ -160,25 +120,6 @@ impl ModelManager {
         Ok(path)
     }
 
-    fn write_config(&self) -> std::sync::RwLockWriteGuard<'_, Option<TranscriptionConfig>> {
-        self.config
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn read_config(&self) -> Option<TranscriptionConfig> {
-        self.config
-            .read()
-            .map(|g| g.clone())
-            .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
-    }
-
-    fn read_config_guard(&self) -> RwLockReadGuard<'_, Option<TranscriptionConfig>> {
-        self.config
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
     fn read_status(&self) -> ModelStatus {
         self.status
             .read()
@@ -187,23 +128,22 @@ impl ModelManager {
     }
 
     fn current_policy(&self) -> UnloadPolicy {
-        self.read_config()
-            .map(|c| c.unload_policy)
-            .unwrap_or(UnloadPolicy::DEFAULT)
+        *self
+            .unload_policy
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     // ── Snapshot ──────────────────────────────────────────────────────
 
-    /// Read-only view of `(engine, model_name, status)`. Does not touch the
-    /// cache mutex, so it returns immediately even mid-inference. This is
-    /// what new windows call on mount to catch up to current state without
-    /// waiting for the next event.
+    /// Read-only view of the resident model and status. New windows call this
+    /// on mount to catch up without waiting for the next event.
     pub fn snapshot(&self) -> LocalModelState {
-        let config = self.read_config();
         let status = self.read_status();
+        let cached = lock_cached(&self.cached);
         LocalModelState {
-            engine: config.as_ref().map(|c| c.engine),
-            model_name: config.map(|c| c.model_name),
+            engine: cached.as_ref().map(|cached| cached.engine_kind),
+            model_name: cached.as_ref().map(|cached| cached.model_name.clone()),
             status,
         }
     }
@@ -217,18 +157,15 @@ impl ModelManager {
 
     // ── Transcribe ────────────────────────────────────────────────────
 
-    /// Synchronous inference dispatch. Reads the ambient configuration,
-    /// validates the samples, then routes to the engine-specific path.
+    /// Synchronous inference dispatch. Receives frontend-owned settings as a
+    /// per-call spec, validates the samples, then routes to the engine-specific
+    /// path.
     /// Called from a blocking-pool thread.
-    pub fn transcribe(&self, samples: Vec<f32>) -> Result<String, TranscriptionError> {
-        let Some(config) = self.read_config() else {
-            return Err(TranscriptionError::NoConfig {
-                message:
-                    "Transcription config not set. The frontend must call setTranscriptionConfig first."
-                        .to_string(),
-            });
-        };
-
+    pub fn transcribe(
+        &self,
+        samples: Vec<f32>,
+        spec: TranscriptionSpec,
+    ) -> Result<String, TranscriptionError> {
         if samples.is_empty() {
             warn!("[Transcription] zero samples, returning empty transcript");
             return Ok(String::new());
@@ -238,19 +175,19 @@ impl ModelManager {
 
         info!(
             "[Transcription] starting {:?} transcription: pcm_samples={}",
-            config.engine,
+            spec.engine,
             samples.len(),
         );
 
         let model_path = self
-            .model_path_for(&config)
+            .model_path_for(&spec)
             .map_err(|message| TranscriptionError::ConfigError { message })?;
         let inference_started = std::time::Instant::now();
-        let transcript = match config.engine {
+        let transcript = match spec.engine {
             EngineKind::Whispercpp => {
                 let mut params = WhisperInferenceParams::default();
-                params.language = config.language.clone();
-                params.initial_prompt = config.initial_prompt.clone();
+                params.language = spec.language.clone();
+                params.initial_prompt = spec.initial_prompt.clone();
                 params.print_special = false;
                 params.print_progress = false;
                 params.print_realtime = false;
@@ -259,7 +196,7 @@ impl ModelManager {
                 params.suppress_non_speech_tokens = true;
                 params.no_speech_thold = 0.2;
 
-                self.with_whisper(&config, model_path, |engine| {
+                self.with_whisper(&spec, model_path, |engine| {
                     let result = engine
                         .transcribe_with(&samples, &params)
                         .map_err(transcription_err)?;
@@ -271,7 +208,7 @@ impl ModelManager {
                     timestamp_granularity: Some(TimestampGranularity::Segment),
                     ..Default::default()
                 };
-                self.with_parakeet(&config, model_path, |engine| {
+                self.with_parakeet(&spec, model_path, |engine| {
                     let result = engine
                         .transcribe_with(&samples, &params)
                         .map_err(transcription_err)?;
@@ -279,8 +216,8 @@ impl ModelManager {
                 })?
             }
             EngineKind::Moonshine => {
-                let variant = parse_moonshine_variant(&config.model_name)?;
-                self.with_moonshine(&config, model_path, variant, |engine| {
+                let variant = parse_moonshine_variant(&spec.model_name)?;
+                self.with_moonshine(&spec, model_path, variant, |engine| {
                     let result = engine
                         .transcribe(&samples, &TranscribeOptions::default())
                         .map_err(transcription_err)?;
@@ -291,11 +228,11 @@ impl ModelManager {
 
         info!(
             "[Transcription] {:?} transcription complete: characters={} elapsed_ms={}",
-            config.engine,
+            spec.engine,
             transcript.len(),
             inference_started.elapsed().as_millis(),
         );
-        self.evict_if_immediate(config.unload_policy);
+        self.evict_if_immediate();
         Ok(transcript)
     }
 
@@ -303,12 +240,12 @@ impl ModelManager {
 
     fn with_whisper<T>(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         model_path: PathBuf,
         f: impl FnOnce(&mut WhisperEngine) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
         self.with_engine(
-            config,
+            spec,
             model_path,
             |e| matches!(e, Engine::Whisper(_)),
             |path| {
@@ -325,12 +262,12 @@ impl ModelManager {
 
     fn with_parakeet<T>(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         model_path: PathBuf,
         f: impl FnOnce(&mut ParakeetModel) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
         self.with_engine(
-            config,
+            spec,
             model_path,
             |e| matches!(e, Engine::Parakeet(_)),
             |path| {
@@ -347,13 +284,13 @@ impl ModelManager {
 
     fn with_moonshine<T>(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         model_path: PathBuf,
         variant: MoonshineVariant,
         f: impl FnOnce(&mut MoonshineModel) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
         self.with_engine(
-            config,
+            spec,
             model_path,
             |e| matches!(e, Engine::Moonshine(_)),
             |path| {
@@ -377,7 +314,7 @@ impl ModelManager {
     /// re-enter and contend on this mutex.
     fn ensure_loaded(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         model_path: PathBuf,
         can_reuse: impl Fn(&Engine) -> bool,
         load: impl FnOnce(&Path) -> Result<Engine, String>,
@@ -391,16 +328,16 @@ impl ModelManager {
         let current_identity = disk_identity(&model_path);
         let reuse = matches!(
             &*guard,
-            Some((p, id, e))
-                if p == &model_path
-                    && can_reuse(e)
+            Some(cached)
+                if cached.path == model_path
+                    && can_reuse(&cached.engine)
                     && current_identity.is_some()
-                    && &current_identity == id
+                    && current_identity == cached.disk_identity
         );
 
         if !reuse {
             let _ = guard.take();
-            self.publish(config, ModelStatus::Loading, |state| {
+            self.publish(spec, ModelStatus::Loading, |state| {
                 ModelStateEvent::LoadingStarted { state }
             });
             let started = Instant::now();
@@ -412,14 +349,20 @@ impl ModelManager {
                         model_path.display(),
                         elapsed_ms
                     );
-                    *guard = Some((model_path, current_identity, engine));
-                    self.publish(config, ModelStatus::Ready, |state| {
+                    *guard = Some(CachedEngine {
+                        path: model_path,
+                        disk_identity: current_identity,
+                        engine_kind: spec.engine,
+                        model_name: spec.model_name.clone(),
+                        engine,
+                    });
+                    self.publish(spec, ModelStatus::Ready, |state| {
                         ModelStateEvent::LoadingCompleted { state, elapsed_ms }
                     });
                 }
                 Err(message) => {
                     self.publish(
-                        config,
+                        spec,
                         ModelStatus::Error {
                             message: message.clone(),
                         },
@@ -440,17 +383,17 @@ impl ModelManager {
     /// events around the user closure.
     fn with_engine<T>(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         model_path: PathBuf,
         can_reuse: impl Fn(&Engine) -> bool,
         load: impl FnOnce(&Path) -> Result<Engine, String>,
         use_engine: impl FnOnce(&mut Engine) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
         self.touch_activity();
-        let mut guard = self.ensure_loaded(config, model_path, can_reuse, load)?;
+        let mut guard = self.ensure_loaded(spec, model_path, can_reuse, load)?;
 
-        let (_, _, engine) = guard.as_mut().expect("cache slot populated above");
-        self.publish(config, ModelStatus::Inferring, |state| {
+        let engine = &mut guard.as_mut().expect("cache slot populated above").engine;
+        self.publish(spec, ModelStatus::Inferring, |state| {
             ModelStateEvent::InferenceStarted { state }
         });
         let started = Instant::now();
@@ -459,7 +402,7 @@ impl ModelManager {
         self.touch_activity();
         match &result {
             Ok(_) => {
-                self.publish(config, ModelStatus::Ready, |state| {
+                self.publish(spec, ModelStatus::Ready, |state| {
                     ModelStateEvent::InferenceCompleted { state, elapsed_ms }
                 });
             }
@@ -470,7 +413,7 @@ impl ModelManager {
                 // successful next call flips it back to Ready.
                 let message = e.to_string();
                 self.publish(
-                    config,
+                    spec,
                     ModelStatus::Error {
                         message: message.clone(),
                     },
@@ -490,8 +433,8 @@ impl ModelManager {
 
     /// Drop the resident model now if the current policy is `Immediately`.
     /// Called at the end of every successful transcription.
-    fn evict_if_immediate(&self, policy: UnloadPolicy) {
-        if matches!(policy, UnloadPolicy::Immediately) {
+    fn evict_if_immediate(&self) {
+        if matches!(self.current_policy(), UnloadPolicy::Immediately) {
             self.evict(UnloadReason::Immediate);
         }
     }
@@ -499,25 +442,24 @@ impl ModelManager {
     /// Drop the resident model and emit an `Unloaded` event with the given
     /// reason, leaving status `Idle`. Uses `try_lock` so it never blocks behind
     /// an in-flight transcription: a busy cache keeps its model, which the next
-    /// transcription reloads against the current config anyway. A no-op when the
+    /// transcription reloads against its per-call spec anyway. A no-op when the
     /// cache is already empty.
     fn evict(&self, reason: UnloadReason) {
         let Ok(mut guard) = self.cached.try_lock() else {
             return;
         };
-        let config_guard = self.read_config_guard();
-        if let Some((path, _identity, _engine)) = guard.take() {
+        if let Some(cached) = guard.take() {
             debug!(
                 "[Transcription] unloaded model ({:?}): {}",
                 reason,
-                path.display()
+                cached.path.display()
             );
             // Drop the guard before emitting so emit handlers cannot deadlock
             // on the cache lock (they should not lock it anyway, but defensive
             // ordering is cheap).
             drop(guard);
             self.set_status(ModelStatus::Idle);
-            let state = state_for_config_option(config_guard.as_ref(), ModelStatus::Idle);
+            let state = state_for_model(cached.engine_kind, cached.model_name, ModelStatus::Idle);
             self.emit(ModelStateEvent::Unloaded { state, reason });
         }
     }
@@ -552,17 +494,17 @@ impl ModelManager {
         let Ok(mut guard) = self.cached.try_lock() else {
             return;
         };
-        if let Some((path, _identity, _engine)) = guard.take() {
+        if let Some(cached) = guard.take() {
             let idle_secs = idle.as_secs();
             debug!(
                 "[Transcription] unloaded model (idle {}s): {}",
                 idle_secs,
-                path.display()
+                cached.path.display()
             );
             drop(guard);
             self.set_status(ModelStatus::Idle);
             self.emit(ModelStateEvent::Unloaded {
-                state: self.snapshot(),
+                state: state_for_model(cached.engine_kind, cached.model_name, ModelStatus::Idle),
                 reason: UnloadReason::Idle { idle_secs },
             });
         }
@@ -577,30 +519,26 @@ impl ModelManager {
     }
 
     /// Set the resident status and emit the matching lifecycle event built
-    /// from the current config and that status.
+    /// from the current per-call spec and that status.
     fn publish(
         &self,
-        config: &TranscriptionConfig,
+        spec: &TranscriptionSpec,
         status: ModelStatus,
         build_event: impl FnOnce(LocalModelState) -> ModelStateEvent,
     ) {
         self.set_status(status.clone());
-        self.emit(build_event(state_for_config(config, status)));
+        self.emit(build_event(state_for_spec(spec, status)));
     }
 }
 
-/// Build a `LocalModelState` from a known (non-optional) config and status.
-fn state_for_config(config: &TranscriptionConfig, status: ModelStatus) -> LocalModelState {
-    state_for_config_option(Some(config), status)
+fn state_for_spec(spec: &TranscriptionSpec, status: ModelStatus) -> LocalModelState {
+    state_for_model(spec.engine, spec.model_name.clone(), status)
 }
 
-fn state_for_config_option(
-    config: Option<&TranscriptionConfig>,
-    status: ModelStatus,
-) -> LocalModelState {
+fn state_for_model(engine: EngineKind, model_name: String, status: ModelStatus) -> LocalModelState {
     LocalModelState {
-        engine: config.map(|config| config.engine),
-        model_name: config.map(|config| config.model_name.clone()),
+        engine: Some(engine),
+        model_name: Some(model_name),
         status,
     }
 }
@@ -790,15 +728,17 @@ mod tests {
 
     #[test]
     fn disk_identity_stable_when_unchanged() {
-        let dir =
-            std::env::temp_dir().join(format!("whispering-id-stable-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("whispering-id-stable-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("model.bin");
         std::fs::write(&path, b"steady").unwrap();
 
         let a = disk_identity(&path).expect("identity for existing file");
         let b = disk_identity(&path).expect("identity on second read");
-        assert_eq!(a, b, "identity is stable across reads when bytes are unchanged");
+        assert_eq!(
+            a, b,
+            "identity is stable across reads when bytes are unchanged"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -826,7 +766,10 @@ mod tests {
             b"thirdx-and-longer".len(),
             "test fixture must be same-size to exercise the mtime path"
         );
-        assert_ne!(second, third, "a same-size rewrite changes identity via mtime");
+        assert_ne!(
+            second, third,
+            "a same-size rewrite changes identity via mtime"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -862,16 +805,15 @@ mod tests {
     }
 
     #[test]
-    fn state_for_config_uses_captured_model_identity() {
-        let config = TranscriptionConfig {
+    fn state_for_spec_uses_captured_model_identity() {
+        let spec = TranscriptionSpec {
             engine: EngineKind::Parakeet,
             model_name: "parakeet-tdt-0.6b-v3-int8".to_string(),
             language: Some("en".to_string()),
             initial_prompt: None,
-            unload_policy: UnloadPolicy::AfterFiveMinutes,
         };
 
-        let state = state_for_config(&config, ModelStatus::Inferring);
+        let state = state_for_spec(&spec, ModelStatus::Inferring);
 
         assert_eq!(state.engine, Some(EngineKind::Parakeet));
         assert_eq!(

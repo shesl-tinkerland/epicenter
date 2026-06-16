@@ -26,7 +26,7 @@ pub mod keys;
 pub mod matcher;
 mod rdev_map;
 
-pub use event::{ShortcutCaptureEvent, ShortcutTriggerEvent, TriggerState};
+pub use event::{ListenerStoppedEvent, ShortcutCaptureEvent, ShortcutTriggerEvent, TriggerState};
 pub use keys::{Key, KeyBinding, Modifier};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -66,7 +66,7 @@ fn is_wayland() -> bool {
 }
 
 /// Owns the registered bindings and the rdev listener thread. Constructed in
-/// `setup` with an `AppHandle` (mirrors `ModelManager`) and managed via
+/// `setup` with an `AppHandle` (mirrors `ModelCache`) and managed via
 /// `app.manage(...)` so commands can reach it with `app.state::<...>()`.
 pub struct KeyboardListener {
     app: AppHandle,
@@ -126,6 +126,7 @@ impl KeyboardListener {
         }
 
         let app = self.app.clone();
+        let stopped_event_app = self.app.clone();
         let matcher = self.matcher.clone();
         let running = self.running.clone();
         std::thread::Builder::new()
@@ -170,12 +171,14 @@ impl KeyboardListener {
                         let _ = trigger.emit_to(&app, MAIN_WINDOW);
                     }
                 });
-                if let Err(error) = result {
+                let error = result.err().map(|error| {
                     log::error!("rdev keyboard listener stopped: {error:?}");
-                }
+                    format!("{error:?}")
+                });
                 // Allow a later `start` (e.g. the FE re-checking on focus) to
                 // respawn after a transient exit.
                 running.store(false, Ordering::SeqCst);
+                let _ = ListenerStoppedEvent { error }.emit_to(&stopped_event_app, MAIN_WINDOW);
             })
             .expect("failed to spawn rdev keyboard listener thread");
 

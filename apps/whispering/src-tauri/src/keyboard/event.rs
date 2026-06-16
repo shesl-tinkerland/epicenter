@@ -44,6 +44,17 @@ pub struct ShortcutCaptureEvent {
     pub binding: KeyBinding,
 }
 
+/// Emitted when the rdev listener thread exits. The frontend treats this as a
+/// liveness signal and asks the idempotent start command to respawn the thread
+/// once shortcuts are still allowed.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type, tauri_specta::Event,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerStoppedEvent {
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,6 +83,17 @@ mod tests {
         assert_eq!(
             serde_json::to_value(event).unwrap(),
             json!({ "commandId": "pushToTalk", "state": "Pressed" })
+        );
+    }
+
+    #[test]
+    fn listener_stopped_event_wire_shape_is_camel_case() {
+        let event = ListenerStoppedEvent {
+            error: Some("permission revoked".to_string()),
+        };
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({ "error": "permission revoked" })
         );
     }
 }

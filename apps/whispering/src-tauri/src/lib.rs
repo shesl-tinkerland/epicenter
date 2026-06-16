@@ -16,8 +16,7 @@ use recorder::recorder::Recorder;
 
 pub mod transcription;
 use transcription::{
-    get_transcription_state, set_transcription_config, transcribe_recording, ModelManager,
-    ModelStateEvent,
+    get_transcription_state, set_unload_policy, transcribe_recording, ModelCache, ModelStateEvent,
 };
 
 pub mod command;
@@ -65,7 +64,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             transcribe_recording,
             open_accessibility_settings,
             write_markdown_files,
-            set_transcription_config,
+            set_unload_policy,
             get_transcription_state,
             download_file,
             cancel_download,
@@ -83,6 +82,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // `mount_events` so `Event::emit` and the generated listeners resolve.
         .events(tauri_specta::collect_events![
             ModelStateEvent,
+            keyboard::ListenerStoppedEvent,
             keyboard::ShortcutTriggerEvent,
             keyboard::ShortcutCaptureEvent,
         ])
@@ -239,11 +239,11 @@ pub async fn run() {
             // the generated `events` listeners (FE) resolve the same names.
             specta_builder.mount_events(app);
 
-            // ModelManager owns an `AppHandle` for emitting model lifecycle
+            // ModelCache owns an `AppHandle` for emitting model lifecycle
             // events, so it cannot be constructed at builder-time (no app handle
             // exists yet). Move construction into setup; everything that needs it
-            // reads via `app.state::<ModelManager>()`.
-            let manager = ModelManager::new(app.handle().clone());
+            // reads via `app.state::<ModelCache>()`.
+            let manager = ModelCache::new(app.handle().clone());
             manager.start_idle_watcher();
             app.manage(manager);
 

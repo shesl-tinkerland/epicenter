@@ -37,7 +37,7 @@ type MoonshineLanguage = (typeof MOONSHINE_LANGUAGES)[number];
  * don't self-describe their architecture.
  *
  * Variant inference from the directory name lives in Rust
- * (`transcription/model_manager.rs::parse_moonshine_variant`), since that
+ * (`transcription/model_cache.rs::parse_moonshine_variant`), since that
  * is the only consumer and the wire format is owned by the loader.
  */
 const MOONSHINE_VARIANTS = ['tiny', 'base'] as const;
@@ -91,7 +91,7 @@ type ParakeetModelConfig = BaseModelConfig & {
  *
  * Rather than storing the variant separately, we encode it in the
  * `directoryName` (e.g. "moonshine-tiny-en") and parse it back out in Rust
- * (`transcription/model_manager.rs::parse_moonshine_variant`). This avoids
+ * (`transcription/model_cache.rs::parse_moonshine_variant`). This avoids
  * redundant metadata while keeping our download configs simple.
  *
  * Variant architecture:

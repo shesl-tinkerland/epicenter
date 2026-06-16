@@ -4,7 +4,7 @@
  * and users add their own models by dropping (or symlinking) them into it.
  * Settings store a folder entry name, never a path; Rust resolves and
  * validates the name against the folder at load time (`model_path_for` in
- * `src-tauri/src/transcription/model_manager.rs`). This module owns the
+ * `src-tauri/src/transcription/model_cache.rs`). This module owns the
  * JS view of the folder: listing entries, streaming catalog downloads into
  * it, and deleting entries, never anything outside the folder.
  *

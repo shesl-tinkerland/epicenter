@@ -16,13 +16,7 @@ pub enum TranscriptionError {
     #[error("Transcription error: {message}")]
     TranscriptionError { message: String },
 
-    /// `transcribe_recording` was called before `set_transcription_config`
-    /// pushed an ambient config. The FE should disable the transcribe button
-    /// until `localModel.state.engine !== null` to avoid this.
-    #[error("No transcription config: {message}")]
-    NoConfig { message: String },
-
-    /// The ambient config holds a value that cannot be dispatched (e.g. a
+    /// The per-call spec holds a value that cannot be dispatched (e.g. a
     /// Moonshine model path that does not match `moonshine-{variant}-{lang}`).
     #[error("Transcription config error: {message}")]
     ConfigError { message: String },

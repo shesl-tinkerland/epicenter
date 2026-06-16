@@ -95,14 +95,12 @@ export const commands = {
 	/**
 	 *  Canonical transcribe-by-id path. Resolves the audio file under
 	 *  `<appDataDir>/recordings/{recordingId}.*` (cpal-written WAV,
-	 *  navigator-saved webm/opus/mp4, etc.), decodes, runs inference using
-	 *  the ambient configuration pushed via `set_transcription_config`.
-	 *
-	 *  Returns `NoConfig` if the FE has not pushed a config yet.
+	 *  navigator-saved webm/opus/mp4, etc.), decodes, then runs inference using
+	 *  the per-call transcription spec supplied by the frontend.
 	 */
-	transcribeRecording: (recordingId: string) =>
+	transcribeRecording: (recordingId: string, spec: TranscriptionSpec) =>
 		typedError<string, TranscriptionError>(
-			__TAURI_INVOKE('transcribe_recording', { recordingId }),
+			__TAURI_INVOKE('transcribe_recording', { recordingId, spec }),
 		),
 	/**
 	 *  Open macOS Accessibility settings.
@@ -130,26 +128,18 @@ export const commands = {
 			__TAURI_INVOKE('write_markdown_files', { directory, files }),
 		),
 	/**
-	 *  Push the ambient transcription configuration. Replaces the per-call
-	 *  `config` argument that `transcribe_recording` used to take. The FE
-	 *  invokes this once at startup and on every subsequent change to
-	 *  settings, model selection, language, prompt, or unload policy.
-	 *
-	 *  Drift in `(engine, model_name)` triggers a background preload so the
-	 *  next `transcribe_recording` call does not pay cold-start latency.
-	 *  Other field changes take effect on the next transcription with no
-	 *  reload.
+	 *  Reconcile the current local-model unload policy into the native idle
+	 *  watcher. The frontend owns the value; Rust owns the clock.
 	 */
-	setTranscriptionConfig: (config: TranscriptionConfig) =>
-		__TAURI_INVOKE<void>('set_transcription_config', { config }),
+	setUnloadPolicy: (policy: UnloadPolicy) =>
+		__TAURI_INVOKE<void>('set_unload_policy', { policy }),
 	/**
 	 *  Snapshot the current model state. Used by late-mounted observers (a
 	 *  second window, the settings panel re-opening, etc.) to catch up to
 	 *  the current lifecycle state without waiting for the next event on
 	 *  `transcription://model-state`.
 	 *
-	 *  Reads a lock-free status field plus the ambient config; never touches
-	 *  the cache mutex, so it returns immediately even mid-inference.
+	 *  Reads the status plus resident model identity, if any.
 	 */
 	getTranscriptionState: () =>
 		__TAURI_INVOKE<LocalModelState>('get_transcription_state'),
@@ -220,6 +210,9 @@ export const commands = {
 
 /** Events */
 export const events = {
+	listenerStoppedEvent: makeEvent<ListenerStoppedEvent>(
+		'listener-stopped-event',
+	),
 	modelStateEvent: makeEvent<ModelStateEvent>('model-state-event'),
 	shortcutCaptureEvent: makeEvent<ShortcutCaptureEvent>(
 		'shortcut-capture-event',
@@ -362,8 +355,10 @@ export type Key =
  *  exactly (see `Matcher`), matching the existing `arraysMatch` semantics of
  *  `local-shortcut-manager` and the plugin's exact-modifier behavior. An empty
  *  `keys` with non-empty `modifiers` is a modifier-only hold (for example hold
- *  Meta); empty `modifiers` with one key is a bare single-key push-to-talk.
- *  Both were impossible with the plugin.
+ *  Meta), which was impossible with the plugin. The matcher also accepts a bare
+ *  key with no modifiers, but the frontend refuses to *configure* one (a global
+ *  gesture must carry a modifier or Fn so it cannot fire on an ordinary
+ *  keypress); the matcher stays permissive so the policy lives in one place.
  */
 export type KeyBinding = {
 	modifiers: Modifier[];
@@ -383,6 +378,15 @@ export type ListenerStart =
 	| 'waylandUnsupported';
 
 /**
+ *  Emitted when the rdev listener thread exits. The frontend treats this as a
+ *  liveness signal and asks the idempotent start command to respawn the thread
+ *  once shortcuts are still allowed.
+ */
+export type ListenerStoppedEvent = {
+	error: string | null;
+};
+
+/**
  *  Snapshot of everything observable about the resident model. Every event
  *  carries a full snapshot rather than a delta because `AppHandle::emit`
  *  does not replay to future windows: a window opened mid-load reads the
@@ -393,7 +397,7 @@ export type LocalModelState = {
 	engine: Engine | null;
 	/**
 	 *  Entry name inside the engine's models directory, mirroring
-	 *  `TranscriptionConfig::model_name`.
+	 *  `TranscriptionSpec::model_name`.
 	 */
 	modelName: string | null;
 	status: ModelStatus;
@@ -428,12 +432,11 @@ export type ModelStateEvent =
 	| { kind: 'inference_started'; state: LocalModelState }
 	| { kind: 'inference_completed'; state: LocalModelState; elapsedMs: number }
 	| { kind: 'inference_failed'; state: LocalModelState; error: string }
-	| { kind: 'unloaded'; state: LocalModelState; reason: UnloadReason }
-	| { kind: 'selection_changed'; state: LocalModelState };
+	| { kind: 'unloaded'; state: LocalModelState; reason: UnloadReason };
 
 /**
  *  Lifecycle state of the resident model. Owned by an `Arc<RwLock<...>>`
- *  inside `ModelManager` so `snapshot()` can read it without touching the
+ *  inside `ModelCache` so `snapshot()` can read it without touching the
  *  cache mutex (which is held across long-running inference).
  */
 export type ModelStatus =
@@ -521,43 +524,34 @@ export type ShortcutTriggerEvent = {
 	state: TriggerState;
 };
 
-/**
- *  Ambient configuration the frontend pushes once per change. The Rust side
- *  reads this on every `transcribe_recording` call instead of receiving
- *  a per-call payload. The model loads lazily on the next transcription, so a
- *  changed `(engine, model_name)` is picked up then; drift in other fields
- *  takes effect on the next transcription with no reload.
- */
-export type TranscriptionConfig = {
-	engine: Engine;
-	/**
-	 *  Entry name inside the engine's models directory (a single file or
-	 *  directory name, never a path). `ModelManager` resolves it under
-	 *  `{app_data}/models/{engine}/` at load time, so a path never exists
-	 *  as data anywhere in the system.
-	 */
-	modelName: string;
-	language?: string | null;
-	initialPrompt?: string | null;
-	unloadPolicy: UnloadPolicy;
-};
-
 export type TranscriptionError =
 	| { name: 'AudioReadError'; message: string }
 	| { name: 'GpuError'; message: string }
 	| { name: 'ModelLoadError'; message: string }
 	| { name: 'TranscriptionError'; message: string }
 	/**
-	 *  `transcribe_recording` was called before `set_transcription_config`
-	 *  pushed an ambient config. The FE should disable the transcribe button
-	 *  until `localModel.state.engine !== null` to avoid this.
-	 */
-	| { name: 'NoConfig'; message: string }
-	/**
-	 *  The ambient config holds a value that cannot be dispatched (e.g. a
+	 *  The per-call spec holds a value that cannot be dispatched (e.g. a
 	 *  Moonshine model path that does not match `moonshine-{variant}-{lang}`).
 	 */
 	| { name: 'ConfigError'; message: string };
+
+/**
+ *  Per-call transcription inputs owned by the frontend. The Rust side receives
+ *  this with `transcribe_recording`, resolves the model at point of use, and
+ *  keeps only the resident model cache.
+ */
+export type TranscriptionSpec = {
+	engine: Engine;
+	/**
+	 *  Entry name inside the engine's models directory (a single file or
+	 *  directory name, never a path). `ModelCache` resolves it under
+	 *  `{app_data}/models/{engine}/` at load time, so a path never exists
+	 *  as data anywhere in the system.
+	 */
+	modelName: string;
+	language?: string | null;
+	initialPrompt?: string | null;
+};
 
 /**
  *  Whether a binding just became fully held (`Pressed`) or stopped being fully
@@ -571,8 +565,7 @@ export type TriggerState = 'Pressed' | 'Released';
 /**
  *  How long after the last transcription the resident model should be
  *  dropped. Mirrors the frontend `transcription.localModelUnloadPolicy`
- *  device setting; serde tags below match its wire format exactly so the
- *  FE value pushes straight through.
+ *  device setting; serde tags below match its wire format exactly.
  *
  *  `Immediately` is enforced synchronously at the end of each transcription;
  *  timed variants are enforced by the background idle watcher.
@@ -598,12 +591,7 @@ export type UnloadReason =
 	 *  Background idle watcher dropped the model after the configured timeout
 	 *  elapsed without activity.
 	 */
-	| { kind: 'idle'; idleSecs: number }
-	/**
-	 *  User selected a different model in settings; the old one was dropped
-	 *  before the new one preloads.
-	 */
-	| { kind: 'config_changed' };
+	| { kind: 'idle'; idleSecs: number };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(

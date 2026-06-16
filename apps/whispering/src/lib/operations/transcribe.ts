@@ -258,8 +258,8 @@ async function dispatchLocalTranscription(
 	}
 	const provider = PROVIDERS[selectedService];
 
-	// Rust owns model resolution and validation: it joins the configured name
-	// under its models directory and reports missing or invalid models with
+	// Rust owns model resolution and validation: it joins this model name under
+	// its models directory and reports missing or invalid models with
 	// user-facing messages. The FE keeps two checks Rust cannot make as well:
 	// "nothing selected yet" (instant, no IPC) and the catalog-size truncation
 	// check (the expected sizes live in the JS catalog).
@@ -276,10 +276,17 @@ async function dispatchLocalTranscription(
 		if (truncated.error) return truncated;
 	}
 
-	// Rust reads engine, modelName, language, prompt, and unloadPolicy from
-	// the ambient config pushed via `setTranscriptionConfig` in the layout
-	// effect. Anything that affects inference output is already there.
-	return commands.transcribeRecording(recordingId);
+	// Read-at-use: the per-call spec is built right here, where it is consumed,
+	// so there is no ambient config to go stale. `auto` language and an empty
+	// prompt map to null (the wire's "unset").
+	const language = settings.get('transcription.language');
+	const prompt = settings.get('transcription.prompt');
+	return commands.transcribeRecording(recordingId, {
+		engine: selectedService,
+		modelName,
+		language: language === 'auto' ? null : language,
+		initialPrompt: prompt || null,
+	});
 }
 
 async function dispatchUploadTranscription(

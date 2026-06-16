@@ -1,6 +1,4 @@
-import { extractErrorMessage } from 'wellcrafted/error';
-import { Err, partitionResults, tryAsync } from 'wellcrafted/result';
-import { tauri } from '#platform/tauri';
+import { partitionResults } from 'wellcrafted/result';
 import { goto } from '$app/navigation';
 import { type Command, commandCallbacks, commands } from '$lib/commands';
 import type { KeyboardEventSupportedKey } from '$lib/constants/keyboard';
@@ -15,7 +13,6 @@ import {
 	deviceConfig,
 } from '$lib/state/device-config.svelte';
 import { settings } from '$lib/state/settings.svelte';
-import type { CommandBinding, KeyBinding } from '$lib/tauri/commands';
 
 /**
  * Local shortcuts - cross-platform, work in web and desktop.
@@ -113,39 +110,10 @@ export async function syncLocalShortcutsWithSettings() {
 	}
 }
 
-/**
- * Pushes the configured global shortcuts to the desktop rdev backend as the
- * full replace-all set. Storage holds structured `KeyBinding`s (physical-key
- * space), so they go straight through with no parsing.
- */
-export async function syncGlobalShortcutsWithSettings() {
-	if (!tauri) return;
-	const { globalShortcuts } = tauri;
-
-	const bindings: CommandBinding[] = [];
-	for (const command of commands) {
-		const binding = deviceConfig.get(getGlobalShortcutKey(command.id));
-		if (!binding) continue;
-		// Storage validates keys as plain strings; Rust validates them by name on
-		// register. The cast bridges the stored `string[]` to the IPC `Key[]`.
-		bindings.push({ commandId: command.id, binding: binding as KeyBinding });
-	}
-
-	// Keys are stored as plain strings and validated by Rust at the IPC boundary,
-	// so a single bad key fails the whole replace-all call. Surface it instead of
-	// letting every global shortcut silently go unregistered.
-	const { error } = await tryAsync({
-		try: () => globalShortcuts.setBindings(bindings),
-		catch: (cause) =>
-			Err({
-				name: 'GlobalShortcutRegistrationFailed',
-				message: extractErrorMessage(cause),
-			}),
-	});
-	if (error) {
-		report.error({ title: 'Error registering global shortcuts', cause: error });
-	}
-}
+// Global shortcuts are no longer pushed to the rdev backend from here. The
+// global-shortcut runtime (`$lib/runtime/global-shortcuts.svelte`) reconciles
+// the native binding set from device config, so writing the config is the only
+// step a caller takes; the reconciler does the rest.
 
 /**
  * Checks if any local shortcuts are duplicated and resets all to defaults if duplicates found.
@@ -225,7 +193,9 @@ export function resetLocalShortcuts() {
 }
 
 /**
- * Reset all global shortcuts to their default values and re-sync.
+ * Reset all global shortcuts to their default values. The global-shortcut
+ * runtime reconciles the native binding set from these device-config writes,
+ * so there is no manual re-sync to call.
  */
 export function resetGlobalShortcuts() {
 	for (const command of commands) {
@@ -234,5 +204,4 @@ export function resetGlobalShortcuts() {
 			DEFAULT_GLOBAL_BINDINGS[command.id] ?? null,
 		);
 	}
-	void syncGlobalShortcutsWithSettings();
 }

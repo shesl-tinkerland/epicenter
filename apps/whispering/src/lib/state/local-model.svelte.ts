@@ -9,7 +9,7 @@ const INITIAL_STATE: LocalModelState = {
 };
 
 /**
- * Reactive mirror of the Rust `ModelManager`'s public state, kept in sync via
+ * Reactive mirror of the Rust `ModelCache`'s public state, kept in sync via
  * the `events.modelStateEvent` topic. Single instance per app;
  * mount once via `attach()` in the root layout.
  *

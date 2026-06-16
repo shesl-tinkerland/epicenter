@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { toast } from '@epicenter/ui/sonner';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { onDestroy, onMount } from 'svelte';
@@ -17,19 +16,14 @@
 		type RecordingOverlayAction,
 		type RecordingOverlayStatus,
 	} from '$lib/recording-overlay/events';
+	import { installGlobalShortcutRuntime } from '$lib/runtime/global-shortcuts.svelte';
+	import { installUnloadPolicyRuntime } from '$lib/runtime/unload-policy.svelte';
 	import { services } from '$lib/services';
-	import {
-		isLocalProviderId,
-		PROVIDERS,
-	} from '$lib/services/transcription/providers';
-	import { deviceConfig } from '$lib/state/device-config.svelte';
 	import { localModel } from '$lib/state/local-model.svelte';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
-	import { commands } from '$lib/tauri/commands';
-	import { os } from '#platform/os';
 	import { recordingOverlay } from '#platform/recording-overlay';
 	import { tauri } from '#platform/tauri';
 	import { checkForUpdates } from '../_runtime/check-for-updates';
@@ -37,7 +31,6 @@
 	import {
 		resetGlobalShortcutsToDefaultIfDuplicates,
 		resetLocalShortcutsToDefaultIfDuplicates,
-		syncGlobalShortcutsWithSettings,
 		syncLocalShortcutsWithSettings,
 	} from '$lib/operations/shortcuts';
 	import { registerOnboarding } from '../_runtime/register-onboarding';
@@ -56,22 +49,6 @@
 	let unlistenLocalModel: UnlistenFn | undefined;
 	let unlistenOverlayAction: UnlistenFn | undefined;
 	let unlistenOverlayFocus: UnlistenFn | undefined;
-
-	// Start the rdev global listener (idempotent). rdev::listen cannot tap the
-	// keyboard before macOS Accessibility is granted, so we only call this once
-	// shortcuts are allowed: on macOS from the accessibility-granted callback, on
-	// other desktops at launch. Wayland has no working listener; tell the user.
-	async function startGlobalListener() {
-		if (!tauri) return;
-		const status = await tauri.globalShortcuts.start();
-		if (status === 'waylandUnsupported') {
-			toast.warning('Global shortcuts unavailable on Wayland', {
-				description:
-					'Whispering needs an X11 session for global shortcuts. On Wayland, bind them through your desktop environment.',
-				duration: Number.POSITIVE_INFINITY,
-			});
-		}
-	}
 
 	// Single source of truth for what the overlay should show: the active
 	// recorder, with manual taking precedence over VAD so the two can never
@@ -95,6 +72,15 @@
 		syncIconWithRecorderState(tauri);
 	}
 
+	// Project frontend-owned settings into native runtime state. Both install a
+	// reconciler `$effect` at this init site (so they get an owner) and no-op on
+	// web. The unload policy reconciles a value into Rust's idle clock; the
+	// global-shortcut runtime supervises the rdev listener and converges its
+	// bindings from device config. Neither mirrors authority: the FE owns values,
+	// native owns mechanism.
+	installUnloadPolicyRuntime();
+	installGlobalShortcutRuntime();
+
 	// In-app (local) keydown shortcut listener. Runs on every platform; the
 	// desktop global backend is separate and started below.
 	$effect(() => {
@@ -113,36 +99,9 @@
 		recordingOverlay.sync(overlayStatus);
 	});
 
-	// Push the ambient transcription config to Rust whenever it changes. Rust
-	// owns the resident model lifecycle (cache, preload, eviction) and resolves
-	// the model name against its models directory; the FE just mirrors the
-	// current settings on a single channel.
-	// - Drift in (engine, modelName) triggers a background preload.
-	// - Other field changes (language, prompt, unloadPolicy) take effect on the
-	//   next transcription with no reload.
-	// Fires once on mount (per local engine) and on every subsequent change.
-	$effect(() => {
-		if (!tauri) return;
-		const service = settings.get('transcription.service');
-		if (!isLocalProviderId(service)) return;
-
-		const modelName = deviceConfig.get(PROVIDERS[service].modelConfigKey);
-		if (!modelName) return;
-
-		const language = settings.get('transcription.language');
-		const prompt = settings.get('transcription.prompt');
-		void commands
-			.setTranscriptionConfig({
-				engine: service,
-				modelName,
-				language: language === 'auto' ? null : language,
-				initialPrompt: prompt || null,
-				unloadPolicy: deviceConfig.get('transcription.localModelUnloadPolicy'),
-			})
-			.catch((err) => {
-				console.error('Failed to push transcription config to Rust:', err);
-			});
-	});
+	// Transcription config is no longer mirrored to Rust here: it travels with
+	// each transcribe call as a per-call `TranscriptionSpec`, built where it is
+	// consumed in `dispatchLocalTranscription`, so nothing ambient can go stale.
 
 	// Retention pruning: keep at most `maxCount` settled recordings.
 	$effect(() => {
@@ -178,11 +137,11 @@
 
 		// Cross-platform startup facts.
 		registerOnboarding();
-		// On macOS the listener starts when Accessibility is granted (the single
-		// gate the whole dictation flow shares); this is its one subscriber.
-		cleanupAccessibilityPermission = registerAccessibilityPermission({
-			onGranted: () => void startGlobalListener(),
-		});
+		// Standing macOS Accessibility signal: this poll keeps
+		// `environment.accessibilityGranted` current; the global-shortcut runtime
+		// subscribes to it to decide when the rdev listener may start. No one-shot
+		// callback: the runtime reconciles, it is not pushed to.
+		cleanupAccessibilityPermission = registerAccessibilityPermission();
 
 		// One trigger backend per platform: desktop uses the rdev global listener
 		// exclusively, the browser uses in-app keydown exclusively. They never
@@ -196,12 +155,10 @@
 				if (shortcutListenerDestroyed) unlisten();
 				else cleanupShortcutListener = unlisten;
 			});
-			syncGlobalShortcutsWithSettings();
+			// Binding registration and listener start-up are owned by
+			// `installGlobalShortcutRuntime()` (above), which reconciles them from
+			// device config plus the accessibility/liveness signals.
 			resetGlobalShortcutsToDefaultIfDuplicates();
-
-			// Non-macOS desktops have no Accessibility gate, so start the listener
-			// now (macOS waits for the grant, above).
-			if (!os.isApple) void startGlobalListener();
 
 			// Desktop-only async check - fire and forget
 			void checkForUpdates();

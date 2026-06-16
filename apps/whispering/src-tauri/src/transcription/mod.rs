@@ -1,31 +1,21 @@
 mod config;
 mod error;
 mod events;
-mod model_manager;
+mod model_cache;
 
 use crate::recorder::read_artifact_samples;
-pub use config::TranscriptionConfig;
+pub use config::{TranscriptionSpec, UnloadPolicy};
 pub use error::TranscriptionError;
 pub use events::{LocalModelState, ModelStateEvent};
-pub use model_manager::ModelManager;
+pub use model_cache::ModelCache;
 use tauri::{AppHandle, State};
 
-/// Push the ambient transcription configuration. Replaces the per-call
-/// `config` argument that `transcribe_recording` used to take. The FE
-/// invokes this once at startup and on every subsequent change to
-/// settings, model selection, language, prompt, or unload policy.
-///
-/// Drift in `(engine, model_name)` triggers a background preload so the
-/// next `transcribe_recording` call does not pay cold-start latency.
-/// Other field changes take effect on the next transcription with no
-/// reload.
+/// Reconcile the current local-model unload policy into the native idle
+/// watcher. The frontend owns the value; Rust owns the clock.
 #[tauri::command]
 #[specta::specta]
-pub fn set_transcription_config(
-    config: TranscriptionConfig,
-    model_manager: State<'_, ModelManager>,
-) {
-    model_manager.set_transcription_config(config);
+pub fn set_unload_policy(policy: UnloadPolicy, model_cache: State<'_, ModelCache>) {
+    model_cache.set_unload_policy(policy);
 }
 
 /// Snapshot the current model state. Used by late-mounted observers (a
@@ -33,32 +23,30 @@ pub fn set_transcription_config(
 /// the current lifecycle state without waiting for the next event on
 /// `transcription://model-state`.
 ///
-/// Reads a lock-free status field plus the ambient config; never touches
-/// the cache mutex, so it returns immediately even mid-inference.
+/// Reads the status plus resident model identity, if any.
 #[tauri::command]
 #[specta::specta]
-pub fn get_transcription_state(model_manager: State<'_, ModelManager>) -> LocalModelState {
-    model_manager.snapshot()
+pub fn get_transcription_state(model_cache: State<'_, ModelCache>) -> LocalModelState {
+    model_cache.snapshot()
 }
 
 /// Canonical transcribe-by-id path. Resolves the audio file under
 /// `<appDataDir>/recordings/{recordingId}.*` (cpal-written WAV,
-/// navigator-saved webm/opus/mp4, etc.), decodes, runs inference using
-/// the ambient configuration pushed via `set_transcription_config`.
-///
-/// Returns `NoConfig` if the FE has not pushed a config yet.
+/// navigator-saved webm/opus/mp4, etc.), decodes, then runs inference using
+/// the per-call transcription spec supplied by the frontend.
 #[tauri::command]
 #[specta::specta]
 pub async fn transcribe_recording(
     recording_id: String,
+    spec: TranscriptionSpec,
     app_handle: AppHandle,
-    model_manager: State<'_, ModelManager>,
+    model_cache: State<'_, ModelCache>,
 ) -> Result<String, TranscriptionError> {
     let samples = read_artifact_samples(&app_handle, &recording_id)
         .map_err(|e| TranscriptionError::AudioReadError { message: e })?;
 
-    let manager = model_manager.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || manager.transcribe(samples))
+    let manager = model_cache.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.transcribe(samples, spec))
         .await
         .map_err(join_err)?
 }

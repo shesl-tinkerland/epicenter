@@ -61,6 +61,7 @@ import { autostartKeys } from '$lib/tauri/autostart-keys';
 import type {
 	CommandBinding,
 	KeyBinding,
+	ListenerStoppedEvent,
 	MediaPlayer,
 } from '$lib/tauri/commands';
 import { commands, events } from '$lib/tauri/commands';
@@ -265,9 +266,10 @@ async function initTray() {
 // It emits a `{ commandId, state }` event on every binding transition; we push
 // the user's bindings down with `set_keyboard_shortcuts` and dispatch the
 // events back into the command layer (the single convergence point). No
-// accelerator strings cross this boundary: the registrar parses them to
-// `KeyBinding` before pushing (see `register-commands.ts`). The trigger and
-// capture topics are the generated `events.shortcutTriggerEvent` /
+// accelerator strings cross this boundary: device config stores structured
+// `KeyBinding`s and the global-shortcut runtime
+// (`$lib/runtime/global-shortcuts.svelte`) reconciles them onto the backend.
+// The trigger and capture topics are the generated `events.shortcutTriggerEvent` /
 // `events.shortcutCaptureEvent`, so no topic string is mirrored here.
 
 // autostart ---------------------------------------------------------
@@ -396,6 +398,9 @@ const globalShortcuts = {
 		events.shortcutCaptureEvent.listen(({ payload }) =>
 			onCombo(payload.binding),
 		),
+
+	listenForStopped: (onStopped: (event: ListenerStoppedEvent) => void) =>
+		events.listenerStoppedEvent.listen(({ payload }) => onStopped(payload)),
 };
 
 // media -------------------------------------------------------------
