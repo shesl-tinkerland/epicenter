@@ -8,7 +8,7 @@
 		stopManualRecording,
 	} from '$lib/operations/recording';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
-	import { shortcuts } from '#platform/shortcuts';
+	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import RecordingActionCard from './RecordingActionCard.svelte';
 
 	let {
@@ -34,7 +34,7 @@
 	const isStopping = $derived(stopMutation.isPending);
 	const isPending = $derived(isStarting || isStopping);
 	const isRecording = $derived(manualRecorder.state === 'RECORDING');
-	const shortcutLabel = $derived(shortcuts.currentLabel('toggleManualRecording'));
+	const shortcutLabel = $derived(getRecordingShortcutLabel('manual'));
 	const icon = $derived(isRecording ? SquareIcon : MicIcon);
 	const label = $derived(isRecording ? 'Stop recording' : 'Start recording');
 	const idleDescription = $derived(
