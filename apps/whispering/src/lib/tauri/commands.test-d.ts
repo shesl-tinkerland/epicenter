@@ -41,7 +41,10 @@ type _TranscribeRecording = Expect<
 >;
 
 type _TranscribeRecordingArgs = Expect<
-	Equal<Parameters<typeof commands.transcribeRecording>, [string, TranscriptionSpec]>
+	Equal<
+		Parameters<typeof commands.transcribeRecording>,
+		[string, TranscriptionSpec]
+	>
 >;
 
 // set_unload_policy: infallible (Rust `()`). Stays plain Promise; no Result
@@ -85,9 +88,7 @@ type _ModelStateEventShape = Expect<
 		| {
 				kind: 'unloaded';
 				state: LocalModelState;
-				reason:
-					| { kind: 'immediate' }
-					| { kind: 'idle'; idleSecs: number };
+				reason: { kind: 'immediate' } | { kind: 'idle'; idleSecs: number };
 		  }
 	>
 >;
