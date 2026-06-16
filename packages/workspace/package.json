@@ -46,6 +46,7 @@
 		"bench": "bun test ./src/__benchmarks__/*.bench.ts --timeout 60000"
 	},
 	"dependencies": {
+		"@epicenter/encryption": "workspace:*",
 		"@epicenter/field": "workspace:*",
 		"@epicenter/identity": "workspace:*",
 		"@hono/standard-validator": "catalog:",
