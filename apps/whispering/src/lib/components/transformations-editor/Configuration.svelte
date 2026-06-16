@@ -20,6 +20,7 @@
 	} from '$lib/constants/inference';
 	import { getProviderConfigKeys } from '$lib/operations/transform';
 	import { deviceConfig } from '$lib/state/device-config.svelte';
+	import { secrets } from '$lib/state/secrets.svelte';
 	import { createDefaultPrompt } from '$lib/state/transformations.svelte';
 	import type {
 		Replacement,
@@ -263,10 +264,16 @@
 			{@const provider = prompt.inferenceProvider}
 			{@const keys = getProviderConfigKeys(provider)}
 			{@const isCustom = provider === 'Custom'}
-			{@const requiredKey = isCustom ? keys.endpointConfigKey : keys.apiKeyConfigKey}
-			{@const hasCredential =
-				!requiredKey ||
-				String(deviceConfig.get(requiredKey) ?? '').trim().length > 0}
+			<!--
+				Custom needs an endpoint (a device setting); every other provider needs
+				an API key (a secret read through the facade, available only when set and
+				unlocked). A null endpoint key means nothing is required.
+			-->
+			{@const hasCredential = isCustom
+				? !keys.endpointConfigKey ||
+					String(deviceConfig.get(keys.endpointConfigKey) ?? '').trim().length >
+						0
+				: secrets.get(keys.apiKeyConfigKey).status === 'available'}
 			<div class="space-y-6" transition:slide>
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<Field.Field>
