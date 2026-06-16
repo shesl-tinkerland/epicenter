@@ -151,8 +151,8 @@ async function runPrompt(
 	// The API key is a secret: read it from the credential facade, which routes to
 	// the device or the (locked) vault. A missing or locked key is a user-actionable
 	// failure raised here, before the provider runs with a blank key. `locked` is
-	// unreachable until the vault sync UI ships (wave 6); handled now so this call
-	// site already covers every read state.
+	// unreachable until the account-aware vault sync wave ships its lifecycle UI;
+	// handled now so this call site already covers every read state.
 	const apiKey = secrets.get(config.apiKeyConfigKey);
 	if (apiKey.status === 'missing') {
 		return Err({

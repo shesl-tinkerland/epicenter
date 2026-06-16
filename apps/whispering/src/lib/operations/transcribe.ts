@@ -366,8 +366,9 @@ async function transcribeViaUpload(
 	if (provider.location === 'cloud' && isCloudProviderId(selectedService)) {
 		// The API key is a secret: read it from the credential facade. A missing or
 		// locked key is a user-actionable error raised here, before the provider SDK
-		// runs with a blank key. `locked` is unreachable until the vault sync UI ships
-		// (wave 6); handled now so this call site already covers every read state.
+		// runs with a blank key. `locked` is unreachable until the account-aware vault
+		// sync wave ships its lifecycle UI; handled now so this call site already covers
+		// every read state.
 		const apiKey = secrets.get(provider.apiKeyConfigKey);
 		if (apiKey.status === 'missing') {
 			return TranscriptionOperationError.ApiKeyMissing({
