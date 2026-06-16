@@ -5,13 +5,23 @@
 **Owner**: Braden
 **Branch**: (future; builds on the providers clean break)
 
-> **Update (2026-06-12, transformation-engine collapse)**: superseded in part by
-> `20260612T210000-whispering-transformation-engine-collapse.md`. The arbitrary
-> `transformationSteps` table is gone: a transformation is a fixed
-> `preReplacements[] + prompt? + postReplacements[]`. Everywhere this spec says a
-> "step" targets a backend and owns the model, read "the transformation's single
-> `prompt`." The co-location invariant is unchanged: `customBackends` lives in the
-> same workspace as `transformations`. Named step errors become named prompt errors.
+> **Update (2026-06-16, Cleanup/Formats greenfield)**: the host concept this
+> spec attaches to is being replaced. Read
+> `apps/whispering/specs/20260616T230000-cleanup-and-portable-formats-greenfield.md`
+> and `docs/adr/0013-transformations-split-into-automatic-cleanup-and-a-portable-format-library.md`
+> first.
+> - **In tension, must reconcile**: this spec assumes a transformation's prompt
+>   "targets a backend by id" and "the step owns the model." The greenfield
+>   decision removes per-Format model/provider selection: model and provider come
+>   from one global AI default, and per-Format override is refused for v1. So
+>   custom backends should attach to the **global AI default** (Settings -> AI),
+>   not to a per-Format/per-prompt slot. The named-backend feature (Ollama/LM
+>   Studio endpoints, device-bound API keys, co-location invariant) survives; its
+>   *binding point* moves from the prompt to the global default.
+> - **Still valid**: the storage-domain reasoning (backend identity in the synced
+>   workspace, keys in deviceConfig) and the co-location invariant.
+> - The earlier `20260612T210000-whispering-transformation-engine-collapse.md`
+>   referenced below has been deleted (its body is in git history).
 
 ## One Sentence
 

@@ -5,12 +5,23 @@
 **Owner**: Braden
 **Branch**: none yet
 
-> **Update (2026-06-12, transformation-engine collapse)**: superseded in part by
-> `20260612T210000-whispering-transformation-engine-collapse.md`. Candidates live
-> in memory; only the accepted candidate becomes a run (no per-candidate rows).
-> There is no `steps` table to relocate: a transformation is
-> `preReplacements[] + prompt? + postReplacements[]`, so "definitions =
-> transformations + steps + backends" now reads "transformations + backends."
+> **Update (2026-06-16, Cleanup/Formats greenfield)**: the *concept* this spec
+> operates on is being replaced. Read
+> `apps/whispering/specs/20260616T230000-cleanup-and-portable-formats-greenfield.md`
+> and `docs/adr/0013-transformations-split-into-automatic-cleanup-and-a-portable-format-library.md`
+> first. The "Transformation" object is deleted and split into an automatic
+> **Cleanup** layer and a portable **Format** library.
+> - **Absorbed**: the "select-text-anywhere picker as the engine's second
+>   consumer" vision (One Sentence, Selection Picker, Comparables) is now the
+>   greenfield spec's core. The portable unit is a `Format` (text in/text out),
+>   not a transformation; the host supplies source/trigger/delivery.
+> - **Still live here, reframed**: the *workspace sync boundary* (definitions are
+>   a shareable library, runs are app-side history) is orthogonal to the concept
+>   reshape and remains valid, except the library now holds Formats + Cleanup,
+>   not `transformations + steps + backends`. Revisit this boundary when sync
+>   ships, against the greenfield concepts.
+> - The earlier `20260612T210000-whispering-transformation-engine-collapse.md`
+>   referenced below has been deleted (its body is in git history).
 
 ## One Sentence
 

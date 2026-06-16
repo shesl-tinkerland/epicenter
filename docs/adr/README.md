@@ -80,5 +80,6 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0010](0010-actions-are-the-only-surface-that-crosses-a-process-boundary.md) | Actions are the only surface that crosses a process boundary | Accepted |
 | [0011](0011-rust-owns-the-macos-dictation-capability.md) | Rust owns the macOS dictation capability; the frontend is a view over it | Accepted |
 | [0012](0012-transcription-settings-are-read-at-use-not-mirrored-into-rust.md) | Transcription settings are read at use; Rust's model cache owns mechanism, not config | Accepted |
+| [0013](0013-transformations-split-into-automatic-cleanup-and-a-portable-format-library.md) | Transformations split into an automatic Cleanup layer and a portable Format library | Proposed |
 
 When you add an ADR, add its row here.
