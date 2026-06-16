@@ -214,24 +214,92 @@
 	import * as Field from '@epicenter/ui/field';
 	import { Input } from '@epicenter/ui/input';
 	import { Link } from '@epicenter/ui/link';
-	import { deviceConfig } from '$lib/state/device-config.svelte';
+	import { report } from '$lib/report';
+	import {
+		deviceConfig,
+		SECRET_KEYS,
+		type SecretKey,
+	} from '$lib/state/device-config.svelte';
+	import { secrets } from '$lib/state/secrets.svelte';
 
 	let { provider }: { provider: ProviderConfigId } = $props();
 
 	const fields = $derived(PROVIDER_FIELDS[provider]);
+
+	/**
+	 * This component is the user-facing vault control point named in ADR 0004: the
+	 * one settings surface that reads and writes provider API keys. Keys are secrets,
+	 * so they route through the credential facade (`secrets`), never raw `deviceConfig`.
+	 * Endpoints, base URLs, and model IDs are not secrets and stay on `deviceConfig`.
+	 *
+	 * There are deliberately no vault lifecycle controls here (no enable-sync
+	 * passphrase prompt, no unlock/lock/forget). The vault is owner-scoped (ADR 0005):
+	 * it must be instantiated per signed-in account through `attachLocalStorage({
+	 * server, ownerId })` and does not exist for a signed-out user. Whispering has no
+	 * auth yet, so `secrets` runs on the local-only placeholder singleton and cannot
+	 * sync across devices. Shipping a passphrase prompt now would provision a
+	 * local-only vault while implying cross-device sync works. Those controls land in
+	 * the wave that makes the workspace account-aware; until then the facade stays in
+	 * its `device-only` home and this surface is plain device-local key entry.
+	 */
+
+	/**
+	 * Whether a field's config key is a secret (a provider API key). `SECRET_KEYS` is
+	 * the single source of truth (ADR 0004), so adding a secret there routes it here
+	 * without touching this component.
+	 */
+	function isSecretKey(key: ProviderField['configKey']): key is SecretKey {
+		return (SECRET_KEYS as readonly string[]).includes(key);
+	}
+
+	/**
+	 * Write a secret through the facade. Today the facade is always in its
+	 * `device-only` home, where a write cannot fail. A `VaultLocked` error is only
+	 * reachable once the vault sync wave lands, and the disabled-when-locked input
+	 * below prevents writing in that state, so an error here is a wiring bug: surface
+	 * it loudly rather than dropping the user's key silently.
+	 */
+	function setSecret(key: SecretKey, value: string): void {
+		const { error } = secrets.set(key, value);
+		if (error) {
+			report.error({
+				title: 'Could not save your API key',
+				description: error.message,
+				cause: error,
+			});
+		}
+	}
 </script>
 
 {#snippet providerField(field: ProviderField)}
 	<Field.Field>
 		<Field.Label for={field.id}>{field.label}</Field.Label>
-		<Input
-			id={field.id}
-			type={field.type}
-			placeholder={field.placeholder}
-			autocomplete="off"
-			bind:value={() => deviceConfig.get(field.configKey),
-				(value) => deviceConfig.set(field.configKey, value)}
-		/>
+		{#if isSecretKey(field.configKey)}
+			{@const configKey = field.configKey}
+			{@const read = secrets.get(configKey)}
+			<Input
+				id={field.id}
+				type={field.type}
+				placeholder={read.status === 'locked'
+					? 'Unlock your secret vault to edit'
+					: field.placeholder}
+				autocomplete="off"
+				disabled={read.status === 'locked'}
+				bind:value={
+					() => (read.status === 'available' ? read.value : ''),
+					(value) => setSecret(configKey, value)
+				}
+			/>
+		{:else}
+			<Input
+				id={field.id}
+				type={field.type}
+				placeholder={field.placeholder}
+				autocomplete="off"
+				bind:value={() => deviceConfig.get(field.configKey),
+					(value) => deviceConfig.set(field.configKey, value)}
+			/>
+		{/if}
 		<Field.Description>
 			{#each field.description as part}{#if typeof part === 'string'}{part}{:else}<Link
 						href={part.href}
