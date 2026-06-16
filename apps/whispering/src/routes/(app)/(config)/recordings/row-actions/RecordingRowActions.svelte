@@ -5,7 +5,6 @@
 	import { Spinner } from '@epicenter/ui/spinner';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import FileStackIcon from '@lucide/svelte/icons/file-stack';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import RepeatIcon from '@lucide/svelte/icons/repeat';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
@@ -17,12 +16,9 @@
 	import { report } from '$lib/report';
 	import { rpc } from '$lib/rpc';
 	import { recordings } from '$lib/state/recordings.svelte';
-	import { transformationRuns } from '$lib/state/transformation-runs.svelte';
 	import { createCopyFn } from '$lib/utils/createCopyFn';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import EditRecordingModal from './EditRecordingModal.svelte';
-	import TransformationPicker from './TransformationPicker.svelte';
-	import ViewTransformationRunsDialog from './ViewTransformationRunsDialog.svelte';
 
 	const transcribeRecording = createMutation(
 		() => rpc.transcription.transcribeRecording.options,
@@ -33,10 +29,6 @@
 	);
 
 	let { recordingId }: { recordingId: string } = $props();
-
-	const latestRun = $derived(
-		transformationRuns.getLatestByRecordingId(recordingId),
-	);
 
 	const recording = $derived(recordings.get(recordingId));
 
@@ -114,8 +106,6 @@
 			{/if}
 		</Button>
 
-		<TransformationPicker recordingId={recording.id} />
-
 		<EditRecordingModal {recording} />
 
 		<CopyButton
@@ -124,21 +114,6 @@
 			style="view-transition-name: {viewTransition.recording(recordingId)
 				.transcript}"
 		/>
-
-		{#if latestRun?.result?.status === 'completed'}
-			<CopyButton
-				text={latestRun.result.output}
-				copyFn={createCopyFn('latest transformation run output')}
-				style="view-transition-name: {viewTransition.recording(recordingId)
-					.transformationOutput}"
-			>
-				{#snippet icon()}
-					<FileStackIcon class="size-4" />
-				{/snippet}
-			</CopyButton>
-		{/if}
-
-		<ViewTransformationRunsDialog {recordingId} />
 
 		<Button
 			tooltip="Download recording"

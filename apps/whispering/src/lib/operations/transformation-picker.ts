@@ -1,31 +1,15 @@
-import { captureSelection } from '$lib/operations/selection';
 import { report } from '$lib/report';
-import * as transformationPickerWindow from '$routes/transformation-picker/transformationPickerWindow.tauri';
 
 /**
- * Open the transformation picker on the user's current selection. Capture happens
- * here, while the source app is still frontmost (the global shortcut fired
- * without stealing focus), so the simulated copy reads from the right app. The
- * window is shown only after a non-empty selection is captured.
+ * TODO(wave-3): rebuild on Formats. The old picker captured the current
+ * selection and opened a Tauri window listing transformations. The window and
+ * its candidate UI were deleted with the `Transformation` model; Wave 3 rebuilds
+ * the shared picker over the Format library (source = selection/transcript,
+ * runner = `run({ input, format })`).
  */
 export async function openTransformationPicker() {
-	const { data: selection, error: captureError } = await captureSelection();
-
-	if (captureError) {
-		report.error({
-			title: 'Could not capture your selection',
-			cause: captureError,
-		});
-		return;
-	}
-
-	if (!selection?.trim()) {
-		report.info({
-			title: 'Nothing selected',
-			description: 'Select some text in any app, then try again.',
-		});
-		return;
-	}
-
-	await transformationPickerWindow.openWithSelection(selection);
+	report.info({
+		title: 'Formats are on the way',
+		description: 'The format picker is coming in the next update.',
+	});
 }

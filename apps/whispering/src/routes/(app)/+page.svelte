@@ -22,7 +22,6 @@
 	import {
 		TranscriptionSelector,
 		TranscriptionRuntimeConfig,
-		TransformationSelector,
 	} from '$lib/components/settings';
 	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
 	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
@@ -299,7 +298,6 @@
 			<CapturePipeline>
 				<ManualDeviceSelector />
 				<TranscriptionSelector triggerVariant="pipeline" />
-				<TransformationSelector />
 			</CapturePipeline>
 		{/snippet}
 
@@ -307,7 +305,6 @@
 			<CapturePipeline>
 				<VadDeviceSelector />
 				<TranscriptionSelector triggerVariant="pipeline" />
-				<TransformationSelector />
 			</CapturePipeline>
 		{/snippet}
 
@@ -355,7 +352,6 @@
 				/>
 				<CapturePipeline>
 					<TranscriptionSelector triggerVariant="pipeline" />
-					<TransformationSelector />
 				</CapturePipeline>
 			</div>
 		{/if}

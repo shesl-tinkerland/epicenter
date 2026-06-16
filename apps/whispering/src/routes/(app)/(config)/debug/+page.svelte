@@ -16,12 +16,8 @@
 				count: () => whispering.tables.recordings.storedCount(),
 			},
 			{
-				label: 'Transformations',
-				count: () => whispering.tables.transformations.storedCount(),
-			},
-			{
-				label: 'Transformation Runs',
-				count: () => whispering.tables.transformationRuns.storedCount(),
+				label: 'Formats',
+				count: () => whispering.tables.formats.storedCount(),
 			},
 		] as const;
 

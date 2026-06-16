@@ -5,7 +5,6 @@
 	import {
 		RecordingModeSelector,
 		TranscriptionSelector,
-		TransformationSelector,
 	} from '$lib/components/settings';
 	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
 	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
@@ -48,7 +47,6 @@
 				{:else}
 					<ManualDeviceSelector />
 					<TranscriptionSelector triggerVariant="standalone" />
-					<TransformationSelector />
 				{/if}
 				{#if manualRecorder.state === 'RECORDING'}
 					<Button
@@ -79,7 +77,6 @@
 				{#if vadRecorder.state === 'IDLE'}
 					<VadDeviceSelector />
 					<TranscriptionSelector triggerVariant="standalone" />
-					<TransformationSelector />
 				{/if}
 				{#if vadRecorder.state === 'IDLE'}
 					<div class="flex">
@@ -108,7 +105,6 @@
 				{/if}
 			{:else if settings.get('recording.mode') === 'upload'}
 				<TranscriptionSelector triggerVariant="standalone" />
-				<TransformationSelector />
 				<RecordingModeSelector />
 			{/if}
 		</div>

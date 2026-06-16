@@ -11,6 +11,5 @@ export { default as ManualDeviceSelector } from './selectors/ManualDeviceSelecto
 // Selector components
 export { default as RecordingModeSelector } from './selectors/RecordingModeSelector.svelte';
 export { default as TranscriptionSelector } from './selectors/TranscriptionSelector.svelte';
-export { default as TransformationSelector } from './selectors/TransformationSelector.svelte';
 export { default as VadDeviceSelector } from './selectors/VadDeviceSelector.svelte';
 export { default as TranscriptionRuntimeConfig } from './TranscriptionRuntimeConfig.svelte';

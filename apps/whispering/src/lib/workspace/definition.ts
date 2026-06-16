@@ -73,6 +73,10 @@ const recordings = defineTable({
 	title: field.string(),
 	recordedAt: field.instant(),
 	recordedAtZone: field.string<IanaTimeZone>(),
+	// The raw transcript, exactly as the transcriber produced it. Cleanup (Wave 2)
+	// layers correction on top and delivers the cleaned text, but the raw words
+	// stay here underneath so "show original" is always one click away. See
+	// ADR 0010.
 	transcript: field.string(),
 	duration: nullable(field.number()),
 	transcription: nullable(field.json(TranscriptionOutcome)),
@@ -82,87 +86,25 @@ const recordings = defineTable({
 export type Recording = InferTableRow<typeof recordings>;
 
 /**
- * A single deterministic find/replace pair. A list of these runs offline (no API
- * key) before the prompt (`preReplacements`) and after it (`postReplacements`):
- * a small dictionary ("new paragraph" to a newline, filler stripping, proper-noun
- * fixes) covers far more real-world cleanup than a single replacement each.
- */
-const Replacement = Type.Object({
-	find: Type.String(),
-	replace: Type.String(),
-	useRegex: Type.Boolean(),
-});
-
-/** One find/replace pair within a transformation's pre/post phase. */
-export type Replacement = Static<typeof Replacement>;
-
-/**
- * The one optional AI phase of a transformation: a single prompt template run
- * against a single model on a single backend (inference provider). The backend
- * and model live here, on the prompt, not on a separate step row.
- */
-const TransformationPrompt = Type.Object({
-	inferenceProvider: field.select(INFERENCE_PROVIDER_IDS),
-	model: Type.String(),
-	systemPromptTemplate: Type.String(),
-	userPromptTemplate: Type.String(),
-});
-
-/** The single prompt phase of a transformation. */
-export type TransformationPrompt = Static<typeof TransformationPrompt>;
-
-/**
- * User-defined transformations. A transformation is a fixed three-phase shape:
- * deterministic `preReplacements`, one optional AI `prompt`, then deterministic
- * `postReplacements`. At least one phase is present (enforced at write time, not
- * by the schema). This replaces the old arbitrary N-step pipeline: there is no
- * ordered `transformationSteps` table, no per-step model memory, no step editor.
- */
-const transformations = defineTable({
-	id: field.string(),
-	title: field.string(),
-	description: field.string(),
-	preReplacements: field.json(Type.Array(Replacement)),
-	prompt: nullable(field.json(TransformationPrompt)),
-	postReplacements: field.json(Type.Array(Replacement)),
-});
-
-/** Transformation row type inferred from the workspace table schema. */
-export type Transformation = InferTableRow<typeof transformations>;
-
-/**
- * Terminal outcome of a finished transformation run, carrying the produced
- * `output` on success. Built from the shared `terminalOutcome` helper.
+ * A reusable text action: a name and a single instruction, run on demand over
+ * whatever text the host hands it (text in, text out). Formats are the portable,
+ * plural, always-picked half of the old `Transformation` split: they know
+ * nothing about voice and carry no correction plumbing (that is Cleanup's job,
+ * run once before any Format). See ADR 0010.
  *
- * Only terminal outcomes are stored. A run that is currently executing has no
- * `result` (the column is null); liveness is derived from `startedAt` recency,
- * never written. A stored `running` status would wedge on crash: the process
- * that died can no longer write the terminal state, so the row would claim
- * `running` forever. See
- * docs/articles/20260612T190745-liveness-belongs-to-the-process-not-the-row.md.
- *
- * Storage is one nullable JSON-encoded TEXT column (`result`); nothing in the
- * read path filters or sorts on these fields.
+ * Deliberately tiny: no pre/post replacements, no system/user prompt split, no
+ * `{{input}}` placeholder, no per-Format model or provider (model comes from the
+ * global `completion.*` default). `icon` is optional; null until one is assigned.
  */
-const TransformationRunResult = terminalOutcome({ output: Type.String() });
-
-/**
- * Execution records for transformations. One run per invocation.
- * State queries filter by top-level `recordingId` / `transformationId` and
- * sort by `startedAt`; the terminal outcome lives inside `result`, which is
- * null while the run is executing or if it was interrupted.
- */
-const transformationRuns = defineTable({
+const formats = defineTable({
 	id: field.string(),
-	transformationId: field.string(),
-	recordingId: nullable(field.string()),
-	input: field.string(),
-	startedAt: field.instant(),
-	result: nullable(field.json(TransformationRunResult)),
+	name: field.string(),
+	instructions: field.string(),
+	icon: nullable(field.string()),
 });
 
-/** Transformation run row type inferred from the workspace table schema. */
-export type TransformationRun = InferTableRow<typeof transformationRuns>;
+/** Format row type inferred from the workspace table schema. */
+export type Format = InferTableRow<typeof formats>;
 
 /**
  * Synced settings stored as individual KV entries with last-write-wins resolution.
@@ -281,15 +223,76 @@ function defineTranscriptionSettings(
 }
 
 /**
- * Currently active transformation, used as the dictation default.
- *
- * `selectedId`: FK to `transformations` table. `null` = no transformation selected.
+ * One dictionary entry: a deterministic spelling fix for the one thing AI cannot
+ * reliably get right, proper nouns and domain terms ("brayden" -> "Braden").
+ * `spell: ""` removes the matched text. `regex` and `wholeWord` are advanced
+ * matching modes; both default to off (literal, anywhere).
  */
-const transformation = {
-	'transformation.selectedId': defineKv(
-		nullable(field.string()),
-		(): string | null => null,
+const DictionaryEntry = Type.Object({
+	heard: Type.String(),
+	spell: Type.String(),
+	regex: Type.Optional(Type.Boolean()),
+	wholeWord: Type.Optional(Type.Boolean()),
+});
+
+/** A single Cleanup dictionary entry. */
+export type DictionaryEntry = Static<typeof DictionaryEntry>;
+
+/**
+ * The auto-cleanup tidy pass: one optional AI call that makes every transcript
+ * correct. A discriminated union so `instructions` only exists when enabled.
+ * Ships enabled; the median user never opens its instructions.
+ */
+const AutoCleanup = Type.Union([
+	Type.Object({
+		enabled: Type.Literal(true),
+		instructions: Type.String(),
+	}),
+	Type.Object({
+		enabled: Type.Literal(false),
+	}),
+]);
+
+/** Auto-cleanup config: enabled with editable instructions, or disabled. */
+export type AutoCleanup = Static<typeof AutoCleanup>;
+
+/** Default tidy instruction. Kept faithful: fix mechanics, preserve wording. */
+const DEFAULT_AUTO_CLEANUP_INSTRUCTIONS =
+	'Fix grammar and punctuation. Keep my wording.';
+
+/**
+ * Cleanup: the singular, automatic correction layer that runs after every
+ * transcription (Wave 2 wires the post-transcription path). Two mechanisms, an
+ * optional `autoCleanup` AI tidy pass and a deterministic `dictionary`. Cleanup
+ * is dictation-specific: it is automatic because voice input is noisy. See
+ * ADR 0010.
+ */
+const cleanup = {
+	'cleanup.autoCleanup': defineKv(
+		AutoCleanup,
+		(): Static<typeof AutoCleanup> => ({
+			enabled: true,
+			instructions: DEFAULT_AUTO_CLEANUP_INSTRUCTIONS,
+		}),
 	),
+	'cleanup.dictionary': defineKv(
+		Type.Array(DictionaryEntry),
+		(): Static<typeof DictionaryEntry>[] => [],
+	),
+} as const;
+
+/**
+ * The single global AI default used for completions: which inference provider
+ * and model the auto-cleanup pass and every Format run against. Per ADR 0010
+ * there is no per-Format model or provider; this is the one place it lives. API
+ * keys and endpoints stay in deviceConfig (local, never synced).
+ */
+const completion = {
+	'completion.provider': defineKv(
+		field.select(INFERENCE_PROVIDER_IDS),
+		() => 'Google' as const,
+	),
+	'completion.model': defineKv(field.string(), () => 'gemini-2.5-flash'),
 } as const;
 
 /** Anonymized event logging toggle (Aptabase). */
@@ -359,7 +362,8 @@ export function createWhispering({
 		...dataRetention,
 		...recording,
 		...defineTranscriptionSettings(defaultTranscriptionService),
-		...transformation,
+		...cleanup,
+		...completion,
 		...analytics,
 		...shortcuts,
 	};
@@ -371,8 +375,7 @@ export function createWhispering({
 		id: 'epicenter-whispering',
 		tables: {
 			recordings,
-			transformations,
-			transformationRuns,
+			formats,
 		},
 		kv: kvDefinitions,
 	});
