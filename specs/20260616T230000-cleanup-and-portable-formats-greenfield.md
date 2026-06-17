@@ -115,7 +115,14 @@ Verify: `cd apps/whispering && bun run check && bun test`, then grep that no
 `cleanup`, `transformation`, `Format` (the type), `DictionaryEntry`,
 `applyDictionary`, or `autoCleanup` references survive.
 
-### Wave 2: Dictation settings UI
+### Wave 2: Dictation settings UI — LANDED
+
+> **Landed**: new `settings/dictation/+page.svelte` (added to the settings
+> SidebarNav after Transcription). Polish toggle via `SettingSwitch`
+> (`polish.enabled`), the instruction (`polish.instructions`) under a
+> `Collapsible` "Advanced" disclosure shown only when Polish is on, and the
+> Dictionary as an add/remove term list (dedupe + blank-skip) over
+> `dictionary`. Pure UI over Wave 1 data through the `settings` namespace.
 
 A Settings -> Dictation page: a Polish toggle (off = speed mode) with the
 instruction editable under an Advanced disclosure, and a Dictionary as an
