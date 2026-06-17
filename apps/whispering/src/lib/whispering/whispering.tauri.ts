@@ -27,7 +27,9 @@ export function openWhispering() {
 		...workspace,
 		actions: defineActions({
 			...workspace.actions,
-			recordings_export_markdown: defineRecordingsMarkdownExport(workspace),
+			recordings_export_markdown: defineRecordingsMarkdownExport(
+				workspace.tables.recordings,
+			),
 		}),
 		whenReady: idb.whenLoaded,
 	});
