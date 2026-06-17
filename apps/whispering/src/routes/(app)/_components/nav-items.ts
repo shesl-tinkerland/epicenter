@@ -1,5 +1,4 @@
 import HomeIcon from '@lucide/svelte/icons/house';
-import LayersIcon from '@lucide/svelte/icons/layers';
 import ListIcon from '@lucide/svelte/icons/list';
 import SettingsIcon from '@lucide/svelte/icons/settings';
 import type { Component } from 'svelte';
@@ -34,12 +33,9 @@ export const NAV_ITEMS = [
 		icon: ListIcon,
 		isActive: matchesRoute('/recordings'),
 	},
-	{
-		label: 'Transformations',
-		href: '/transformations',
-		icon: LayersIcon,
-		isActive: matchesRoute('/transformations'),
-	},
+	// TODO(wave-3): add a "Formats" nav item once the Formats library page lands.
+	// The old "Transformations" item and its route were removed with the
+	// Transformation model (ADR 0013).
 	{
 		label: 'Settings',
 		href: '/settings',

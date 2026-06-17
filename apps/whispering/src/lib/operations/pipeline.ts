@@ -1,20 +1,13 @@
 import { InstantString } from '@epicenter/field';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
-import { goto } from '$app/navigation';
-import {
-	deliverTranscriptionResult,
-	deliverTransformationResult,
-} from '$lib/operations/delivery';
+import { deliverTranscriptionResult } from '$lib/operations/delivery';
 import { sound } from '$lib/operations/sound';
 import { transcribeAndPersist } from '$lib/operations/transcribe';
-import { runTransformation } from '$lib/operations/transform';
 import { report } from '$lib/report';
 import { services } from '$lib/services';
 import type { RecorderStopResult } from '$lib/services/recorder/types';
 import { recordings } from '$lib/state/recordings.svelte';
-import { settings } from '$lib/state/settings.svelte';
-import { transformations } from '$lib/state/transformations.svelte';
 
 type DeliverySource = 'recording' | 'upload';
 
@@ -105,46 +98,10 @@ export async function processRecordingPipeline({
 	});
 	transcribeLoading.resolve(transcribeNotice);
 
-	const transformationId = settings.get('transformation.selectedId');
-	if (!transformationId) return;
-
-	const transformation = transformations.get(transformationId);
-	if (!transformation) {
-		settings.set('transformation.selectedId', null);
-		report.info({
-			title: 'No matching transformation found',
-			description:
-				'No matching transformation found. Please select a different transformation.',
-			action: {
-				label: 'Select a different transformation',
-				onClick: () => goto('/transformations'),
-			},
-		});
-		return;
-	}
-
-	const transformLoading = report.loading({
-		title: '🔄 Running transformation...',
-		description:
-			'Applying your selected transformation to the transcribed text...',
-	});
-
-	const { data: transformedText, error: transformError } =
-		await runTransformation({
-			input: transcribedText,
-			transformation,
-			recordingId,
-		});
-	if (transformError) {
-		transformLoading.reject({ cause: transformError });
-		return;
-	}
-
-	sound.playSoundIfEnabled('transformationComplete');
-
-	const transformNotice = await deliverTransformationResult({
-		text: transformedText,
-		recordingId,
-	});
-	transformLoading.resolve(transformNotice);
+	// TODO(wave-2): run Cleanup here (dictionary -> auto-cleanup) over the raw
+	// transcript and deliver the cleaned text, keeping the raw stored underneath
+	// on the recording. This replaces the old `transformation.selectedId`
+	// auto-run, which is gone: the automatic path is always Cleanup, never a
+	// picked Format. See ADR 0013 and the Wave 2 sequencing in
+	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
 }

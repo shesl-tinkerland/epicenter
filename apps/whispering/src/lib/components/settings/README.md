@@ -33,7 +33,6 @@ settings/
 ├── selectors/              # Various selector components
 │   ├── ManualDeviceSelector.svelte
 │   ├── VadDeviceSelector.svelte
-│   ├── TransformationSelector.svelte
 │   ├── TranscriptionSelector.svelte
 │   └── RecordingModeSelector.svelte
 ├── LocalModelSelector.svelte

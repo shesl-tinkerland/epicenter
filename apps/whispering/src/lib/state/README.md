@@ -50,26 +50,15 @@ recordings.update(id, {
 recordings.delete(id);
 ```
 
-### `transformations.svelte.ts`
+### `formats.svelte.ts`
 
-Transformations backed by a Yjs workspace table. Each transformation is a single self-contained row: the fixed three-phase shape (`preReplacements`, `prompt`, `postReplacements`) lives on the row, there is no separate steps table.
-
-```typescript
-import { transformations } from '$lib/state/transformations.svelte';
-
-const transformation = transformations.get(id);
-const sorted = transformations.sorted; // alphabetical
-```
-
-### `transformation-runs.svelte.ts`
-
-Transformation run execution records backed by Yjs workspace table.
+Formats backed by a Yjs workspace table. A Format is a single self-contained row: a name and one instruction (text in, text out). No replacements, no prompt split, no per-Format model. See ADR 0013.
 
 ```typescript
-import { transformationRuns } from '$lib/state/transformation-runs.svelte';
+import { formats } from '$lib/state/formats.svelte';
 
-const runs = transformationRuns.getByRecordingId(recordingId);
-const latest = transformationRuns.getLatestByRecordingId(recordingId);
+const format = formats.get(id);
+const sorted = formats.sorted; // alphabetical by name
 ```
 
 ### `device-config.svelte.ts`

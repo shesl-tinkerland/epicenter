@@ -32,21 +32,7 @@ export const viewTransition = {
 			audio: `recording-${id}-audio`,
 			/** The transcript text display */
 			transcript: `recording-${id}-transcript`,
-			/** The transformation output display */
-			transformationOutput: `recording-${id}-transformation-output`,
 		} as const;
-	},
-
-	/**
-	 * Transition name for a transformation card/selector.
-	 *
-	 * @example
-	 * ```svelte
-	 * <div style="view-transition-name: {viewTransition.transformation(id)}" />
-	 * ```
-	 */
-	transformation(id: string | null) {
-		return `transformation-${id ?? 'none'}` as const;
 	},
 
 	/**
