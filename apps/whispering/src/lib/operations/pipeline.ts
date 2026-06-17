@@ -2,6 +2,7 @@ import { InstantString } from '@epicenter/field';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { deliverTranscriptionResult } from '$lib/operations/delivery';
+import { runCleanup } from '$lib/operations/run-cleanup';
 import { sound } from '$lib/operations/sound';
 import { transcribeAndPersist } from '$lib/operations/transcribe';
 import { report } from '$lib/report';
@@ -91,17 +92,35 @@ export async function processRecordingPipeline({
 		return;
 	}
 
+	// Run Cleanup over the raw transcript, then deliver the CLEANED text. The raw
+	// stays on `recordings.transcript` (persisted by transcribeAndPersist) so
+	// "show original" is recoverable. We hold delivery until Cleanup finishes and
+	// deliver once (Option A): typing the raw at the cursor and then re-typing the
+	// cleaned version would double-type, the exact problem the old
+	// transcription/transformation cursor asymmetry existed to dodge. Cleanup is
+	// the only thing on the automatic path; the old `transformation.selectedId`
+	// auto-run is gone. See ADR 0013 and the Wave 2 runtime flow in
+	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
+	const { data: cleanedText, error: cleanupError } = await runCleanup({
+		input: transcribedText,
+	});
+	// Auto-cleanup is best-effort: a failed AI tidy pass carries the
+	// dictionary-corrected text in `fallback`, so a transcript is never lost to a
+	// tidy-pass error. Surface the failure without blocking delivery.
+	const deliveredText = cleanupError ? cleanupError.fallback : cleanedText;
+	if (cleanupError) {
+		report.info({
+			title: 'Auto-cleanup skipped',
+			description: cleanupError.message,
+		});
+	}
+
+	// The transcript is "ready" once it is cleaned and about to be delivered, so
+	// the completion sound and the resolved loading notice both fire here.
 	sound.playSoundIfEnabled('transcriptionComplete');
-	const transcribeNotice = await deliverTranscriptionResult({
-		text: transcribedText,
+	const deliverNotice = await deliverTranscriptionResult({
+		text: deliveredText,
 		source: deliverySource,
 	});
-	transcribeLoading.resolve(transcribeNotice);
-
-	// TODO(wave-2): run Cleanup here (dictionary -> auto-cleanup) over the raw
-	// transcript and deliver the cleaned text, keeping the raw stored underneath
-	// on the recording. This replaces the old `transformation.selectedId`
-	// auto-run, which is gone: the automatic path is always Cleanup, never a
-	// picked Format. See ADR 0013 and the Wave 2 sequencing in
-	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
+	transcribeLoading.resolve(deliverNotice);
 }
