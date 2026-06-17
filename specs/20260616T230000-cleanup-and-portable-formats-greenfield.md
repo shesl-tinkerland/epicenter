@@ -54,6 +54,51 @@ plus a stale-reference grep for `transformation.selectedId`,
 Transformation model fully deleted and only the two intentional Wave-3 command
 stubs remaining (marked `TODO(wave-3)`).
 
+## Evolved direction (2026-06-16, post-Wave-2): Dictionary + pinned Recipe
+
+Waves 1-2 shipped the two-concept model below (a separate "Cleanup" + a "Format"
+library). Reviewing it against the user story and against Handy's design
+collapsed it further. **This section is the current target; the sections below it
+are the context it grew out of.** ADR 0013 records the decision.
+
+- **There is one AI mechanism, not two.** The auto AI tidy pass needs no
+  primitive a Format lacks: it is just a saved instruction applied to text. So
+  "Cleanup" is not a second concept. It dissolves into **a deterministic
+  Dictionary + one Recipe pinned to run automatically.** The picker shows the
+  other Recipes. One mental model for "AI rewriting," plus a separate
+  deterministic Dictionary.
+- **"Format" is renamed "Recipe."** Reads as "a saved reusable rewrite," not
+  "styling." `take` / `picker` / `source-trigger-delivery` vocabulary stays.
+- **The auto-pin** defaults to a meaning-preserving **Polish** Recipe, gated on a
+  configured key (no surprise cost, no broken first-run). A user could pin a
+  different Recipe; the pinned one stays visible and per-dictation overridable.
+  Auto-running a *reshaping* Recipe by default is still refused.
+- **Dictionary ordering (resolves the pre/post question).** The Dictionary runs
+  **once, deterministically, on the raw transcript, before the AI.** Its target
+  terms are **injected into the pinned Recipe's prompt** ("preserve these
+  spellings") so the AI never un-fixes them. **No deterministic pass runs after
+  the AI** (the old `postReplacements` was a band-aid; Handy corrects vocab
+  pre-LLM only; a blind post-pass corrupts prose). Optionally the terms also feed
+  the transcription prompt for models that accept one (Whisper/OpenAI; the
+  default Parakeet does not, so the deterministic path is the backbone).
+- **Dictionary shape.** The strong form is a **single-column, fuzzy matcher**
+  (you list the correct word; Levenshtein + Soundex + n-gram snap mishearings to
+  it, Handy-style), which beats forcing users to predict mishearings. Exact
+  `heard -> spell`, spoken-command mappings, and regex are advanced overrides.
+  Shipped Wave 2 is the literal `heard -> spell` form; fuzzy is the upgrade.
+- **Delivery is single-write to the cursor** (deliver-after-correction). The
+  cursor is never written twice. Instant feedback + streaming polish live in
+  Whispering's **own HUD** (a surface it may mutate), with an explicit "ship raw
+  now" escape while polishing. Pure speed = turn the auto-pin off (Dictionary-only
+  is instant and final).
+- **Drop the default "Clean" Format.** It duplicates the auto-pinned Polish. The
+  default Recipes are genuine reshapes: Email, Reply, Notes, To-dos. ("Fix
+  grammar" only earns a picker slot in a *writing app*, where nothing auto-ran
+  it.)
+
+Open forks (carried into the next design pass): pin-Polish-only vs allow pinning
+any Recipe; and when the fuzzy Dictionary lands vs the shipped literal form.
+
 ## Current main context (what this reshape sits on)
 
 This spec is written against current `origin/main`, which has moved since the
@@ -485,9 +530,16 @@ Later   Writing-app host (separate consumer; triggers package extraction)
 
 ## Naming summary
 
-Cleanup (auto-cleanup + dictionary) · Format (name + instruction, portable unit)
-· take (one Format's output) · picker (selection-driven command palette over the
-Format library) · source / trigger / delivery (the per-host adapter seam).
+Updated by the evolved direction above:
 
-Dead vocabulary: Transformation, pre/post-replacements, phase, step, pipeline,
-prompt-template, selectedId, showInPicker.
+- **Dictionary** (deterministic term spellings; fuzzy single-column is the strong
+  form, literal `heard -> spell` / regex / spoken-command are advanced)
+- **Recipe** (name + instruction, the portable unit; was "Format")
+- **auto-pinned Recipe** (the Recipe Whispering runs automatically; defaults to a
+  Polish Recipe; this plus the Dictionary is what "Cleanup" dissolved into)
+- **take** (one Recipe's output) · **picker** (palette over the Recipe library)
+- **source / trigger / delivery** (the per-host adapter seam)
+
+Dead vocabulary: Transformation, Cleanup (as a standalone concept), Format,
+pre/post-replacements, phase, step, pipeline, prompt-template, selectedId,
+showInPicker.
