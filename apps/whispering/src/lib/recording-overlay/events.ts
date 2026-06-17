@@ -41,10 +41,20 @@ export const RECORDING_OVERLAY_MIC_LEVEL = 'mic-level';
  * What the overlay should display. Only the non-idle states are
  * representable: an idle recorder hides the overlay rather than emitting a
  * status, so there is no `IDLE` variant to render.
+ *
+ * The overlay spans the whole dictation gesture, not just recording: after the
+ * recorder stops, the `polishing` mode keeps the same floating pill on screen
+ * while the AI Polish pass runs, so the user sees one continuous surface
+ * (recording -> polishing -> gone) in the spot they are already watching. See
+ * ADR 0013.
  */
 export type RecordingOverlayStatus =
 	| { mode: 'manual'; state: Extract<WhisperingRecordingState, 'RECORDING'> }
-	| { mode: 'vad'; state: Exclude<VadState, 'IDLE'> };
+	| { mode: 'vad'; state: Exclude<VadState, 'IDLE'> }
+	| { mode: 'polishing' };
 
-/** The control the user invoked from the overlay. */
-export type RecordingOverlayAction = 'stop' | 'cancel';
+/**
+ * The control the user invoked from the overlay. `ship-raw` cancels the
+ * in-flight Polish pass and delivers the raw transcript immediately.
+ */
+export type RecordingOverlayAction = 'stop' | 'cancel' | 'ship-raw';

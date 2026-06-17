@@ -25,33 +25,46 @@ export const RunPolishError = defineErrors({
 export type RunPolishError = InferErrors<typeof RunPolishError>;
 
 /**
+ * Whether a Polish AI pass will actually run for `input`: Polish enabled AND a
+ * provider key configured AND non-empty input. "On by default once a key
+ * exists" is a runtime gate, not a settings flag, so a keyless install (or a
+ * user in speed mode) skips the call. The single source for this decision so
+ * the pipeline can show the "Polishing..." HUD only when an AI call is really
+ * about to happen (no flicker in speed mode); `runPolish` reads it too. Read at
+ * use per ADR 0012; nothing is cached.
+ */
+export function polishWillRun(input: string): boolean {
+	return (
+		settings.get('polish.enabled') &&
+		hasCompletionKey() &&
+		input.trim().length > 0
+	);
+}
+
+/**
  * Polish: the always-on, meaning-preserving AI base, run once after every
  * transcription. One optional completion whose system prompt is
  * `polish.instructions` plus a Dictionary block (via `buildSystemPrompt`) and
- * whose content is the raw transcript.
+ * whose content is the raw transcript. Skips the call (returns the raw input)
+ * whenever {@link polishWillRun} is false.
  *
- * The pass fires only when Polish is enabled AND a provider key is actually
- * configured AND the input is non-empty: "on by default once a key exists" is a
- * runtime gate, not a settings flag, so a fresh keyless install (or a user who
- * turned Polish off for speed mode) silently returns the raw transcript with no
- * surprise cost. Every input (`polish.*`, `dictionary`, `completion.*`, the key)
- * is read at use per ADR 0012; nothing is cached.
+ * `signal` lets the caller cancel the in-flight pass (the HUD's "ship raw"):
+ * when it aborts, the raw input is returned as a clean success, not an error,
+ * because shipping the raw transcript was the user's explicit intent.
  *
  * Pure execution: no workspace writes, no toasts. The pipeline owns delivery and
  * keeps the raw transcript on `recordings.transcript` underneath the polished
- * text. On AI failure the raw input rides along in the error so delivery can
- * still proceed.
+ * text. On a genuine AI failure the raw input rides along in the error so
+ * delivery can still proceed.
  */
 export async function runPolish({
 	input,
+	signal,
 }: {
 	input: string;
+	signal?: AbortSignal;
 }): Promise<Result<string, RunPolishError>> {
-	const shouldRun =
-		settings.get('polish.enabled') &&
-		hasCompletionKey() &&
-		input.trim().length > 0;
-	if (!shouldRun) return Ok(input);
+	if (!polishWillRun(input)) return Ok(input);
 
 	const result = await complete({
 		systemPrompt: buildSystemPrompt(
@@ -59,8 +72,11 @@ export async function runPolish({
 			settings.get('dictionary'),
 		),
 		userPrompt: input,
+		signal,
 	});
 	if (isErr(result)) {
+		// A user-requested abort is not a failure: ship the raw transcript cleanly.
+		if (signal?.aborted) return Ok(input);
 		return RunPolishError.PolishFailed({
 			message: extractErrorMessage(result.error),
 			fallback: input,

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AudioLinesIcon from '@lucide/svelte/icons/audio-lines';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import MicIcon from '@lucide/svelte/icons/mic';
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -22,7 +23,11 @@
 	let status = $state<RecordingOverlayStatus | null>(null);
 
 	const isManual = $derived(status?.mode === 'manual');
-	const isSpeaking = $derived(status?.state === 'SPEECH_DETECTED');
+	const isPolishing = $derived(status?.mode === 'polishing');
+	const isSpeaking = $derived(
+		(status?.mode === 'manual' || status?.mode === 'vad') &&
+			status.state === 'SPEECH_DETECTED',
+	);
 
 	// Live, smoothed mic loudness, 0 (silent) to 1 (loud). Driven by the
 	// `mic-level` event: VAD frames in JS for voice-activated capture, the Rust
@@ -93,42 +98,62 @@
 	title="Open Whispering"
 	onclick={focusMainWindow}
 >
-	<div class="icon">
-		{#if isManual}
-			<MicIcon class="size-4" />
-		{:else}
-			<AudioLinesIcon class="size-4" />
-		{/if}
-	</div>
+	{#if isPolishing}
+		<div class="icon">
+			<LoaderCircleIcon class="size-4 animate-spin motion-reduce:animate-none" />
+		</div>
 
-	<div class="bars" aria-hidden="true">
-		{#each BAR_ENVELOPE as envelope, i (i)}
-			<span class="bar" style="height: {barHeight(envelope)}px"></span>
-		{/each}
-	</div>
+		<div class="label">Polishing…</div>
 
-	<div class="actions">
-		<button
-			type="button"
-			class="action stop"
-			aria-label={isManual ? 'Stop recording' : 'Stop listening'}
-			title={isManual ? 'Stop recording' : 'Stop listening'}
-			onclick={(event) => sendAction(event, 'stop')}
-		>
-			<SquareIcon class="size-3.5" />
-		</button>
-		{#if isManual}
+		<div class="actions">
 			<button
 				type="button"
 				class="action cancel"
-				aria-label="Cancel recording"
-				title="Cancel recording"
-				onclick={(event) => sendAction(event, 'cancel')}
+				aria-label="Ship raw transcript now"
+				title="Ship raw transcript now"
+				onclick={(event) => sendAction(event, 'ship-raw')}
 			>
 				<XIcon class="size-4" />
 			</button>
-		{/if}
-	</div>
+		</div>
+	{:else}
+		<div class="icon">
+			{#if isManual}
+				<MicIcon class="size-4" />
+			{:else}
+				<AudioLinesIcon class="size-4" />
+			{/if}
+		</div>
+
+		<div class="bars" aria-hidden="true">
+			{#each BAR_ENVELOPE as envelope, i (i)}
+				<span class="bar" style="height: {barHeight(envelope)}px"></span>
+			{/each}
+		</div>
+
+		<div class="actions">
+			<button
+				type="button"
+				class="action stop"
+				aria-label={isManual ? 'Stop recording' : 'Stop listening'}
+				title={isManual ? 'Stop recording' : 'Stop listening'}
+				onclick={(event) => sendAction(event, 'stop')}
+			>
+				<SquareIcon class="size-3.5" />
+			</button>
+			{#if isManual}
+				<button
+					type="button"
+					class="action cancel"
+					aria-label="Cancel recording"
+					title="Cancel recording"
+					onclick={(event) => sendAction(event, 'cancel')}
+				>
+					<XIcon class="size-4" />
+				</button>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -183,6 +208,18 @@
 		display: flex;
 		align-items: center;
 		color: rgba(255, 255, 255, 0.85);
+	}
+
+	/* The polishing pill swaps the mic-level bars for a single label that fills
+	   the same center column. */
+	.label {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 13px;
+		font-weight: 500;
+		color: rgba(255, 255, 255, 0.92);
+		white-space: nowrap;
 	}
 
 	.bars {

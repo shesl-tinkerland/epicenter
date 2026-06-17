@@ -14,6 +14,7 @@ import {
 	type RecordingOverlayStatus,
 } from '$lib/recording-overlay/events';
 import { manualRecorder } from '$lib/state/manual-recorder.svelte';
+import { polishHud } from '$lib/state/polish-hud.svelte';
 import { vadRecorder } from '$lib/state/vad-recorder.svelte';
 
 export function attachRecordingOverlay() {
@@ -28,6 +29,9 @@ export function attachRecordingOverlay() {
 			vadRecorder.state === 'SPEECH_DETECTED'
 		)
 			return { mode: 'vad', state: vadRecorder.state };
+		// The Polish pass runs after the recorder is idle, so the pill stays on
+		// the same spot through recording -> polishing -> gone.
+		if (polishHud.active) return { mode: 'polishing' };
 		return null;
 	});
 
@@ -41,6 +45,10 @@ export function attachRecordingOverlay() {
 				RECORDING_OVERLAY_ACTION,
 				(event) => {
 					if (!overlayStatus) return;
+					if (overlayStatus.mode === 'polishing') {
+						if (event.payload === 'ship-raw') polishHud.shipRaw();
+						return;
+					}
 					if (overlayStatus.mode === 'manual') {
 						if (event.payload === 'cancel') void cancelRecording();
 						else void stopManualRecording();

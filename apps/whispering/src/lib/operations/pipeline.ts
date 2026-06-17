@@ -2,12 +2,13 @@ import { InstantString } from '@epicenter/field';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { deliverTranscriptionResult } from '$lib/operations/delivery';
-import { runPolish } from '$lib/operations/run-polish';
+import { polishWillRun, runPolish } from '$lib/operations/run-polish';
 import { sound } from '$lib/operations/sound';
 import { transcribeAndPersist } from '$lib/operations/transcribe';
 import { report } from '$lib/report';
 import { services } from '$lib/services';
 import type { RecorderStopResult } from '$lib/services/recorder/types';
+import { polishHud } from '$lib/state/polish-hud.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 
 type DeliverySource = 'recording' | 'upload';
@@ -101,9 +102,17 @@ export async function processRecordingPipeline({
 	// thing on the automatic path; there is no auto-running Recipe. See ADR 0013
 	// and the runtime flow in
 	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
+	// Show the floating "Polishing..." HUD only when an AI pass is actually about
+	// to run (not in speed mode), and hand its abort signal to runPolish so the
+	// HUD's "ship raw" control can cancel the in-flight pass. begin/end bracket
+	// the call so the pill is torn down on success, failure, or abort.
+	const willPolish = polishWillRun(transcribedText);
+	const signal = willPolish ? polishHud.begin() : undefined;
 	const { data: polishedText, error: polishError } = await runPolish({
 		input: transcribedText,
+		signal,
 	});
+	if (willPolish) polishHud.end();
 	// Polish is best-effort: a failed AI pass carries the raw transcript in
 	// `fallback`, so a transcript is never lost to a polish error. Surface the
 	// failure without blocking delivery.

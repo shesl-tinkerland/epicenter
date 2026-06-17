@@ -55,6 +55,7 @@ const COMPLETION_PROVIDERS = {
 				systemPrompt: string;
 				userPrompt: string;
 				baseUrl?: string;
+				signal?: AbortSignal;
 			}) => Promise<Result<string, { message: string }>>;
 		};
 		apiKeyConfigKey: DeviceConfigKey;
@@ -74,9 +75,12 @@ const COMPLETION_PROVIDERS = {
 export function complete({
 	systemPrompt,
 	userPrompt,
+	signal,
 }: {
 	systemPrompt: string;
 	userPrompt: string;
+	/** Aborts the in-flight request when it fires (e.g. the Polish HUD's "ship raw"). */
+	signal?: AbortSignal;
 }): Promise<Result<string, { message: string }>> {
 	const provider = settings.get('completion.provider');
 	const config = COMPLETION_PROVIDERS[provider];
@@ -88,6 +92,7 @@ export function complete({
 			: undefined,
 		systemPrompt,
 		userPrompt,
+		signal,
 	});
 }
 
