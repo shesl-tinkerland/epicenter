@@ -80,7 +80,7 @@
 		<Field.Set>
 			<Field.Legend variant="label">Completion Sounds</Field.Legend>
 			<Field.Description>
-				Configure sounds for transcription and format completion.
+				Configure sounds for transcription and recipe completion.
 			</Field.Description>
 			<Field.Group>
 				<SettingSwitch
