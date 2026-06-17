@@ -1,5 +1,5 @@
 /**
- * Word-level diff used to show a transformation candidate against the original
+ * Word-level diff used to show a reshaped candidate against the original
  * selection.
  *
  * Splits both strings on whitespace (keeping the whitespace as its own tokens so

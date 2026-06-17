@@ -39,7 +39,7 @@ const globalBinding = type({
 // Cancel is the platform cancel chord (Cmd + . on macOS, the system cancel gesture
 // since classic Mac OS; Ctrl + Shift + . elsewhere); it carries a modifier so it is
 // safe to hold globally and registers like any other gesture with no session
-// gating. Transformation gestures ship unbound: opt-in only. Exported so the reset
+// gating. Recipe gestures ship unbound: opt-in only. Exported so the reset
 // path in platform/shortcuts.tauri.ts shares this one source of truth.
 const RECORDING_MODIFIERS: KeyBinding['modifiers'] = os.isApple
 	? ['fn']
@@ -54,8 +54,8 @@ export const DEFAULT_GLOBAL_BINDINGS = {
 	toggleManualRecording: null,
 	cancelRecording: { modifiers: CANCEL_MODIFIERS, keys: ['dot'] },
 	toggleVadRecording: null,
-	openTransformationPicker: null,
-	runTransformationOnClipboard: null,
+	openRecipePicker: null,
+	runRecipeOnClipboard: null,
 } satisfies Record<string, KeyBinding | null>;
 
 // ── Per-key definitions ──────────────────────────────────────────────────────
@@ -159,13 +159,13 @@ const DEVICE_DEFINITIONS = {
 		globalBinding,
 		DEFAULT_GLOBAL_BINDINGS.toggleVadRecording,
 	),
-	'shortcuts.global.openTransformationPicker': defineEntry(
+	'shortcuts.global.openRecipePicker': defineEntry(
 		globalBinding,
-		DEFAULT_GLOBAL_BINDINGS.openTransformationPicker,
+		DEFAULT_GLOBAL_BINDINGS.openRecipePicker,
 	),
-	'shortcuts.global.runTransformationOnClipboard': defineEntry(
+	'shortcuts.global.runRecipeOnClipboard': defineEntry(
 		globalBinding,
-		DEFAULT_GLOBAL_BINDINGS.runTransformationOnClipboard,
+		DEFAULT_GLOBAL_BINDINGS.runRecipeOnClipboard,
 	),
 };
 

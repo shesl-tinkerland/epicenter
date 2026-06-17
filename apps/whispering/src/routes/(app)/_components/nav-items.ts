@@ -33,9 +33,8 @@ export const NAV_ITEMS = [
 		icon: ListIcon,
 		isActive: matchesRoute('/recordings'),
 	},
-	// TODO(wave-3): add a "Formats" nav item once the Formats library page lands.
-	// The old "Transformations" item and its route were removed with the
-	// Transformation model (ADR 0013).
+	// TODO(wave-4): add a "Recipes" nav item once the Recipes library page lands.
+	// The old picker nav item and its route were removed in the ADR 0013 rewrite.
 	{
 		label: 'Settings',
 		href: '/settings',

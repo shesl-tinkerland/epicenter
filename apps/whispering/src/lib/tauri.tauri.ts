@@ -2,7 +2,7 @@
  * Tauri-only capability namespace. Everything that requires the Tauri
  * runtime lives in this file: fs, permissions, window, tray,
  * globalShortcuts, autostart. The subset that needs TanStack caching,
- * error transformation, or invalidation is exposed in the same shape
+ * error mapping, or invalidation is exposed in the same shape
  * (no sub-namespace), with each leaf picking one canonical call form.
  *
  * Two files, one import path (`#platform/tauri`, declared in package.json

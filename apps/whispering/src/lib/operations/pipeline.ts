@@ -2,7 +2,7 @@ import { InstantString } from '@epicenter/field';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { deliverTranscriptionResult } from '$lib/operations/delivery';
-import { runCleanup } from '$lib/operations/run-cleanup';
+import { runPolish } from '$lib/operations/run-polish';
 import { sound } from '$lib/operations/sound';
 import { transcribeAndPersist } from '$lib/operations/transcribe';
 import { report } from '$lib/report';
@@ -92,30 +92,30 @@ export async function processRecordingPipeline({
 		return;
 	}
 
-	// Run Cleanup over the raw transcript, then deliver the CLEANED text. The raw
+	// Run Polish over the raw transcript, then deliver the POLISHED text. The raw
 	// stays on `recordings.transcript` (persisted by transcribeAndPersist) so
-	// "show original" is recoverable. We hold delivery until Cleanup finishes and
-	// deliver once (Option A): typing the raw at the cursor and then re-typing the
-	// cleaned version would double-type, the exact problem the old
-	// transcription/transformation cursor asymmetry existed to dodge. Cleanup is
-	// the only thing on the automatic path; the old `transformation.selectedId`
-	// auto-run is gone. See ADR 0013 and the Wave 2 runtime flow in
+	// "show original" is recoverable. We hold delivery until Polish finishes and
+	// deliver once: typing the raw at the cursor and then re-typing the polished
+	// version would double-type, the exact problem the old
+	// transcription/recipe cursor asymmetry existed to dodge. Polish is the only
+	// thing on the automatic path; there is no auto-running Recipe. See ADR 0013
+	// and the runtime flow in
 	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
-	const { data: cleanedText, error: cleanupError } = await runCleanup({
+	const { data: polishedText, error: polishError } = await runPolish({
 		input: transcribedText,
 	});
-	// Auto-cleanup is best-effort: a failed AI tidy pass carries the
-	// dictionary-corrected text in `fallback`, so a transcript is never lost to a
-	// tidy-pass error. Surface the failure without blocking delivery.
-	const deliveredText = cleanupError ? cleanupError.fallback : cleanedText;
-	if (cleanupError) {
+	// Polish is best-effort: a failed AI pass carries the raw transcript in
+	// `fallback`, so a transcript is never lost to a polish error. Surface the
+	// failure without blocking delivery.
+	const deliveredText = polishError ? polishError.fallback : polishedText;
+	if (polishError) {
 		report.info({
-			title: 'Auto-cleanup skipped',
-			description: cleanupError.message,
+			title: 'Polishing skipped',
+			description: polishError.message,
 		});
 	}
 
-	// The transcript is "ready" once it is cleaned and about to be delivered, so
+	// The transcript is "ready" once it is polished and about to be delivered, so
 	// the completion sound and the resolved loading notice both fire here.
 	sound.playSoundIfEnabled('transcriptionComplete');
 	const deliverNotice = await deliverTranscriptionResult({

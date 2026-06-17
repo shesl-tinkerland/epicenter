@@ -64,13 +64,12 @@ const COMPLETION_PROVIDERS = {
 >;
 
 /**
- * Run one completion against the single global AI default. Both the auto-cleanup
- * tidy pass and every Format share this call path, so provider/model/key
- * resolution lives here once. Per ADR 0012 everything is read at use: the
- * provider and model come from `completion.*` in settings, the key and endpoint
- * from `deviceConfig`, all resolved on each call so nothing goes stale. Keys,
- * model names, and endpoints are pasted strings, so trim once: a trailing space
- * fails the request opaquely.
+ * Run one completion against the single global AI default. Both the Polish pass
+ * and every Recipe share this call path, so provider/model/key resolution lives
+ * here once. Per ADR 0012 everything is read at use: the provider and model come
+ * from `completion.*` in settings, the key and endpoint from `deviceConfig`, all
+ * resolved on each call so nothing goes stale. Keys, model names, and endpoints
+ * are pasted strings, so trim once: a trailing space fails the request opaquely.
  */
 export function complete({
 	systemPrompt,
@@ -94,9 +93,9 @@ export function complete({
 
 /**
  * Whether the currently selected completion provider has an API key configured.
- * The auto-cleanup gate ("on by default only when a key already exists") reads
- * this so the AI pass is skipped silently on a fresh, keyless install instead of
- * failing a request. Read at use, same as `complete`.
+ * The Polish gate ("on by default only when a key already exists") reads this so
+ * the AI pass is skipped silently on a fresh, keyless install instead of failing
+ * a request. Read at use, same as `complete`.
  */
 export function hasCompletionKey(): boolean {
 	const provider = settings.get('completion.provider');

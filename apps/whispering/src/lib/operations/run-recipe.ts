@@ -4,7 +4,9 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { isErr, Ok, type Result } from 'wellcrafted/result';
+import { buildSystemPrompt } from '$lib/operations/build-system-prompt';
 import { complete } from '$lib/operations/completion';
+import { settings } from '$lib/state/settings.svelte';
 import type { Recipe } from '$lib/workspace';
 
 export const RunRecipeError = defineErrors({
@@ -21,8 +23,10 @@ export type RunRecipeError = InferErrors<typeof RunRecipeError>;
  * per-Recipe model. Polish has already run upstream, so `input` is the polished
  * text and this never re-does correction.
  *
- * Provider and model come from the single global `completion.*` default (via
- * `complete`), not from the Recipe.
+ * The system prompt is `recipe.instructions` plus the Dictionary block (via
+ * `buildSystemPrompt`, with `dictionary` read at use per ADR 0012). Provider and
+ * model come from the single global `completion.*` default (via `complete`), not
+ * from the Recipe.
  *
  * Pure execution: no workspace writes, no persistence, no toasts. The picker
  * (Wave 4) is the caller; it owns delivery and any history bookkeeping.
@@ -46,7 +50,10 @@ export async function runRecipe({
 	}
 
 	const result = await complete({
-		systemPrompt: recipe.instructions,
+		systemPrompt: buildSystemPrompt(
+			recipe.instructions,
+			settings.get('dictionary'),
+		),
 		userPrompt: input,
 	});
 

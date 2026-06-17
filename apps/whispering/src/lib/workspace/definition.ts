@@ -9,7 +9,7 @@ import {
 	nullable,
 	satisfiesWorkspace,
 } from '@epicenter/workspace';
-import { type Static, type TProperties, Type } from 'typebox';
+import { type TProperties, Type } from 'typebox';
 
 // ── Constant imports ─────────────────────────────────────────────────────────
 
@@ -73,10 +73,9 @@ const recordings = defineTable({
 	title: field.string(),
 	recordedAt: field.instant(),
 	recordedAtZone: field.string<IanaTimeZone>(),
-	// The raw transcript, exactly as the transcriber produced it. Cleanup (Wave 2)
-	// layers correction on top and delivers the cleaned text, but the raw words
-	// stay here underneath so "show original" is always one click away. See
-	// ADR 0013.
+	// The raw transcript, exactly as the transcriber produced it. Polish layers
+	// correction on top and delivers the polished text, but the raw words stay
+	// here underneath so "show original" is always one click away. See ADR 0013.
 	transcript: field.string(),
 	duration: nullable(field.number()),
 	transcription: nullable(field.json(TranscriptionOutcome)),
@@ -223,70 +222,43 @@ function defineTranscriptionSettings(
 	} as const;
 }
 
-/**
- * One dictionary entry: a deterministic spelling fix for the one thing AI cannot
- * reliably get right, proper nouns and domain terms ("brayden" -> "Braden").
- * `spell: ""` removes the matched text. `regex` and `wholeWord` are advanced
- * matching modes; both default to off (literal, anywhere).
- */
-const DictionaryEntry = Type.Object({
-	heard: Type.String(),
-	spell: Type.String(),
-	regex: Type.Optional(Type.Boolean()),
-	wholeWord: Type.Optional(Type.Boolean()),
-});
-
-/** A single Cleanup dictionary entry. */
-export type DictionaryEntry = Static<typeof DictionaryEntry>;
-
-/**
- * The auto-cleanup tidy pass: one optional AI call that makes every transcript
- * correct. A discriminated union so `instructions` only exists when enabled.
- * Ships enabled; the median user never opens its instructions.
- */
-const AutoCleanup = Type.Union([
-	Type.Object({
-		enabled: Type.Literal(true),
-		instructions: Type.String(),
-	}),
-	Type.Object({
-		enabled: Type.Literal(false),
-	}),
-]);
-
-/** Auto-cleanup config: enabled with editable instructions, or disabled. */
-export type AutoCleanup = Static<typeof AutoCleanup>;
-
-/** Default tidy instruction. Kept faithful: fix mechanics, preserve wording. */
-const DEFAULT_AUTO_CLEANUP_INSTRUCTIONS =
+/** Default Polish instruction. Kept faithful: fix mechanics, preserve wording. */
+const DEFAULT_POLISH_INSTRUCTIONS =
 	'Fix grammar and punctuation. Keep my wording.';
 
 /**
- * Cleanup: the singular, automatic correction layer that runs after every
- * transcription (Wave 2 wires the post-transcription path). Two mechanisms, an
- * optional `autoCleanup` AI tidy pass and a deterministic `dictionary`. Cleanup
- * is dictation-specific: it is automatic because voice input is noisy. See
- * ADR 0013.
+ * Polish: the always-on, meaning-preserving AI base, run once after every
+ * transcription. One optional pass that fixes grammar and punctuation while
+ * keeping the user's wording. On by default, but it only fires when an AI key is
+ * configured (a runtime gate, not a flag), so a fresh keyless install never pays
+ * a surprise cost. Turn `enabled` off for speed mode: the raw transcript ships
+ * instantly with no AI call. `instructions` is editable under Advanced. Polish is
+ * not a Recipe; it is the base layer every Recipe stands on. See ADR 0013.
  */
-const cleanup = {
-	'cleanup.autoCleanup': defineKv(
-		AutoCleanup,
-		(): Static<typeof AutoCleanup> => ({
-			enabled: true,
-			instructions: DEFAULT_AUTO_CLEANUP_INSTRUCTIONS,
-		}),
-	),
-	'cleanup.dictionary': defineKv(
-		Type.Array(DictionaryEntry),
-		(): Static<typeof DictionaryEntry>[] => [],
+const polish = {
+	'polish.enabled': defineKv(field.boolean(), () => true),
+	'polish.instructions': defineKv(
+		field.string(),
+		() => DEFAULT_POLISH_INSTRUCTIONS,
 	),
 } as const;
 
 /**
+ * Dictionary: a flat list of words Whispering should know, proper nouns and
+ * domain terms ("Kubernetes", "Braden"). Injection-only: the runtime composes
+ * these terms into every AI prompt (via `buildSystemPrompt`) and, where the
+ * transcription model accepts one, into its `initial_prompt`. It is not
+ * find/replace and not an algorithm; the AI is the matcher. See ADR 0013.
+ */
+const dictionary = {
+	dictionary: defineKv(Type.Array(Type.String()), (): string[] => []),
+} as const;
+
+/**
  * The single global AI default used for completions: which inference provider
- * and model the auto-cleanup pass and every Format run against. Per ADR 0013
- * there is no per-Format model or provider; this is the one place it lives. API
- * keys and endpoints stay in deviceConfig (local, never synced).
+ * and model the Polish pass and every Recipe run against. Per ADR 0013 there is
+ * no per-Recipe model or provider; this is the one place it lives. API keys and
+ * endpoints stay in deviceConfig (local, never synced).
  */
 const completion = {
 	'completion.provider': defineKv(
@@ -334,11 +306,11 @@ const shortcuts = {
 		nullable(field.string()),
 		(): string | null => 'v',
 	),
-	'shortcut.openTransformationPicker': defineKv(
+	'shortcut.openRecipePicker': defineKv(
 		nullable(field.string()),
 		(): string | null => 't',
 	),
-	'shortcut.runTransformationOnClipboard': defineKv(
+	'shortcut.runRecipeOnClipboard': defineKv(
 		nullable(field.string()),
 		(): string | null => 'r',
 	),
@@ -363,7 +335,8 @@ export function createWhispering({
 		...dataRetention,
 		...recording,
 		...defineTranscriptionSettings(defaultTranscriptionService),
-		...cleanup,
+		...polish,
+		...dictionary,
 		...completion,
 		...analytics,
 		...shortcuts,
