@@ -69,7 +69,16 @@ Already shipped and green, to be renamed in Wave 1:
 
 ## Build waves
 
-### Wave 1: data model + runtime reshape (backend only, stays green, the tracer)
+### Wave 1: data model + runtime reshape (backend only, stays green, the tracer) — LANDED
+
+> **Landed** (2 commits): 1.1 renamed the Format library to Recipes; 1.2-1.3
+> replaced Cleanup with `polish.enabled`/`polish.instructions` + `dictionary:
+> string[]`, added the pure `buildSystemPrompt` (with a unit test), rewired
+> `runPolish`/`runRecipe`/the pipeline through it, deleted the find/replace path,
+> and renamed the command stubs + shortcut keys to `openRecipePicker` /
+> `runRecipeOnClipboard`. Clean typecheck, 21 tests pass. The legacy Dexie
+> `transformations`/`transformationRuns` IndexedDB schema is intentionally left
+> alone (audio blob store version history, a name collision, not this feature).
 
 Polish starts working end-to-end for anyone with a key, on the existing
 toast-based delivery. Suggested as ~3 commits.
