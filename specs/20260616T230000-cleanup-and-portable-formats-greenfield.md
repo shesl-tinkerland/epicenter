@@ -1,7 +1,7 @@
 # Cleanup and Portable Formats: Replace Transformations with an Automatic Correction Layer and a Reusable Text-Action Library
 
 **Date**: 2026-06-16
-**Status**: In Progress (Wave 1 landed; greenfield, compatibility with the current transformation model explicitly released)
+**Status**: In Progress (Waves 1-2 landed; greenfield, compatibility with the current transformation model explicitly released)
 **Owner**: Braden
 **Branch**: `whispering-cleanup-formats-restart`
 **ADR**: [0013](/docs/adr/0013-transformations-split-into-automatic-cleanup-and-a-portable-format-library.md)
@@ -40,7 +40,7 @@ The raw transcript stays on `recordings.transcript` underneath the cleaned text.
   types, the old runner, and the now-uncompilable editor/selector/picker/route
   UI. The two shortcut commands become Wave-3 stubs so shortcut wiring stays
   compiling. No compatibility layer.
-- **Wave 2: automatic path.** Post-transcription runs Cleanup
+- **Wave 2 (landed): automatic path.** Post-transcription runs Cleanup
   (dictionary -> auto-cleanup); deliver cleaned text, keep raw underneath.
 - **Wave 3: manual path + picker.** Formats library page + sticky-note editor;
   repoint the picker/clipboard commands at Formats; ship default Formats.
@@ -414,9 +414,12 @@ Wave 1  Data model + runner reshape          [LANDED on whispering-cleanup-forma
         - runner takes { input, format }; no pre/post, no {{input}}, no per-Format model
         - keep raw transcript stored underneath (recordings.transcript)
         - keep the two shortcut commands as Wave-3 stubs so shortcut wiring compiles
-Wave 2  Automatic path
+Wave 2  Automatic path                          [LANDED on whispering-cleanup-formats-restart]
         - post-transcription runs Cleanup (dictionary -> auto-cleanup)
         - deliver cleaned text, keep raw underneath; read completion.*/cleanup.* at use
+        - shared completion call path (operations/completion.ts: complete + hasCompletionKey)
+          extracted so the Cleanup and Format runners do not duplicate provider resolution
+        - retired the dead transformation output vocabulary early (see decision below)
 Wave 3  Manual path + picker
         - Formats library page + sticky-note editor
         - repoint the openTransformationPicker / runTransformationOnClipboard commands at Formats
@@ -424,9 +427,31 @@ Wave 3  Manual path + picker
         - ship default Formats
 Wave 4  Migration + cleanup
         - migrate existing transformations per the rules above, one-time notice
-        - retire the output.transformation.* / sound.transformationComplete naming if it drifts
+        - (the output.transformation.* / sound.transformationComplete naming was already
+          retired in Wave 2; see the decisions below)
 Later   Writing-app host (separate consumer; triggers package extraction)
 ```
+
+### Wave 2 decisions
+
+- **Delivery ordering: deliver-after-cleanup.** The pipeline holds delivery
+  until Cleanup finishes and delivers the cleaned text once, through the
+  existing `output.transcription.*` preferences. Cleanup is invisible inline
+  correction, not a separately-routed stage, so it needs no output scope of its
+  own. The rejected alternative (deliver raw immediately, then replace at the
+  cursor) re-opens the double-type problem the transcription/format cursor
+  asymmetry exists to dodge. The raw transcript stays on `recordings.transcript`
+  (written by `transcribeAndPersist`), so no new column is needed.
+- **Renamed the dead transformation vocabulary to `format`, not `cleanup`.**
+  Wave 1 left `output.transformation.*`, `sound.transformationComplete`, and
+  `deliverTransformationResult` dead at runtime. Because the automatic path
+  rides `output.transcription.*` (above), this scope's real successor is the
+  Wave-3 Format picker, so the honest rename is `output.format.*` /
+  `sound.formatComplete` / `deliverFormatResult`. Renaming to `cleanup.*` would
+  have described a delivery, sound, and output scope Cleanup does not own.
+- **Auto-cleanup failure is non-fatal.** A failed AI tidy pass surfaces a
+  non-blocking notice and still delivers the dictionary-corrected text (carried
+  in the error's `fallback`), so a transcript is never lost to a tidy-pass error.
 
 ## Refusals (explicit, for now)
 
