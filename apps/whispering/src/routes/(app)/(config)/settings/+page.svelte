@@ -105,25 +105,25 @@
 		<Field.Separator />
 
 		<Field.Set>
-			<Field.Legend variant="label">Transformation output</Field.Legend>
+			<Field.Legend variant="label">Format output</Field.Legend>
 			<Field.Description>
-				Applies after you run a saved transformation on a transcription.
+				Applies after you run a saved format on a transcription.
 			</Field.Description>
 			<Field.Group>
 				<SettingSwitch
-					key="output.transformation.clipboard"
-					label="Copy transformed text to clipboard"
+					key="output.format.clipboard"
+					label="Copy formatted text to clipboard"
 				/>
 
 				<SettingSwitch
-					key="output.transformation.cursor"
-					label="Paste transformed text at cursor"
+					key="output.format.cursor"
+					label="Paste formatted text at cursor"
 				/>
 
-				{#if tauri && settings.get('output.transformation.cursor')}
+				{#if tauri && settings.get('output.format.cursor')}
 					<SettingSwitch
-						key="output.transformation.enter"
-						label="Press Enter after pasting transformed text"
+						key="output.format.enter"
+						label="Press Enter after pasting formatted text"
 					/>
 				{/if}
 			</Field.Group>

@@ -80,7 +80,7 @@
 		<Field.Set>
 			<Field.Legend variant="label">Completion Sounds</Field.Legend>
 			<Field.Description>
-				Configure sounds for transcription and transformation completion.
+				Configure sounds for transcription and format completion.
 			</Field.Description>
 			<Field.Group>
 				<SettingSwitch
@@ -88,8 +88,8 @@
 					label="Play sound after transcription"
 				/>
 				<SettingSwitch
-					key="sound.transformationComplete"
-					label="Play sound after transformation"
+					key="sound.formatComplete"
+					label="Play sound after running a format"
 				/>
 			</Field.Group>
 		</Field.Set>

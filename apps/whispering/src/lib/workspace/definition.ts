@@ -129,32 +129,33 @@ const sound = {
 	'sound.vadCapture': defineKv(field.boolean(), () => true),
 	'sound.vadStop': defineKv(field.boolean(), () => true),
 	'sound.transcriptionComplete': defineKv(field.boolean(), () => true),
-	'sound.transformationComplete': defineKv(field.boolean(), () => true),
+	'sound.formatComplete': defineKv(field.boolean(), () => true),
 	'sound.pauseMediaDuringRecording': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
- * Output behavior after transcription/transformation completes.
- * Controls clipboard, cursor paste, and simulated Enter key per pipeline stage.
+ * Output behavior after a transcription or a picked Format completes. Controls
+ * clipboard, cursor paste, and simulated Enter key per delivery.
  *
- * Uses `output.*` prefix to separate post-processing behavior from service
- * configuration: avoids polluting `transcription.*` and `transformation.*`
- * namespaces with unrelated concerns.
+ * `transcription.*` governs the automatic path: the cleaned transcript Cleanup
+ * delivers after every recording. `format.*` governs the manual path: a Format
+ * take the user picks from the picker (Wave 3). Uses the `output.*` prefix to
+ * keep this post-processing behavior out of the `transcription.*` /
+ * `completion.*` service namespaces.
  *
- * Cursor default asymmetry (transcription=true, transformation=false): when a
- * transformation runs on the just-finished transcription, the transcription
- * has already typed itself at the cursor. Defaulting transformation.cursor to
- * true would double-type. Users who turn off transcription.cursor specifically
- * to let the transformation be the cursor output can flip the transformation
- * toggle on.
+ * Cursor default asymmetry (transcription=true, format=false): the transcript
+ * already types itself at the cursor automatically, so a Format the user then
+ * picks would double-type if `format.cursor` also defaulted true. A user who
+ * turns off `transcription.cursor` specifically to let a Format be the cursor
+ * output can flip the `format.cursor` toggle on.
  */
 const output = {
 	'output.transcription.clipboard': defineKv(field.boolean(), () => true),
 	'output.transcription.cursor': defineKv(field.boolean(), () => true),
 	'output.transcription.enter': defineKv(field.boolean(), () => false),
-	'output.transformation.clipboard': defineKv(field.boolean(), () => true),
-	'output.transformation.cursor': defineKv(field.boolean(), () => false),
-	'output.transformation.enter': defineKv(field.boolean(), () => false),
+	'output.format.clipboard': defineKv(field.boolean(), () => true),
+	'output.format.cursor': defineKv(field.boolean(), () => false),
+	'output.format.enter': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
