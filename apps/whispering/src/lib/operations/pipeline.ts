@@ -102,6 +102,6 @@ export async function processRecordingPipeline({
 	// transcript and deliver the cleaned text, keeping the raw stored underneath
 	// on the recording. This replaces the old `transformation.selectedId`
 	// auto-run, which is gone: the automatic path is always Cleanup, never a
-	// picked Format. See ADR 0010 and the Wave 2 sequencing in
+	// picked Format. See ADR 0013 and the Wave 2 sequencing in
 	// apps/whispering/specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
 }

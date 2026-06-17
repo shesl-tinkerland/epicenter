@@ -35,7 +35,7 @@ export const NAV_ITEMS = [
 	},
 	// TODO(wave-3): add a "Formats" nav item once the Formats library page lands.
 	// The old "Transformations" item and its route were removed with the
-	// Transformation model (ADR 0010).
+	// Transformation model (ADR 0013).
 	{
 		label: 'Settings',
 		href: '/settings',

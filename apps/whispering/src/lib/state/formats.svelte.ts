@@ -2,7 +2,7 @@
  * Reactive Format state backed by the Yjs workspace table.
  *
  * A Format is a single self-contained row: a name and one instruction (text in,
- * text out). No replacements, no prompt split, no per-Format model. See ADR 0010.
+ * text out). No replacements, no prompt split, no per-Format model. See ADR 0013.
  *
  * @example
  * ```typescript

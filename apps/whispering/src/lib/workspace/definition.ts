@@ -76,7 +76,7 @@ const recordings = defineTable({
 	// The raw transcript, exactly as the transcriber produced it. Cleanup (Wave 2)
 	// layers correction on top and delivers the cleaned text, but the raw words
 	// stay here underneath so "show original" is always one click away. See
-	// ADR 0010.
+	// ADR 0013.
 	transcript: field.string(),
 	duration: nullable(field.number()),
 	transcription: nullable(field.json(TranscriptionOutcome)),
@@ -90,7 +90,7 @@ export type Recording = InferTableRow<typeof recordings>;
  * whatever text the host hands it (text in, text out). Formats are the portable,
  * plural, always-picked half of the old `Transformation` split: they know
  * nothing about voice and carry no correction plumbing (that is Cleanup's job,
- * run once before any Format). See ADR 0010.
+ * run once before any Format). See ADR 0013.
  *
  * Deliberately tiny: no pre/post replacements, no system/user prompt split, no
  * `{{input}}` placeholder, no per-Format model or provider (model comes from the
@@ -265,7 +265,7 @@ const DEFAULT_AUTO_CLEANUP_INSTRUCTIONS =
  * transcription (Wave 2 wires the post-transcription path). Two mechanisms, an
  * optional `autoCleanup` AI tidy pass and a deterministic `dictionary`. Cleanup
  * is dictation-specific: it is automatic because voice input is noisy. See
- * ADR 0010.
+ * ADR 0013.
  */
 const cleanup = {
 	'cleanup.autoCleanup': defineKv(
@@ -283,7 +283,7 @@ const cleanup = {
 
 /**
  * The single global AI default used for completions: which inference provider
- * and model the auto-cleanup pass and every Format run against. Per ADR 0010
+ * and model the auto-cleanup pass and every Format run against. Per ADR 0013
  * there is no per-Format model or provider; this is the one place it lives. API
  * keys and endpoints stay in deviceConfig (local, never synced).
  */
