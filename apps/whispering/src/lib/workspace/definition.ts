@@ -87,24 +87,24 @@ export type Recording = InferTableRow<typeof recordings>;
 
 /**
  * A reusable text action: a name and a single instruction, run on demand over
- * whatever text the host hands it (text in, text out). Formats are the portable,
- * plural, always-picked half of the old `Transformation` split: they know
- * nothing about voice and carry no correction plumbing (that is Cleanup's job,
- * run once before any Format). See ADR 0013.
+ * whatever text the host hands it (text in, text out). Recipes are the portable,
+ * plural, on-demand reshape library; they know nothing about voice and carry no
+ * correction plumbing (that is Polish's job, run once before any Recipe). See
+ * ADR 0013.
  *
  * Deliberately tiny: no pre/post replacements, no system/user prompt split, no
- * `{{input}}` placeholder, no per-Format model or provider (model comes from the
+ * `{{input}}` placeholder, no per-Recipe model or provider (model comes from the
  * global `completion.*` default). `icon` is optional; null until one is assigned.
  */
-const formats = defineTable({
+const recipes = defineTable({
 	id: field.string(),
 	name: field.string(),
 	instructions: field.string(),
 	icon: nullable(field.string()),
 });
 
-/** Format row type inferred from the workspace table schema. */
-export type Format = InferTableRow<typeof formats>;
+/** Recipe row type inferred from the workspace table schema. */
+export type Recipe = InferTableRow<typeof recipes>;
 
 /**
  * Synced settings stored as individual KV entries with last-write-wins resolution.
@@ -129,33 +129,33 @@ const sound = {
 	'sound.vadCapture': defineKv(field.boolean(), () => true),
 	'sound.vadStop': defineKv(field.boolean(), () => true),
 	'sound.transcriptionComplete': defineKv(field.boolean(), () => true),
-	'sound.formatComplete': defineKv(field.boolean(), () => true),
+	'sound.recipeComplete': defineKv(field.boolean(), () => true),
 	'sound.pauseMediaDuringRecording': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
- * Output behavior after a transcription or a picked Format completes. Controls
+ * Output behavior after a transcription or a picked Recipe completes. Controls
  * clipboard, cursor paste, and simulated Enter key per delivery.
  *
- * `transcription.*` governs the automatic path: the cleaned transcript Cleanup
- * delivers after every recording. `format.*` governs the manual path: a Format
- * take the user picks from the picker (Wave 3). Uses the `output.*` prefix to
+ * `transcription.*` governs the automatic path: the polished transcript
+ * delivered after every recording. `recipe.*` governs the manual path: a Recipe
+ * take the user picks from the picker (Wave 4). Uses the `output.*` prefix to
  * keep this post-processing behavior out of the `transcription.*` /
  * `completion.*` service namespaces.
  *
- * Cursor default asymmetry (transcription=true, format=false): the transcript
- * already types itself at the cursor automatically, so a Format the user then
- * picks would double-type if `format.cursor` also defaulted true. A user who
- * turns off `transcription.cursor` specifically to let a Format be the cursor
- * output can flip the `format.cursor` toggle on.
+ * Cursor default asymmetry (transcription=true, recipe=false): the transcript
+ * already types itself at the cursor automatically, so a Recipe the user then
+ * picks would double-type if `recipe.cursor` also defaulted true. A user who
+ * turns off `transcription.cursor` specifically to let a Recipe be the cursor
+ * output can flip the `recipe.cursor` toggle on.
  */
 const output = {
 	'output.transcription.clipboard': defineKv(field.boolean(), () => true),
 	'output.transcription.cursor': defineKv(field.boolean(), () => true),
 	'output.transcription.enter': defineKv(field.boolean(), () => false),
-	'output.format.clipboard': defineKv(field.boolean(), () => true),
-	'output.format.cursor': defineKv(field.boolean(), () => false),
-	'output.format.enter': defineKv(field.boolean(), () => false),
+	'output.recipe.clipboard': defineKv(field.boolean(), () => true),
+	'output.recipe.cursor': defineKv(field.boolean(), () => false),
+	'output.recipe.enter': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
@@ -376,7 +376,7 @@ export function createWhispering({
 		id: 'epicenter-whispering',
 		tables: {
 			recordings,
-			formats,
+			recipes,
 		},
 		kv: kvDefinitions,
 	});

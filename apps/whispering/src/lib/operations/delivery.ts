@@ -35,13 +35,13 @@ export async function deliverTranscriptionResult({
 }
 
 /**
- * Delivers a Format's output to the user according to their text output
+ * Delivers a Recipe's output to the user according to their text output
  * preferences. Returns the success Notice the caller passes to
  * `loading.resolve(...)`. `recordingId` is the run's link to a recording, or
  * null for ad-hoc runs (clipboard, selection): only a recording-anchored run
  * offers a "go to recordings" action, since an ad-hoc run has no history to open.
  */
-export async function deliverFormatResult({
+export async function deliverRecipeResult({
 	text,
 	recordingId,
 }: {
@@ -50,8 +50,8 @@ export async function deliverFormatResult({
 }) {
 	return deliverResult({
 		text,
-		successCopy: '🔄 Format complete',
-		settingsScope: 'format',
+		successCopy: '🔄 Recipe complete',
+		settingsScope: 'recipe',
 		linkedRecording: recordingId !== null,
 	});
 }
@@ -64,7 +64,7 @@ async function deliverResult({
 }: {
 	text: string;
 	successCopy: string;
-	settingsScope: 'transcription' | 'format';
+	settingsScope: 'transcription' | 'recipe';
 	linkedRecording: boolean;
 }) {
 	const recordingsAction = linkedRecording

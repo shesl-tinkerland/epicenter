@@ -105,25 +105,25 @@
 		<Field.Separator />
 
 		<Field.Set>
-			<Field.Legend variant="label">Format output</Field.Legend>
+			<Field.Legend variant="label">Recipe output</Field.Legend>
 			<Field.Description>
-				Applies after you run a saved format on a transcription.
+				Applies after you run a saved recipe on a transcription.
 			</Field.Description>
 			<Field.Group>
 				<SettingSwitch
-					key="output.format.clipboard"
-					label="Copy formatted text to clipboard"
+					key="output.recipe.clipboard"
+					label="Copy recipe output to clipboard"
 				/>
 
 				<SettingSwitch
-					key="output.format.cursor"
-					label="Paste formatted text at cursor"
+					key="output.recipe.cursor"
+					label="Paste recipe output at cursor"
 				/>
 
-				{#if tauri && settings.get('output.format.cursor')}
+				{#if tauri && settings.get('output.recipe.cursor')}
 					<SettingSwitch
-						key="output.format.enter"
-						label="Press Enter after pasting formatted text"
+						key="output.recipe.enter"
+						label="Press Enter after pasting recipe output"
 					/>
 				{/if}
 			</Field.Group>

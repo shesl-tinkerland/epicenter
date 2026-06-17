@@ -16,8 +16,8 @@
 				count: () => whispering.tables.recordings.storedCount(),
 			},
 			{
-				label: 'Formats',
-				count: () => whispering.tables.formats.storedCount(),
+				label: 'Recipes',
+				count: () => whispering.tables.recipes.storedCount(),
 			},
 		] as const;
 

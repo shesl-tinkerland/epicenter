@@ -166,7 +166,7 @@ $lib/rpc/*          TanStack adapters (this directory)
   │                 shared UI needs mutation state
   ├──▶
 $lib/operations/*   imperative orchestrations (delivery, recording, upload,
-                    pipeline, transcribe, run-format, transformation-clipboard,
+                    pipeline, transcribe, run-recipe, recipe-clipboard,
                     analytics, sound, shortcuts)
   ▼
 $lib/services/*     UI-free, Result-typed

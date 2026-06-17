@@ -2,6 +2,6 @@ export {
 	type AutoCleanup,
 	createWhispering,
 	type DictionaryEntry,
-	type Format,
+	type Recipe,
 	type Recording,
 } from './definition';

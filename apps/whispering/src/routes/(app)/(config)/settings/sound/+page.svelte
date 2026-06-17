@@ -88,8 +88,8 @@
 					label="Play sound after transcription"
 				/>
 				<SettingSwitch
-					key="sound.formatComplete"
-					label="Play sound after running a format"
+					key="sound.recipeComplete"
+					label="Play sound after running a recipe"
 				/>
 			</Field.Group>
 		</Field.Set>
