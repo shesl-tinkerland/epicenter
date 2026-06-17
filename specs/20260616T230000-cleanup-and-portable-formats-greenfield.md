@@ -130,7 +130,26 @@ add/remove list of plain strings. This is the only way to reach speed mode or ad
 known terms in-app. Pure UI over Wave 1's data; read/write through the `settings`
 namespace.
 
-### Wave 3: HUD overlay + esc-to-ship-raw
+### Wave 3: HUD overlay + esc-to-ship-raw — LANDED (with one deferred sub-decision)
+
+> **Landed**: the "Polishing..." HUD reuses the floating recording-overlay pill
+> (greenfield surface choice: the canonical flow is dictation into another app,
+> where an in-window overlay would be invisible; the floating pill is what the
+> user is already watching and matches the category). `RecordingOverlayStatus`
+> gains `{ mode: 'polishing' }` and `RecordingOverlayAction` gains `'ship-raw'`;
+> the pill shows a spinner + "Polishing..." + a clickable x. An optional
+> `AbortSignal` is threaded through `complete()` and every provider; `runPolish`
+> treats a user abort as a clean ship-raw (not an error). A new `polish-hud`
+> reactive state owns the active flag + `AbortController`; the pipeline brackets
+> the AI call with `begin()`/`end()` and only shows the HUD when `polishWillRun`
+> is true (no speed-mode flicker). On web the existing loading toast stands.
+>
+> **Deferred (needs a steer)**: true **esc-over-other-apps** cancellation. The
+> overlay pill is non-focusable, so it cannot receive an esc keypress, and during
+> dictation the user is focused in another app, so a global esc requires a
+> transient rdev key hook (a separate mechanism from the registered-command
+> dispatcher). The clickable pill control is the cancel affordance for now;
+> wiring a global esc is a small follow-up that just calls `polishHud.shipRaw()`.
 
 A Whispering-owned "Polishing..." surface shown while the Polish pass runs, with
 `esc` to cancel the in-flight completion (AbortController threaded through
