@@ -21,6 +21,7 @@
 import { fromTable } from '@epicenter/svelte';
 import { nanoid } from 'nanoid/non-secure';
 import { whispering } from '#platform/whispering';
+import { BUILTIN_RECIPES } from '$lib/state/builtin-recipes';
 import type { Recipe } from '$lib/workspace';
 
 function createRecipes() {
@@ -30,6 +31,10 @@ function createRecipes() {
 	const sorted = $derived(
 		[...map.values()].sort((a, b) => a.name.localeCompare(b.name)),
 	);
+
+	// Built-ins first, then the user's own (alphabetical). This is the list the
+	// picker and the library both show: `builtins` union `customs`.
+	const pickable = $derived([...BUILTIN_RECIPES, ...sorted]);
 
 	return {
 		[Symbol.dispose]() {
@@ -51,11 +56,24 @@ function createRecipes() {
 		},
 
 		/**
-		 * All recipes as a sorted array (alphabetical by name). Memoized via
-		 * `$derived`. Stable reference until the SvelteMap changes.
+		 * The user's own recipes as a sorted array (alphabetical by name). Memoized
+		 * via `$derived`. Stable reference until the SvelteMap changes.
 		 */
 		get sorted(): Recipe[] {
 			return sorted;
+		},
+
+		/** The built-in recipes that ship in code (read-only). */
+		get builtins(): Recipe[] {
+			return BUILTIN_RECIPES;
+		},
+
+		/**
+		 * Every recipe the user can pick: built-ins first, then their own. This is
+		 * what the picker and the library list. Memoized via `$derived`.
+		 */
+		get pickable(): Recipe[] {
+			return pickable;
 		},
 
 		/** Create or update a recipe. Writes to Yjs, observer updates the SvelteMap. */
