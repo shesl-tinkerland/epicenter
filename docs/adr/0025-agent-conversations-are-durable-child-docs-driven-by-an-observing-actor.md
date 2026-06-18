@@ -1,4 +1,4 @@
-# 0015. Agent conversations are durable child docs driven by an observing actor
+# 0025. Agent conversations are durable child docs driven by an observing actor
 
 - **Status:** Proposed
 - **Date:** 2026-06-16
@@ -11,7 +11,7 @@ refresh-resume fall out of one source of truth rather than separate features. Bu
 it still needs an HTTP kickoff carrying the turn id, model, and prompts; the actor
 snapshots the prompt once and never reads the doc back; cancellation is request
 abort; and interactive tools are excluded. None of that survives moving the actor
-to a user-owned always-on device (see [ADR-0014](0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md))
+to a user-owned always-on device (see [ADR-0024](0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md))
 or running it as a durable background service.
 
 ## Decision
@@ -26,7 +26,7 @@ single immutable `agent: AgentId`, set once by the client that creates it. An
 hosted cloud agent, an always-on home daemon, a laptop daemon), not a per-install
 node id and not a Yjs `clientID`. The agent is the address; the *actor* is the
 process that answers as it (the role distinction is pinned in
-[ADR-0014](0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md)).
+[ADR-0024](0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md)).
 Presence can decorate the configured agent list
 with live/offline status and capabilities, but it is not durable routing truth.
 The binding is the row field. The cloud agent is `epicenter-cloud`, whose current
@@ -54,7 +54,7 @@ merges could not enforce a claimant anyway).
 
 The actor observes the transcript mid-answer so it can honor a durable, client-owned
 cancel field, and it writes the write-once `finish`. Tool calls are the workspace's
-published actions ([ADR-0010](0010-actions-are-the-only-surface-that-crosses-a-process-boundary.md));
+published actions ([ADR-0021](0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md));
 when a call needs approval, the approval is a durable record in the doc that any
 device resolves, not an in-process prompt. Dispatch is an optional wake nudge (the
 doorbell), never the durable queue (the doc is the mailbox).
@@ -82,7 +82,7 @@ doorbell), never the durable queue (the doc is the mailbox).
   `agent` equals the agent the daemon answers as, so the actor is built and runs only
   for those: filtering the open set, not abstaining after the fact, is what keeps the
   app-aware actor out of the app-blind anchor's availability job
-  ([ADR-0014](0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md)).
+  ([ADR-0024](0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md)).
   The actor itself carries no designation concept. The browser supplies the
   complementary half: it nudges the cloud agent's HTTP route only when the
   conversation is bound to the cloud agent (`epicenter-cloud`), and does nothing for

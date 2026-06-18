@@ -1,5 +1,5 @@
 /**
- * The agent catalog's routing invariants (ADR-0015).
+ * The agent catalog's routing invariants (ADR-0025).
  *
  * The browser nudges the HTTP route for, and only for, a conversation whose bound
  * agent has `runtime: 'cloud'` (`ConversationView.nudgeBoundAgent`); everything

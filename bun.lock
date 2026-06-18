@@ -1023,14 +1023,14 @@
     "@tauri-apps/cli": "^2.9.6",
     "@tauri-apps/plugin-fs": "^2.4.1",
     "@tauri-apps/plugin-opener": "^2.4.0",
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.14",
     "@types/node": "^24.0.0",
     "@types/yargs": "^17.0.35",
     "arkregex": "^0.0.5",
     "arktype": "^2.1.29",
     "better-auth": "^1.6.18",
     "bits-ui": "^2.14.4",
-    "clsx": "latest",
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "drizzle-arktype": "^0.1.3",
     "drizzle-kit": "^0.31.7",
@@ -1043,7 +1043,7 @@
     "marked": "^17.0.3",
     "mime": "^4.0.6",
     "mode-watcher": "^1.1.0",
-    "nanoid": "latest",
+    "nanoid": "^5.1.14",
     "oauth4webapi": "^3.8.6",
     "svelte": "^5.56.3",
     "svelte-check": "^4.3.4",
@@ -4054,8 +4054,6 @@
     "@devicefarmer/adbkit/commander": ["commander@9.5.0", "", {}, "sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ=="],
 
     "@devicefarmer/adbkit/debug": ["debug@4.3.7", "", { "dependencies": { "ms": "^2.1.3" } }, "sha512-Er2nc/H7RrMXZBFCEim6TCmMk02Z8vLC2Rbi1KEBggpo0fS6l0S1nnapwmIi3yW/+GOJap1Krg4w0Hg80oCqgQ=="],
-
-    "@epicenter/example-doc-as-wire-chat/nanoid": ["nanoid@5.1.11", "", { "bin": { "nanoid": "bin/nanoid.js" } }, "sha512-v+KEsUv2ps74PaSKv0gHTxTCgMXOIfBEbaqa6w6ISIGC7ZsvHN4N9oJ8d4cmf0n5oTzQz2SLmThbQWhjd/8eKg=="],
 
     "@epicenter/ui/@lucide/svelte": ["@lucide/svelte@1.8.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-+zYQUKqEOVP5lxbGmxL1OVgGMQtRK91eIJ0bR+3Cr1ts4oQEsQfxyzzd5X47psJlblAuGFrl2xm4YuATjR9oaA=="],
 

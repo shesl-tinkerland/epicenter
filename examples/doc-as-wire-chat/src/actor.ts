@@ -1,5 +1,5 @@
 /**
- * The ACTOR (ADR-0014/0015), now over the REAL observe loop (S4).
+ * The ACTOR (ADR-0024/0025), now over the REAL observe loop (S4).
  *
  * It holds the root workspace doc, runs `attachChildDocActor` (the production
  * loop from `@epicenter/workspace`) over the `conversations` table, and hosts a

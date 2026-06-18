@@ -52,7 +52,7 @@ recordings.delete(id);
 
 ### `formats.svelte.ts`
 
-Formats backed by a Yjs workspace table. A Format is a single self-contained row: a name and one instruction (text in, text out). No replacements, no prompt split, no per-Format model. See ADR 0021.
+Formats backed by a Yjs workspace table. A Format is a single self-contained row: a name and one instruction (text in, text out). No replacements, no prompt split, no per-Format model. See ADR 0029.
 
 ```typescript
 import { formats } from '$lib/state/formats.svelte';

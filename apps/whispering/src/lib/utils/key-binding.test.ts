@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
+import type { KeyBinding } from '$lib/tauri/commands';
 import {
 	type BindingLike,
 	bindingsOverlap,
 	domCodeToKey,
 	isTierZeroChord,
 	keyBindingToAccelerator,
+	keyBindingToString,
+	parseManualBinding,
 	resolveBinding,
 } from './key-binding';
 
@@ -147,6 +150,57 @@ test('domCodeToKey rejects modifier codes and anything off the chord alphabet', 
 	// Outside the alphabet keyBindingToAccelerator can spell.
 	expect(domCodeToKey('Numpad1')).toBeNull();
 	expect(domCodeToKey('Lang1')).toBeNull();
+});
+
+test('keyBindingToString emits only tokens parseManualBinding accepts', () => {
+	// The canonical spelling drops the physical-key noun: keyA -> "a", dot -> ".",
+	// upArrow -> "up". Modifiers keep their canonical names.
+	expect(keyBindingToString({ modifiers: [], keys: ['keyA'] })).toBe('a');
+	expect(keyBindingToString({ modifiers: [], keys: ['num1'] })).toBe('1');
+	expect(keyBindingToString({ modifiers: [], keys: ['dot'] })).toBe('.');
+	expect(keyBindingToString({ modifiers: [], keys: ['space'] })).toBe('space');
+	expect(keyBindingToString({ modifiers: [], keys: ['upArrow'] })).toBe('up');
+	expect(
+		keyBindingToString({ modifiers: ['meta', 'shift'], keys: ['dot'] }),
+	).toBe('meta+shift+.');
+	expect(keyBindingToString({ modifiers: ['fn'], keys: [] })).toBe('fn');
+});
+
+test('parseManualBinding(keyBindingToString(b)) round-trips every binding shape', () => {
+	const fixtures: KeyBinding[] = [
+		// Bare keys (the in-app single-key defaults).
+		{ modifiers: [], keys: ['keyC'] },
+		{ modifiers: [], keys: ['space'] },
+		{ modifiers: [], keys: ['f5'] },
+		{ modifiers: [], keys: ['num0'] },
+		// Chords.
+		{ modifiers: ['ctrl'], keys: ['keyA'] },
+		{ modifiers: ['meta', 'shift'], keys: ['dot'] },
+		{ modifiers: ['ctrl', 'alt'], keys: ['delete'] },
+		{ modifiers: ['alt'], keys: ['num1'] },
+		// Fn (a Tier-1 global shape, still must round-trip through the grammar).
+		{ modifiers: ['fn'], keys: ['space'] },
+		// Modifier-only holds.
+		{ modifiers: ['ctrl', 'meta'], keys: [] },
+		{ modifiers: ['fn'], keys: [] },
+		// Punctuation, arrows, named keys across the alphabet.
+		{ modifiers: ['ctrl'], keys: ['slash'] },
+		{ modifiers: ['ctrl'], keys: ['minus'] },
+		{ modifiers: ['ctrl'], keys: ['equal'] },
+		{ modifiers: ['ctrl'], keys: ['leftBracket'] },
+		{ modifiers: ['ctrl'], keys: ['semiColon'] },
+		{ modifiers: ['ctrl'], keys: ['quote'] },
+		{ modifiers: ['ctrl'], keys: ['backQuote'] },
+		{ modifiers: ['ctrl'], keys: ['backSlash'] },
+		{ modifiers: ['meta'], keys: ['upArrow'] },
+		{ modifiers: ['meta'], keys: ['pageDown'] },
+		{ modifiers: [], keys: ['return'] },
+		{ modifiers: [], keys: ['escape'] },
+		{ modifiers: [], keys: ['backspace'] },
+	];
+	for (const binding of fixtures) {
+		expect(parseManualBinding(keyBindingToString(binding))).toEqual(binding);
+	}
 });
 
 test('domCodeToKey is the inverse of acceleratorKey for every chord key', () => {

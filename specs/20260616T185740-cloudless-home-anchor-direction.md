@@ -52,14 +52,14 @@ actor:
   observes synced docs
   runs the model loop and app actions
   writes answers or computed effects back into the docs
-  answers as one or more agents (an AgentId is the address; ADR-0015)
+  answers as one or more agents (an AgentId is the address; ADR-0025)
   can be Epicenter-hosted or self-hosted
 ```
 
 The third role is the **actor** (the running process); the **agent** is the
 durable address a conversation binds to, which an actor answers as. The two are
 not interchangeable; see the "Agent and actor are not one word for one thing"
-section of ADR-0014.
+section of ADR-0024.
 
 Cloudflare rooms currently bundle relay and anchor. The Iroh direction splits
 them: Iroh gives the peer connection system and blind relay path; the chosen
@@ -177,7 +177,7 @@ The sidecar must not learn Fuji tables, actions, materializers, child-doc layout
 
 ## Scope: App-Blind Custody Only
 
-The home anchor here routes opaque room bytes and never learns app schemas, layouts, actions, or product semantics. The always-on device *also* runs per-app **actors** (observe synced docs, run inference, execute the app's actions as agent tools), but those are a separate, app-aware role: daemons that sit beside the anchor, never inside the Iroh sidecar. "Anchor" in this spec always means the app-blind role. The actor/agent layer is specified in `docs/adr/0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md`, `docs/adr/0015-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md`, and `specs/20260616T225034-always-on-actors-over-synced-docs.md`.
+The home anchor here routes opaque room bytes and never learns app schemas, layouts, actions, or product semantics. The always-on device *also* runs per-app **actors** (observe synced docs, run inference, execute the app's actions as agent tools), but those are a separate, app-aware role: daemons that sit beside the anchor, never inside the Iroh sidecar. "Anchor" in this spec always means the app-blind role. The actor/agent layer is specified in `docs/adr/0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md`, `docs/adr/0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md`, and `specs/20260616T225034-always-on-actors-over-synced-docs.md`.
 
 ## Multiplexing Rule
 
@@ -243,7 +243,7 @@ laptop-books-agent:
     ignore
 ```
 
-The optional wake nudge (the doorbell, ADR-0015) follows the same rule: it
+The optional wake nudge (the doorbell, ADR-0025) follows the same rule: it
 targets the bound agent's runtime, never the anchor. The anchor stores and
 forwards; it is never the endpoint you ping to make an answer happen. Wiring the
 doorbell to the anchor would re-fuse the durable-storage role with the
@@ -274,7 +274,7 @@ What it did not prove:
 2. Make the sidecar carry real `@epicenter/sync` binary frames for one room.
 3. Add sidecar room multiplexing.
 4. Define pairing: how a daemon learns and trusts the home anchor's Iroh endpoint id.
-5. Treat the app-blind anchor/sidecar and the app-aware actor (daemon) as separate roles with separate packaging. The sidecar multiplexes opaque rooms; the actor mounts an app workspace, observes its docs, and runs the app's actions as agent tools. Do not fold the actor into the sidecar. See ADR-0014.
+5. Treat the app-blind anchor/sidecar and the app-aware actor (daemon) as separate roles with separate packaging. The sidecar multiplexes opaque rooms; the actor mounts an app workspace, observes its docs, and runs the app's actions as agent tools. Do not fold the actor into the sidecar. See ADR-0024.
 6. Only then add product packaging and browser/native wrapper decisions.
 
 ## Grill Prompt
@@ -332,8 +332,8 @@ Relevant files:
 - specs/20260616T185740-cloudless-home-anchor-direction.md
 - specs/20260614T120000-app-folder-as-root-and-jsrepo-blocks.md
 - specs/20260615T120000-trusted-relay-and-collaborative-fields.md
-- docs/adr/0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md
-- docs/adr/0015-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md
+- docs/adr/0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md
+- docs/adr/0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md
 - docs/encryption.md
 - packages/workspace/src/daemon/attach-mount-infrastructure.ts
 - packages/workspace/src/config/daemon-node-id.ts

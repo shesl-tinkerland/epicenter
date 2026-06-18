@@ -44,7 +44,7 @@
 				<!--
 				 The primary click starts a chat with the default agent; the caret
 				 picks a specific one. The bound agent is fixed for the conversation's
-				 life (ADR-0015), so this choice is made once, here, at creation.
+				 life (ADR-0025), so this choice is made once, here, at creation.
 				-->
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>

@@ -449,14 +449,14 @@ export type MountOptions<
 	) => MountComposition<ActionRegistry>;
 	/**
 	 * Register daemon child-doc actors: the always-on observe loops that host a
-	 * live replica of a row's child doc and watch it (ADR-0014/0015). Keyed by
+	 * live replica of a row's child doc and watch it (ADR-0024/0025). Keyed by
 	 * table then field, to a per-body factory. Identity and shape (the table, the
 	 * guid, the layout) come from the schema; the factory supplies only behavior.
 	 * See {@link MountActors}.
 	 */
 	readonly actors?: MountActors<TTables>;
 	/**
-	 * The agent identity this daemon answers as (ADR-0015). A conversation row
+	 * The agent identity this daemon answers as (ADR-0025). A conversation row
 	 * names the one agent it is bound to in its `agent` column; the observe loop
 	 * hosts and answers exactly the rows whose `agent` equals this id. Authored in
 	 * configuration (the durable, stable address), not derived from the per-install
@@ -974,7 +974,7 @@ function connectMountActors<TTableDefinitions extends TableDefinitions>({
 			observe(callback: () => void): () => void;
 			get(id: string): { data: { agent?: AgentId } | null };
 		};
-		// The designation contract (ADR-0015): a daemon hosts and answers exactly
+		// The designation contract (ADR-0025): a daemon hosts and answers exactly
 		// the rows bound to the agent it answers as. Composed once here, the single
 		// owner of the rule, so an app's actor factory supplies behavior alone. A
 		// daemon with no configured agent (`selfAgentId` undefined) designates

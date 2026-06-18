@@ -1,4 +1,4 @@
-# 0016. The Matter vault's SQLite mirror is a read-only projection, never a verdict source
+# 0026. The Matter vault's SQLite mirror is a read-only projection, never a verdict source
 
 - **Status:** Accepted
 - **Date:** 2026-06-18

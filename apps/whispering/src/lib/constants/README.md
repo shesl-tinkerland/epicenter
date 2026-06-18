@@ -2,13 +2,13 @@
 
 ## Purpose
 
-This directory holds immutable, cross-cutting values that more than one part of the app needs and that have no single obvious owner: key vocabularies, the language list, sound names, provider registries, and the setting-value enums the workspace schema validates against.
+This directory holds immutable, cross-cutting values that more than one part of the app needs and that have no single obvious owner: the language list, sound names, provider registries, and the setting-value enums the workspace schema validates against.
 
 ## What belongs here (and what does not)
 
 A constant lives with the code that owns its meaning. Only put something here when it is **pure data** and **shared across modules** with no natural home. Everything else lives next to its owner:
 
-- **Logic and functions** (formatters, guards, validators, normalizers) live in `$lib/utils` or `$lib/services`, never here. Example: keyboard display formatting and the supported-key guard live in `$lib/utils/keyboard.ts`.
+- **Logic and functions** (formatters, guards, validators, normalizers) live in `$lib/utils` or `$lib/services`, never here. Example: shortcut parsing, labeling, and matching live in `$lib/utils/key-binding.ts`.
 - **Types owned by one module** live in that module. Example: `DeviceAcquisitionOutcome` lives in `$lib/services/recorder/types.ts`.
 - **Registries with behavior** live next to their service. The transcription and inference registries stay here only because their service-ID enums are shared vocabulary the workspace schema validates against.
 - **Build-target values** (platform identity) live behind the `#platform/*` seam (see below).
@@ -20,7 +20,6 @@ Rule of thumb: no computed behavior, no functions, no runtime schema objects. If
 ```
 constants/
 ├── audio/                  # Recording settings: bitrate, sample-rate, triggers, button icons (folder + barrel)
-├── keyboard/               # Key vocabularies and types for browser keyboard events (folder + barrel)
 ├── icons/                  # Provider brand SVG assets
 ├── inference.ts            # Text-completion provider/model registry
 ├── languages.ts            # Supported transcription languages
@@ -32,7 +31,7 @@ constants/
 └── urls.ts                 # App route pathnames
 ```
 
-Domains with several files keep a folder and a barrel `index.ts` (`audio/`, `keyboard/`). A single-file domain is just a flat file: a one-line barrel re-exporting one file earns nothing.
+Domains with several files keep a folder and a barrel `index.ts` (`audio/`). A single-file domain is just a flat file: a one-line barrel re-exporting one file earns nothing.
 
 ## Platform Identity Lives Elsewhere
 
@@ -51,7 +50,6 @@ Import from a domain's folder barrel, or directly from a flat file:
 ```typescript
 // Folder domains expose a barrel
 import { SAMPLE_RATE_OPTIONS } from '$lib/constants/audio';
-import { CommandOrControl } from '$lib/constants/keyboard';
 
 // Flat domains are imported directly
 import { SUPPORTED_LANGUAGES_OPTIONS } from '$lib/constants/languages';

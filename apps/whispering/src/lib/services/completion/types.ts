@@ -42,7 +42,7 @@ export type CompletionService = {
 		 * Optional abort signal. When it fires, the in-flight request is canceled
 		 * (the SDK rejects with an abort error). Used by the Polish HUD's
 		 * "ship raw" action so the user can skip the pass and take the raw
-		 * transcript immediately. See ADR 0021.
+		 * transcript immediately. See ADR 0029.
 		 */
 		signal?: AbortSignal;
 	}) => Promise<Result<string, CompletionError>>;

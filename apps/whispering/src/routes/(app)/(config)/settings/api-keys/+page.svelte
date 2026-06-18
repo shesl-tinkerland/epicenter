@@ -15,7 +15,7 @@
 		'Mistral',
 	];
 	// Providers that power the AI passes (Polish and recipes), keyed off the
-	// global `completion.*` default. See ADR 0021.
+	// global `completion.*` default. See ADR 0029.
 	const COMPLETION: ProviderConfigId[] = [
 		'Google',
 		'Anthropic',

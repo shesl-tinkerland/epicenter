@@ -5,23 +5,21 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { onDestroy } from 'svelte';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
-	import { type Command, commands } from '$lib/commands';
+	import type { Command } from '$lib/commands';
 	import { report } from '$lib/report';
 	import { shortcuts } from '#platform/shortcuts';
 	import type { Tauri } from '#platform/tauri';
-	import { deviceConfig } from '$lib/state/device-config.svelte';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import type { Key, KeyBinding, Modifier } from '$lib/tauri/commands';
 	import { os } from '#platform/os';
 	import {
-		bindingsOverlap,
 		isEmptyBinding,
 		isTierZeroChord,
 		keyBindingToLabel,
+		keyBindingToString,
 		parseManualBinding,
 	} from '$lib/utils/key-binding';
-	import { validateGlobalBinding } from '$lib/utils/reserved-shortcuts';
-	import { createGlobalChordRecorder } from './create-global-chord-recorder';
+	import { createChordRecorder } from './create-chord-recorder';
 	import RecorderShell from './RecorderShell.svelte';
 
 	// `tauri` is passed non-null from the Tauri-gated global settings page.
@@ -35,7 +33,7 @@
 		tauri: Tauri;
 	} = $props();
 
-	const binding = $derived(deviceConfig.get(`shortcuts.global.${command.id}`));
+	const binding = $derived(shortcuts.current(command.id));
 	const label = $derived(binding ? keyBindingToLabel(binding, os.isApple) : null);
 
 	// The recorder is always available here: chords record straight from the
@@ -59,7 +57,7 @@
 	let capturedModifiers = new Set<Modifier>();
 	let capturedKeys = new Set<Key>();
 
-	const chordRecorder = createGlobalChordRecorder({
+	const chordRecorder = createChordRecorder({
 		onCapture: (next) => void commitWebviewChord(next),
 	});
 
@@ -76,7 +74,7 @@
 			// leak (the pattern dictation-capability.svelte.ts uses for the same race).
 			let torn = false;
 			let unlisten: (() => void) | undefined;
-			void tauri.globalShortcuts
+			void tauri.keyboard
 				.listenForCapture((combo) => {
 					for (const modifier of combo.modifiers) capturedModifiers.add(modifier);
 					for (const key of combo.keys) capturedKeys.add(key);
@@ -110,7 +108,7 @@
 		// the tap up (gated on trust) so an Fn or modifier-only binding is even
 		// recordable; when the tap is already running it just enters capture mode.
 		// An untrusted user lands in `untrusted`, which lights the upgrade hint.
-		await tauri.globalShortcuts.setCapturing(true);
+		await tauri.keyboard.setCapturing(true);
 	}
 
 	async function stopSession() {
@@ -118,7 +116,7 @@
 		capturing = false;
 		// Drop the capture-hold; the tap tears back down to the floor unless a
 		// binding or auto-paste still wants it.
-		await tauri.globalShortcuts.setCapturing(false);
+		await tauri.keyboard.setCapturing(false);
 	}
 
 	// If the recorder is torn down mid-capture (route change, or the popover
@@ -128,28 +126,13 @@
 		if (capturing) void stopSession();
 	});
 
-	// A gesture's keys must be unique to it. The matcher fires on exact set
-	// equality with no prefix resolution, so a gesture that contains (or is
-	// contained by) another would shadow it or be unreachable. Refuse the overlap
-	// and name the gesture it collides with.
-	function overlapReason(next: KeyBinding): string | null {
-		for (const other of commands) {
-			if (other.id === command.id) continue;
-			const otherBinding = deviceConfig.get(`shortcuts.global.${other.id}`);
-			if (!otherBinding || isEmptyBinding(otherBinding)) continue;
-			if (bindingsOverlap(next, otherBinding)) {
-				return `Those keys are already part of the "${other.title}" gesture (${keyBindingToLabel(otherBinding, os.isApple)}). Each global gesture needs its own keys, so a key used by one gesture cannot be part of another.`;
-			}
-		}
-		return null;
-	}
-
-	// Reject reserved or overlapping gestures before saving. Returns true when the
-	// binding is allowed; otherwise reports why and leaves the current binding
-	// untouched.
-	function validateAndReport(next: KeyBinding): boolean {
-		const reason = validateGlobalBinding(next) ?? overlapReason(next);
-		if (!reason) return true;
+	// The seam owns the policy (a reserved gesture, or one overlapping another:
+	// the matcher fires on exact set equality with no prefix resolution, so an
+	// overlapping pair would shadow or be unreachable). Report why a gesture is
+	// refused and leave the current binding untouched. Returns true when refused.
+	function rejectConflict(next: KeyBinding): boolean {
+		const reason = shortcuts.findConflict(command.id, next);
+		if (!reason) return false;
 		report.error({
 			title: 'That shortcut is not available',
 			description: reason,
@@ -158,7 +141,7 @@
 				message: `${keyBindingToLabel(next, os.isApple)}: ${reason}`,
 			},
 		});
-		return false;
+		return true;
 	}
 
 	// A webview capture can only legitimately produce a Tier-0 chord (one key plus
@@ -178,13 +161,13 @@
 			});
 			return;
 		}
-		if (!validateAndReport(next)) return;
+		if (rejectConflict(next)) return;
 		await finishCapture(next);
 	}
 
 	// A tap capture may be a chord, an Fn hold, or a modifier-only hold: all valid.
 	async function commitTapBinding(next: KeyBinding) {
-		if (!validateAndReport(next)) {
+		if (rejectConflict(next)) {
 			capturedModifiers = new Set();
 			capturedKeys = new Set();
 			return;
@@ -201,8 +184,7 @@
 	}
 
 	async function persist(next: KeyBinding) {
-		deviceConfig.set(`shortcuts.global.${command.id}`, next);
-		await shortcuts.sync();
+		await shortcuts.set(command.id, next);
 		report.success({
 			title: `Global shortcut set to ${keyBindingToLabel(next, os.isApple)}`,
 			description: `Press the shortcut to trigger "${command.title}"`,
@@ -211,8 +193,7 @@
 
 	async function clear() {
 		await stopSession();
-		deviceConfig.set(`shortcuts.global.${command.id}`, null);
-		await shortcuts.sync();
+		await shortcuts.clear(command.id);
 		report.success({
 			title: 'Global shortcut cleared',
 			description: `Set a new shortcut to trigger "${command.title}"`,
@@ -233,7 +214,7 @@
 			});
 			return false;
 		}
-		if (!validateAndReport(next)) return false;
+		if (rejectConflict(next)) return false;
 		void persist(next).then(() => {
 			void stopSession();
 			open = false;
@@ -255,7 +236,7 @@
 			return label;
 		},
 		get manualInitial() {
-			return label ?? '';
+			return binding ? keyBindingToString(binding) : '';
 		},
 		start: () => void startSession(),
 		stop: () => void stopSession(),

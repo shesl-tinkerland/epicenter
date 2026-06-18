@@ -75,7 +75,7 @@ const recordings = defineTable({
 	recordedAtZone: field.string<IanaTimeZone>(),
 	// The raw transcript, exactly as the transcriber produced it. Polish layers
 	// correction on top and delivers the polished text, but the raw words stay
-	// here underneath so "show original" is always one click away. See ADR 0021.
+	// here underneath so "show original" is always one click away. See ADR 0029.
 	transcript: field.string(),
 	// The delivered polished text, when a Polish pass ran. Null in speed mode and
 	// on a polish-failure fallback, where no polished version exists. The history
@@ -93,7 +93,7 @@ export type Recording = InferTableRow<typeof recordings>;
  * whatever text the host hands it (text in, text out). Recipes are the portable,
  * plural, on-demand reshape library; they know nothing about voice and carry no
  * correction plumbing (that is Polish's job, run once before any Recipe). See
- * ADR 0021.
+ * ADR 0029.
  *
  * Deliberately tiny: no pre/post replacements, no system/user prompt split, no
  * `{{input}}` placeholder, no per-Recipe model or provider (model comes from the
@@ -189,10 +189,14 @@ const recording = {
 		field.select(RECORDING_TRIGGERS),
 		() => 'manual' as const,
 	),
-	// Pause system media playback while capturing, resume it when capture ends.
-	// A capture-quality preference (reduce background-audio contamination), so it
-	// roams like the sound toggles even though the pause capability is per-device.
-	'recording.pausePlayback': defineKv(field.boolean(), () => false),
+	// Pause system media playback while your voice is being captured, resume it
+	// after. On by default: hearing music while you talk disrupts dictation, and
+	// pausing media during voice capture is the least-astonishing behavior (it is
+	// what a phone call does to your music). Discoverable without a nudge via the
+	// settings toggle's description and the home-row quick toggle. A roaming
+	// preference, not a per-device capability, so it follows you across machines
+	// like the sound toggles.
+	'recording.pausePlayback': defineKv(field.boolean(), () => true),
 } as const;
 
 /**
@@ -247,7 +251,7 @@ const DEFAULT_POLISH_INSTRUCTIONS =
  * configured (a runtime gate, not a flag), so a fresh keyless install never pays
  * a surprise cost. Turn `enabled` off for speed mode: the raw transcript ships
  * instantly with no AI call. `instructions` is editable under Advanced. Polish is
- * not a Recipe; it is the base layer every Recipe stands on. See ADR 0021.
+ * not a Recipe; it is the base layer every Recipe stands on. See ADR 0029.
  */
 const polish = {
 	'polish.enabled': defineKv(field.boolean(), () => true),
@@ -262,7 +266,7 @@ const polish = {
  * domain terms ("Kubernetes", "Braden"). Injection-only: the runtime composes
  * these terms into every AI prompt (via `buildSystemPrompt`) and, where the
  * transcription model accepts one, into its `initial_prompt`. It is not
- * find/replace and not an algorithm; the AI is the matcher. See ADR 0021.
+ * find/replace and not an algorithm; the AI is the matcher. See ADR 0029.
  */
 const dictionary = {
 	dictionary: defineKv(Type.Array(Type.String()), (): string[] => []),
@@ -270,7 +274,7 @@ const dictionary = {
 
 /**
  * The single global AI default used for completions: which inference provider
- * and model the Polish pass and every Recipe run against. Per ADR 0021 there is
+ * and model the Polish pass and every Recipe run against. Per ADR 0029 there is
  * no per-Recipe model or provider; this is the one place it lives. API keys and
  * endpoints stay in deviceConfig (local, never synced).
  */
@@ -296,7 +300,10 @@ const shortcuts = {
 	// These getDefault thunks are the single source for the in-app shortcut
 	// defaults. The web backend (platform/shortcuts.browser.ts) reads them back
 	// through `settings.getDefault('shortcut.*')` instead of redeclaring them, so
-	// the schema and the backend can never drift.
+	// the schema and the backend can never drift. Values are the readable manual
+	// grammar (`parseManualBinding`): `'space'`, `'c'`, `'ctrl+shift+a'`. The cell
+	// stays `field.string()`, so this is a value re-spelling, not a migration; a
+	// stale logical value (e.g. a stored `' '`) fails the parse and reads as unset.
 	//
 	// Push-to-talk ships unbound in-app: a stray Space-style tap would fire
 	// start+immediate-stop and feed a junk recording to the pipeline, so the safe
@@ -307,7 +314,7 @@ const shortcuts = {
 	),
 	'shortcut.toggleManualRecording': defineKv(
 		nullable(field.string()),
-		(): string | null => ' ',
+		(): string | null => 'space',
 	),
 	// Renamed from `shortcut.cancelManualRecording` (cancel now aborts manual or
 	// VAD capture, so the "manual" qualifier is gone). No migration: pre-release,

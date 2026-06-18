@@ -3,7 +3,7 @@
 **Date**: 2026-06-17
 **Status**: Draft
 **Owner**: Braden
-**Builds on**: `20260616T225034-always-on-actors-over-synced-docs.md` (the vision), `20260530T100000-ai-workflows-consolidated-design.md` (Model 1 / Model 2), `docs/adr/0010-actions-are-the-only-surface-that-crosses-a-process-boundary.md`, `docs/adr/0014-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md`, `docs/adr/0015-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md`
+**Builds on**: `20260616T225034-always-on-actors-over-synced-docs.md` (the vision), `20260530T100000-ai-workflows-consolidated-design.md` (Model 1 / Model 2), `docs/adr/0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md`, `docs/adr/0024-an-always-on-actor-runs-app-semantics-beside-the-app-blind-anchor.md`, `docs/adr/0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md`
 
 This is the **V2.R** deliverable from `20260616T225034-actors-buildout.tracker.md`:
 research only, no product code. It answers three questions the vision spec named
@@ -28,7 +28,7 @@ chat actor already speaks.
   per `20260530T100000-ai-workflows-consolidated-design.md`.
 - **Not Model 1**: Model 1 (the app's typed actions, the bounded predicate-AST +
   transform engine) needs **no** OS sandbox; the action surface is already the
-  capability boundary (ADR-0010). This spec does not touch it.
+  capability boundary (ADR-0021). This spec does not touch it.
 - **Not a decision to build**: this records the chosen shape so that when V2 starts
   it starts from a settled design, not a blank page.
 
@@ -75,7 +75,7 @@ selected by config. [1][2]
 **Adapter shape**: one interface, three operations.
 `provision({ actionSocket, dataMirrorRoot }, { network: 'none', readOnly: true })
 -> handle`; the workload speaks **only** to the action socket (an RPC mirror of the
-same action surface Model 1 uses, per ADR-0010: actions are the only cross-process
+same action surface Model 1 uses, per ADR-0021: actions are the only cross-process
 surface), never a raw fs/net/Y.Doc handle; `dispose()`. Backends:
 `LocalProcessSandbox`, `DockerSandbox`, and a deferred `RemoteSandbox`. Selection is
 policy-driven, exactly like OpenHands' `RUNTIME` switch, so the coding-actor code
@@ -120,7 +120,7 @@ end state that Codex's and Claude Code's vendor lock cannot). [6][9][10]
    (`message_start`/`update`/`end` for assistant text; `tool_execution_start`/
    `update`/`end` for tool-call rows; `turn`/`agent` markers for boundaries) and
    append into the same conversation child-doc transcript the V0 loop writes
-   (assistant `Y.Text` + structured tool-call rows). This reuses ADR-0015's
+   (assistant `Y.Text` + structured tool-call rows). This reuses ADR-0025's
    append-to-`Y.Text`-is-the-wire model verbatim; no SSE. [7]
 2. **Per-tool approval to a durable record**: use pi's in-process
    `beforeToolCall(context, signal) => Promise<{ block, reason } | undefined>`.
@@ -254,7 +254,7 @@ open question O6 for reasoning/tool-call chunks.
 These are load-bearing; the build cannot start clean until they are answered.
 
 - **O1 (the linchpin)**: does the daemon expose a socket-friendly RPC mirror of the
-  action surface today, or does ADR-0010's action boundary need a new transport
+  action surface today, or does ADR-0021's action boundary need a new transport
   (Unix socket / named pipe) so a sandboxed process can reach it without a raw
   Y.Doc/SQLite handle? "Mount only the socket" presumes the socket exists.
 - **O2**: for the local-process backend, how is "only socket + ro mirror" actually
@@ -289,8 +289,8 @@ These are load-bearing; the build cannot start clean until they are answered.
 
 V2 is parallel and independent. It depends on **none** of V0/V1 landing, but two of
 its seams reuse V0/V1 primitives rather than reinventing them: the harness writes
-into the **same** conversation child-doc transcript (ADR-0015, the V0 append loop),
+into the **same** conversation child-doc transcript (ADR-0025, the V0 append loop),
 and the per-tool approval reuses the **V1.3 durable approval record** the doc
-already carries. The sandbox's action socket is the RPC face of the **ADR-0010**
+already carries. The sandbox's action socket is the RPC face of the **ADR-0021**
 action surface Model 1 already uses. So when V2 is greenlit, it composes onto
 settled primitives instead of forking new ones.

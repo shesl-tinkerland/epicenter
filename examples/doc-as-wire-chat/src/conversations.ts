@@ -3,7 +3,7 @@
  * child-doc address grammar. This stands in for the full workspace schema; the
  * point of the demo is the observe loop and the binding, not the table machinery.
  *
- * Each row is one human + one agent, for life (ADR-0015): an immutable `agent`
+ * Each row is one human + one agent, for life (ADR-0025): an immutable `agent`
  * set once at creation. The transcript is a SEPARATE child doc whose guid is
  * DERIVED from the row id (the 4-part grammar from `doc-guid.ts`), so the actor
  * and every client compute the identical address with zero coordination.

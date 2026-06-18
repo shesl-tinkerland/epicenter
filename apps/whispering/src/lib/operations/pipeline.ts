@@ -105,7 +105,7 @@ export async function processRecordingPipeline({
 	// version would land two copies (a clipboard the user might paste mid-polish,
 	// or two cursor pastes), the exact race the deliver-after-polish rule exists to
 	// dodge. Polish is the only thing on the automatic path; there is no
-	// auto-running Recipe. See ADR 0021 and the runtime flow in
+	// auto-running Recipe. See ADR 0029 and the runtime flow in
 	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
 	// Show the floating "Polishing..." HUD only when an AI pass is actually about
 	// to run (not in speed mode), and hand its abort signal to runPolish so the

@@ -1,5 +1,5 @@
 /**
- * The RELAY (ADR-0014): a deliberately dumb, app-blind byte router.
+ * The RELAY (ADR-0024): a deliberately dumb, app-blind byte router.
  *
  * It holds one Y.Doc per room name and forwards opaque Yjs sync frames between
  * the peers connected to that room. It speaks the exact same wire protocol as

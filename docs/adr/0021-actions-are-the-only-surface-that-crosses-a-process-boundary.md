@@ -1,4 +1,4 @@
-# 0010. Actions are the only surface that crosses a process boundary
+# 0021. Actions are the only surface that crosses a process boundary
 
 - **Status:** Accepted
 - **Date:** 2026-06-16

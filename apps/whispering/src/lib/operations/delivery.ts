@@ -5,6 +5,25 @@ import { services } from '$lib/services';
 import { settings } from '$lib/state/settings.svelte';
 
 /**
+ * The output scopes Whispering delivers into. Each has its own
+ * clipboard/cursor/enter toggles under `output.<scope>.*`. Keeping the list in
+ * one place lets delivery and the tap-hold capability derive from the same
+ * source instead of hardcoding the scope names.
+ */
+const OUTPUT_SCOPES = ['transcription', 'recipe'] as const;
+type OutputScope = (typeof OUTPUT_SCOPES)[number];
+
+/**
+ * True when any output scope is set to write at the cursor. Cursor delivery is a
+ * synthetic Cmd/Ctrl+V, so this is exactly when delivery needs the macOS
+ * Accessibility grant, which is the one fact the tap supervisor holds the tap to
+ * track. Call inside a reactive scope to stay live as the toggles change.
+ */
+export function outputWritesToCursor(): boolean {
+	return OUTPUT_SCOPES.some((scope) => settings.get(`output.${scope}.cursor`));
+}
+
+/**
  * Where a transcript originated: a live `recording` or an imported file
  * (`import`). Shapes the success copy and flows in from the pipeline's
  * `deliverySource`.
@@ -69,7 +88,7 @@ async function deliverResult({
 }: {
 	text: string;
 	successCopy: string;
-	settingsScope: 'transcription' | 'recipe';
+	settingsScope: OutputScope;
 	linkedRecording: boolean;
 }) {
 	const recordingsAction = linkedRecording

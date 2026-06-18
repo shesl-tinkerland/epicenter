@@ -33,4 +33,4 @@ You are continuing the "always-on actors over synced docs" buildout. Do ONE slic
 
 ## Whole-effort stop condition
 
-Every V0 and V1 box ticked, and the V2.R research spec written. When that holds, report completion and propose flipping ADR-0014 and ADR-0015 from Proposed to Accepted.
+Every V0 and V1 box ticked, and the V2.R research spec written. When that holds, report completion and propose flipping ADR-0024 and ADR-0025 from Proposed to Accepted.

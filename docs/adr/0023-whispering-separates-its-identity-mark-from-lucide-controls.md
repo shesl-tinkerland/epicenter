@@ -1,4 +1,4 @@
-# 0013. Whispering separates its identity mark from Lucide controls
+# 0023. Whispering separates its identity mark from Lucide controls
 
 - **Status:** Accepted
 - **Date:** 2026-06-16

@@ -1,4 +1,4 @@
-# 0014. An always-on actor runs app semantics beside the app-blind anchor
+# 0024. An always-on actor runs app semantics beside the app-blind anchor
 
 - **Status:** Proposed
 - **Date:** 2026-06-16
@@ -56,7 +56,7 @@ different words on purpose:
 - An **actor** is a running process: the role above that holds a live replica,
   observes, and writes.
 - An **agent** is the durable, configuration-authored *address* a conversation
-  binds to (`AgentId`, [ADR-0015](0015-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md)),
+  binds to (`AgentId`, [ADR-0025](0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-actor.md)),
   and that one or more actors answer *as*.
 
 A laptop daemon is one actor that answers as the agent a user named it;

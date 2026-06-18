@@ -2,7 +2,7 @@
 
 A script is a Bun file that calls a running daemon's actions through `connectDaemonActions`. Both reads and writes default to actions: query actions return typed, strongly-consistent data; mutation actions are the only way to write. There is no `script.ts` recipe to copy. The daemon is the single writer; the script is a short-lived IPC client that holds no Y.Doc.
 
-For bulk, analytical, FTS, or join-heavy reads, drop to the direct-file SQLite materializer (below): one `O(rows)` SQL scan beats N round-trips. That is the escape hatch, not the default. Actions per [ADR-0010](adr/0010-actions-are-the-only-surface-that-crosses-a-process-boundary.md) are the only surface that crosses the process boundary; the SQLite reader is a separate read-only view of the materialized file, not workspace access.
+For bulk, analytical, FTS, or join-heavy reads, drop to the direct-file SQLite materializer (below): one `O(rows)` SQL scan beats N round-trips. That is the escape hatch, not the default. Actions per [ADR-0021](adr/0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md) are the only surface that crosses the process boundary; the SQLite reader is a separate read-only view of the materialized file, not workspace access.
 
 The Epicenter root is the folder that holds `epicenter.config.ts`. That config default-exports one `Mount`; one foreground daemon serves that mount over the root's Unix socket. The CLI addresses actions by their bare key (`epicenter run entries_update`): the daemon serves one mount, so the key alone is unambiguous, and the mount name is just the header `epicenter list` prints. Scripts likewise call actions by their bare keys through `connectDaemonActions`.
 

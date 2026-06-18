@@ -1,4 +1,4 @@
-# 0013. Rust owns the models folder, the webview owns the catalog
+# 0022. Rust owns the models folder, the webview owns the catalog
 
 - **Status:** Accepted
 - **Date:** 2026-06-17

@@ -39,6 +39,12 @@ jobs:
       # runs in spec-execution Phase 4. See scripts/check-doc-hygiene.ts.
       - name: Check doc hygiene
         run: bun run check:doc-hygiene
+      # Rejects floating specs (latest, *, dist-tags) in the bun catalog. A
+      # catalog entry IS the version pin; a floating one reintroduces lockfile
+      # drift that only surfaces as a frozen-install failure here, days later,
+      # on whoever opens the next PR. See scripts/check-catalog-pins.ts.
+      - name: Check catalog pins
+        run: bun run check:catalog-pins
       # The Biome plugin at scripts/biome/c-json-errors.grit rejects ad-hoc
       # c.json({ ... }, 4xx/5xx) error literals as part of `bun run lint:check`
       # above; no separate step is needed. See

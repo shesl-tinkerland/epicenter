@@ -11,7 +11,7 @@
  * The block tells the model the terms are proper nouns and domain terms to keep
  * spelled as written and to map obvious mishearings onto: this is VoiceInk's
  * `<CUSTOM_VOCABULARY>` approach, letting the AI be the matcher with world
- * knowledge no edit-distance algorithm has. See ADR 0021.
+ * knowledge no edit-distance algorithm has. See ADR 0029.
  */
 export function buildSystemPrompt(
 	instructions: string,
@@ -42,7 +42,7 @@ ${terms}
  * Polish-only by design. The shared {@link buildSystemPrompt} stays a pure
  * Dictionary injector because Recipes call it too, and a reshape (an Email recipe
  * adding a greeting) legitimately adds and rewords text. This composer reuses it
- * to append the Dictionary block after the scaffold. See ADR 0021.
+ * to append the Dictionary block after the scaffold. See ADR 0029.
  */
 export function buildPolishSystemPrompt(
 	instructions: string,

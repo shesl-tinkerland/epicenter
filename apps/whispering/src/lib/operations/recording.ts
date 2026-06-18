@@ -76,6 +76,9 @@ export async function startManualRecording() {
 		description: 'Setting up your recording environment...',
 	});
 
+	// Manual owns playback for the whole recording; drop any leftover VAD
+	// per-utterance resume so it cannot fire mid-recording.
+	cancelPendingVadResume();
 	recordingMedia.pause();
 
 	const { data: outcome, error } = await manualRecorder.startRecording();
@@ -184,6 +187,46 @@ export async function cancelRecording() {
 	if (isVadRecordingActive()) await stopVadRecording();
 }
 
+// VAD pauses playback per utterance (the speaking window), not for the whole
+// armed session: music keeps playing while you are armed-and-silent and stops
+// only while you actually speak. A return to listening (speech end or a misfire)
+// schedules a debounced resume so back-to-back utterances do not flutter the
+// music; the next speech start cancels that pending resume. Ending the session
+// resumes immediately. See ADR-0027.
+let vadResumeTimer: ReturnType<typeof setTimeout> | undefined;
+const VAD_RESUME_DELAY_MS = 1500;
+
+function pausePlaybackForSpeech() {
+	clearTimeout(vadResumeTimer);
+	vadResumeTimer = undefined;
+	recordingMedia.pause();
+}
+
+function scheduleResumeAfterSpeech() {
+	clearTimeout(vadResumeTimer);
+	vadResumeTimer = setTimeout(() => {
+		vadResumeTimer = undefined;
+		void recordingMedia.resume();
+	}, VAD_RESUME_DELAY_MS);
+}
+
+/** Resume now and drop any pending debounce: the VAD session is ending. */
+function resumePlaybackForVadEnd() {
+	clearTimeout(vadResumeTimer);
+	vadResumeTimer = undefined;
+	void recordingMedia.resume();
+}
+
+/**
+ * Drop a pending VAD resume without resuming. Used when a manual recording
+ * starts: manual owns playback for its whole window, so a debounce left over
+ * from a prior VAD utterance must not fire and resume music mid-recording.
+ */
+function cancelPendingVadResume() {
+	clearTimeout(vadResumeTimer);
+	vadResumeTimer = undefined;
+}
+
 export async function startVadRecording() {
 	settings.set('recording.trigger', 'vad');
 	// A capture just started, so leave the import overlay if it was open (see
@@ -202,17 +245,20 @@ export async function startVadRecording() {
 		description: 'Your voice activated capture is starting...',
 	});
 
-	recordingMedia.pause();
-
 	const { data: outcome, error } = await vadRecorder.startActiveListening({
 		onLevel: (level) => recordingOverlay.reportLevel(level),
 		onSpeechStart: () => {
+			// Speaking window opened: pause whatever is playing.
+			pausePlaybackForSpeech();
 			report.success({
 				title: 'Speech started',
 				description: 'Recording started. Speak clearly and loudly.',
 			});
 		},
 		onSpeechEnd: async (blob) => {
+			// Speaking window closed: resume after a short debounce so a quick
+			// next utterance does not flutter the music.
+			scheduleResumeAfterSpeech();
 			report.success({
 				title: 'Voice activated speech captured',
 				description: 'Your voice activated speech has been captured.',
@@ -235,10 +281,15 @@ export async function startVadRecording() {
 				durationMs: null,
 			});
 		},
+		onVADMisfire: () => {
+			// False start: schedule the same debounced resume as a real speech
+			// end, so an immediate retry does not flutter the music.
+			scheduleResumeAfterSpeech();
+		},
 	});
 
 	if (error) {
-		void recordingMedia.resume();
+		resumePlaybackForVadEnd();
 		loading.reject({ cause: error });
 		return;
 	}
@@ -265,7 +316,7 @@ export async function stopVadRecording() {
 	});
 	const { data, error } = await vadRecorder.stopActiveListening();
 	if (error) {
-		void recordingMedia.resume();
+		resumePlaybackForVadEnd();
 		loading.reject({ cause: error });
 		return;
 	}
@@ -273,13 +324,15 @@ export async function stopVadRecording() {
 		title: 'Voice activated capture stopped',
 		description: 'Your voice activated capture has been stopped.',
 	};
+	// Disarming ends the session: restore playback now, do not wait on the
+	// per-utterance debounce.
+	resumePlaybackForVadEnd();
 	if (data.status === 'idle') {
 		loading.resolve(stoppedNotice);
 		return;
 	}
 	loading.resolve(stoppedNotice);
 	sound.playSoundIfEnabled('vad-stop');
-	void recordingMedia.resume();
 }
 
 export function toggleVadRecording() {

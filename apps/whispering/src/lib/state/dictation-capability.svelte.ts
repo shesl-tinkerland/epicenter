@@ -111,11 +111,11 @@ function createDictationCapability() {
 			detached = false;
 			const t = tauri;
 			let unlisten: (() => void) | undefined;
-			void t.globalShortcuts.getCapability().then((capability) => {
+			void t.keyboard.getDictationCapability().then((capability) => {
 				if (!detached && status === 'unknown') status = capability;
 			});
-			void t.globalShortcuts
-				.onCapabilityChanged((capability) => {
+			void t.keyboard
+				.onDictationCapabilityChanged((capability) => {
 					status = capability;
 				})
 				.then((fn) => {

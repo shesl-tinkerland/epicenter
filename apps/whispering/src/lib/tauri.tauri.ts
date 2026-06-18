@@ -1,7 +1,7 @@
 /**
  * Tauri-only capability namespace. Everything that requires the Tauri
  * runtime lives in this file: fs, permissions, window, tray,
- * globalShortcuts, autostart. The subset that needs TanStack caching,
+ * keyboard, autostart. The subset that needs TanStack caching,
  * error mapping, or invalidation is exposed in the same shape
  * (no sub-namespace), with each leaf picking one canonical call form.
  *
@@ -255,8 +255,10 @@ async function initTray() {
 	});
 }
 
-// globalShortcuts ---------------------------------------------------
-// Two backends feed one convergence point (`dispatchCommandTrigger`):
+// keyboard ----------------------------------------------------------
+// The desktop keyboard subsystem (mirrors `src-tauri/src/keyboard`): both
+// shortcut tiers, the dictation capability, and chord capture. Two backends
+// feed one convergence point (`dispatchCommandTrigger`):
 //
 //   Tier 0 (default, no permission): `tauri-plugin-global-shortcut`. The
 //     registrar maps each chord binding to an accelerator and registers it; the
@@ -338,7 +340,7 @@ const tray = {
 		}),
 };
 
-const globalShortcuts = {
+const keyboard = {
 	/**
 	 * Register the Tier-0 chord backend (`tauri-plugin-global-shortcut`). Replaces
 	 * the whole set: unregister everything, then register each resolved chord
@@ -387,7 +389,7 @@ const globalShortcuts = {
 	 * supervisor owns the rdev tap's lifecycle and trust gating, so there is no
 	 * `start`: the tap is already running whenever the capability is `active`.
 	 */
-	getCapability: (): Promise<DictationCapability> =>
+	getDictationCapability: (): Promise<DictationCapability> =>
 		commands.getDictationCapability(),
 
 	/**
@@ -396,7 +398,7 @@ const globalShortcuts = {
 	 * `dispatchCommandTrigger`, the single convergence point both trigger
 	 * backends share, so this stays pure transport.
 	 */
-	startListening: async () => {
+	startTriggerDispatch: async () => {
 		const { dispatchCommandTrigger } = await import('$lib/commands');
 		return events.shortcutTriggerEvent.listen(
 			({ payload: { commandId, state } }) =>
@@ -429,7 +431,9 @@ const globalShortcuts = {
 	 * unlisten fn. The supervisor owns the meaning, so the FE just renders the
 	 * value instead of inferring liveness or re-probing the OS.
 	 */
-	onCapabilityChanged: (onChange: (capability: DictationCapability) => void) =>
+	onDictationCapabilityChanged: (
+		onChange: (capability: DictationCapability) => void,
+	) =>
 		events.dictationCapabilityEvent.listen(({ payload }) =>
 			onChange(payload.capability),
 		),
@@ -479,7 +483,7 @@ export const tauriOnly = {
 	fs,
 	permissions,
 	tray,
-	globalShortcuts,
+	keyboard,
 	autostart,
 	media,
 	opener,

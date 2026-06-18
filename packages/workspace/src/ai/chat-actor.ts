@@ -1,6 +1,6 @@
 /**
  * The per-conversation chat actor: the daemon behavior for one hosted transcript
- * child doc (ADR-0014/0015).
+ * child doc (ADR-0024/0025).
  *
  * `attachChatActor` is the backend-agnostic append loop the always-on actor runs
  * over a conversation transcript. It is parameterized by a {@link ChatStream},
@@ -98,7 +98,7 @@ type InFlightGeneration = {
  * exposes only the client's user-message writer, never the assistant one). The
  * returned handle is what a mount's child-doc actor factory yields.
  *
- * Designation (R, ADR-0015) is NOT the actor's concern. The child-doc observe
+ * Designation (R, ADR-0025) is NOT the actor's concern. The child-doc observe
  * loop only ever builds this actor for a conversation bound to this daemon's
  * agent (`row.agent === selfAgentId`); a conversation bound to another agent is
  * never hosted here, so the actor unconditionally answers whatever body it is

@@ -1,5 +1,5 @@
 /**
- * The thin CLIENT (ADR-0014/0015): bind a conversation to an agent, then chat by
+ * The thin CLIENT (ADR-0024/0025): bind a conversation to an agent, then chat by
  * WRITING turns into its transcript child doc and OBSERVING the answer stream in.
  *
  * - Default `AGENT=demo-actor` binds to the running actor, so it answers.

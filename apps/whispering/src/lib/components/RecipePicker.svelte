@@ -16,7 +16,7 @@
 	 * `runRecipeOnClipboard` shortcuts raise over the captured text. Mounted once
 	 * in the app layout; visibility is driven entirely by the `recipePicker` rune.
 	 * Picking a recipe runs it on the captured source and delivers the take. See
-	 * ADR 0021.
+	 * ADR 0029.
 	 */
 
 	async function run(recipe: Recipe) {

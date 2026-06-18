@@ -4,15 +4,15 @@
 	import MicIcon from '@lucide/svelte/icons/mic';
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+	import { type UnlistenFn } from '@tauri-apps/api/event';
 	import { onDestroy, onMount } from 'svelte';
+	import { revealMainWindow } from '$lib/main-window';
 	import {
 		type RecordingOverlayAction,
-		RECORDING_OVERLAY_ACTION,
-		RECORDING_OVERLAY_FOCUS_MAIN,
-		RECORDING_OVERLAY_MIC_LEVEL,
-		RECORDING_OVERLAY_READY,
-		RECORDING_OVERLAY_STATUS,
+		recordingOverlayAction,
+		recordingOverlayMicLevel,
+		recordingOverlayReady,
+		recordingOverlayStatus,
 		type RecordingOverlayStatus,
 	} from '$lib/recording-overlay/events';
 
@@ -54,13 +54,10 @@
 
 	onMount(async () => {
 		unlisteners.push(
-			await listen<RecordingOverlayStatus>(
-				RECORDING_OVERLAY_STATUS,
-				(event) => {
-					status = event.payload;
-				},
-			),
-			await listen<number>(RECORDING_OVERLAY_MIC_LEVEL, (event) => {
+			await recordingOverlayStatus.listen((event) => {
+				status = event.payload;
+			}),
+			await recordingOverlayMicLevel.listen((event) => {
 				const normalized = Math.min(1, Math.sqrt(event.payload) * LEVEL_GAIN);
 				// Exponential smoothing so the bars glide instead of jittering.
 				level = level * 0.6 + normalized * 0.4;
@@ -69,7 +66,7 @@
 		// Tell the main window we are ready so it re-sends the latest status.
 		// Without this handshake the status emitted right after window creation
 		// can land before our listener is attached.
-		await emit(RECORDING_OVERLAY_READY);
+		await recordingOverlayReady.emit();
 	});
 
 	onDestroy(() => {
@@ -80,11 +77,11 @@
 		// Don't let a button click bubble to the pill's focus-main handler:
 		// stop/cancel should only stop/cancel, never reveal the main window.
 		event.stopPropagation();
-		void emit(RECORDING_OVERLAY_ACTION, action);
+		void recordingOverlayAction.emit(action);
 	}
 
 	function focusMainWindow() {
-		void emit(RECORDING_OVERLAY_FOCUS_MAIN);
+		void revealMainWindow.emit({});
 	}
 </script>
 

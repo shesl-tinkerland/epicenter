@@ -124,7 +124,7 @@ C4  Delete the HTTP generation route.                       V1+ (R landed; unblo
     handling and the transitional kickoff, not the cloud answerer).
 
 R   Reframe: "claim" -> "reconcile a targeted turn."  DONE (actorNodeId designation)
-    (DECIDED in ADR-0015, resolves OQ#1; BUILT 2026-06-17)
+    (DECIDED in ADR-0025, resolves OQ#1; BUILT 2026-06-17)
     "Claim" imported a contention model the single-actor design does not have. The
     actor is a RECONCILER (observe -> compute the missing answer -> produce it),
     like the materializers. Designation is DATA, not a race or a global config: the
@@ -244,7 +244,7 @@ D3 (V0.5 GATE) RESOLVED 2026-06-17 by R (option (i)): the daemon now answers onl
             schema like the browser connect(); app registers behavior only (a
             per-body factory, the V0.3 onChange seam); node connector injected
             via nodeMountRuntime().connectChildDoc; loop moved to
-            document/child-doc-actor.ts. ADR-0014/0015 updated. 531 tests green.
+            document/child-doc-actor.ts. ADR-0024/0025 updated. 531 tests green.
 2026-06-17  V0.3 (7acc1043e): filled the conversations.messages actor seam with
             the claim -> stream -> finish loop. onChange reads the transcript,
             claims the unanswered user turn on its idempotent generationId by
@@ -386,7 +386,7 @@ D3 (V0.5 GATE) RESOLVED 2026-06-17 by R (option (i)): the daemon now answers onl
             filters rows to its own node"). The first cut had the child-doc loop host
             EVERY row and the chat actor abstain via an isDesignated thunk, which made
             the app-aware actor do the app-blind anchor's availability job in one code
-            path (ADR-0014 forbids exactly this) and duplicated the actorNodeId ===
+            path (ADR-0024 forbids exactly this) and duplicated the actorNodeId ===
             selfNodeId contract into every app's factory. Now: the loop takes one
             isDesignated(rowId) predicate and reconciles only its node's rows (re-
             designation opens/closes a body reactively, since the loop already
@@ -428,7 +428,7 @@ D3 (V0.5 GATE) RESOLVED 2026-06-17 by R (option (i)): the daemon now answers onl
             privacy invariant (content only ever reaches the one bound agent) and
             free truthful attribution (the bound agent is who was addressed and who
             answered, so no per-message author field and the transcript stays portable
-            with no agent identity). This AFFIRMS ADR-0015's whole-conversation binding
+            with no agent identity). This AFFIRMS ADR-0025's whole-conversation binding
             and its "transcript holds no node identity" seam; what changed is the
             address type (node id -> AgentId) and killing `actorNodeId: null`. Changes:
             new AgentId brand + asAgentId (workspace, exported); MountOptions.agentId
@@ -439,7 +439,7 @@ D3 (V0.5 GATE) RESOLVED 2026-06-17 by R (option (i)): the daemon now answers onl
             to CLOUD_AGENT_ID; ConversationView kickoffUnlessDaemonOwned -> nudgeBoundAgent
             (nudge route iff agent === CLOUD_AGENT_ID). chat-doc/chat-actor/doc-generation
             schemas UNCHANGED (attribution is the row's agent), the tell the collapse was
-            real. ADR-0015 Decision + alternatives updated (per-message rejection now
+            real. ADR-0025 Decision + alternatives updated (per-message rejection now
             grounded in the privacy/DM-model rationale). workspace 552 + server ai 13 green;
             workspace + zhongwen + server typecheck clean. Zhongwen mount sets no agentId
             yet (no configured agent), so the daemon hosts nothing and cloud answers every

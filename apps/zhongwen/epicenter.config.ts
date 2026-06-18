@@ -7,9 +7,9 @@
  * the durable node id under `.epicenter/`, builds the auth-derived session, and
  * opens the mount.
  *
- * The actor (ADR-0014) is the observe loop the mount runs over the
+ * The actor (ADR-0024) is the observe loop the mount runs over the
  * `conversations.messages` transcripts. `agentId: 'zhongwen-home'` is the
- * designation (ADR-0015): the loop hosts exactly the conversations bound to that
+ * designation (ADR-0025): the loop hosts exactly the conversations bound to that
  * catalog agent (`row.agent === selfAgentId`) and answers them over hosted sync,
  * while the browser skips its HTTP kickoff for the same conversations. Bind a
  * conversation to `zhongwen-home` in the app and this daemon is who answers it.

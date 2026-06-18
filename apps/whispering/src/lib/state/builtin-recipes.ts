@@ -10,7 +10,7 @@ import type { Recipe } from '$lib/workspace';
  * Each is a plain {@link Recipe}: a name and one instruction, text in and text
  * out. Built-in ids carry the `builtin:` prefix so they never collide with a
  * user recipe's generated id, and so the library can show them read-only (a user
- * edits a copy, not the shipped original). See ADR 0021.
+ * edits a copy, not the shipped original). See ADR 0029.
  */
 export const BUILTIN_RECIPES: Recipe[] = [
 	{

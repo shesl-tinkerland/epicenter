@@ -4,7 +4,7 @@
  * `zhongwen()` returns the `Mount` that an `epicenter.config.ts`
  * default-exports. Zhongwen has no daemon actions to add and no materializers,
  * so the daemon hosts the root Y.Doc on disk and bridges cloud sync, then runs
- * one child-doc actor: an always-on observe loop (ADR-0014/0015) over the
+ * one child-doc actor: an always-on observe loop (ADR-0024/0025) over the
  * `conversations.messages` transcripts. Registering the field is all the app
  * declares; the table, the guid, and the layout come from the schema. The
  * factory is the behavior seam, and it hands each hosted transcript to
@@ -22,7 +22,7 @@
  * itself observes -> answers -> streams -> finishes and honors the client's
  * durable cancel, all over hosted sync with no HTTP and no duplicate stream.
  *
- * Designation (R, ADR-0015) is the observe loop's concern, not this factory's:
+ * Designation (R, ADR-0025) is the observe loop's concern, not this factory's:
  * the loop builds an actor only for conversations bound to this daemon's agent
  * (`row.agent === selfAgentId`), so the factory supplies behavior alone. The
  * `agentId` option names which catalog agent this daemon answers as (a
@@ -58,7 +58,7 @@ export type ZhongwenMountOptions = {
 	 */
 	baseURL?: string;
 	/**
-	 * The catalog agent this daemon answers as (ADR-0015): a `ZHONGWEN_AGENTS` id
+	 * The catalog agent this daemon answers as (ADR-0025): a `ZHONGWEN_AGENTS` id
 	 * such as `zhongwen-home`. The observe loop then hosts exactly the
 	 * conversations bound to it. Omit it and the daemon hosts nothing.
 	 */

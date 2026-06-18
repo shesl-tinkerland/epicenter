@@ -1,43 +1,32 @@
 import { debounce } from '@epicenter/workspace';
 import { on } from 'svelte/events';
 import type { Key, KeyBinding, Modifier } from '$lib/tauri/commands';
-import { domCodeToKey, isEmptyBinding } from '$lib/utils/key-binding';
+import {
+	domCodeToKey,
+	eventModifiers,
+	isEmptyBinding,
+} from '$lib/utils/key-binding';
 
-const CAPTURE_WINDOW_MS = 300; // Time to wait for additional keys, as in createLocalKeyRecorder.
-
-/**
- * Read the live modifier set from a `KeyboardEvent`'s boolean flags rather than
- * its `.code`, so a chord carries its modifiers no matter which key fired. Fn
- * has no flag (and no `.code`), so a webview capture can never produce an Fn
- * binding: that is exactly why Fn holds belong to the Tier-1 tap, not here.
- */
-function eventModifiers(e: KeyboardEvent): Modifier[] {
-	const modifiers: Modifier[] = [];
-	if (e.ctrlKey) modifiers.push('ctrl');
-	if (e.altKey) modifiers.push('alt');
-	if (e.shiftKey) modifiers.push('shift');
-	if (e.metaKey) modifiers.push('meta');
-	return modifiers;
-}
+const CAPTURE_WINDOW_MS = 300; // Time to wait for additional keys in a combination.
 
 /**
- * The permission-free chord recorder: captures a global gesture straight from
- * the webview's `keydown` stream, with no Accessibility grant and no Tier-1 tap.
- * It can only see what the browser exposes (modifier flags plus a physical
- * `.code`), which is precisely the Tier-0 chord alphabet: one key plus at least
- * one non-Fn modifier. Fn and modifier-only holds are invisible here and stay
- * the tap's job.
+ * The shared physical chord recorder: captures a gesture straight from the
+ * webview's `keydown` stream in physical-key space (modifier flags plus a
+ * physical `.code`), producing a `KeyBinding`. Both shortcut recorders use it for
+ * capture; what they accept differs by policy, not by capture. It can only see
+ * what the browser exposes, so Fn and modifier-only holds are invisible here and
+ * stay the global tap's job (the global recorder switches to the native tap once
+ * Accessibility is granted); the in-app recorder accepts whatever it yields.
  *
- * The completion model mirrors {@link createLocalKeyRecorder}: each new key extends a
- * 300ms window, and the gesture commits when every key releases (immediate) or
- * the window expires (the safety net for the macOS quirk where a key's `keyup`
- * is swallowed while a modifier is still held). `onCapture` receives each
- * captured `KeyBinding`; the recorder then resets and keeps listening, so the
- * owner can refuse a non-chord (a bare key) and let the user try again without
- * re-opening. The owner calls `stop()` once a capture is accepted. Escape is left
- * to bubble; the session owner cancels.
+ * The completion model: each new key extends a 300ms window, and the gesture
+ * commits when every key releases (immediate) or the window expires (the safety
+ * net for the macOS quirk where a key's `keyup` is swallowed while a modifier is
+ * still held). `onCapture` receives each captured `KeyBinding`; the recorder then
+ * resets and keeps listening, so the owner can refuse a binding and let the user
+ * try again without re-opening. The owner calls `stop()` once a capture is
+ * accepted. Escape is left to bubble; the session owner cancels.
  */
-export function createGlobalChordRecorder({
+export function createChordRecorder({
 	onCapture,
 }: {
 	onCapture: (binding: KeyBinding) => void;
@@ -45,8 +34,8 @@ export function createGlobalChordRecorder({
 	// Internal control-flow guard only (the owner tracks its own session state), so
 	// a plain bool, not reactive.
 	let isListening = false;
-	// Accumulated across the capture window, like createLocalKeyRecorder's set union:
-	// the modifiers ever held and the last physical key seen.
+	// Accumulated across the capture window: the modifiers ever held (a combo built
+	// up over several presses) and the last physical key seen.
 	let capturedModifiers: Modifier[] = [];
 	let capturedKey: Key | null = null;
 	// Every physical code currently down (modifiers included), so "all released"
