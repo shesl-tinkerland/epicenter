@@ -1,6 +1,7 @@
 import HomeIcon from '@lucide/svelte/icons/house';
 import ListIcon from '@lucide/svelte/icons/list';
 import SettingsIcon from '@lucide/svelte/icons/settings';
+import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles';
 import type { Component } from 'svelte';
 
 export type NavItem = {
@@ -33,8 +34,12 @@ export const NAV_ITEMS = [
 		icon: ListIcon,
 		isActive: matchesRoute('/recordings'),
 	},
-	// TODO(wave-4): add a "Recipes" nav item once the Recipes library page lands.
-	// The old picker nav item and its route were removed in the ADR 0021 rewrite.
+	{
+		label: 'Recipes',
+		href: '/recipes',
+		icon: WandSparklesIcon,
+		isActive: matchesRoute('/recipes'),
+	},
 	{
 		label: 'Settings',
 		href: '/settings',
