@@ -5,7 +5,7 @@
  *
  * Each row is one human + one agent, for life (ADR-0015): an immutable `agent`
  * set once at creation. The transcript is a SEPARATE child doc whose guid is
- * DERIVED from the row id (the 4-part grammar from `doc-guid.ts`), so the actor
+ * DERIVED from the row id (the 4-part grammar from `doc-guid.ts`), so the reaction
  * and every client compute the identical address with zero coordination.
  */
 
@@ -59,7 +59,7 @@ export function agentOf(doc: Y.Doc, rowId: string): string | undefined {
 /**
  * Derive a conversation's transcript child-doc guid: the canonical 4-part
  * `${workspaceId}.${collection}.${rowId}.${field}` address. The single-owner
- * derivation is why the actor's observe loop and the client opener land on the
+ * derivation is why the reaction's observe loop and the client opener land on the
  * same room.
  */
 export function transcriptGuid(workspaceId: string, rowId: string): string {

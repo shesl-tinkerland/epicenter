@@ -4,7 +4,7 @@
  * (`createGeminiChat` + `chat({ adapter, messages, abortController })`). With no
  * key it falls back to a slow echo so S1-S4 run with zero setup.
  *
- * Swapping real inference in is this one function, not a rewrite: the actor's
+ * Swapping real inference in is this one function, not a rewrite: the reaction's
  * append loop is identical either way (`startStream(messages, signal)`).
  */
 
@@ -25,7 +25,7 @@ const echoStream: ChatStream = async function* (messages, signal) {
 		typeof last?.content === 'string'
 			? last.content
 			: JSON.stringify(last?.content ?? '');
-	const reply = `You said: "${said}". This is the demo actor streaming an echo through the synced doc, one character at a time, slowly enough that you can type /cancel mid-stream to exercise the durable, offline-survivable cancel path.`;
+	const reply = `You said: "${said}". This is the demo reaction streaming an echo through the synced doc, one character at a time, slowly enough that you can type /cancel mid-stream to exercise the durable, offline-survivable cancel path.`;
 	for (const char of reply) {
 		if (signal.aborted) return;
 		yield {

@@ -1,7 +1,7 @@
 /**
- * The ACTOR (ADR-0014/0015), now over the REAL observe loop (S4).
+ * The reaction (ADR-0014/0015), now over the REAL observe loop (S4).
  *
- * It holds the root workspace doc, runs `attachChildDocActor` (the production
+ * It holds the root workspace doc, runs `attachChildDocReactions` (the production
  * loop from `@epicenter/workspace`) over the `conversations` table, and hosts a
  * live transcript replica for EVERY conversation bound to the agent it answers
  * as (`isDesignated: row.agent === SELF_AGENT`). A conversation bound to any
@@ -10,15 +10,15 @@
  * The inference backend is one argument (`startStream`): echo by default, real
  * Gemini when `GEMINI_API_KEY` is set (S5).
  *
- * Run: `bun run src/actor.ts`  (after the relay is up). Set `AGENT` to change
- * which agent this daemon answers as (default `demo-actor`).
+ * Run: `bun run src/reaction.ts`  (after the relay is up). Set `AGENT` to change
+ * which agent this daemon answers as (default `demo-agent`).
  */
 
 import {
-	attachChildDocActor,
+	attachChildDocReactions,
 	type ConnectedChildDoc,
 } from '@epicenter/workspace';
-import { attachChatActor, attachChatTranscript } from '@epicenter/workspace/ai';
+import { attachChatReaction, attachChatTranscript } from '@epicenter/workspace/ai';
 import * as Y from 'yjs';
 import {
 	agentOf,
@@ -31,7 +31,7 @@ import { connectPeer } from './transport';
 
 const WORKSPACE = process.env.ROOM ?? 'epicenter-demo';
 const PORT = process.env.PORT ?? 8787;
-const SELF_AGENT = process.env.AGENT ?? 'demo-actor';
+const SELF_AGENT = process.env.AGENT ?? 'demo-agent';
 const wsUrl = (guid: string) => `ws://localhost:${PORT}/${guid}`;
 
 const startStream = resolveChatStream();
@@ -45,7 +45,7 @@ connectPeer({
 });
 
 // The production observe loop, wired to a relay-backed child-doc connector.
-attachChildDocActor({
+attachChildDocReactions({
 	rootDoc,
 	table: {
 		scan: () => ({
@@ -74,15 +74,15 @@ attachChildDocActor({
 		};
 	},
 	layout: (ydoc) => attachChatTranscript(ydoc),
-	actorFor: ({ ydoc, rowId }) => {
+	reactionFor: ({ ydoc, rowId }) => {
 		console.log(`▸ hosting "${rowId}" (bound to me) — will answer its turns`);
-		return attachChatActor({ ydoc, startStream });
+		return attachChatReaction({ ydoc, startStream });
 	},
 	// The whole binding: host only conversations addressed to the agent I am.
 	isDesignated: (rowId) => agentOf(rootDoc, rowId) === SELF_AGENT,
 });
 
-// Narrate every conversation the actor learns about, designated or not.
+// Narrate every conversation the reaction learns about, designated or not.
 const narrated = new Set<string>();
 observeConversations(rootDoc, () => {
 	for (const conversation of listConversations(rootDoc)) {
@@ -101,5 +101,5 @@ observeConversations(rootDoc, () => {
 });
 
 console.log(
-	`actor up · answering as agent "${SELF_AGENT}" · workspace "${WORKSPACE}"`,
+	`reaction up · answering as agent "${SELF_AGENT}" · workspace "${WORKSPACE}"`,
 );

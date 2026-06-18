@@ -86,7 +86,7 @@ describe('attachChatTranscript', () => {
 			createdAt: 1,
 			generationId: 'a1',
 		});
-		// The server generation actor writes assistant messages via the free
+		// The server generation reaction writes assistant messages via the free
 		// function; the client handle reads them through the same doc.
 		const writer = appendAssistantMessage(doc, { id: 'a1', createdAt: 2 });
 		writer.appendText('answer');

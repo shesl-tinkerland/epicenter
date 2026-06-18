@@ -1,4 +1,4 @@
-export { attachChatActor, type ChatStream } from './chat-actor';
+export { attachChatReaction, type ChatStream } from './chat-reaction';
 export {
 	type AnswerableTurn,
 	appendAssistantMessage,

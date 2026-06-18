@@ -57,12 +57,12 @@ import { assertSafeSegment } from '../shared/safe-segment.js';
 import type { Drainable } from '../shared/types.js';
 import type { AgentId } from './agent-id.js';
 import {
-	attachChildDocActor,
-	type ChildDocActor,
-	type ChildDocActorFactory,
+	attachChildDocReactions,
+	type ChildDocReactions,
+	type ChildDocReactionFactory,
 	type ConnectedChildDoc,
 	type ObservableChildDocLayout,
-} from './child-doc-actor.js';
+} from './child-doc-reactions.js';
 import { type ConnectionConfig, connectDoc } from './connect-doc.js';
 import { docGuid } from './doc-guid.js';
 import { KV_KEY, TableKey } from './keys.js';
@@ -378,8 +378,8 @@ export type MountComposition<TActions extends ActionRegistry> = {
 };
 
 /**
- * The daemon child-doc actors a mount registers, keyed by table then by
- * child-doc field, to a per-body {@link ChildDocActorFactory}. The keys are
+ * The daemon child-doc reactions a mount registers, keyed by table then by
+ * child-doc field, to a per-body {@link ChildDocReactionFactory}. The keys are
  * typed against the schema (only declared tables, and only each table's declared
  * child-doc fields), and each factory's `handle` is the field's declared layout
  * return type. So the app supplies behavior alone: the table, the field's guid
@@ -387,13 +387,13 @@ export type MountComposition<TActions extends ActionRegistry> = {
  * site.
  *
  * Registering a field is what makes the daemon host and observe its bodies; a
- * field left out is opened on demand by browser UI, not held live by the actor.
+ * field left out is opened on demand by browser UI, not held live by the reaction.
  *
  * Only fields whose layout exposes `observe` can be registered: the loop watches
  * each body through it, so a layout without one (e.g. `attachPlainText`) collapses
- * to `never` and the field cannot carry an actor. `attachChatTranscript` does.
+ * to `never` and the field cannot carry an reaction. `attachChatTranscript` does.
  */
-export type MountActors<TTables extends TableDefinitions> = {
+export type MountReactions<TTables extends TableDefinitions> = {
 	[T in keyof TTables]?: TTables[T] extends TableDefinition<
 		any,
 		infer TDecls extends ChildDocDeclarations
@@ -402,7 +402,7 @@ export type MountActors<TTables extends TableDefinitions> = {
 				[F in keyof TDecls]?: ReturnType<LayoutOf<TDecls[F]>> extends {
 					observe(callback: () => void): () => void;
 				}
-					? ChildDocActorFactory<
+					? ChildDocReactionFactory<
 							InferTableRow<TTables[T]>['id'],
 							ReturnType<LayoutOf<TDecls[F]>>
 						>
@@ -415,7 +415,7 @@ export type MountActors<TTables extends TableDefinitions> = {
  * Options for `definition.mount(...)`, the daemon runtime. The mount's display
  * label comes from the definition's `name` (see `defineWorkspace`), so the only
  * per-mount inputs are the sync base URL, the injected node runtime, the
- * optional composer, and the optional child-doc actors.
+ * optional composer, and the optional child-doc reactions.
  *
  * `runtime` is the injected node bag from `nodeMountRuntime()`; `.mount()`
  * itself imports no node module. `compose` is optional: omit it to serve the
@@ -448,13 +448,13 @@ export type MountOptions<
 		context: MountComposeContext<TTables, TKv, TActions>,
 	) => MountComposition<ActionRegistry>;
 	/**
-	 * Register daemon child-doc actors: the always-on observe loops that host a
+	 * Register daemon child-doc reactions: the always-on observe loops that host a
 	 * live replica of a row's child doc and watch it (ADR-0014/0015). Keyed by
 	 * table then field, to a per-body factory. Identity and shape (the table, the
 	 * guid, the layout) come from the schema; the factory supplies only behavior.
-	 * See {@link MountActors}.
+	 * See {@link MountReactions}.
 	 */
-	readonly actors?: MountActors<TTables>;
+	readonly reactions?: MountReactions<TTables>;
 	/**
 	 * The agent identity this daemon answers as (ADR-0015). A conversation row
 	 * names the one agent it is bound to in its `agent` column; the observe loop
@@ -747,15 +747,15 @@ export function defineWorkspace<
 					mountOptions.compose
 						? mountOptions.compose({ workspace, scope })
 						: { actions: workspace.actions };
-				// Schema-driven child-doc actors. The coordinator reads the layout
+				// Schema-driven child-doc reactions. The coordinator reads the layout
 				// and guid deriver from the definition (never re-passed by the app),
-				// so an actor cannot interpret a body with a layout that disagrees
-				// with the schema. Each actor enrolls its own drain. Runs before
+				// so an reaction cannot interpret a body with a layout that disagrees
+				// with the schema. Each reaction enrolls its own drain. Runs before
 				// infrastructure so the loops are observing the root table by the
 				// time sync starts to fill it.
-				if (mountOptions.actors) {
-					connectMountActors({
-						actors: mountOptions.actors,
+				if (mountOptions.reactions) {
+					connectMountReactions({
+						reactions: mountOptions.reactions,
 						workspace,
 						definitions: options.tables,
 						connectBody: runtime.connectChildDoc(ctx, baseURL),
@@ -869,7 +869,7 @@ function connectTableChildDocs<TTableDefinitions extends TableDefinitions>({
 				const bodyDoc = new Y.Doc({ guid, gc: true });
 				// A body is a doc like any other; `connectDoc` is the same wiring the
 				// root uses. No action registry: the body's only writers are the
-				// `attach*` layout and the server generation actor streaming in.
+				// `attach*` layout and the server generation reaction streaming in.
 				const { idb } = connectDoc(bodyDoc, connection);
 				// Recency: a local edit bumps a column on the row. One observer per
 				// shared body Y.Doc (built here, not per `open`), torn down on
@@ -919,30 +919,30 @@ function connectTableChildDocs<TTableDefinitions extends TableDefinitions>({
 }
 
 /**
- * Wire the schema-driven daemon child-doc actors for a mount, the browser-safe
+ * Wire the schema-driven daemon child-doc reactions for a mount, the browser-safe
  * twin of {@link connectTableChildDocs}.
  *
- * For every `(table, field)` the mount registered an actor on, read the field's
+ * For every `(table, field)` the mount registered an reaction on, read the field's
  * layout from the definition and its guid deriver from the workspace's own
- * `.docs` namespace, then run {@link attachChildDocActor} over the injected node
+ * `.docs` namespace, then run {@link attachChildDocReactions} over the injected node
  * `connectBody`. The app supplied only the per-body factory, so identity (the
- * guid) and shape (the layout) stay single-owner: an actor can never read a body
+ * guid) and shape (the layout) stay single-owner: an reaction can never read a body
  * with a layout that disagrees with the schema, the way a hand-passed `layout`
  * would allow.
  *
- * Each actor enrolls its drain through `registerDrain`; its body teardown
- * cascades off the root `ydoc.destroy()` inside {@link attachChildDocActor}, so
+ * Each reaction enrolls its drain through `registerDrain`; its body teardown
+ * cascades off the root `ydoc.destroy()` inside {@link attachChildDocReactions}, so
  * there is no handle to thread back.
  */
-function connectMountActors<TTableDefinitions extends TableDefinitions>({
-	actors,
+function connectMountReactions<TTableDefinitions extends TableDefinitions>({
+	reactions,
 	workspace,
 	definitions,
 	connectBody,
 	selfAgentId,
 	registerDrain,
 }: {
-	actors: MountActors<TTableDefinitions>;
+	reactions: MountReactions<TTableDefinitions>;
 	workspace: Workspace<TTableDefinitions, KvDefinitions, ActionRegistry>;
 	definitions: TTableDefinitions;
 	connectBody: (guid: string) => ConnectedChildDoc;
@@ -952,16 +952,16 @@ function connectMountActors<TTableDefinitions extends TableDefinitions>({
 	 * whose `agent` equals it.
 	 */
 	selfAgentId: AgentId | undefined;
-	registerDrain: (drainable: ChildDocActor) => void;
+	registerDrain: (drainable: ChildDocReactions) => void;
 }): void {
-	// `Object.entries` erases the per-table types the public `MountActors` already
+	// `Object.entries` erases the per-table types the public `MountReactions` already
 	// enforced, so the loop body works in the widened `string`/`unknown` forms and
 	// casts at the schema reads (layout, guid) and the designation read.
-	for (const [collection, fieldActors] of Object.entries(actors) as [
+	for (const [collection, fieldReactions] of Object.entries(reactions) as [
 		string,
-		Record<string, ChildDocActorFactory<string, unknown>> | undefined,
+		Record<string, ChildDocReactionFactory<string, unknown>> | undefined,
 	][]) {
-		if (fieldActors === undefined) continue;
+		if (fieldReactions === undefined) continue;
 		const definition = definitions[collection as keyof TTableDefinitions]!;
 		// One structural view of the connected table: the loop reads its
 		// schema-derived guid derivers, scans/observes its rows, and reads a row's
@@ -976,29 +976,29 @@ function connectMountActors<TTableDefinitions extends TableDefinitions>({
 		};
 		// The designation contract (ADR-0015): a daemon hosts and answers exactly
 		// the rows bound to the agent it answers as. Composed once here, the single
-		// owner of the rule, so an app's actor factory supplies behavior alone. A
+		// owner of the rule, so an app's reaction factory supplies behavior alone. A
 		// daemon with no configured agent (`selfAgentId` undefined) designates
 		// nothing, so every conversation is left to its own bound agent.
 		const isDesignated = (rowId: string): boolean =>
 			selfAgentId !== undefined && table.get(rowId).data?.agent === selfAgentId;
 
-		for (const [field, actorFor] of Object.entries(fieldActors)) {
-			if (actorFor === undefined) continue;
+		for (const [field, reactionFor] of Object.entries(fieldReactions)) {
+			if (reactionFor === undefined) continue;
 			// Layout and guid both come from the schema, never the call site.
 			const declaration = definition.docDecls[field] as ChildDocDeclaration;
 			const layout =
 				typeof declaration === 'function' ? declaration : declaration.layout;
 			const guidEntry = table.docs[field]!;
-			const actor = attachChildDocActor<string, unknown>({
+			const reaction = attachChildDocReactions<string, unknown>({
 				rootDoc: workspace.ydoc,
 				table,
 				guidFor: (rowId) => guidEntry.guid(rowId),
 				connectBody,
 				layout: layout as unknown as ObservableChildDocLayout<unknown>,
-				actorFor,
+				reactionFor,
 				isDesignated,
 			});
-			registerDrain(actor);
+			registerDrain(reaction);
 		}
 	}
 }

@@ -1,5 +1,5 @@
 /**
- * Doc-as-wire generation actor.
+ * Doc-as-wire generation reaction.
  *
  * Streams one assistant turn into a conversation Y.Doc by acting as a sync
  * peer of the room that owns it:
@@ -19,7 +19,7 @@
  *     `cancelled` (kickoff fetch aborted / client disconnected), or
  *     `failed` (provider error, sanitized).
  *
- * The actor never reads room diffs back mid-generation and never touches
+ * The reaction never reads room diffs back mid-generation and never touches
  * any message map it did not create (append-only, single writer per map).
  *
  * Runtime-agnostic: drives any {@link ResolvedRoom} (Durable Object stub in
@@ -118,7 +118,7 @@ export async function runDocGeneration({
 	const messages = readChatDocMessages(replica);
 
 	// The unanswered user turn IS the work queue: its client-minted
-	// `generationId` is the identity the actor reads from the doc, not from an
+	// `generationId` is the identity the reaction reads from the doc, not from an
 	// HTTP body. No user turn (or one synced without a generationId) means there
 	// is nothing valid to answer yet.
 	const latestUserTurn = findLatestUserTurn(messages);
@@ -168,7 +168,7 @@ export async function runDocGeneration({
 			// malformed body, which we never send). Both the rejection and the
 			// Err re-queue the batch so a later flush or the final drain retries
 			// it; sendChain itself must never reject, or drain's await would
-			// throw out of the actor. Yjs updates are idempotent, so resending
+			// throw out of the reaction. Yjs updates are idempotent, so resending
 			// is safe.
 			try {
 				const { error } = await room.sync(body);

@@ -1,9 +1,9 @@
 /**
- * The always-on chat actor, reconciling a transcript over a REAL room.
+ * The always-on chat reaction, reconciling a transcript over a REAL room.
  *
- * Every other actor test drives `onChange` by hand over an in-memory `Y.Doc`
+ * Every other reaction test drives `onChange` by hand over an in-memory `Y.Doc`
  * with no sync. This suite is the missing end-to-end proof: a daemon peer runs
- * `attachChatActor` over a transcript body that is synced through a live
+ * `attachChatReaction` over a transcript body that is synced through a live
  * `createRoomCore` (the same room the Durable Object wraps), and a SEPARATE
  * client peer (the asking device) reads the answer back over that sync. The
  * room core is the relay; the two docs never touch each other directly.
@@ -15,11 +15,11 @@
  *  2. a durable cancel written by another peer stops the answer mid-stream
  *     ("cancel works after a disconnect").
  *
- * The actor here always answers because the daemon's observe loop only ever
+ * The reaction here always answers because the daemon's observe loop only ever
  * builds it for a conversation bound to this daemon's agent (the loop filters by
- * the row's `agent`; see child-doc-actor.test.ts). The D3 single-answerer
+ * the row's `agent`; see child-doc-reactions.test.ts). The D3 single-answerer
  * guarantee is therefore that loop filter plus the browser skipping its HTTP
- * kickoff for daemon-owned conversations, not anything this actor decides, so it
+ * kickoff for daemon-owned conversations, not anything this reaction decides, so it
  * is proven where each half lives, not here.
  *
  * Peer sync is the same RPC model `doc-generation.test.ts` trusts: a peer pushes
@@ -31,12 +31,12 @@ import { describe, expect, test } from 'bun:test';
 import { field } from '@epicenter/field';
 import { encodeSyncRequest } from '@epicenter/sync';
 import {
-	attachChildDocActor,
+	attachChildDocReactions,
 	type ConnectedChildDoc,
 	createWorkspace,
 	defineTable,
 } from '@epicenter/workspace';
-import { attachChatActor, attachChatTranscript } from '@epicenter/workspace/ai';
+import { attachChatReaction, attachChatTranscript } from '@epicenter/workspace/ai';
 import { EventType, type StreamChunk } from '@tanstack/ai';
 import * as Y from 'yjs';
 import type { RoomUpdateLog } from '../room/contracts.js';
@@ -128,24 +128,24 @@ async function pumpUntil(
 }
 
 /**
- * Wire `attachChatActor` to a body and fire `onChange` on every transaction.
+ * Wire `attachChatReaction` to a body and fire `onChange` on every transaction.
  *
- * This stands in for the daemon's observe loop, which builds the actor only for a
- * designated conversation; the actor itself has no designation concept, so the
+ * This stands in for the daemon's observe loop, which builds the reaction only for a
+ * designated conversation; the reaction itself has no designation concept, so the
  * harness just attaches it to the body.
  */
 function attachDaemon(
 	ydoc: Y.Doc,
-	startStream: Parameters<typeof attachChatActor>[0]['startStream'],
+	startStream: Parameters<typeof attachChatReaction>[0]['startStream'],
 ) {
 	const transcript = attachChatTranscript(ydoc);
-	const actor = attachChatActor({ ydoc, startStream });
-	const unobserve = transcript.observe(() => actor.onChange?.());
+	const reaction = attachChatReaction({ ydoc, startStream });
+	const unobserve = transcript.observe(() => reaction.onChange?.());
 	return {
 		transcript,
 		dispose() {
 			unobserve();
-			actor[Symbol.dispose]?.();
+			reaction[Symbol.dispose]?.();
 		},
 	};
 }
@@ -162,7 +162,7 @@ const assistantsFor = (
 // Tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe('chat actor over real room sync', () => {
+describe('chat reaction over real room sync', () => {
 	test('the daemon answers a turn written by another peer, and the reply syncs back', async () => {
 		const core = createRoomCore({ updateLog: createMemoryUpdateLog() });
 
@@ -198,7 +198,7 @@ describe('chat actor over real room sync', () => {
 			text: '你好!',
 			finish: { kind: 'completed' },
 		});
-		// Exactly one answer: the single designated actor did not double-stream.
+		// Exactly one answer: the single designated reaction did not double-stream.
 		expect(assistantsFor(client, 'gen-1')).toHaveLength(1);
 
 		daemon.dispose();
@@ -260,11 +260,11 @@ describe('chat actor over real room sync', () => {
 	// Test 3: designation over real sync (the V0 "0 duplicate streams" claim in
 	// the real composition). Tests 1-2 prove a single daemon answers and honors a
 	// cancel; neither exercises designation, because the harness attaches the
-	// actor straight to a body. This one runs the REAL observe loop
-	// (`attachChildDocActor`) over a table of two conversations bound to two
+	// reaction straight to a body. This one runs the REAL observe loop
+	// (`attachChildDocReactions`) over a table of two conversations bound to two
 	// different agents, composed exactly as the Zhongwen mount does
 	// (`isDesignated = row.agent === selfAgentId`, `layout = attachChatTranscript`,
-	// `actorFor = attachChatActor`). It proves the daemon answers ONLY the
+	// `reactionFor = attachChatReaction`). It proves the daemon answers ONLY the
 	// conversation bound to its agent and never even opens the other, so a turn for
 	// another agent is left to that agent (the browser's cloud path), never
 	// double-answered here.
@@ -319,7 +319,7 @@ describe('chat actor over real room sync', () => {
 		// hosted body is a fresh Y.Doc synced through its per-guid core; the set of
 		// opened bodies is the proof of which conversations the loop hosted.
 		const daemonBodies: Y.Doc[] = [];
-		const actor = attachChildDocActor({
+		const reaction = attachChildDocReactions({
 			rootDoc: daemonWs.ydoc,
 			table: daemonWs.tables.conversations,
 			guidFor: daemonWs.tables.conversations.docs.messages.guid,
@@ -332,8 +332,8 @@ describe('chat actor over real room sync', () => {
 				return { ydoc, whenDisposed, dispose: () => ydoc.destroy() };
 			},
 			layout: attachChatTranscript,
-			actorFor: ({ ydoc }) =>
-				attachChatActor({ ydoc, startStream: streamOf('你', '好', '!') }),
+			reactionFor: ({ ydoc }) =>
+				attachChatReaction({ ydoc, startStream: streamOf('你', '好', '!') }),
 			isDesignated: (rowId) =>
 				daemonWs.tables.conversations.get(rowId).data?.agent === SELF_AGENT,
 		});
@@ -387,7 +387,7 @@ describe('chat actor over real room sync', () => {
 		// hosted set is the direct evidence of the single-answerer guarantee.
 		expect(daemonBodies.map((body) => body.guid)).toEqual([homeGuid]);
 
-		actor[Symbol.dispose]();
+		reaction[Symbol.dispose]();
 		daemonWs[Symbol.dispose]();
 		clientWs[Symbol.dispose]();
 		homeClientBody.destroy();

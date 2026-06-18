@@ -39,7 +39,7 @@ import { join } from 'node:path';
 import { createLogger } from 'wellcrafted/logger';
 import * as Y from 'yjs';
 import { attachYjsLog } from '../document/attach-yjs-log.js';
-import type { ConnectedChildDoc } from '../document/child-doc-actor.js';
+import type { ConnectedChildDoc } from '../document/child-doc-reactions.js';
 import {
 	attachGitAutosave,
 	attachMarkdownExport,
@@ -177,7 +177,7 @@ function connectMountChildDoc(
 		ydoc.clientID = hashYDocClientId(ctx.nodeId);
 		const yjsLog = attachYjsLog(ydoc, {
 			filePath: yjsPath(ctx.epicenterRoot, guid),
-			log: createLogger(`${ctx.mount}-actor-log`),
+			log: createLogger(`${ctx.mount}-reaction-log`),
 		});
 		const collaboration = openCollaboration(ydoc, {
 			url: roomWsUrl({
@@ -188,10 +188,10 @@ function connectMountChildDoc(
 			}),
 			openWebSocket: ctx.session.openWebSocket,
 			onReconnectSignal: ctx.session.onReconnectSignal,
-			// A body's writers are the layout and the generation actor, never peer
+			// A body's writers are the layout and the generation reaction, never peer
 			// dispatch, so it publishes no action manifest.
 			actions: {},
-			log: createLogger(`${ctx.mount}-actor-sync`),
+			log: createLogger(`${ctx.mount}-reaction-sync`),
 		});
 		return {
 			ydoc,
@@ -226,7 +226,7 @@ export type NodeMountRuntime = {
 	/**
 	 * Build the node-only per-body connector the schema-driven child-doc observe
 	 * loop uses. The coordinator derives each body's guid and layout from the
-	 * schema, then hands the connector to `attachChildDocActor`; this is the one
+	 * schema, then hands the connector to `attachChildDocReactions`; this is the one
 	 * node dependency that step needs, injected so the coordinator stays
 	 * browser-safe.
 	 */

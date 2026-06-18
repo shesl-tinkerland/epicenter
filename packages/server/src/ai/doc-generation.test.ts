@@ -1,11 +1,11 @@
 /**
- * Doc-as-wire generation actor tests.
+ * Doc-as-wire generation reaction tests.
  *
  * Drives {@link runDocGeneration} against a real `createRoomCore` (the
  * runtime-agnostic room the Durable Object wraps) with fake provider
  * streams. The room core IS the second replica: every assertion about the
  * post-run transcript reads the room's doc back through `getDoc()`, so a
- * passing test proves the actor's incremental flush updates apply cleanly
+ * passing test proves the reaction's incremental flush updates apply cleanly
  * on the receiving side.
  */
 
@@ -46,7 +46,7 @@ function createHarness() {
 	const waited: Promise<unknown>[] = [];
 	return {
 		core,
-		/** The `ResolvedRoom` slice the actor consumes, over the live core. */
+		/** The `ResolvedRoom` slice the reaction consumes, over the live core. */
 		room: {
 			getDoc: async () => core.getDoc(),
 			sync: async (body: Uint8Array) => core.sync(body),
@@ -391,7 +391,7 @@ describe('runDocGeneration', () => {
 		});
 	});
 
-	test('a rejecting room.sync degrades gracefully: the actor resolves, never throws', async () => {
+	test('a rejecting room.sync degrades gracefully: the reaction resolves, never throws', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
 			appendUserMessage(doc, {
@@ -403,7 +403,7 @@ describe('runDocGeneration', () => {
 		);
 
 		// A Durable Object RPC rejects (it does not return Err) on isolate
-		// eviction or transport failure. The actor must swallow it, keep the
+		// eviction or transport failure. The reaction must swallow it, keep the
 		// held-open request alive, and resolve rather than 500 the route.
 		const rejectingRoom = {
 			getDoc: harness.room.getDoc,

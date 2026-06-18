@@ -1,21 +1,21 @@
 /**
- * The child-doc observe loop: the daemon-side ACTOR (ADR-0014) that hosts a live
+ * The child-doc observe loop: the daemon-side reaction (ADR-0014) that hosts a live
  * replica of every conversation bound to the agent THIS daemon answers as and
  * watches it.
  *
  * ADR-0014 splits two roles one device may host but never in one code path: the
  * app-blind ANCHOR/relay stores and routes opaque room bytes for availability
  * (it keeps every conversation reachable while knowing no schema), and the
- * app-aware ACTOR holds a live typed replica of the docs it answers. This loop is
- * the actor, so it reconciles only the conversations bound to its agent
+ * app-aware reaction holds a live typed replica of the docs it answers. This loop is
+ * the reaction, so it reconciles only the conversations bound to its agent
  * (ADR-0015: designation is the row's `agent`). A conversation bound to another
  * agent stays available through the anchor, never hosted here: filtering to the
- * designated set is exactly what keeps the actor out of the anchor's job.
+ * designated set is exactly what keeps the reaction out of the anchor's job.
  *
  * The daemon mount hosts the root Y.Doc on disk and over cloud sync, but a
  * conversation transcript is not a row, it is a separate child doc keyed by the
  * row id (see {@link connectTableChildDocs}, the browser twin that hands the UI
- * `tables.<t>.docs.<field>.open(rowId)`). The actor needs its designated bodies
+ * `tables.<t>.docs.<field>.open(rowId)`). The reaction needs its designated bodies
  * live so it can watch an unanswered turn and stream a reply into it. This is
  * that loop:
  *
@@ -27,7 +27,7 @@
  *    transport-agnostic, so the browser-safe coordinator can call it and a test
  *    drives it with an in-memory connector.
  *  - **observe**: shape each body with the field's declared `layout` and build a
- *    per-body `actor` for it; every transcript transaction calls the actor's
+ *    per-body `reaction` for it; every transcript transaction calls the reaction's
  *    `onChange`. That is the seam V0.3 fills with claim -> stream -> finish.
  *  - **dispose**: a body whose row was removed OR re-designated away from this
  *    node is torn down. On root `ydoc.destroy()` (a daemon shutdown), every
@@ -40,7 +40,7 @@
  *
  * The app declares nothing about identity or shape here: the table, the field's
  * guid deriver, and the layout all come from the schema, exactly as the browser
- * opener derives them. The app supplies only behavior, the per-body `actor`.
+ * opener derives them. The app supplies only behavior, the per-body `reaction`.
  *
  * @module
  */
@@ -50,7 +50,7 @@ import type * as Y from 'yjs';
 import type { Drainable } from '../shared/types.js';
 
 /**
- * A connected child-doc body the actor hosts: a live Y.Doc persisted and synced
+ * A connected child-doc body the reaction hosts: a live Y.Doc persisted and synced
  * by the injected connector. `dispose()` destroys the doc, cascading the
  * connector's own teardown; `whenDisposed` resolves once that teardown settles.
  */
@@ -74,15 +74,15 @@ export type ObservableChildDocLayout<THandle> = (
  * teardown. Both members are optional, so a pure observe-and-host registration
  * is `() => ({})`; V0.3 fills `onChange` with claim -> stream -> finish.
  */
-export type ChildDocActorHandle = {
+export type ChildDocReaction = {
 	/** React to a body change (a new message, a token append, a finish write). */
 	onChange?(): void;
 	/** Clean up when the body is torn down (row removed or shutdown). */
 	[Symbol.dispose]?(): void;
 };
 
-/** Per-body context handed to a {@link ChildDocActorFactory}. */
-export type ChildDocActorContext<TRowId extends string, THandle> = {
+/** Per-body context handed to a {@link ChildDocReactionFactory}. */
+export type ChildDocReactionContext<TRowId extends string, THandle> = {
 	/** The row whose child doc this body is. */
 	readonly rowId: TRowId;
 	/** The body shaped by the field's declared layout. */
@@ -98,11 +98,11 @@ export type ChildDocActorContext<TRowId extends string, THandle> = {
  * loop's concern, not the factory's: it is only ever invoked for a body this
  * node is designated to host, so the behavior it builds always answers.
  */
-export type ChildDocActorFactory<TRowId extends string, THandle> = (
-	context: ChildDocActorContext<TRowId, THandle>,
-) => ChildDocActorHandle;
+export type ChildDocReactionFactory<TRowId extends string, THandle> = (
+	context: ChildDocReactionContext<TRowId, THandle>,
+) => ChildDocReaction;
 
-export type ChildDocActorConfig<TRowId extends string, THandle> = {
+export type ChildDocReactionsConfig<TRowId extends string, THandle> = {
 	/**
 	 * The table whose rows name the child docs to host. Read with `scan()` and
 	 * watched with `observe()`; every change reconciles the open set.
@@ -113,7 +113,7 @@ export type ChildDocActorConfig<TRowId extends string, THandle> = {
 	};
 	/**
 	 * Derive a row's child-doc room address. The field's single-owner guid
-	 * deriver (`tables.<t>.docs.<field>.guid`), so the actor reads a body at the
+	 * deriver (`tables.<t>.docs.<field>.guid`), so the reaction reads a body at the
 	 * same address the browser opener writes it.
 	 */
 	readonly guidFor: (rowId: TRowId) => string;
@@ -122,9 +122,9 @@ export type ChildDocActorConfig<TRowId extends string, THandle> = {
 	/** Shape an opened body into its typed handle (the field's declared layout). */
 	readonly layout: ObservableChildDocLayout<THandle>;
 	/** Build the per-body behavior. The app's only input. */
-	readonly actorFor: ChildDocActorFactory<TRowId, THandle>;
+	readonly reactionFor: ChildDocReactionFactory<TRowId, THandle>;
 	/**
-	 * Whether this daemon hosts (and so answers) a row's child doc. The actor
+	 * Whether this daemon hosts (and so answers) a row's child doc. The reaction
 	 * reconciles only the conversations bound to its agent (ADR-0015: the row's
 	 * `agent` names it); the mount composes this as `row.agent === selfAgentId`.
 	 * Re-evaluated on every table change, so a re-binding opens or closes the body
@@ -140,8 +140,8 @@ export type ChildDocActorConfig<TRowId extends string, THandle> = {
 	readonly log?: Logger;
 };
 
-/** The running actor: a drainable whose teardown awaits every hosted body. */
-export type ChildDocActor = Drainable & {
+/** The running reaction: a drainable whose teardown awaits every hosted body. */
+export type ChildDocReactions = Drainable & {
 	[Symbol.dispose](): void;
 };
 
@@ -153,23 +153,23 @@ export type ChildDocActor = Drainable & {
  * imports no node module. The node-only connector and the schema-driven wiring
  * live in the mount coordinator.
  */
-export function attachChildDocActor<TRowId extends string, THandle>(
-	config: ChildDocActorConfig<TRowId, THandle>,
-): ChildDocActor {
+export function attachChildDocReactions<TRowId extends string, THandle>(
+	config: ChildDocReactionsConfig<TRowId, THandle>,
+): ChildDocReactions {
 	const {
 		table,
 		guidFor,
 		connectBody,
 		layout,
-		actorFor,
+		reactionFor,
 		isDesignated,
 		rootDoc,
 	} = config;
-	const log = config.log ?? createLogger('workspace/child-doc-actor');
+	const log = config.log ?? createLogger('workspace/child-doc-reactions');
 
 	type Hosted = {
 		body: ConnectedChildDoc;
-		actor: ChildDocActorHandle;
+		reaction: ChildDocReaction;
 		unobserve: () => void;
 	};
 	const hosted = new Map<TRowId, Hosted>();
@@ -181,27 +181,27 @@ export function attachChildDocActor<TRowId extends string, THandle>(
 		if (hosted.has(rowId)) return;
 		const body = connectBody(guidFor(rowId));
 		const handle = layout(body.ydoc);
-		const actor = actorFor({ rowId, handle, ydoc: body.ydoc });
-		const unobserve = handle.observe(() => actor.onChange?.());
-		hosted.set(rowId, { body, actor, unobserve });
+		const reaction = reactionFor({ rowId, handle, ydoc: body.ydoc });
+		const unobserve = handle.observe(() => reaction.onChange?.());
+		hosted.set(rowId, { body, reaction, unobserve });
 	}
 
 	function close(rowId: TRowId): void {
 		const entry = hosted.get(rowId);
 		if (entry === undefined) return;
 		hosted.delete(rowId);
-		// Stop firing onChange, let the actor clean up while the doc is still
+		// Stop firing onChange, let the reaction clean up while the doc is still
 		// readable, then destroy the body.
 		entry.unobserve();
-		entry.actor[Symbol.dispose]?.();
+		entry.reaction[Symbol.dispose]?.();
 		entry.body.dispose();
 	}
 
 	function reconcile(): void {
 		if (disposed) return;
 		// Host only the conversations bound to this daemon's agent (ADR-0015); the
-		// rest stay available through the app-blind anchor, not in this actor's
-		// replica set (ADR-0014: actor and anchor are never one code path).
+		// rest stay available through the app-blind anchor, not in this reaction's
+		// replica set (ADR-0014: reaction and anchor are never one code path).
 		const wanted = new Set(
 			table
 				.scan()
@@ -226,7 +226,7 @@ export function attachChildDocActor<TRowId extends string, THandle>(
 		// daemon shutdown cannot drop a body's pending write or socket close.
 		const draining = [...hosted.values()].map((entry) => {
 			entry.unobserve();
-			entry.actor[Symbol.dispose]?.();
+			entry.reaction[Symbol.dispose]?.();
 			entry.body.dispose();
 			return entry.body.whenDisposed;
 		});
@@ -234,13 +234,13 @@ export function attachChildDocActor<TRowId extends string, THandle>(
 		try {
 			await Promise.all(draining);
 		} catch (cause) {
-			log.warn(new Error('child-doc actor body teardown threw', { cause }));
+			log.warn(new Error('child-doc reaction body teardown threw', { cause }));
 		} finally {
 			resolveDisposed();
 		}
 	}
 
-	// Root destroy cascades the actor's teardown, the same way the root's own
+	// Root destroy cascades the reaction's teardown, the same way the root's own
 	// stores and the browser child-doc caches release on `ydoc.destroy()`.
 	rootDoc.once('destroy', () => {
 		void dispose();

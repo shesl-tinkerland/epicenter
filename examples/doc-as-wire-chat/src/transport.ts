@@ -5,7 +5,7 @@
  * describes (the seam an Iroh sidecar would slot under). It speaks the same
  * `@epicenter/sync` protocol as the production client: send STEP1 on open,
  * answer inbound frames with `handleSyncPayload`, and push every local edit as
- * an UPDATE. Both the actor and the client are just peers; this is all either
+ * an UPDATE. Both the reaction and the client are just peers; this is all either
  * of them needs to reach the wire.
  */
 
