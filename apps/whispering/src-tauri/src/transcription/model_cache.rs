@@ -225,15 +225,12 @@ impl ModelCache {
                     Ok(result.text.trim().to_string())
                 })?
             }
-            EngineKind::Moonshine => {
-                let variant = parse_moonshine_variant(&spec.model_name)?;
-                self.with_moonshine(&spec, model_path, variant, |engine| {
-                    let result = engine
-                        .transcribe(&samples, &TranscribeOptions::default())
-                        .map_err(transcription_err)?;
-                    Ok(result.text.trim().to_string())
-                })?
-            }
+            EngineKind::Moonshine => self.with_moonshine(&spec, model_path, |engine| {
+                let result = engine
+                    .transcribe(&samples, &TranscribeOptions::default())
+                    .map_err(transcription_err)?;
+                Ok(result.text.trim().to_string())
+            })?,
         };
 
         info!(
@@ -248,26 +245,78 @@ impl ModelCache {
 
     // ── Engine cache + eviction ───────────────────────────────────────
 
+    /// Make the model for `spec` resident, reusing it if already loaded. This
+    /// is the single load path: both `prewarm` (load only) and `run_loaded`
+    /// (load then infer) go through here, so the model a prewarm warms is
+    /// exactly the one a transcribe runs, with no second resolution to drift.
+    /// The per-engine `(can_reuse, load)` pair lives only here.
+    fn ensure_engine_loaded(
+        &self,
+        spec: &TranscriptionSpec,
+        model_path: PathBuf,
+    ) -> Result<MutexGuard<'_, Cached>, TranscriptionError> {
+        match spec.engine {
+            EngineKind::Whispercpp => self.ensure_loaded(
+                spec,
+                model_path,
+                |e| matches!(e, Engine::Whisper(_)),
+                |path| {
+                    WhisperEngine::load(path)
+                        .map(Engine::Whisper)
+                        .map_err(|e| format!("Failed to load Whisper model: {}", e))
+                },
+            ),
+            EngineKind::Parakeet => self.ensure_loaded(
+                spec,
+                model_path,
+                |e| matches!(e, Engine::Parakeet(_)),
+                |path| {
+                    ParakeetModel::load(path, &Quantization::Int8)
+                        .map(Engine::Parakeet)
+                        .map_err(|e| format!("Failed to load Parakeet model: {}", e))
+                },
+            ),
+            EngineKind::Moonshine => {
+                let variant = parse_moonshine_variant(&spec.model_name)?;
+                self.ensure_loaded(
+                    spec,
+                    model_path,
+                    |e| matches!(e, Engine::Moonshine(_)),
+                    move |path| {
+                        MoonshineModel::load(path, variant, &Quantization::default())
+                            .map(Engine::Moonshine)
+                            .map_err(|e| format!("Failed to load Moonshine model: {}", e))
+                    },
+                )
+            }
+        }
+    }
+
+    /// Load the model for `spec` into the cache without running inference, so
+    /// the next transcribe finds it warm. Idempotent: a no-op when the exact
+    /// model is already resident. Called at capture start (manual record / VAD
+    /// listen) to overlap the cold load with the user's speech. Shares the one
+    /// load path (`ensure_engine_loaded`) with transcribe, and emits the same
+    /// `Loading`/`Ready` lifecycle events, so the model-state UI reflects it.
+    pub fn prewarm(&self, spec: &TranscriptionSpec) -> Result<(), TranscriptionError> {
+        let model_path = self
+            .model_path_for(spec)
+            .map_err(|message| TranscriptionError::ConfigError { message })?;
+        self.touch_activity();
+        let _guard = self.ensure_engine_loaded(spec, model_path)?;
+        Ok(())
+    }
+
     fn with_whisper<T>(
         &self,
         spec: &TranscriptionSpec,
         model_path: PathBuf,
         f: impl FnOnce(&mut WhisperEngine) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
-        self.with_engine(
-            spec,
-            model_path,
-            |e| matches!(e, Engine::Whisper(_)),
-            |path| {
-                WhisperEngine::load(path)
-                    .map(Engine::Whisper)
-                    .map_err(|e| format!("Failed to load Whisper model: {}", e))
-            },
-            |engine| match engine {
-                Engine::Whisper(e) => f(e),
-                _ => unreachable!("can_reuse guarantees Whisper variant"),
-            },
-        )
+        self.run_loaded(spec, model_path, |engine| match engine {
+            Engine::Whisper(e) => f(e),
+            _ => unreachable!("ensure_engine_loaded guarantees Whisper variant"),
+        })
     }
 
     fn with_parakeet<T>(
@@ -276,43 +325,22 @@ impl ModelCache {
         model_path: PathBuf,
         f: impl FnOnce(&mut ParakeetModel) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
-        self.with_engine(
-            spec,
-            model_path,
-            |e| matches!(e, Engine::Parakeet(_)),
-            |path| {
-                ParakeetModel::load(path, &Quantization::Int8)
-                    .map(Engine::Parakeet)
-                    .map_err(|e| format!("Failed to load Parakeet model: {}", e))
-            },
-            |engine| match engine {
-                Engine::Parakeet(e) => f(e),
-                _ => unreachable!("can_reuse guarantees Parakeet variant"),
-            },
-        )
+        self.run_loaded(spec, model_path, |engine| match engine {
+            Engine::Parakeet(e) => f(e),
+            _ => unreachable!("ensure_engine_loaded guarantees Parakeet variant"),
+        })
     }
 
     fn with_moonshine<T>(
         &self,
         spec: &TranscriptionSpec,
         model_path: PathBuf,
-        variant: MoonshineVariant,
         f: impl FnOnce(&mut MoonshineModel) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
-        self.with_engine(
-            spec,
-            model_path,
-            |e| matches!(e, Engine::Moonshine(_)),
-            |path| {
-                MoonshineModel::load(path, variant, &Quantization::default())
-                    .map(Engine::Moonshine)
-                    .map_err(|e| format!("Failed to load Moonshine model: {}", e))
-            },
-            |engine| match engine {
-                Engine::Moonshine(e) => f(e),
-                _ => unreachable!("can_reuse guarantees Moonshine variant"),
-            },
-        )
+        self.run_loaded(spec, model_path, |engine| match engine {
+            Engine::Moonshine(e) => f(e),
+            _ => unreachable!("ensure_engine_loaded guarantees Moonshine variant"),
+        })
     }
 
     /// Hold the cache lock across load. If `(path, identity, engine kind)`
@@ -345,6 +373,13 @@ impl ModelCache {
                     && current_identity == cached.disk_identity
         );
 
+        if reuse {
+            // The falsification benchmark turns on "is the model already
+            // resident?". A warm reuse means the cold-load cost (PR 2's target)
+            // was zero for this transcription.
+            crate::timing_note!("model.load warm-reuse engine={:?}", spec.engine);
+        }
+
         if !reuse {
             let _ = guard.take();
             self.publish(spec, ModelStatus::Loading, |state| {
@@ -359,6 +394,10 @@ impl ModelCache {
                         model_path.display(),
                         elapsed_ms
                     );
+                    // The single largest removable number for short clips; PR 2
+                    // (prewarm) decides whether to hide it under the user's
+                    // speech. Surface it on the unified timing target too.
+                    crate::timing_note!("model.load COLD {elapsed_ms}ms engine={:?}", spec.engine);
                     *guard = Some(CachedEngine {
                         path: model_path,
                         disk_identity: current_identity,
@@ -389,18 +428,18 @@ impl ModelCache {
         Ok(guard)
     }
 
-    /// Hold the cache lock across load and use, emitting semantic inference
-    /// events around the user closure.
-    fn with_engine<T>(
+    /// Run inference on the resident engine for `spec`, loading it first if
+    /// needed (via the shared `ensure_engine_loaded`). Holds the cache lock
+    /// across load and use, emitting semantic inference events around the user
+    /// closure.
+    fn run_loaded<T>(
         &self,
         spec: &TranscriptionSpec,
         model_path: PathBuf,
-        can_reuse: impl Fn(&Engine) -> bool,
-        load: impl FnOnce(&Path) -> Result<Engine, String>,
         use_engine: impl FnOnce(&mut Engine) -> Result<T, TranscriptionError>,
     ) -> Result<T, TranscriptionError> {
         self.touch_activity();
-        let mut guard = self.ensure_loaded(spec, model_path, can_reuse, load)?;
+        let mut guard = self.ensure_engine_loaded(spec, model_path)?;
 
         let engine = &mut guard.as_mut().expect("cache slot populated above").engine;
         self.publish(spec, ModelStatus::Inferring, |state| {
@@ -409,6 +448,7 @@ impl ModelCache {
         let started = Instant::now();
         let result = use_engine(engine);
         let elapsed_ms = started.elapsed().as_millis() as u64;
+        crate::timing_note!("model.inference {elapsed_ms}ms engine={:?}", spec.engine);
         self.touch_activity();
         match &result {
             Ok(_) => {

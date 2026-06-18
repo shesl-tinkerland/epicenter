@@ -16,13 +16,14 @@
 >
 > **Regenerate (deterministic per ref set, lossless):** `bun scripts/generate-spec-history.ts`. The totals track the refs this clone can see; `--all` is deliberate so the timeline recovers specs that only lived on unmerged or deleted branches.
 
-**1257 specs ever** (567 still in tree, 690 removed).
+**1258 specs ever** (567 still in tree, 691 removed).
 
 
 ## 2026
 
 | Date | Spec | State | Path |
 |------|------|-------|------|
+| 2026-06-16 | pause-playback-while-recording | removed | apps/whispering/specs/20260616T180000-pause-playback-while-recording.md |
 | 2026-06-16 | rust-owns-models-folder | removed | apps/whispering/specs/20260616T170000-rust-owns-models-folder.md |
 | 2026-06-16 | settings-registry-and-vault-handoff | removed | specs/20260616T120000-settings-registry-and-vault-handoff.md |
 | 2026-06-16 | production-secret-vault-build | removed | specs/20260616T160000-production-secret-vault-build.md |

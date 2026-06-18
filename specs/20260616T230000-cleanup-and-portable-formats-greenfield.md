@@ -1,16 +1,16 @@
 # Dictation rewrite: Polish, Dictionary, and a portable Recipe library
 
-**Date**: 2026-06-16 (relocked after a design pass; see ADR 0013 Evolution)
+**Date**: 2026-06-16 (relocked after a design pass; see ADR 0021 Evolution)
 **Status**: In Progress (Waves 1-2 of the old two-concept model landed; this is
 the relocked build plan, greenfield, compatibility released, no migration)
 **Owner**: Braden
 **Branch**: `whispering-cleanup-formats-restart`
-**ADR**: [0013](/docs/adr/0013-transformations-split-into-automatic-cleanup-and-a-portable-format-library.md)
+**ADR**: [0021](/docs/adr/0021-replace-transformations-with-a-dictionary-polish-and-a-portable-recipe-library.md)
 (read it first; it carries the why and the rejected alternatives)
 
 ## The locked model
 
-Three nouns, two behaviors. ADR 0013 has the reasoning; this is the shape to
+Three nouns, two behaviors. ADR 0021 has the reasoning; this is the shape to
 build.
 
 - **Dictionary** (`dictionary: string[]`): words Whispering should know.
@@ -172,7 +172,7 @@ Append the Dictionary terms to `transcription.prompt` for models that accept one
 (Whisper, OpenAI); Parakeet ignores it. Small, additive, touches `transcribe.ts`
 and the relevant transcription services.
 
-## Deferred, not v1 (recorded in ADR 0013 with reasons)
+## Deferred, not v1 (recorded in ADR 0021 with reasons)
 
 - A deterministic fuzzy matcher (Levenshtein + Soundex + n-gram) whose one job is
   making the Dictionary work in speed mode.

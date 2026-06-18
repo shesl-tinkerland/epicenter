@@ -1,8 +1,6 @@
 <script lang="ts">
 	import * as Field from '@epicenter/ui/field';
 	import { SettingSwitch } from '$lib/components/settings';
-	import { os } from '#platform/os';
-	import { tauri } from '#platform/tauri';
 </script>
 
 <svelte:head> <title>Sound Settings - Whispering</title> </svelte:head>
@@ -14,23 +12,6 @@
 	</Field.Description>
 	<Field.Separator />
 	<Field.Group>
-		{#if tauri && os.isApple}
-			<Field.Set>
-				<Field.Legend variant="label">Media</Field.Legend>
-				<Field.Description>
-					Pause Music or Spotify while Whispering records.
-				</Field.Description>
-				<Field.Group>
-					<SettingSwitch
-						key="sound.pauseMediaDuringRecording"
-						label="Pause media while recording"
-					/>
-				</Field.Group>
-			</Field.Set>
-
-			<Field.Separator />
-		{/if}
-
 		<Field.Set>
 			<Field.Legend variant="label">Manual Recording Sounds</Field.Legend>
 			<Field.Description>

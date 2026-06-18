@@ -4,13 +4,15 @@
  * Multi-vault state is split three ways, and this file owns only the durable slice.
  * WHICH vault is active lives in the URL (`/vault/[id]`); the LIVE watcher lives in
  * the route component (construct on mount, dispose on destroy). All that is left is
- * WHICH folders are open: a small persisted list of `{ id, path, folderName }` that
- * survives relaunch so the tabs come back. The `id` is opaque and URL-safe so the
- * route can carry it; `/vault/[id]` resolves it back to a `path` via {@link get}.
+ * WHICH vault roots are open: a small persisted list of `{ id, root }` that survives
+ * relaunch so the tabs come back. The `id` is opaque and URL-safe so the route can carry
+ * it; `/vault/[id]` resolves it back to a `root` via {@link get}. The tab LABEL is not
+ * stored: it is `basename(root)`, derived where it renders, so there is no cached copy to
+ * keep in sync with the path.
  *
  * Replaces the old `vaultSession` singleton: where that held ONE `current` vault and
  * drove its lifetime, this holds only the list of tabs and the open/close actions.
- * SvelteKit's router owns everything else, so there is no `Map<id, Vault>`, no
+ * SvelteKit's router owns everything else, so there is no `Map<id, TableHandle>`, no
  * `activeId`, and no manual dispose policy here.
  *
  * Single-context: the list is read once at construction and written on each change,
@@ -22,14 +24,13 @@
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
+import { routes } from '$lib/routes';
 
-/** One open vault as persisted: an opaque id, the absolute folder path, its basename label. */
-export type OpenVault = { id: string; path: string; folderName: string };
+/** One open vault as persisted: an opaque id and the absolute vault-root path. The tab label is
+ *  `basename(root)`, derived at render, not stored. */
+export type OpenVault = { id: string; root: string };
 
 const STORAGE_KEY = 'matter.open-vaults';
-
-/** A folder's basename (the tab label). Per-file paths stay Rust's; this is folder-level. */
-const basename = (path: string) => path.split(/[/\\]/).pop() ?? path;
 
 /** Prompt for a folder; `null` if the dialog was cancelled. */
 async function openFolderDialog(): Promise<string | null> {
@@ -53,8 +54,7 @@ function isOpenVaultList(value: unknown): value is OpenVault[] {
 				typeof entry === 'object' &&
 				entry !== null &&
 				typeof (entry as OpenVault).id === 'string' &&
-				typeof (entry as OpenVault).path === 'string' &&
-				typeof (entry as OpenVault).folderName === 'string',
+				typeof (entry as OpenVault).root === 'string',
 		)
 	);
 }
@@ -81,38 +81,37 @@ function createOpenVaults() {
 	}
 
 	/**
-	 * Open a folder as a tab and navigate to it. Opening is always a user action: the
+	 * Open a vault root as a tab and navigate to it. Opening is always a user action: the
 	 * native picker cannot be triggered from a URL, so this mints the id the URL will
-	 * carry. Reopening a folder already in the list focuses its existing tab instead of
+	 * carry. Reopening a root already in the list focuses its existing tab instead of
 	 * duplicating it (tabs show one at a time and only the active one is live, so a
-	 * second tab on the same folder would be a dead duplicate).
+	 * second tab on the same root would be a dead duplicate).
 	 */
 	async function open(): Promise<void> {
-		const path = await openFolderDialog();
-		if (path === null) return;
-		const existing = vaults.find((vault) => vault.path === path);
+		const root = await openFolderDialog();
+		if (root === null) return;
+		const existing = vaults.find((vault) => vault.root === root);
 		if (existing) {
-			await goto(`/vault/${existing.id}`);
+			await goto(routes.vault(existing.id));
 			return;
 		}
 		// Opaque, URL-safe, collision-free: the URL carries this, not the raw path (paths
 		// contain `/` and special chars that are fragile in a URL).
 		const vault: OpenVault = {
 			id: crypto.randomUUID(),
-			path,
-			folderName: basename(path),
+			root,
 		};
 		vaults = [...vaults, vault];
 		persist();
-		await goto(`/vault/${vault.id}`);
+		await goto(routes.vault(vault.id));
 	}
 
 	/**
 	 * Remove a tab. Navigating away from a closed ACTIVE tab is the caller's job (the
-	 * tab strip's `closeTab` goto()s a neighbor). That is what keeps the invariant "the
-	 * viewed id is always in the list" true: the route's `load` resolves id -> path once
-	 * and is not reactive to this list, so a removal that did NOT navigate would leave a
-	 * now-orphaned vault live until the next navigation.
+	 * tab strip's `closeTab` navigates to a neighbor). That is what keeps the invariant
+	 * "the viewed id is always in the list" true: the route's `load` resolves id -> path
+	 * once and is not reactive to this list, so a removal that did NOT navigate would
+	 * leave a now-orphaned vault live until the next navigation.
 	 */
 	function close(id: string): void {
 		vaults = vaults.filter((vault) => vault.id !== id);

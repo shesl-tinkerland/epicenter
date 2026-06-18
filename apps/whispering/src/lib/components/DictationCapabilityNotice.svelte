@@ -7,6 +7,7 @@
 		accessibilityGuide,
 		openSystemSettings,
 	} from '$lib/components/MacosAccessibilityGuideDialog.svelte';
+	import { clipboardFallback } from '$lib/components/accessibility-feature-copy';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 </script>
 
@@ -30,16 +31,19 @@ branch order is load-bearing: `broken` is caught before the plain untrusted case
 		</Alert.Description>
 	</Alert.Root>
 {:else if dictationCapability.isStale}
-	<!-- A macOS grant that went stale after an update, where toggling does
-	nothing: the fix is remove-and-re-add, so the guide leads. -->
+	<!-- macOS reports Whispering as trusted, but the global tap is not delivering
+	events. The common cause is a grant left stale by an app update, which a
+	remove-and-re-add fixes, so the guide leads. We do not assert that as the only
+	cause: the tap can also stall for reasons re-granting won't touch, so the copy
+	stays honest about what we know (it is not firing) and what usually helps. -->
 	<Alert.Root class="w-full text-left">
 		<TriangleAlertIcon class="size-4" aria-hidden="true" />
-		<Alert.Title>Your global shortcut stopped working</Alert.Title>
+		<Alert.Title>Your global shortcut isn't working</Alert.Title>
 		<Alert.Description>
-			Whispering's macOS Accessibility access went stale after an update, so your
-			global shortcut and paste-back are off. Toggling it won't help: remove
-			Whispering from Accessibility and add it back to restore them. Until then,
-			transcripts go to your clipboard.
+			Whispering appears to have macOS Accessibility, but your global shortcut and
+			paste-back aren't firing. Re-granting access (remove Whispering from
+			Accessibility, then add it back) usually fixes it. Until then, transcripts
+			go to your clipboard.
 		</Alert.Description>
 		<Alert.Action>
 			<Button size="sm" onclick={() => accessibilityGuide.open()}>
@@ -48,15 +52,23 @@ branch order is load-bearing: `broken` is caught before the plain untrusted case
 		</Alert.Action>
 	</Alert.Root>
 {:else if dictationCapability.needsAccessibility}
-	<!-- macOS never granted (broken is handled above): a capability pitch.
-	Open Settings, toggle on. -->
+	<!-- macOS never granted (broken is handled above): an upgrade pitch, not a
+	wall. Dictation already works through the keyboard shortcut and the clipboard;
+	this grant unlocks two ergonomics features. Open Settings, toggle on. -->
 	<Alert.Root class="w-full text-left">
 		<WandSparklesIcon class="size-4" aria-hidden="true" />
-		<Alert.Title>Dictate into any app, hands-free</Alert.Title>
-		<Alert.Description>
-			Open macOS Accessibility settings, then turn on Whispering to start
-			recording with your global shortcut and paste transcripts where you're
-			typing. Until then, transcripts go to your clipboard.
+		<Alert.Title>Hold a key to talk, paste hands-free</Alert.Title>
+		<Alert.Description class="space-y-2">
+			<p>
+				Dictation already works: your shortcut starts recording and the
+				transcript lands on your clipboard. Turn on Whispering in macOS
+				Accessibility to add two upgrades:
+			</p>
+			<ul class="list-disc space-y-1 pl-4">
+				<li>Hold a key to talk: press to record, release to stop.</li>
+				<li>Paste hands-free: transcripts land where you're typing.</li>
+			</ul>
+			<p>{clipboardFallback}</p>
 			<Button
 				variant="link"
 				class="h-auto p-0 text-sm font-normal"

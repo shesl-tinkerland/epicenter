@@ -38,13 +38,13 @@
 		</li>
 		<li>
 			Click on
-			<span class="text-primary font-semibold tracking-tight">🎙️ Whispering</span>
+			<span class="text-primary font-semibold tracking-tight">Whispering</span>
 			and remove it using the minus icon (-).
 		</li>
 		<li>
 			Re-add Whispering by pressing the plus icon (+) and selecting
 			<span class="text-primary font-semibold tracking-tight"
-				>🎙️ Whispering.app</span
+				>Whispering.app</span
 			>.
 		</li>
 	</ol>

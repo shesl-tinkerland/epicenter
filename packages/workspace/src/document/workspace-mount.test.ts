@@ -10,9 +10,13 @@
 
 import { describe, expect, test } from 'bun:test';
 import { field } from '@epicenter/field';
+import * as Y from 'yjs';
+import { attachChatTranscript } from '../ai/index.js';
 import type { SessionMountContext } from '../daemon/define-mount.js';
 import type { NodeMountRuntime } from '../daemon/mount-runtime.js';
 import { defineActions, defineQuery } from '../shared/actions.js';
+import type { AgentId } from './agent-id.js';
+import type { ConnectedChildDoc } from './child-doc-actor.js';
 import { defineTable } from './define-table.js';
 import { defineWorkspace } from './workspace.js';
 
@@ -21,6 +25,13 @@ const demoWorkspace = defineWorkspace({
 	name: 'demo',
 	tables: {
 		items: defineTable({ id: field.string(), label: field.string() }),
+		conversations: defineTable({
+			id: field.string(),
+			title: field.string(),
+			// Designation: the actor loop hosts only rows bound to the agent the
+			// daemon answers as (the mount's `agentId`).
+			agent: field.string<AgentId>(),
+		}).docs({ messages: attachChatTranscript }),
 	},
 	kv: {},
 	actions: ({ tables }) =>
@@ -37,6 +48,8 @@ type AttachSpy = {
 	baseURL?: string;
 	actions?: Record<string, unknown>;
 	materializers?: ReadonlyArray<{ whenDisposed: Promise<void> }>;
+	/** Guids the stub `connectChildDoc` connector was asked to open. */
+	childDocGuids: string[];
 };
 
 /**
@@ -52,6 +65,24 @@ function stubRuntime(spy: AttachSpy): NodeMountRuntime {
 			open: (c: SessionMountContext) => unknown;
 		}) => ({ name: mount.name, open: mount.open }),
 		resolveBaseURL: (explicit?: string) => explicit ?? 'https://hosted.example',
+		// In-memory child-doc connector: record each requested guid and return a
+		// body whose teardown cascades off `ydoc.destroy()`. No disk, no sockets.
+		connectChildDoc:
+			(_ctx: SessionMountContext, _baseURL: string) =>
+			(guid: string): ConnectedChildDoc => {
+				spy.childDocGuids.push(guid);
+				const ydoc = new Y.Doc({ guid, gc: true });
+				const { promise: whenDisposed, resolve } =
+					Promise.withResolvers<void>();
+				ydoc.once('destroy', () => resolve());
+				return {
+					ydoc,
+					whenDisposed,
+					dispose() {
+						ydoc.destroy();
+					},
+				};
+			},
 		attachInfrastructure: (
 			ydoc: { destroy(): void },
 			_ctx: SessionMountContext,
@@ -96,7 +127,7 @@ const open = (mount: { open: (c: SessionMountContext) => unknown }): any =>
 
 describe('definition.mount', () => {
 	test('without compose: serves base actions, no materializers, falls back to hosted URL', () => {
-		const spy: AttachSpy = {};
+		const spy: AttachSpy = { childDocGuids: [] };
 		const mount = demoWorkspace.mount({
 			runtime: stubRuntime(spy),
 		});
@@ -113,7 +144,7 @@ describe('definition.mount', () => {
 	});
 
 	test('with compose: serves the composed action set, tracks materializers', () => {
-		const spy: AttachSpy = {};
+		const spy: AttachSpy = { childDocGuids: [] };
 		const mount = demoWorkspace.mount({
 			baseURL: 'https://explicit.example',
 			runtime: stubRuntime(spy),
@@ -163,5 +194,43 @@ describe('definition.mount', () => {
 		expect(spy.materializers).toHaveLength(2);
 		// The runtime serves exactly what infrastructure was handed.
 		expect(runtime.actions).toBe(spy.actions);
+	});
+
+	test('with actors: hosts child docs at the schema-derived guid, drains the actor', () => {
+		const spy: AttachSpy = { childDocGuids: [] };
+		const mount = demoWorkspace.mount({
+			runtime: stubRuntime(spy),
+			// This daemon answers as the `daemon-agent` agent.
+			agentId: 'daemon-agent' as AgentId,
+			actors: {
+				// The app registers behavior only: no table, guid, or layout passed.
+				conversations: { messages: () => ({}) },
+			},
+		});
+
+		const runtime = open(mount);
+
+		// The actor is registered for ordered teardown even before any row exists.
+		expect(spy.materializers).toHaveLength(1);
+
+		// A row bound to this daemon's agent drives the loop to host its transcript
+		// at the guid the schema derives, the same address the browser opener uses.
+		runtime.tables.conversations.set({
+			id: 'c1',
+			title: 'first',
+			agent: 'daemon-agent' as AgentId,
+		});
+		const expectedGuid = runtime.tables.conversations.docs.messages.guid('c1');
+		expect(spy.childDocGuids).toEqual([expectedGuid]);
+
+		// A row bound to a different agent (the cloud agent) is NOT this daemon's to
+		// answer, so the loop never hosts it: that filter is the daemon half of the
+		// D3 fix.
+		runtime.tables.conversations.set({
+			id: 'c2',
+			title: 'second',
+			agent: 'epicenter-cloud' as AgentId,
+		});
+		expect(spy.childDocGuids).toEqual([expectedGuid]);
 	});
 });

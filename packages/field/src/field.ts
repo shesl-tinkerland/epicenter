@@ -86,6 +86,21 @@ const CLOSED = { additionalProperties: false } as const;
 export const JSON_SCHEMA_KEYWORD = 'x-json-schema';
 
 /**
+ * The `reference` kind's discriminator: a marker keyword whose VALUE is the name of the
+ * table this column points at. Like {@link JSON_SCHEMA_KEYWORD} it is a non-standard
+ * keyword, so `Value.Check` and `Schema.Compile` ignore it: a reference cell validates as a
+ * plain string (the row stem / id), while `recognize` reads the marker to classify the
+ * column as `reference` and to recover its target. The closed scalar metas forbid it via
+ * `additionalProperties:false`, so the marker can only ever land on the `reference` kind,
+ * which is what keeps `reference` mutually exclusive with the bare `string` kind: a plain
+ * string carries no marker (so it is never a reference) and a reference always carries one
+ * (so it is never a bare string). The target resolves WITHIN one substrate (a sibling
+ * Matter folder / a workspace table key); cross-mount links are the `epicenter://` scheme,
+ * not this keyword.
+ */
+export const REFERENCE_KEYWORD = 'x-ref';
+
+/**
  * Bucket 3: ANNOTATIONS. Inert standard metadata, whitelisted into EVERY closed meta
  * (identically, so it can never affect discrimination) so carrying one does not open
  * the shape. Held to the keys with a real authoring path into a field: `title` /
@@ -221,6 +236,26 @@ const FIELDS = {
 			CLOSED,
 		),
 	},
+	reference: {
+		storage: 'TEXT',
+		// A cross-row pointer: a string VALUE (the target row's stem / id) plus the
+		// REFERENCE_KEYWORD marker carrying the target TABLE name. Closed and string-typed,
+		// so it stores, materializes, and value-validates exactly like `string` (the marker
+		// is invisible to `Value.Check`); the REQUIRED marker is the only thing separating it
+		// from `string`, which is what makes the two mutually exclusive (string forbids the
+		// marker via CLOSED, reference requires it). The string refinements ride along so an
+		// upgraded `{type:'string',minLength:1}` field keeps its constraint when it gains the
+		// marker.
+		meta: Type.Object(
+			{
+				type: Type.Literal('string'),
+				[REFERENCE_KEYWORD]: Type.String({ minLength: 1 }),
+				...STRING_REFINE,
+				...ANNOT,
+			},
+			CLOSED,
+		),
+	},
 	multiSelect: {
 		storage: 'TEXT',
 		meta: Type.Object(
@@ -300,6 +335,22 @@ export type FieldOf<K extends Kind> = {
 export type Field = { [K in Kind]: FieldOf<K> }[Kind];
 
 /**
+ * The table a recognized field points at, read from its {@link REFERENCE_KEYWORD} marker,
+ * or `null` when the field is not a reference. The ONE place the marker is read off a
+ * loaded {@link Field}, so every consumer (the row-level validator, a relation widget, a
+ * grid) recovers a reference target the same way instead of re-narrowing the union and
+ * indexing the marker by hand. The `kind === 'reference'` guard narrows `schema` to the
+ * reference meta, whose `[REFERENCE_KEYWORD]` is a required string, so no cast is needed.
+ *
+ * This reads a field AFTER recognition. The schema-level floor in `@epicenter/workspace`
+ * reads the marker off a raw `TSchema` BEFORE recognition (and sees through `nullable`),
+ * a genuinely different input, so the two readers stay separate.
+ */
+export function referenceTargetOf(field: Field): string | null {
+	return field.kind === 'reference' ? field.schema[REFERENCE_KEYWORD] : null;
+}
+
+/**
  * The one classifier: the recognized field (kind + typed schema) whose closed meta
  * matches `schema`, or `null` when `schema` is outside the palette (the rejection lane
  * that degrades a field to raw). One pass over the metas, no gate to forget and no
@@ -350,10 +401,21 @@ export const META_BY_KIND = Object.fromEntries(
  * accept any string. But `uri`, `date`, and `date-time` are TypeBox STANDARD formats,
  * registered as a load side effect of `typebox/format` (which `Schema.Compile` imports),
  * so the bare compile already enforces them.
+ *
+ * A reference VALUE is a pointer to a row by its stem, so the empty string names no row
+ * and is never a valid reference. That non-emptiness is intrinsic to the kind, the way the
+ * marker is already `minLength: 1`, so it holds even when a stored reference omits the
+ * refinement: floor the value's `minLength` at 1 here. Any larger author-set `minLength`
+ * is kept; non-reference schemas compile verbatim. This makes `""` INVALID at the value
+ * check rather than a silently-accepted empty pointer.
  */
 export function compile(
 	schema: Recognized['schema'],
 ): (value: unknown) => boolean {
-	const validator = Schema.Compile(schema);
+	const effective =
+		REFERENCE_KEYWORD in schema
+			? { ...schema, minLength: Math.max(1, schema.minLength ?? 0) }
+			: schema;
+	const validator = Schema.Compile(effective);
 	return (value) => validator.Check(value);
 }

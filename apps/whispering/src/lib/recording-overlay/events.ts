@@ -46,12 +46,12 @@ export const RECORDING_OVERLAY_MIC_LEVEL = 'mic-level';
  * recorder stops, the `polishing` mode keeps the same floating pill on screen
  * while the AI Polish pass runs, so the user sees one continuous surface
  * (recording -> polishing -> gone) in the spot they are already watching. See
- * ADR 0013.
+ * ADR 0021.
  */
 export type RecordingOverlayStatus =
-	| { mode: 'manual'; state: Extract<WhisperingRecordingState, 'RECORDING'> }
-	| { mode: 'vad'; state: Exclude<VadState, 'IDLE'> }
-	| { mode: 'polishing' };
+	| { trigger: 'manual'; state: Extract<WhisperingRecordingState, 'RECORDING'> }
+	| { trigger: 'vad'; state: Exclude<VadState, 'IDLE'> }
+	| { phase: 'polishing' };
 
 /**
  * The control the user invoked from the overlay. `ship-raw` cancels the

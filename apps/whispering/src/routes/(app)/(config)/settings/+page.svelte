@@ -1,11 +1,19 @@
 <script lang="ts">
 	import * as Field from '@epicenter/ui/field';
+	import { Button } from '@epicenter/ui/button';
 	import { Switch } from '@epicenter/ui/switch';
+	import LockIcon from '@lucide/svelte/icons/lock';
 	import { createMutation, createQuery } from '@tanstack/svelte-query';
+	import {
+		clipboardFallback,
+		pasteBack,
+	} from '$lib/components/accessibility-feature-copy';
+	import { openSystemSettings } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { SettingSelect, SettingSwitch } from '$lib/components/settings';
 	import { report } from '$lib/report';
 	import { autostartKeys } from '$lib/tauri/autostart-keys';
 	import { tauri } from '#platform/tauri';
+	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 
 	const retentionItems = [
@@ -93,11 +101,35 @@
 					label="Paste transcript at cursor"
 				/>
 
+				{#if tauri && dictationCapability.isUnavailable}
+					<!-- The toggle stays on and interactive (it records intent), but the
+					paste can't fire without the macOS Accessibility grant. Annotate the
+					current capability inline; offer the grant only when there is one to
+					give (untrusted or stale, not Wayland). -->
+					<div
+						class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+					>
+						<LockIcon class="size-3.5 shrink-0" aria-hidden="true" />
+						<span>{pasteBack} {clipboardFallback}</span>
+						{#if dictationCapability.needsAccessibility}
+							<Button
+								variant="link"
+								class="h-auto p-0 text-sm font-normal"
+								onclick={openSystemSettings}
+							>
+								Open Settings
+							</Button>
+						{/if}
+					</div>
+				{/if}
+
 				{#if tauri && settings.get('output.transcription.cursor')}
-					<SettingSwitch
-						key="output.transcription.enter"
-						label="Press Enter after pasting transcript"
-					/>
+					<div class={dictationCapability.isUnavailable ? 'opacity-50' : ''}>
+						<SettingSwitch
+							key="output.transcription.enter"
+							label="Press Enter after pasting transcript"
+						/>
+					</div>
 				{/if}
 			</Field.Group>
 		</Field.Set>

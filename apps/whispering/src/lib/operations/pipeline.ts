@@ -1,7 +1,10 @@
 import { InstantString } from '@epicenter/field';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
-import { deliverTranscriptionResult } from '$lib/operations/delivery';
+import {
+	deliverTranscriptionResult,
+	type TranscriptionSource,
+} from '$lib/operations/delivery';
 import { polishWillRun, runPolish } from '$lib/operations/run-polish';
 import { sound } from '$lib/operations/sound';
 import { transcribeAndPersist } from '$lib/operations/transcribe';
@@ -11,17 +14,16 @@ import type { RecorderStopResult } from '$lib/services/recorder/types';
 import { polishHud } from '$lib/state/polish-hud.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 
-type DeliverySource = 'recording' | 'upload';
-
 /**
  * Argument shape for the pipeline. The recorder produces a
- * `RecorderStopResult`; the VAD path and file-upload path build the
- * equivalent shape with `kind: 'blob'`.
+ * `RecorderStopResult`; the VAD path and file import path build the
+ * equivalent shape with `kind: 'blob'`. `deliverySource` is forwarded
+ * straight to delivery, so it shares delivery's `TranscriptionSource` type.
  */
 type PipelineInput = {
 	source: RecorderStopResult;
 	durationMs: number | null;
-	deliverySource?: DeliverySource;
+	deliverySource?: TranscriptionSource;
 };
 
 /**
@@ -31,8 +33,10 @@ type PipelineInput = {
  * Audio bytes never live in pipeline state. For cpal sources Rust has
  * already written the durable artifact at
  * `<appDataDir>/recordings/{id}.wav` by the time we get here. For blob
- * sources (navigator MediaRecorder, VAD, file upload) we persist the
+ * sources (navigator MediaRecorder, VAD, file import) we persist the
  * bytes through the recordings blob store, then operate on the id.
+ *
+ * `deliverySource` only shapes the success copy (recording vs file import).
  */
 export async function processRecordingPipeline({
 	source,
@@ -99,7 +103,7 @@ export async function processRecordingPipeline({
 	// deliver once: typing the raw at the cursor and then re-typing the polished
 	// version would double-type, the exact problem the old
 	// transcription/recipe cursor asymmetry existed to dodge. Polish is the only
-	// thing on the automatic path; there is no auto-running Recipe. See ADR 0013
+	// thing on the automatic path; there is no auto-running Recipe. See ADR 0021
 	// and the runtime flow in
 	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
 	// Show the floating "Polishing..." HUD only when an AI pass is actually about

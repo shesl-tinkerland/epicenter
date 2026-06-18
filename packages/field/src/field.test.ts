@@ -21,7 +21,7 @@ import { describe, expect, test } from 'bun:test';
 import { type TSchema, Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { field, jsonValue } from './builders';
-import { KINDS, type Kind, META_BY_KIND, recognize } from './field';
+import { compile, KINDS, type Kind, META_BY_KIND, recognize } from './field';
 import { INSTANT_STRING_PATTERN } from './instant-string';
 
 /**
@@ -55,6 +55,7 @@ const kindOf = (schema: unknown): Kind | null =>
 /** One representative builder call per kind. The convergence proof iterates these. */
 const BUILT: Record<Kind, TSchema> = {
 	string: field.string(),
+	reference: field.reference('pages'),
 	url: field.url(),
 	date: field.date(),
 	instant: field.instant(),
@@ -110,7 +111,7 @@ describe('round-trip: the native enum wire-form', () => {
 // ============================================================================
 
 describe('the palette catalog', () => {
-	test('exactly the twelve kinds, including date, instant, and json', () => {
+	test('exactly the thirteen kinds, including date, instant, json, and reference', () => {
 		const expected: Kind[] = [
 			'boolean',
 			'date',
@@ -120,6 +121,7 @@ describe('the palette catalog', () => {
 			'json',
 			'multiSelect',
 			'number',
+			'reference',
 			'select',
 			'string',
 			'tags',
@@ -127,6 +129,7 @@ describe('the palette catalog', () => {
 		];
 		expect([...KINDS].sort()).toEqual(expected.sort());
 		expect(KINDS).toContain('json');
+		expect(KINDS).toContain('reference');
 	});
 });
 
@@ -137,6 +140,7 @@ describe('the palette catalog', () => {
 /** Canonical at-rest shape per kind: the minimal schema that should recognize as it. */
 const CANONICAL: Record<Kind, unknown> = {
 	string: { type: 'string' },
+	reference: { type: 'string', 'x-ref': 'pages' },
 	url: { type: 'string', format: 'uri' },
 	date: { type: 'string', format: 'date' },
 	instant: {
@@ -274,6 +278,63 @@ describe('json: the marker-discriminated escape kind', () => {
 		expect(countMatches(atRest(schema))).toBe(1);
 		expect(Value.Check(schema, [1, 'x', null, { a: 1 }])).toBe(true);
 		expect(Value.Check(schema, 'not-an-array')).toBe(false);
+	});
+});
+
+describe('reference: the marker-discriminated cross-row pointer', () => {
+	test('field.reference recognizes as reference and carries its target table', () => {
+		const rest = atRest(field.reference('pages')) as Record<string, unknown>;
+		expect(kindOf(rest)).toBe('reference');
+		expect(countMatches(rest)).toBe(1);
+		expect(rest['x-ref']).toBe('pages');
+	});
+
+	test('the marker is what flips a plain string into a reference', () => {
+		// same string shape, no marker -> string; with marker -> reference
+		expect(kindOf({ type: 'string' })).toBe('string');
+		expect(kindOf({ type: 'string', 'x-ref': 'pages' })).toBe('reference');
+	});
+
+	test('a plain string is NOT a reference (the marker is required)', () => {
+		expect(Value.Check(META_BY_KIND.reference, { type: 'string' })).toBe(false);
+	});
+
+	test('the string meta forbids the marker, so the two are mutually exclusive', () => {
+		const s = { type: 'string', 'x-ref': 'pages' };
+		expect(Value.Check(META_BY_KIND.string, s)).toBe(false); // string forbids x-ref
+		expect(countMatches(s)).toBe(1);
+	});
+
+	test('value validation ignores the marker and validates the value as a string', () => {
+		const schema = field.reference('pages', { minLength: 1 });
+		expect(Value.Check(schema, 'become-the-source')).toBe(true);
+		expect(Value.Check(schema, '')).toBe(false); // minLength rides along
+		expect(Value.Check(schema, 42)).toBe(false);
+	});
+
+	test('string refinements ride along without changing the kind', () => {
+		const s = { type: 'string', 'x-ref': 'pages', minLength: 1 };
+		expect(kindOf(s)).toBe('reference');
+		expect(countMatches(s)).toBe(1);
+	});
+
+	test('the compiled value check rejects an empty reference even with no stored minLength', () => {
+		// A reference points at a row by stem, so "" names no row and is never a valid pointer.
+		// The floor is intrinsic to the kind: a bare {type:'string','x-ref':'pages'} (no minLength)
+		// still rejects "" at the value check, so an empty pointer is INVALID, not silently OK.
+		const check = compile(
+			recognize({ type: 'string', 'x-ref': 'pages' })!.schema,
+		);
+		expect(check('become-the-source')).toBe(true);
+		expect(check('')).toBe(false);
+	});
+
+	test('a larger author-set minLength is kept, not lowered to 1', () => {
+		const check = compile(
+			recognize({ type: 'string', 'x-ref': 'pages', minLength: 5 })!.schema,
+		);
+		expect(check('abcd')).toBe(false);
+		expect(check('abcde')).toBe(true);
 	});
 });
 

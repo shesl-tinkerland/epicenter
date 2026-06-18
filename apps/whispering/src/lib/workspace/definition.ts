@@ -13,7 +13,7 @@ import { type TProperties, Type } from 'typebox';
 
 // ── Constant imports ─────────────────────────────────────────────────────────
 
-import { RECORDING_MODES } from '$lib/constants/audio/recording-modes';
+import { RECORDING_TRIGGERS } from '$lib/constants/audio/recording-triggers';
 import { INFERENCE_PROVIDER_IDS } from '$lib/constants/inference';
 import {
 	PROVIDERS,
@@ -75,7 +75,7 @@ const recordings = defineTable({
 	recordedAtZone: field.string<IanaTimeZone>(),
 	// The raw transcript, exactly as the transcriber produced it. Polish layers
 	// correction on top and delivers the polished text, but the raw words stay
-	// here underneath so "show original" is always one click away. See ADR 0013.
+	// here underneath so "show original" is always one click away. See ADR 0021.
 	transcript: field.string(),
 	duration: nullable(field.number()),
 	transcription: nullable(field.json(TranscriptionOutcome)),
@@ -89,7 +89,7 @@ export type Recording = InferTableRow<typeof recordings>;
  * whatever text the host hands it (text in, text out). Recipes are the portable,
  * plural, on-demand reshape library; they know nothing about voice and carry no
  * correction plumbing (that is Polish's job, run once before any Recipe). See
- * ADR 0013.
+ * ADR 0021.
  *
  * Deliberately tiny: no pre/post replacements, no system/user prompt split, no
  * `{{input}}` placeholder, no per-Recipe model or provider (model comes from the
@@ -129,7 +129,6 @@ const sound = {
 	'sound.vadStop': defineKv(field.boolean(), () => true),
 	'sound.transcriptionComplete': defineKv(field.boolean(), () => true),
 	'sound.recipeComplete': defineKv(field.boolean(), () => true),
-	'sound.pauseMediaDuringRecording': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
@@ -142,15 +141,18 @@ const sound = {
  * keep this post-processing behavior out of the `transcription.*` /
  * `completion.*` service namespaces.
  *
- * Cursor default asymmetry (transcription=true, recipe=false): the transcript
- * already types itself at the cursor automatically, so a Recipe the user then
- * picks would double-type if `recipe.cursor` also defaulted true. A user who
- * turns off `transcription.cursor` specifically to let a Recipe be the cursor
- * output can flip the `recipe.cursor` toggle on.
+ * Clipboard is the permission-free default; cursor paste is opt-in. Pasting at
+ * the cursor synthesizes a Cmd/Ctrl+V keystroke (`write_text` -> enigo), and on
+ * macOS injecting keystrokes into another app requires Accessibility. So both
+ * cursor defaults are `false`: out of the box the transcript lands on the
+ * clipboard (no permission, works on first launch) and the user pastes it.
+ * Turning cursor paste on is the deliberate step that asks for Accessibility.
+ * Recipe cursor also stays off so it cannot double-type over a transcription
+ * that already pasted itself once a user turns both on.
  */
 const output = {
 	'output.transcription.clipboard': defineKv(field.boolean(), () => true),
-	'output.transcription.cursor': defineKv(field.boolean(), () => true),
+	'output.transcription.cursor': defineKv(field.boolean(), () => false),
 	'output.transcription.enter': defineKv(field.boolean(), () => false),
 	'output.recipe.clipboard': defineKv(field.boolean(), () => true),
 	'output.recipe.cursor': defineKv(field.boolean(), () => false),
@@ -173,12 +175,20 @@ const dataRetention = {
 	'retention.maxCount': defineKv(field.integer({ minimum: 1 }), () => 100),
 } as const;
 
-/** User's preferred recording mode: manual trigger vs voice activity detection. */
+/**
+ * How the microphone starts capturing: manual trigger vs voice activity
+ * detection. File import is a separate surface, not a trigger, so it is not a
+ * value here.
+ */
 const recording = {
-	'recording.mode': defineKv(
-		field.select(RECORDING_MODES),
+	'recording.trigger': defineKv(
+		field.select(RECORDING_TRIGGERS),
 		() => 'manual' as const,
 	),
+	// Pause system media playback while capturing, resume it when capture ends.
+	// A capture-quality preference (reduce background-audio contamination), so it
+	// roams like the sound toggles even though the pause capability is per-device.
+	'recording.pausePlayback': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
@@ -233,7 +243,7 @@ const DEFAULT_POLISH_INSTRUCTIONS =
  * configured (a runtime gate, not a flag), so a fresh keyless install never pays
  * a surprise cost. Turn `enabled` off for speed mode: the raw transcript ships
  * instantly with no AI call. `instructions` is editable under Advanced. Polish is
- * not a Recipe; it is the base layer every Recipe stands on. See ADR 0013.
+ * not a Recipe; it is the base layer every Recipe stands on. See ADR 0021.
  */
 const polish = {
 	'polish.enabled': defineKv(field.boolean(), () => true),
@@ -248,7 +258,7 @@ const polish = {
  * domain terms ("Kubernetes", "Braden"). Injection-only: the runtime composes
  * these terms into every AI prompt (via `buildSystemPrompt`) and, where the
  * transcription model accepts one, into its `initial_prompt`. It is not
- * find/replace and not an algorithm; the AI is the matcher. See ADR 0013.
+ * find/replace and not an algorithm; the AI is the matcher. See ADR 0021.
  */
 const dictionary = {
 	dictionary: defineKv(Type.Array(Type.String()), (): string[] => []),
@@ -256,7 +266,7 @@ const dictionary = {
 
 /**
  * The single global AI default used for completions: which inference provider
- * and model the Polish pass and every Recipe run against. Per ADR 0013 there is
+ * and model the Polish pass and every Recipe run against. Per ADR 0021 there is
  * no per-Recipe model or provider; this is the one place it lives. API keys and
  * endpoints stay in deviceConfig (local, never synced).
  */

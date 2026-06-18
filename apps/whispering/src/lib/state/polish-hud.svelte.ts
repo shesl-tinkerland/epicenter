@@ -6,7 +6,7 @@
  * desktop) into its polishing state. The module also owns the `AbortController`
  * so the overlay's "ship raw" control (and any future esc binding) can cancel
  * the in-flight completion through `shipRaw()` without threading the controller
- * through component props. See ADR 0013.
+ * through component props. See ADR 0021.
  *
  * Lives outside the pipeline because two different owners read and write it: the
  * pipeline (imperative, begins/ends the pass) and the overlay action handler

@@ -11,7 +11,7 @@ pub use error::TranscriptionError;
 pub use events::{LocalModelState, ModelStateEvent};
 pub use model_cache::ModelCache;
 pub use model_folder::{
-    delete_model_entry, download_model, list_model_entries, resolve_model_file_sizes,
+    delete_model_entry, download_model, list_model_entries, resolve_model_files,
     reveal_models_folder, ModelFolderError,
 };
 pub use model_import::{link_local_model, ModelImportError};
@@ -51,11 +51,36 @@ pub async fn transcribe_recording(
     app_handle: AppHandle,
     model_cache: State<'_, ModelCache>,
 ) -> Result<String, TranscriptionError> {
-    let samples = read_artifact_samples(&app_handle, &recording_id)
-        .map_err(|e| TranscriptionError::AudioReadError { message: e })?;
+    let samples = crate::timing::measure("transcribe.read+decode", || {
+        read_artifact_samples(&app_handle, &recording_id)
+    })
+    .map_err(|e| TranscriptionError::AudioReadError { message: e })?;
 
     let cache = model_cache.inner().clone();
     tauri::async_runtime::spawn_blocking(move || cache.transcribe(samples, spec))
+        .await
+        .map_err(join_err)?
+}
+
+/// Prewarm the local model for `spec` so a following transcribe finds it
+/// warm. The frontend fires this fire-and-forget at capture start (manual
+/// record or VAD listen) for a local provider, overlapping the ~1 s model
+/// load with the user's speech instead of paying it after they stop.
+///
+/// Idempotent and cheap: a no-op when the exact model is already resident.
+/// Shares the one load path with `transcribe_recording` (`ModelCache::prewarm`
+/// and `transcribe` both resolve through `ensure_engine_loaded`), so the model
+/// warmed here is exactly the one transcribe will use, and a mid-recording
+/// model change simply reloads at transcribe time. A failure here is
+/// non-fatal: transcribe will load normally and surface any real error then.
+#[tauri::command]
+#[specta::specta]
+pub async fn prewarm_model(
+    spec: TranscriptionSpec,
+    model_cache: State<'_, ModelCache>,
+) -> Result<(), TranscriptionError> {
+    let cache = model_cache.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || cache.prewarm(&spec))
         .await
         .map_err(join_err)?
 }

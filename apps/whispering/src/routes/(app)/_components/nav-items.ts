@@ -34,7 +34,7 @@ export const NAV_ITEMS = [
 		isActive: matchesRoute('/recordings'),
 	},
 	// TODO(wave-4): add a "Recipes" nav item once the Recipes library page lands.
-	// The old picker nav item and its route were removed in the ADR 0013 rewrite.
+	// The old picker nav item and its route were removed in the ADR 0021 rewrite.
 	{
 		label: 'Settings',
 		href: '/settings',

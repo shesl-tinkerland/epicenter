@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { classifyRow, classifyRows } from './conformance';
-import { validateModel } from './model';
+import { validateContract } from './contract';
 import type { Row } from './parse';
 
 function fields(
 	defs: Record<string, Record<string, unknown>>,
 	optional?: string[],
 ) {
-	const { data, error } = validateModel({ fields: defs, optional });
+	const { data, error } = validateContract({ fields: defs, optional });
 	if (error) throw new Error(error.message);
 	return data.fields;
 }
@@ -101,7 +101,7 @@ describe('classifyRow (per-cell conformance)', () => {
 		expect(nullConformance.rowValid).toBe(true);
 	});
 
-	// "Must have content" is a value constraint, not a model flag: minLength rejects
+	// "Must have content" is a value constraint, not a contract flag: minLength rejects
 	// the empty string, so a blank string fails as INVALID rather than passing OK.
 	test('an empty string is OK for a plain string, INVALID under minLength', () => {
 		const plain = fields({ title: { type: 'string' } });
@@ -131,7 +131,7 @@ describe('classifyRow (per-cell conformance)', () => {
 		expect(c.rowValid).toBe(true); // extras present, row still valid
 	});
 
-	test('an unmodeled field surfaces as an extra, not a field', () => {
+	test('an untyped field surfaces as an extra, not a field', () => {
 		// `note` is a nullable wrapper, outside the palette, so it is not a field.
 		const withUnmodeled = fields({
 			title: { type: 'string' },

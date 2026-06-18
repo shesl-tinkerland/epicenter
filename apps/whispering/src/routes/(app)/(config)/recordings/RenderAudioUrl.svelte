@@ -20,7 +20,7 @@
 {#if audioUrlQuery.data}
 	<audio
 		class="h-8"
-		style="view-transition-name: {viewTransition.recording(id).audio}"
+		style:view-transition-name={viewTransition.recording(id).audio}
 		controls
 		src={audioUrlQuery.data}
 	>

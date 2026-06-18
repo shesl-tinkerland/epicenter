@@ -37,6 +37,9 @@
 
 import { join } from 'node:path';
 import { createLogger } from 'wellcrafted/logger';
+import * as Y from 'yjs';
+import { attachYjsLog } from '../document/attach-yjs-log.js';
+import type { ConnectedChildDoc } from '../document/child-doc-actor.js';
 import {
 	attachGitAutosave,
 	attachMarkdownExport,
@@ -50,9 +53,13 @@ import type {
 } from '../document/materializer/shared.js';
 import type { FtsConfig } from '../document/materializer/sqlite/core.js';
 import { attachBunSqliteMaterializer } from '../document/materializer/sqlite/index.js';
+import { openCollaboration } from '../document/open-collaboration.js';
+import { roomWsUrl } from '../document/transport.js';
 import type { MountComposeScope } from '../document/workspace.js';
-import { sqlitePath } from '../document/workspace-paths.js';
+import { sqlitePath, yjsPath } from '../document/workspace-paths.js';
+import { hashYDocClientId } from '../shared/client-id.js';
 import { attachMountInfrastructure } from './attach-mount-infrastructure.js';
+import type { SessionMountContext } from './define-mount.js';
 import { defineSessionMount } from './define-mount.js';
 
 const HOSTED_API_URL = 'https://api.epicenter.so';
@@ -154,6 +161,54 @@ export function attachMountMarkdown<TTables extends TablesRecord>(
 }
 
 /**
+ * Build the node-only per-body connector the child-doc observe loop needs: open
+ * a body Y.Doc with the deterministic `clientID`, persist its update log to disk,
+ * and join its cloud room. Same recipe {@link attachMountInfrastructure} uses for
+ * the root doc, scoped to one child-doc guid. Injected into the mount coordinator
+ * through {@link NodeMountRuntime.connectChildDoc} so the browser-safe coordinator
+ * never imports this node-only wiring.
+ */
+function connectMountChildDoc(
+	ctx: SessionMountContext,
+	baseURL: string,
+): (guid: string) => ConnectedChildDoc {
+	return (guid: string): ConnectedChildDoc => {
+		const ydoc = new Y.Doc({ guid, gc: true });
+		ydoc.clientID = hashYDocClientId(ctx.nodeId);
+		const yjsLog = attachYjsLog(ydoc, {
+			filePath: yjsPath(ctx.epicenterRoot, guid),
+			log: createLogger(`${ctx.mount}-actor-log`),
+		});
+		const collaboration = openCollaboration(ydoc, {
+			url: roomWsUrl({
+				baseURL,
+				ownerId: ctx.session.ownerId,
+				guid,
+				nodeId: ctx.nodeId,
+			}),
+			openWebSocket: ctx.session.openWebSocket,
+			onReconnectSignal: ctx.session.onReconnectSignal,
+			// A body's writers are the layout and the generation actor, never peer
+			// dispatch, so it publishes no action manifest.
+			actions: {},
+			log: createLogger(`${ctx.mount}-actor-sync`),
+		});
+		return {
+			ydoc,
+			// `ydoc.destroy()` cascades both the log and the collaboration teardown,
+			// the same order `attachMountInfrastructure` relies on for the root doc.
+			whenDisposed: Promise.all([
+				yjsLog.whenDisposed,
+				collaboration.whenDisposed,
+			]).then(() => {}),
+			dispose() {
+				ydoc.destroy();
+			},
+		};
+	};
+}
+
+/**
  * The injected node runtime `WorkspaceDefinition.mount(...)` coordinates. Build
  * one with {@link nodeMountRuntime} and pass it as `runtime`. It holds only the
  * capabilities the browser-safe coordinator itself calls; materializer helpers
@@ -168,6 +223,17 @@ export type NodeMountRuntime = {
 	 * `EPICENTER_API_URL`, then the hosted API.
 	 */
 	resolveBaseURL(explicit?: string): string;
+	/**
+	 * Build the node-only per-body connector the schema-driven child-doc observe
+	 * loop uses. The coordinator derives each body's guid and layout from the
+	 * schema, then hands the connector to `attachChildDocActor`; this is the one
+	 * node dependency that step needs, injected so the coordinator stays
+	 * browser-safe.
+	 */
+	connectChildDoc(
+		ctx: SessionMountContext,
+		baseURL: string,
+	): (guid: string) => ConnectedChildDoc;
 };
 
 /**
@@ -193,5 +259,6 @@ export function nodeMountRuntime(): NodeMountRuntime {
 		attachInfrastructure: attachMountInfrastructure,
 		resolveBaseURL: (explicit) =>
 			explicit || process.env.EPICENTER_API_URL || HOSTED_API_URL,
+		connectChildDoc: connectMountChildDoc,
 	};
 }

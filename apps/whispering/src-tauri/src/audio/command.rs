@@ -32,11 +32,15 @@ pub async fn encode_recording_for_upload(
     app_handle: AppHandle,
 ) -> Result<Response, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let samples = read_artifact_samples(&app_handle, &recording_id)?;
+        let samples = crate::timing::measure("encode.read+decode", || {
+            read_artifact_samples(&app_handle, &recording_id)
+        })?;
         // 16 kHz is the rate every `read_artifact_samples` output lands on
         // (see `recorder::artifact::ARTIFACT_RATE`); pass it through so the
         // encoder's source-to-48k resample sees the right input rate.
-        encode_pcm_to_opus_ogg(samples, 16_000).map_err(|e| e.to_string())
+        crate::timing::measure("encode.opus", || {
+            encode_pcm_to_opus_ogg(samples, 16_000).map_err(|e| e.to_string())
+        })
     })
     .await
     .map_err(|e| format!("background encode task failed: {e}"))?

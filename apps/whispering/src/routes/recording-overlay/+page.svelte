@@ -22,11 +22,12 @@
 	// (the window is hidden before the first status arrives).
 	let status = $state<RecordingOverlayStatus | null>(null);
 
-	const isManual = $derived(status?.mode === 'manual');
-	const isPolishing = $derived(status?.mode === 'polishing');
+	const isManual = $derived(
+		!!status && 'trigger' in status && status.trigger === 'manual',
+	);
+	const isPolishing = $derived(!!status && 'phase' in status);
 	const isSpeaking = $derived(
-		(status?.mode === 'manual' || status?.mode === 'vad') &&
-			status.state === 'SPEECH_DETECTED',
+		!!status && 'trigger' in status && status.state === 'SPEECH_DETECTED',
 	);
 
 	// Live, smoothed mic loudness, 0 (silent) to 1 (loud). Driven by the

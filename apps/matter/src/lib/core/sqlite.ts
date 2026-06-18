@@ -6,7 +6,7 @@
  * typed folder. The live in-app grid stays reactive JS over the projection; this is
  * the external read surface, not the app's query engine.
  *
- * This module is the PURE half: given the model and the classified rows, it produces
+ * This module is the PURE half: given the contract and the classified rows, it produces
  * the schema script (`DROP` + `CREATE`) and the row tuples to insert. The impure half
  * (writing the file) is a thin Tauri command that runs the script and parameter-binds
  * the rows; keeping serialization here makes it unit-testable with no filesystem.
@@ -29,7 +29,8 @@
 
 import { type Field, storageOf } from '@epicenter/field';
 import type { RowConformance } from './conformance';
-import type { MatterModel } from './model';
+import type { Contract } from './contract';
+import { stemOf } from './parse';
 
 /** A SQLite-bindable scalar. Missing cells bind NULL, so values are nullable. */
 export type SqlValue = string | number | null;
@@ -50,22 +51,15 @@ export type SqliteProjection = {
 };
 
 /**
- * Quote a SQL identifier, doubling embedded quotes, so any field name is safe. The ONE
- * identifier-quoting implementation: the vault reuses it to build the WHERE filter's
- * `SELECT` so the table name is never quoted by hand in a second place.
+ * Quote a SQL identifier, doubling embedded quotes, so any field name is safe. The single
+ * quoter for every statement JS assembles: the vault reuses it for the WHERE filter's
+ * `SELECT`, so a table name is never quoted by hand in JS-built SQL. The one place quoting
+ * lives elsewhere is Rust's `drop_mirror_table`, which receives a bare folder name (not
+ * built SQL) and applies the same doubling — trivial and identical, kept in sync by eye.
  */
 export function quoteIdent(name: string): string {
 	return `"${name.replace(/"/g, '""')}"`;
 }
-
-/**
- * The one table in every matter.sqlite. A matter folder is one db file with one table, so
- * the name is a CONSTANT, not the folder's basename: the agent read surface (and the WHERE
- * filter) stays stable no matter what the folder is called or renamed to. The read
- * (`matchingFileNames` in the vault) and the write (`buildDdl`) both name it through this one
- * value, still guarded by `quoteIdent`.
- */
-export const MIRROR_TABLE = 'entries';
 
 /**
  * Serialize one OK (validated) cell value to its storage class. The value passed the
@@ -108,33 +102,36 @@ function serializeInvalid(value: unknown): SqlValue {
 }
 
 /**
- * Build the `CREATE TABLE` for a folder: `file` primary key (the row's basename
- * identity), one NULLABLE column per modeled field (typed by its storage class so the
- * filter coerces by affinity; a missing cell binds NULL), and an `_extra` JSON column
- * (always present) for the unmodeled keys, so an agent can see extras too.
+ * Build the `CREATE TABLE` for a folder: `stem` primary key (the row's reference
+ * identity, basename without `.md` — the exact value a reference field stores, so a
+ * cross-table JOIN matches references directly with no `.md` juggling), one NULLABLE
+ * column per typed field (typed by its storage class so the filter coerces by affinity;
+ * a missing cell binds NULL), and an `_extra` JSON column (always present) for the
+ * untyped keys, so an agent can see extras too.
  */
-function buildDdl(fields: readonly Field[]): string {
+function buildDdl(tableName: string, fields: readonly Field[]): string {
 	const defs = [
-		`${quoteIdent('file')} TEXT PRIMARY KEY`,
+		`${quoteIdent('stem')} TEXT PRIMARY KEY`,
 		...fields.map((c) => `${quoteIdent(c.name)} ${storageOf(c.kind)}`),
 		`${quoteIdent('_extra')} TEXT NOT NULL`,
 	];
-	return `CREATE TABLE ${quoteIdent(MIRROR_TABLE)} (${defs.join(', ')})`;
+	return `CREATE TABLE ${quoteIdent(tableName)} (${defs.join(', ')})`;
 }
 
 /**
- * Project a classified folder into the SQLite artifacts. EVERY readable row is included;
- * each cell is serialized by its conformance state (OK by storage class, INVALID by its
- * raw value, MISSING_REQUIRED/MISSING_OPTIONAL as NULL) and its unmodeled keys are
- * folded into the `_extra` JSON object. The cells are read off
- * `RowConformance.cells`, which classifyRow built in `model.fields` order, so they
- * line up positionally with the columns below.
+ * Project a classified folder into the SQLite artifacts. `tableName` is the SQL table's name
+ * (the folder's name, so a cross-table JOIN can refer to it), quoted through {@link quoteIdent}.
+ * EVERY readable row is included; each cell is serialized by its conformance state (OK by storage
+ * class, INVALID by its raw value, MISSING_REQUIRED/MISSING_OPTIONAL as NULL) and its untyped keys
+ * are folded into the `_extra` JSON object. The cells are read off `RowConformance.cells`, which
+ * classifyRow built in `contract.fields` order, so they line up positionally with the columns below.
  */
 export function projectToSqlite(
-	model: MatterModel,
+	tableName: string,
+	contract: Contract,
 	conformance: readonly RowConformance[],
 ): SqliteProjection {
-	const columns = ['file', ...model.fields.map((c) => c.name), '_extra'];
+	const columns = ['stem', ...contract.fields.map((c) => c.name), '_extra'];
 	const rows = conformance.map((c) => {
 		const cells = c.cells.map((cell): SqlValue => {
 			switch (cell.state) {
@@ -152,18 +149,18 @@ export function projectToSqlite(
 		const extra = JSON.stringify(
 			Object.fromEntries(c.extras.map((e) => [e.key, e.value])),
 		);
-		return [c.row.fileName, ...cells, extra];
+		return [stemOf(c.row.fileName), ...cells, extra];
 	});
 
 	const placeholders = columns.map(() => '?').join(', ');
-	const insert = `INSERT INTO ${quoteIdent(MIRROR_TABLE)} (${columns
+	const insert = `INSERT INTO ${quoteIdent(tableName)} (${columns
 		.map(quoteIdent)
 		.join(', ')}) VALUES (${placeholders})`;
 
 	// DROP + CREATE as one param-less script; the command runs it via execute_batch,
 	// rusqlite's idiom for a multi-statement setup script.
-	const drop = `DROP TABLE IF EXISTS ${quoteIdent(MIRROR_TABLE)}`;
-	const schema = `${drop};\n${buildDdl(model.fields)}`;
+	const drop = `DROP TABLE IF EXISTS ${quoteIdent(tableName)}`;
+	const schema = `${drop};\n${buildDdl(tableName, contract.fields)}`;
 
 	return { schema, insert, rows };
 }

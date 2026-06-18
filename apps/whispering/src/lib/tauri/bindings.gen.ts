@@ -103,6 +103,23 @@ export const commands = {
 			__TAURI_INVOKE('transcribe_recording', { recordingId, spec }),
 		),
 	/**
+	 *  Prewarm the local model for `spec` so a following transcribe finds it
+	 *  warm. The frontend fires this fire-and-forget at capture start (manual
+	 *  record or VAD listen) for a local provider, overlapping the ~1 s model
+	 *  load with the user's speech instead of paying it after they stop.
+	 *
+	 *  Idempotent and cheap: a no-op when the exact model is already resident.
+	 *  Shares the one load path with `transcribe_recording` (`ModelCache::prewarm`
+	 *  and `transcribe` both resolve through `ensure_engine_loaded`), so the model
+	 *  warmed here is exactly the one transcribe will use, and a mid-recording
+	 *  model change simply reloads at transcribe time. A failure here is
+	 *  non-fatal: transcribe will load normally and surface any real error then.
+	 */
+	prewarmModel: (spec: TranscriptionSpec) =>
+		typedError<null, TranscriptionError>(
+			__TAURI_INVOKE('prewarm_model', { spec }),
+		),
+	/**
 	 *  Open macOS Accessibility settings.
 	 *
 	 *  This is intentionally a fixed command instead of a general command
@@ -161,16 +178,30 @@ export const commands = {
 			__TAURI_INVOKE('delete_model_entry', { engine, name }),
 		),
 	/**
-	 *  Resolve an entry **through any symlink** and return the size of each file, or
-	 *  `None` for a missing/unreadable one. The catalog-size comparison stays in JS
-	 *  (the 90% threshold). An empty `filenames` means the entry is itself the file
-	 *  (Whisper) and returns one element; otherwise one element per filename
-	 *  (directory engines). A dead link stats to `None`, so a linked-but-broken
-	 *  model reads as not installed.
+	 *  Resolve an entry **through any symlink** and report each expected file's size
+	 *  and completeness verdict. The webview passes the expected catalog sizes (it
+	 *  owns the catalog); the 90% completeness rule lives here next to the stat, so
+	 *  "what counts as a complete file on disk" has one owner shared with the
+	 *  download integrity check (`is_size_complete`). An empty `filenames` means the
+	 *  entry is itself the file (Whisper) and returns one element checked against
+	 *  `expected_sizes[0]`; otherwise one element per filename (directory engines),
+	 *  each checked against the aligned `expected_sizes`. A dead link reports
+	 *  `size: None, complete: false`, so a linked-but-broken model reads as not
+	 *  installed.
 	 */
-	resolveModelFileSizes: (engine: Engine, name: string, filenames: string[]) =>
-		typedError<(number | null)[], ModelFolderError>(
-			__TAURI_INVOKE('resolve_model_file_sizes', { engine, name, filenames }),
+	resolveModelFiles: (
+		engine: Engine,
+		name: string,
+		filenames: string[],
+		expectedSizes: (number | null)[],
+	) =>
+		typedError<ModelFileStatus[], ModelFolderError>(
+			__TAURI_INVOKE('resolve_model_files', {
+				engine,
+				name,
+				filenames,
+				expectedSizes,
+			}),
 		),
 	/**
 	 *  Download a model into its engine folder, cancelable via
@@ -213,14 +244,22 @@ export const commands = {
 	 */
 	cancelDownload: (downloadId: string) =>
 		__TAURI_INVOKE<void>('cancel_download', { downloadId }),
-	pauseActiveMedia: () =>
-		typedError<PauseActiveMediaOutcome, string>(
-			__TAURI_INVOKE('pause_active_media'),
-		),
-	resumeMedia: (players: MediaPlayer[]) =>
-		typedError<MediaControlFailure[], string>(
-			__TAURI_INVOKE('resume_media', { players }),
-		),
+	/**
+	 *  Pause every system media session currently playing. Returns one opaque token
+	 *  per session paused, to hand back to `resume_playback`. Pausing is gated to
+	 *  never *start* playback: only sessions observed playing are touched, and the
+	 *  dedicated pause command (never a play/pause toggle) is sent.
+	 */
+	pausePlayback: () =>
+		typedError<string[], string>(__TAURI_INVOKE('pause_playback')),
+	/**
+	 *  Resume the sessions named by `sessions`, which must be tokens returned by a
+	 *  prior `pause_playback`. A session that vanished, was already resumed by the
+	 *  user, or can't be resumed is silently skipped. Safety rule: we only ever send
+	 *  *play* to a session we personally paused.
+	 */
+	resumePlayback: (sessions: string[]) =>
+		typedError<null, string>(__TAURI_INVOKE('resume_playback', { sessions })),
 	/**
 	 *  Replace the full set of registered global shortcuts. The FE computes the
 	 *  complete list from device-config and pushes it on startup and on every
@@ -230,6 +269,15 @@ export const commands = {
 	 */
 	setKeyboardShortcuts: (bindings: CommandBinding[]) =>
 		__TAURI_INVOKE<void>('set_keyboard_shortcuts', { bindings }),
+	/**
+	 *  Tell the keyboard supervisor whether auto-paste-at-cursor is enabled. Paste
+	 *  writes a synthetic Cmd/Ctrl+V through the same macOS Accessibility grant the
+	 *  tap reads through, so the supervisor holds the tap whenever paste is on (even
+	 *  with no binding) to track that grant and surface the notice when it is
+	 *  missing. The FE pushes this on startup and whenever the output settings change.
+	 */
+	setAutoPasteEnabled: (enabled: boolean) =>
+		__TAURI_INVOKE<void>('set_auto_paste_enabled', { enabled }),
 	/**
 	 *  Enter or leave binding-capture mode for the settings recorder. While
 	 *  capturing, the listener emits the held combo as a `ShortcutCaptureEvent`
@@ -299,6 +347,13 @@ export type DictationCapability =
 	 *  receives no events). Terminal for the session.
 	 */
 	| 'unsupported'
+	/**
+	 *  No bound shortcut needs the tap (no Fn or modifier-only binding), so it is
+	 *  deliberately not running and no Accessibility is touched. This is the
+	 *  permission-free floor: chords go through the global-shortcut plugin and
+	 *  the tap stays dormant until the user opts into a binding that needs it.
+	 */
+	| 'inactive'
 	/**
 	 *  macOS Accessibility is not granted. The tap is not running; turning
 	 *  Whispering on in System Settings unlocks it.
@@ -474,14 +529,6 @@ export type LocalModelState = {
 	status: ModelStatus;
 };
 
-export type MediaControlFailure = {
-	player: MediaPlayer;
-	message: string;
-	permissionDenied: boolean;
-};
-
-export type MediaPlayer = 'music' | 'spotify';
-
 /**  One selectable entry in an engine's models folder. */
 export type ModelEntry = {
 	/**  File or directory name inside the engine's models folder. */
@@ -506,6 +553,26 @@ export type ModelFileDownload = {
 	filename: string;
 	/**  Catalog size in bytes; the integrity check and progress total use it. */
 	sizeBytes: number | null;
+};
+
+/**
+ *  One file's presence and completeness in a model entry, resolved through any
+ *  symlink. The webview supplies expected catalog sizes and reads back both the
+ *  stat'd `size` (for messaging) and the `complete` verdict (for installed /
+ *  truncated decisions). The completeness rule itself lives in Rust; see
+ *  `is_size_complete`.
+ */
+export type ModelFileStatus = {
+	/**
+	 *  File size in bytes, following symlinks. `None` when missing or unreadable
+	 *  (a dead link whose target is gone, or a file never created).
+	 */
+	size: number | null;
+	/**
+	 *  Whether the file is present and at least the completeness floor (90%) of
+	 *  its expected catalog size. A missing file is never complete.
+	 */
+	complete: boolean;
 };
 
 export type ModelFolderError =
@@ -598,11 +665,6 @@ export type ModelStatus =
  *  global-shortcut plugin could never express.
  */
 export type Modifier = 'ctrl' | 'alt' | 'shift' | 'meta' | 'fn';
-
-export type PauseActiveMediaOutcome = {
-	paused: MediaPlayer[];
-	failures: MediaControlFailure[];
-};
 
 /**
  *  Serializable handle returned to the JS side. The id is the lookup key

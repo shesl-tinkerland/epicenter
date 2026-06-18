@@ -11,7 +11,7 @@
  * The block tells the model the terms are proper nouns and domain terms to keep
  * spelled as written and to map obvious mishearings onto: this is VoiceInk's
  * `<CUSTOM_VOCABULARY>` approach, letting the AI be the matcher with world
- * knowledge no edit-distance algorithm has. See ADR 0013.
+ * knowledge no edit-distance algorithm has. See ADR 0021.
  */
 export function buildSystemPrompt(
 	instructions: string,

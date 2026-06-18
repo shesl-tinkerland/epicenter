@@ -2,12 +2,15 @@ import { nanoid } from 'nanoid/non-secure';
 import { manualRecorderConfig } from '#platform/manual-recorder-config';
 import { recordingOverlay } from '#platform/recording-overlay';
 import { goto } from '$app/navigation';
+import type { CaptureSurface } from '$lib/constants/audio';
 import { analytics } from '$lib/operations/analytics';
 import { recordingMedia } from '$lib/operations/media';
 import { processRecordingPipeline } from '$lib/operations/pipeline';
 import { sound } from '$lib/operations/sound';
+import { prewarmLocalModel } from '$lib/operations/transcribe';
 import { log, type Notice, report } from '$lib/report';
 import type { DeviceAcquisitionOutcome } from '$lib/services/recorder/types';
+import { captureSurface } from '$lib/state/capture-surface.svelte';
 import { deviceConfig } from '$lib/state/device-config.svelte';
 import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 import { settings } from '$lib/state/settings.svelte';
@@ -30,7 +33,7 @@ function handleDeviceAcquisitionOutcome(
 	switch (outcome.reason) {
 		case 'no-device-selected':
 			return {
-				title: '🎙️ Switched to available microphone',
+				title: 'Switched to available microphone',
 				description:
 					'No microphone was selected, so we automatically connected to an available one. You can update your selection in settings.',
 				action: {
@@ -40,7 +43,7 @@ function handleDeviceAcquisitionOutcome(
 			};
 		case 'preferred-device-unavailable':
 			return {
-				title: '🎙️ Switched to different microphone',
+				title: 'Switched to different microphone',
 				description:
 					"Your previously selected microphone wasn't found, so we automatically connected to an available one.",
 				action: {
@@ -58,10 +61,18 @@ function isVadRecordingActive() {
 }
 
 export async function startManualRecording() {
-	settings.set('recording.mode', 'manual');
+	settings.set('recording.trigger', 'manual');
+	// A capture just started, so leave the import overlay if it was open: the
+	// surface should follow the live recording, not stay parked on import.
+	captureSurface.dismissImport();
+
+	// Kick off the local model load now, concurrently with bringing up the
+	// recorder, so the ~1 s cold load overlaps the speech you're about to
+	// record rather than being paid after you stop. No-op for cloud/web.
+	prewarmLocalModel();
 
 	const loading = report.loading({
-		title: '🎙️ Preparing to record...',
+		title: 'Preparing to record...',
 		description: 'Setting up your recording environment...',
 	});
 
@@ -78,7 +89,7 @@ export async function startManualRecording() {
 	loading.resolve(
 		handleDeviceAcquisitionOutcome(
 			outcome,
-			'🎙️ Whispering is recording...',
+			'Whispering is recording...',
 			'Speak now and stop recording when done',
 			(deviceId) => {
 				manualRecorderConfig.deviceId = deviceId;
@@ -92,7 +103,7 @@ export async function startManualRecording() {
 
 export async function stopManualRecording() {
 	const loading = report.loading({
-		title: '⏸️ Stopping recording...',
+		title: 'Stopping recording...',
 		description: 'Finalizing your audio capture...',
 	});
 
@@ -110,7 +121,7 @@ export async function stopManualRecording() {
 		source.kind === 'artifact' ? source.artifact.byteLength : source.blob.size;
 
 	loading.resolve({
-		title: '🎙️ Recording stopped',
+		title: 'Recording stopped',
 		description: 'Your recording has been saved',
 	});
 	log.info('Recording stopped');
@@ -141,8 +152,9 @@ export async function cancelRecording() {
 	// stream teardown). This is the user-facing command: it decides what "cancel"
 	// means across the manual and VAD recorders.
 	//
-	// Cancel aborts whichever capture is live, without touching `recording.mode`:
-	// the chosen input mode (manual vs VAD) is a deliberate preference, not
+	// Cancel aborts whichever capture is live, without touching
+	// `recording.trigger`: the chosen trigger (manual vs VAD) is a deliberate
+	// preference, not
 	// something a cancel keystroke should flip, so cancelling in VAD mode leaves
 	// you in VAD mode, idle and ready to listen again. This is also the global
 	// cancel chord (Cmd + . on macOS), which the rdev hook observes on every
@@ -158,7 +170,7 @@ export async function cancelRecording() {
 	if (data.status === 'cancelled') {
 		void recordingMedia.resume();
 		sound.playSoundIfEnabled('manual-cancel');
-		report.success({ title: '✅ Recording cancelled' });
+		report.success({ title: 'Recording cancelled' });
 		log.info('Recording cancelled');
 		return;
 	}
@@ -173,11 +185,20 @@ export async function cancelRecording() {
 }
 
 export async function startVadRecording() {
-	settings.set('recording.mode', 'vad');
+	settings.set('recording.trigger', 'vad');
+	// A capture just started, so leave the import overlay if it was open (see
+	// startManualRecording).
+	captureSurface.dismissImport();
+
+	// Warm the local model when listening is armed (not when speech is
+	// detected): arming VAD is the "about to dictate" signal, and starting the
+	// load now means the model is ready before the first word, even for a short
+	// utterance. No-op for cloud/web.
+	prewarmLocalModel();
 
 	log.info('Starting voice activated capture');
 	const loading = report.loading({
-		title: '🎙️ Starting voice activated capture',
+		title: 'Starting voice activated capture',
 		description: 'Your voice activated capture is starting...',
 	});
 
@@ -187,13 +208,13 @@ export async function startVadRecording() {
 		onLevel: (level) => recordingOverlay.reportLevel(level),
 		onSpeechStart: () => {
 			report.success({
-				title: '🎙️ Speech started',
+				title: 'Speech started',
 				description: 'Recording started. Speak clearly and loudly.',
 			});
 		},
 		onSpeechEnd: async (blob) => {
 			report.success({
-				title: '🎙️ Voice activated speech captured',
+				title: 'Voice activated speech captured',
 				description: 'Your voice activated speech has been captured.',
 			});
 			log.info('Voice activated speech captured');
@@ -225,7 +246,7 @@ export async function startVadRecording() {
 	loading.resolve(
 		handleDeviceAcquisitionOutcome(
 			outcome,
-			'🎙️ Voice activated capture started',
+			'Voice activated capture started',
 			'Your voice activated capture has been started.',
 			(deviceId) => deviceConfig.set('recording.navigator.deviceId', deviceId),
 		),
@@ -239,7 +260,7 @@ export async function stopVadRecording() {
 
 	log.info('Stopping voice activated capture');
 	const loading = report.loading({
-		title: '⏸️ Stopping voice activated capture...',
+		title: 'Stopping voice activated capture...',
 		description: 'Finalizing your voice activated capture...',
 	});
 	const { data, error } = await vadRecorder.stopActiveListening();
@@ -249,7 +270,7 @@ export async function stopVadRecording() {
 		return;
 	}
 	const stoppedNotice = {
-		title: '🎙️ Voice activated capture stopped',
+		title: 'Voice activated capture stopped',
 		description: 'Your voice activated capture has been stopped.',
 	};
 	if (data.status === 'idle') {
@@ -266,4 +287,37 @@ export function toggleVadRecording() {
 		return stopVadRecording();
 	}
 	return startVadRecording();
+}
+
+/**
+ * Select a capture surface from the homepage tabs or the header dropdown.
+ * `import` opens the transient import overlay without touching
+ * `recording.trigger`; `manual`/`vad` close the overlay and switch the durable
+ * trigger. Either way, a live capture on a different surface is stopped first so
+ * two captures never overlap (`import` keeps neither recorder, so both stop).
+ */
+export async function selectCaptureSurface(surface: CaptureSurface) {
+	// Flip the surface first so the tab/dropdown responds instantly; the live
+	// capture stopped below finalizes and transcribes in the background rather
+	// than blocking the switch.
+	if (surface === 'import') {
+		captureSurface.showImport();
+	} else {
+		captureSurface.dismissImport();
+		if (settings.get('recording.trigger') !== surface) {
+			settings.set('recording.trigger', surface);
+		}
+	}
+
+	// Stop a live capture on a different surface so two captures never overlap
+	// (`import` keeps neither recorder, so both stop). Stopping finalizes it: a
+	// manual recording is saved and transcribed, and a voice-activated utterance
+	// in progress is flushed through the pipeline (the VAD runs with
+	// `submitUserSpeechOnPause`), so nothing you already said is lost.
+	if (surface !== 'manual' && manualRecorder.state === 'RECORDING') {
+		await stopManualRecording();
+	}
+	if (surface !== 'vad' && isVadRecordingActive()) {
+		await stopVadRecording();
+	}
 }

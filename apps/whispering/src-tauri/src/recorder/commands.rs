@@ -109,7 +109,12 @@ pub async fn stop_recording(
         (id, samples)
     };
 
-    let artifact = write_artifact(&app_handle, &recording_id, &samples)?;
+    // Measured on the critical path on purpose: this synchronous write + fsync
+    // is exactly the cost the parked handoff + async-persist optimization would
+    // remove. The numbers here decide whether that optimization is worth it.
+    let artifact = crate::timing::measure("stop.wav_write+fsync", || {
+        write_artifact(&app_handle, &recording_id, &samples)
+    })?;
     emit_recording_state(&app_handle, RecordingState::Idle);
     info!(
         "Recording stopped: id={}, duration_ms={}, bytes={}",

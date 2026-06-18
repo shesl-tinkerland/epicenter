@@ -17,7 +17,6 @@
 	import { rpc } from '$lib/rpc';
 	import { recordings } from '$lib/state/recordings.svelte';
 	import { createCopyFn } from '$lib/utils/createCopyFn';
-	import { viewTransition } from '$lib/utils/viewTransitions';
 	import EditRecordingModal from './EditRecordingModal.svelte';
 
 	const transcribeRecording = createMutation(
@@ -111,8 +110,6 @@
 		<CopyButton
 			text={recording.transcript}
 			copyFn={createCopyFn('transcript')}
-			style="view-transition-name: {viewTransition.recording(recordingId)
-				.transcript}"
 		/>
 
 		<Button

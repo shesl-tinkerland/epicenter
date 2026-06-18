@@ -54,6 +54,8 @@ export {
 // NODE IDENTITY
 // ════════════════════════════════════════════════════════════════════════════
 
+export type { AgentId } from './document/agent-id.js';
+export { asAgentId } from './document/agent-id.js';
 export type { NodeId } from './document/node-id.js';
 export {
 	asNodeId,
@@ -107,6 +109,15 @@ export { attachLocalStorage } from './document/attach-local-storage.js';
 export { attachPlainText } from './document/attach-plain-text.js';
 export { attachRichText } from './document/attach-rich-text.js';
 export { attachTimeline } from './document/attach-timeline/index.js';
+export type {
+	ChildDocActor,
+	ChildDocActorContext,
+	ChildDocActorFactory,
+	ChildDocActorHandle,
+	ConnectedChildDoc,
+	ObservableChildDocLayout,
+} from './document/child-doc-actor.js';
+export { attachChildDocActor } from './document/child-doc-actor.js';
 export { type ConnectionConfig, connectDoc } from './document/connect-doc.js';
 export { defineKv } from './document/define-kv.js';
 export { defineTable } from './document/define-table.js';
@@ -165,6 +176,7 @@ export {
 	createWorkspace,
 	type DefineWorkspaceOptions,
 	defineWorkspace,
+	type MountActors,
 	type MountComposeContext,
 	type MountComposition,
 	type MountOptions,

@@ -18,8 +18,7 @@ import {
 	Zap as ZapIcon,
 } from '@lucide/astro';
 import GitHubStars from '../components/whispering/GitHubStars.astro';
-import GithubIcon from '../components/whispering/GithubIcon.astro';
-import MicrophoneHero from '../components/whispering/MicrophoneHero.svelte';
+import MicrophoneHero from '../components/whispering/MicrophoneHero.astro';
 import OSDetector from '../components/whispering/OSDetector.svelte';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
@@ -146,7 +145,7 @@ const downloads = [
 			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 hero-content">
 				<div class="text-center max-w-5xl mx-auto">
 					<!-- Microphone Animation -->
-					<MicrophoneHero client:load />
+					<MicrophoneHero />
 
 					<!-- Headlines -->
 					<div class="mb-10 lg:mb-12 animate-fade-up space-y-4 lg:space-y-6">
@@ -618,7 +617,7 @@ const downloads = [
 				<div class="text-center space-y-8">
 					<!-- Logo -->
 					<div class="flex items-center justify-center space-x-3">
-						<div class="text-2xl">🎙️</div>
+						<img src="/studio-microphone.png" alt="" class="size-7">
 						<span class="text-xl font-semibold">Whispering</span>
 					</div>
 
@@ -684,7 +683,6 @@ const downloads = [
 		const icon = floatingButton?.querySelector('.github-icon');
 
 		if (floatingButton && button && text && icon) {
-			let lastScrollY = 0;
 			let ticking = false;
 
 			function updateButtonState() {
@@ -711,7 +709,6 @@ const downloads = [
 					floatingButton.style.opacity = '1';
 				}
 
-				lastScrollY = scrollY;
 				ticking = false;
 			}
 

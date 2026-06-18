@@ -4,7 +4,9 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { basename } from '$lib/core/path';
 	import { openVaults } from '$lib/open-vaults.svelte';
+	import { routes } from '$lib/routes';
 
 	let { children } = $props();
 
@@ -20,7 +22,7 @@
 		if (!wasActive) return;
 		const remaining = openVaults.list;
 		const next = remaining[index] ?? remaining[index - 1];
-		await goto(next ? `/vault/${next.id}` : '/');
+		await (next ? goto(routes.vault(next.id)) : goto(routes.home()));
 	}
 </script>
 
@@ -34,13 +36,17 @@
 					active ? 'border-border bg-muted' : 'border-transparent hover:bg-muted/50',
 				]}
 			>
-				<a href="/vault/{vault.id}" class="max-w-48 truncate py-1 pl-2.5 pr-1" title={vault.path}>
-					{vault.folderName}
+				<a
+					href={routes.vault(vault.id)}
+					class="max-w-48 truncate py-1 pl-2.5 pr-1"
+					title={vault.root}
+				>
+					{basename(vault.root)}
 				</a>
 				<button
 					type="button"
 					onclick={() => closeTab(vault.id)}
-					aria-label="Close {vault.folderName}"
+					aria-label="Close {basename(vault.root)}"
 					class="mr-1 rounded-sm p-0.5 text-muted-foreground opacity-0 transition hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
 				>
 					<XIcon class="size-3.5" />

@@ -82,6 +82,22 @@ pub struct ModelFileDownload {
     pub size_bytes: f64,
 }
 
+/// One file's presence and completeness in a model entry, resolved through any
+/// symlink. The webview supplies expected catalog sizes and reads back both the
+/// stat'd `size` (for messaging) and the `complete` verdict (for installed /
+/// truncated decisions). The completeness rule itself lives in Rust; see
+/// `is_size_complete`.
+#[derive(Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelFileStatus {
+    /// File size in bytes, following symlinks. `None` when missing or unreadable
+    /// (a dead link whose target is gone, or a file never created).
+    pub size: Option<f64>,
+    /// Whether the file is present and at least the completeness floor (90%) of
+    /// its expected catalog size. A missing file is never complete.
+    pub complete: bool,
+}
+
 /// List every selectable entry in the engine's models folder: model files
 /// (.bin/.gguf/.ggml) for Whisper, directories for Parakeet and Moonshine, plus
 /// symlinks to either. Hidden entries and in-flight `.partial` staging are
@@ -172,20 +188,25 @@ pub fn delete_model_entry(
     })
 }
 
-/// Resolve an entry **through any symlink** and return the size of each file, or
-/// `None` for a missing/unreadable one. The catalog-size comparison stays in JS
-/// (the 90% threshold). An empty `filenames` means the entry is itself the file
-/// (Whisper) and returns one element; otherwise one element per filename
-/// (directory engines). A dead link stats to `None`, so a linked-but-broken
-/// model reads as not installed.
+/// Resolve an entry **through any symlink** and report each expected file's size
+/// and completeness verdict. The webview passes the expected catalog sizes (it
+/// owns the catalog); the 90% completeness rule lives here next to the stat, so
+/// "what counts as a complete file on disk" has one owner shared with the
+/// download integrity check (`is_size_complete`). An empty `filenames` means the
+/// entry is itself the file (Whisper) and returns one element checked against
+/// `expected_sizes[0]`; otherwise one element per filename (directory engines),
+/// each checked against the aligned `expected_sizes`. A dead link reports
+/// `size: None, complete: false`, so a linked-but-broken model reads as not
+/// installed.
 #[tauri::command]
 #[specta::specta]
-pub fn resolve_model_file_sizes(
+pub fn resolve_model_files(
     engine: Engine,
     name: String,
     filenames: Vec<String>,
+    expected_sizes: Vec<f64>,
     app_handle: AppHandle,
-) -> Result<Vec<Option<f64>>, ModelFolderError> {
+) -> Result<Vec<ModelFileStatus>, ModelFolderError> {
     if !is_contained_entry_name(&name) {
         return Err(ModelFolderError::InvalidEntryName {
             message: format!("Model entry name must be a single models-folder entry, got: {name}"),
@@ -195,17 +216,34 @@ pub fn resolve_model_file_sizes(
         .map_err(|message| ModelFolderError::ReadFailed { message })?
         .join(&name);
 
-    if filenames.is_empty() {
-        return Ok(vec![file_size(&entry)]);
-    }
-    Ok(filenames
-        .iter()
-        .map(|filename| {
-            if is_contained_entry_name(filename) {
-                file_size(&entry.join(filename))
-            } else {
-                None
-            }
+    // Empty `filenames` => the entry itself is the file (Whisper); otherwise one
+    // file per name inside the entry directory.
+    let sizes: Vec<Option<f64>> = if filenames.is_empty() {
+        vec![file_size(&entry)]
+    } else {
+        filenames
+            .iter()
+            .map(|filename| {
+                if is_contained_entry_name(filename) {
+                    file_size(&entry.join(filename))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    // Pair each stat with its aligned expected size; a missing file (or a missing
+    // expectation) is never complete.
+    Ok(sizes
+        .into_iter()
+        .enumerate()
+        .map(|(index, size)| {
+            let complete = match (size, expected_sizes.get(index)) {
+                (Some(actual), Some(&expected)) => is_size_complete(actual, expected),
+                _ => false,
+            };
+            ModelFileStatus { size, complete }
         })
         .collect())
 }
@@ -394,10 +432,23 @@ async fn run_staged_download(
     Ok(())
 }
 
-/// Reject a file that finished below 90% of its catalog size: whisper.cpp loads
-/// a truncated `.bin` but transcribes garbage, and ONNX files fail to load.
+/// A file at least this fraction of its catalog size counts as complete. A
+/// dropped connection can leave a whisper.cpp `.bin` that still loads but
+/// transcribes garbage, or ONNX files that fail to load; the floor rejects them.
+const COMPLETENESS_FLOOR: f64 = 0.9;
+
+/// The single completeness rule, shared by the download integrity check
+/// (`ensure_complete`) and the read-path verdict (`resolve_model_files`), so the
+/// threshold has one owner instead of a copy on each side of the IPC boundary.
+fn is_size_complete(received: f64, expected: f64) -> bool {
+    received >= expected * COMPLETENESS_FLOOR
+}
+
+/// Reject a file that finished below the completeness floor of its catalog size:
+/// whisper.cpp loads a truncated `.bin` but transcribes garbage, and ONNX files
+/// fail to load.
 fn ensure_complete(received: u64, expected: f64) -> Result<(), ModelFolderError> {
-    if (received as f64) >= expected * 0.9 {
+    if is_size_complete(received as f64, expected) {
         return Ok(());
     }
     Err(ModelFolderError::DownloadIncomplete {
@@ -471,6 +522,15 @@ mod tests {
         assert!(ensure_complete(899, 1000.0).is_err());
         // A larger-than-catalog file is fine.
         assert!(ensure_complete(1200, 1000.0).is_ok());
+    }
+
+    #[test]
+    fn is_size_complete_is_the_single_floor_shared_by_both_paths() {
+        // The same rule `ensure_complete` (download) and `resolve_model_files`
+        // (read) both call, so the threshold can never drift between them.
+        assert!(is_size_complete(900.0, 1000.0));
+        assert!(!is_size_complete(899.0, 1000.0));
+        assert!(is_size_complete(1200.0, 1000.0));
     }
 
     #[test]

@@ -19,7 +19,6 @@ import { ElevenLabsTranscriptionServiceLive } from '$lib/services/transcription/
 import { GroqTranscriptionServiceLive } from '$lib/services/transcription/cloud/groq';
 import { MistralTranscriptionServiceLive } from '$lib/services/transcription/cloud/mistral';
 import { OpenaiTranscriptionServiceLive } from '$lib/services/transcription/cloud/openai';
-import { isModelFileSizeValid } from '$lib/services/transcription/model-file';
 import {
 	type CloudProviderId,
 	isLocalProviderId,
@@ -151,7 +150,7 @@ async function loadForCloudUpload(
  * point for transcription:
  *
  * - The cpal stop path saves the WAV via Rust and returns the id.
- * - The navigator / VAD / file-upload paths save the blob via the
+ * - The navigator / VAD / file import paths save the blob via the
  *   recordings blob store and pass the id here.
  *
  * Local transcription always goes through `transcribe_recording(id)`.
@@ -237,24 +236,57 @@ async function checkWhisperTruncation(
 	const modelConfig = WHISPER_MODELS.find((m) => m.file.filename === modelName);
 	if (!modelConfig) return Ok(undefined);
 
-	// Rust resolves the entry through any link and stats it; an empty filename
-	// list means "the entry is itself the file" (Whisper). A missing/unstattable
-	// file passes through (Rust reports load errors itself).
-	const { data: sizes } = await commands.resolveModelFileSizes(
+	// Rust resolves the entry through any link, stats it, and applies the 90%
+	// completeness rule against the catalog size we pass; an empty filename list
+	// means "the entry is itself the file" (Whisper). A missing/unstattable file
+	// passes through (Rust reports load errors itself).
+	const { data: statuses } = await commands.resolveModelFiles(
 		'whispercpp',
 		modelName,
 		[],
+		[modelConfig.sizeBytes],
 	);
-	const actualSize = sizes?.[0];
-	if (actualSize == null) return Ok(undefined);
+	const status = statuses?.[0];
+	if (!status || status.size == null) return Ok(undefined);
 
-	if (!isModelFileSizeValid(actualSize, modelConfig.sizeBytes)) {
+	if (!status.complete) {
 		return TranscriptionOperationError.CorruptedModelFile({
-			actualSizeMb: Math.round(actualSize / 1000000),
+			actualSizeMb: Math.round(status.size / 1000000),
 			expectedSizeMb: Math.round(modelConfig.sizeBytes / 1000000),
 		});
 	}
 	return Ok(undefined);
+}
+
+/**
+ * Warm the selected local model the instant a capture begins, so the cold
+ * load (~1 s) overlaps the user's speech instead of being paid after they
+ * stop. Called fire-and-forget from the manual and VAD start paths.
+ *
+ * No-op unless we are on desktop with a local provider selected and a model
+ * chosen: cloud/self-hosted have no local model to load, and web has no Rust.
+ * It resolves the model exactly the way `transcribeLocally` does, so it warms
+ * the same model transcription will use. Failures are swallowed on purpose:
+ * the worst case is transcription loads the model itself, as it does today.
+ * `language`/`initialPrompt` are inference params, irrelevant to loading, so
+ * they are sent null.
+ */
+export function prewarmLocalModel(): void {
+	if (!tauri) return;
+
+	const selectedService = settings.get('transcription.service');
+	if (!isLocalProviderId(selectedService)) return;
+
+	const provider = PROVIDERS[selectedService];
+	const modelName = deviceConfig.get(provider.modelConfigKey);
+	if (!modelName) return;
+
+	void commands.prewarmModel({
+		engine: selectedService,
+		modelName,
+		language: null,
+		initialPrompt: null,
+	});
 }
 
 async function transcribeLocally(

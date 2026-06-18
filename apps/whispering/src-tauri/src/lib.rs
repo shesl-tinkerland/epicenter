@@ -17,8 +17,8 @@ use recorder::recorder::Recorder;
 pub mod transcription;
 use transcription::{
     delete_model_entry, download_model, get_transcription_state, link_local_model,
-    list_model_entries, resolve_model_file_sizes, reveal_models_folder, set_unload_policy,
-    transcribe_recording, ModelCache, ModelStateEvent,
+    list_model_entries, prewarm_model, resolve_model_files, reveal_models_folder,
+    set_unload_policy, transcribe_recording, ModelCache, ModelStateEvent,
 };
 
 pub mod command;
@@ -28,7 +28,12 @@ pub mod download;
 use download::{cancel_download, DownloadManager};
 
 pub mod media;
-use media::{pause_active_media, resume_media};
+use media::{pause_playback, resume_playback};
+
+// Flag-gated (`WHISPERING_TIMING`) latency instrumentation for the desktop
+// audio pipeline. The `timing_note!` macro it exports is used across the
+// recorder, audio, and transcription modules.
+pub mod timing;
 
 // Desktop global keyboard trigger backend (rdev listener + binding matcher).
 // Built in isolation in Wave 2; the FE registrar swap and listener start-up
@@ -61,19 +66,21 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_recording_artifacts,
             clear_recording_artifacts,
             transcribe_recording,
+            prewarm_model,
             open_accessibility_settings,
             set_unload_policy,
             get_transcription_state,
             link_local_model,
             list_model_entries,
             delete_model_entry,
-            resolve_model_file_sizes,
+            resolve_model_files,
             download_model,
             reveal_models_folder,
             cancel_download,
-            pause_active_media,
-            resume_media,
+            pause_playback,
+            resume_playback,
             keyboard::commands::set_keyboard_shortcuts,
+            keyboard::commands::set_auto_paste_enabled,
             keyboard::commands::set_keyboard_capturing,
             keyboard::commands::get_dictation_capability,
         ])
@@ -228,6 +235,7 @@ pub async fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
@@ -257,7 +265,7 @@ pub async fn run() {
             // views. There is no FE-driven start: trust is a fact about the
             // process that holds the tap, so the tap holder owns it.
             #[cfg(desktop)]
-            app.manage(keyboard::KeyboardListener::new(app.handle().clone()));
+            app.manage(keyboard::TapController::new(app.handle().clone()));
 
             // Create the recording overlay as a non-activating NSPanel up front
             // (hidden); the frontend shows it when recording starts.

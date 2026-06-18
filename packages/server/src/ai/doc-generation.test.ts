@@ -101,13 +101,17 @@ describe('runDocGeneration', () => {
 	test('streams a turn into the room: appends one assistant message, finish completed', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		let prompt: ModelMessage[] | undefined;
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: (messages) => {
@@ -134,7 +138,12 @@ describe('runDocGeneration', () => {
 	test('multi-flush turn (slow stream) converges on the room replica', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		async function* slowStream(): AsyncGenerator<StreamChunk> {
@@ -146,7 +155,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => slowStream(),
@@ -159,7 +167,12 @@ describe('runDocGeneration', () => {
 	test('replayed generationId returns GenerationAlreadyExists and writes nothing', async () => {
 		const harness = createHarness();
 		harness.seed((doc) => {
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 });
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			});
 			const writer = appendAssistantMessage(doc, {
 				id: 'gen-1',
 				createdAt: 2000,
@@ -171,7 +184,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => streamOf('should never run'),
@@ -184,14 +196,18 @@ describe('runDocGeneration', () => {
 	test('recent unfinished trailing assistant blocks with GenerationInProgress', async () => {
 		const harness = createHarness();
 		harness.seed((doc) => {
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 });
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			});
 			appendAssistantMessage(doc, { id: 'gen-live', createdAt: Date.now() });
 		});
 		const before = harness.messages();
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-2',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => streamOf('should never run'),
@@ -204,19 +220,24 @@ describe('runDocGeneration', () => {
 	test('recent unfinished assistant still blocks after a later user message', async () => {
 		const harness = createHarness();
 		harness.seed((doc) => {
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 });
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			});
 			appendAssistantMessage(doc, { id: 'gen-live', createdAt: Date.now() });
 			appendUserMessage(doc, {
 				id: 'u2',
 				content: 'second prompt',
 				createdAt: 2000,
+				generationId: 'gen-2',
 			});
 		});
 		const before = harness.messages();
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-2',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => streamOf('should never run'),
@@ -230,7 +251,12 @@ describe('runDocGeneration', () => {
 		const harness = createHarness();
 		const staleCreatedAt = Date.now() - 3 * 60 * 1000;
 		harness.seed((doc) => {
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 });
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			});
 			const writer = appendAssistantMessage(doc, {
 				id: 'gen-interrupted',
 				createdAt: staleCreatedAt,
@@ -242,7 +268,6 @@ describe('runDocGeneration', () => {
 		let prompt: ModelMessage[] | undefined;
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-2',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: (messages) => {
@@ -265,8 +290,9 @@ describe('runDocGeneration', () => {
 			text: 'partial answer',
 		});
 		expect(messages[1]?.finish).toBeUndefined();
+		// The new assistant message takes the user turn's generationId.
 		expect(messages[2]).toMatchObject({
-			id: 'gen-2',
+			id: 'gen-1',
 			text: 'fresh answer',
 			finish: { kind: 'completed' },
 		});
@@ -277,7 +303,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => streamOf('should never run'),
@@ -290,7 +315,12 @@ describe('runDocGeneration', () => {
 	test('abort mid-stream writes finish cancelled with the flushed prefix, via waitUntil', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		const abortController = new AbortController();
@@ -302,7 +332,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: abortController.signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => abortingStream(),
@@ -326,7 +355,12 @@ describe('runDocGeneration', () => {
 	test('provider RUN_ERROR writes finish failed with code and keeps streamed text', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		async function* erroringStream(): AsyncGenerator<StreamChunk> {
@@ -340,7 +374,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => erroringStream(),
@@ -361,7 +394,12 @@ describe('runDocGeneration', () => {
 	test('a rejecting room.sync degrades gracefully: the actor resolves, never throws', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		// A Durable Object RPC rejects (it does not return Err) on isolate
@@ -376,7 +414,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: rejectingRoom,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => streamOf('你好'),
@@ -391,7 +428,12 @@ describe('runDocGeneration', () => {
 	test('a throwing stream (not aborted) writes finish failed with stream-error', async () => {
 		const harness = createHarness();
 		harness.seed((doc) =>
-			appendUserMessage(doc, { id: 'u1', content: 'hi', createdAt: 1000 }),
+			appendUserMessage(doc, {
+				id: 'u1',
+				content: 'hi',
+				createdAt: 1000,
+				generationId: 'gen-1',
+			}),
 		);
 
 		async function* throwingStream(): AsyncGenerator<StreamChunk> {
@@ -401,7 +443,6 @@ describe('runDocGeneration', () => {
 
 		const result = await runDocGeneration({
 			room: harness.room,
-			generationId: 'gen-1',
 			signal: new AbortController().signal,
 			waitUntil: harness.waitUntil,
 			startStream: () => throwingStream(),

@@ -42,6 +42,21 @@ export type _StringLiteralRejected = Expect<
 	Equal<ReturnType<typeof field.string<'draft'>>, never>
 >;
 
+// field.reference('table'): Static = string (unbranded, but always TUnsafe for the marker)
+export type _ReferenceStatic = Expect<
+	Equal<Static<ReturnType<typeof field.reference>>, string>
+>;
+
+// field.reference<NoteId>('table'): Static = NoteId (brand preserved)
+export type _ReferenceBrandStatic = Expect<
+	Equal<Static<ReturnType<typeof field.reference<NoteId>>>, NoteId>
+>;
+
+// field.reference<'draft'>('table'): never (literal subtypes rejected, like field.string)
+export type _ReferenceLiteralRejected = Expect<
+	Equal<ReturnType<typeof field.reference<'draft'>>, never>
+>;
+
 // field.url(): Static = string
 export type _UrlStatic = Expect<
 	Equal<Static<ReturnType<typeof field.url>>, string>

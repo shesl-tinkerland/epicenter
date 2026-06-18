@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
-	import {
-		ACCEPT_AUDIO,
-		ACCEPT_VIDEO,
-		FileDropZone,
-		MEGABYTE,
-	} from '@epicenter/ui/file-drop-zone';
+	import { FileDropZone } from '@epicenter/ui/file-drop-zone';
 	import * as Kbd from '@epicenter/ui/kbd';
 	import { Link } from '@epicenter/ui/link';
 	import * as SectionHeader from '@epicenter/ui/section-header';
@@ -18,37 +13,42 @@
 	import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 	import { tryAsync } from 'wellcrafted/result';
 	import { commandCallbacks } from '$lib/commands';
+	import DictationCapabilityNotice from '$lib/components/DictationCapabilityNotice.svelte';
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import {
-		TranscriptionSelector,
 		TranscriptionRuntimeConfig,
+		TranscriptionSelector,
 	} from '$lib/components/settings';
 	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
 	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
 	import {
-		RECORDING_MODE_ICONS,
-		RECORDING_MODE_OPTIONS,
-		type RecordingMode,
+		CAPTURE_SURFACE_META,
+		CAPTURE_SURFACE_OPTIONS,
+		type CaptureSurface,
 	} from '$lib/constants/audio';
-	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
-	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import {
-		stopManualRecording,
-		stopVadRecording,
-	} from '$lib/operations/recording';
-	import { uploadRecordings } from '$lib/operations/upload';
+		IMPORT_ACCEPT,
+		IMPORTABLE_AUDIO_EXTENSIONS,
+		IMPORTABLE_VIDEO_EXTENSIONS,
+		MAX_IMPORT_FILES,
+		MAX_IMPORT_FILE_SIZE,
+	} from '$lib/constants/import-formats';
+	import { importFiles } from '$lib/operations/import';
+	import { selectCaptureSurface } from '$lib/operations/recording';
 	import { report } from '$lib/report';
 	import { rpc } from '$lib/rpc';
 	import { services } from '$lib/services';
-	import { tauri } from '#platform/tauri';
+	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
+	import { captureSurface } from '$lib/state/capture-surface.svelte';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
 	import { settings } from '$lib/state/settings.svelte';
-	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
+	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import { viewTransition } from '$lib/utils/viewTransitions';
+	import studioMicrophone from '$lib/assets/studio-microphone.png';
+	import { tauri } from '#platform/tauri';
 	import CapturePipeline from './_components/CapturePipeline.svelte';
-	import DictationCapabilityNotice from '$lib/components/DictationCapabilityNotice.svelte';
 	import ManualRecordingAction from './_components/ManualRecordingAction.svelte';
 	import VadRecordingAction from './_components/VadRecordingAction.svelte';
 
@@ -91,40 +91,8 @@
 		enabled: !!latestRecording?.id,
 	}));
 
-	const availableModes = $derived(
-		RECORDING_MODE_OPTIONS.filter((mode) => {
-			if (!mode.desktopOnly) return true;
-			// Desktop only, only show if Tauri is available
-			return !!tauri;
-		}),
-	);
-
-	const AUDIO_EXTENSIONS = [
-		'mp3',
-		'wav',
-		'm4a',
-		'aac',
-		'ogg',
-		'flac',
-		'wma',
-		'opus',
-	] as const;
-
-	const VIDEO_EXTENSIONS = [
-		'mp4',
-		'avi',
-		'mov',
-		'wmv',
-		'flv',
-		'mkv',
-		'webm',
-		'm4v',
-	] as const;
-
-	// Store unlisten function for drag drop events
 	let unlistenDragDrop: UnlistenFn | undefined;
 
-	// Set up desktop drag and drop listener
 	onMount(async () => {
 		if (!tauri) return;
 		const { error } = await tryAsync({
@@ -133,24 +101,22 @@
 				const { extname } = await import('@tauri-apps/api/path');
 
 				const isAudio = async (path: string) =>
-					AUDIO_EXTENSIONS.includes(
-						(await extname(path)) as (typeof AUDIO_EXTENSIONS)[number],
+					IMPORTABLE_AUDIO_EXTENSIONS.includes(
+						(await extname(path)) as (typeof IMPORTABLE_AUDIO_EXTENSIONS)[number],
 					);
 				const isVideo = async (path: string) =>
-					VIDEO_EXTENSIONS.includes(
-						(await extname(path)) as (typeof VIDEO_EXTENSIONS)[number],
+					IMPORTABLE_VIDEO_EXTENSIONS.includes(
+						(await extname(path)) as (typeof IMPORTABLE_VIDEO_EXTENSIONS)[number],
 					);
 
 				unlistenDragDrop = await getCurrentWebview().onDragDropEvent(
 					async (event) => {
-						if (settings.get('recording.mode') !== 'upload') return;
 						if (
 							event.payload.type !== 'drop' ||
 							event.payload.paths.length === 0
 						)
 							return;
 
-						// Filter for audio/video files based on extension
 						const pathResults = await Promise.all(
 							event.payload.paths.map(async (path) => ({
 								path,
@@ -169,10 +135,6 @@
 							return;
 						}
 
-						await switchRecordingMode('upload');
-
-						// Convert file paths to File objects. The file-drop event only
-						// fires on Tauri, so `tauri` is non-null in this branch.
 						if (!tauri) return;
 						const { data: files, error } =
 							await tauri.fs.pathsToFiles(validPaths);
@@ -183,7 +145,7 @@
 						}
 
 						if (files.length > 0) {
-							await uploadRecordings({ files });
+							await importFiles({ files });
 						}
 					},
 				);
@@ -198,49 +160,10 @@
 
 	onDestroy(() => {
 		unlistenDragDrop?.();
-		// Clean up audio URL when component unmounts to prevent memory leaks
 		if (latestRecording?.id) {
 			services.blobs.audio.revokeUrl(latestRecording.id);
 		}
 	});
-
-	async function stopAllRecordingModesExcept(modeToKeep: RecordingMode) {
-		const recordingModes = [
-			{
-				mode: 'manual' as const,
-				isActive: () => manualRecorder.state === 'RECORDING',
-				stop: () => stopManualRecording(),
-			},
-			{
-				mode: 'vad' as const,
-				isActive: () => vadRecorder.state !== 'IDLE',
-				stop: () => stopVadRecording(),
-			},
-		] satisfies {
-			mode: RecordingMode;
-			isActive: () => boolean;
-			stop: () => Promise<unknown>;
-		}[];
-
-		const modesToStop = recordingModes.filter(
-			(recordingMode) =>
-				recordingMode.mode !== modeToKeep && recordingMode.isActive(),
-		);
-
-		await Promise.all(modesToStop.map((recordingMode) => recordingMode.stop()));
-	}
-
-	async function switchRecordingMode(newMode: RecordingMode) {
-		await stopAllRecordingModesExcept(newMode);
-
-		if (settings.get('recording.mode') !== newMode) {
-			settings.set('recording.mode', newMode);
-			report.success({
-				title: 'Recording mode switched',
-				description: `Switched to ${newMode} recording mode`,
-			});
-		}
-	}
 </script>
 
 <svelte:head> <title>Whispering</title> </svelte:head>
@@ -248,13 +171,16 @@
 <div
 	class="flex flex-1 flex-col items-center justify-start gap-4 w-full max-w-lg mx-auto px-4 pt-6 pb-24 sm:justify-center sm:py-0"
 >
-	<SectionHeader.Root class="flex flex-col items-center gap-4">
-		<SectionHeader.Title
-			level={1}
-			class="scroll-m-20 text-4xl tracking-tight lg:text-5xl"
-		>
-			Whispering
-		</SectionHeader.Title>
+	<SectionHeader.Root class="flex flex-col items-center gap-3">
+		<div class="flex items-center gap-3">
+			<img src={studioMicrophone} alt="" class="size-12" />
+			<SectionHeader.Title
+				level={1}
+				class="scroll-m-20 text-4xl tracking-tight lg:text-5xl"
+			>
+				Whispering
+			</SectionHeader.Title>
+		</div>
 		<SectionHeader.Description class="text-center">
 			Press shortcut → speak → get text. Free and open source ❤️
 		</SectionHeader.Description>
@@ -275,20 +201,20 @@
 	{:else}
 		<ToggleGroup.Root
 			type="single"
-			bind:value={() => settings.get('recording.mode'),
-				(mode) => {
-					if (!mode) return;
-					void switchRecordingMode(mode as RecordingMode);
+			bind:value={() => captureSurface.current,
+				(surface) => {
+					if (!surface) return;
+					void selectCaptureSurface(surface as CaptureSurface);
 				}}
 			class="w-full"
 		>
-			{#each availableModes as option}
-				{@const ModeIcon = RECORDING_MODE_ICONS[option.value]}
+			{#each CAPTURE_SURFACE_OPTIONS as option}
+				{@const SurfaceIcon = CAPTURE_SURFACE_META[option.value].Icon}
 				<ToggleGroup.Item
 					value={option.value}
-					aria-label="Switch to {option.label.toLowerCase()} mode"
+					aria-label="Switch to {option.label.toLowerCase()}"
 				>
-					<ModeIcon class="size-4" />
+					<SurfaceIcon class="size-4" />
 					<span class="hidden truncate sm:inline">{option.label}</span>
 				</ToggleGroup.Item>
 			{/each}
@@ -296,19 +222,29 @@
 
 		{#snippet manualPipeline()}
 			<CapturePipeline>
-				<ManualDeviceSelector />
-				<TranscriptionSelector triggerVariant="pipeline" />
+				<ManualDeviceSelector
+					iconViewTransitionName={viewTransition.pipeline.device}
+				/>
+				<TranscriptionSelector
+					variant="pipeline"
+					iconViewTransitionName={viewTransition.pipeline.transcription}
+				/>
 			</CapturePipeline>
 		{/snippet}
 
 		{#snippet vadPipeline()}
 			<CapturePipeline>
-				<VadDeviceSelector />
-				<TranscriptionSelector triggerVariant="pipeline" />
+				<VadDeviceSelector
+					iconViewTransitionName={viewTransition.pipeline.device}
+				/>
+				<TranscriptionSelector
+					variant="pipeline"
+					iconViewTransitionName={viewTransition.pipeline.transcription}
+				/>
 			</CapturePipeline>
 		{/snippet}
 
-		{#if settings.get('recording.mode') === 'manual'}
+		{#if captureSurface.current === 'manual'}
 			<div class="flex w-full flex-col items-center gap-3">
 				<ManualRecordingAction pipeline={manualPipeline} />
 				{#if manualRecorder.state === 'RECORDING'}
@@ -317,26 +253,25 @@
 						onclick={() => commandCallbacks.cancelRecording()}
 						variant="ghost-destructive"
 						size="sm"
-						style="view-transition-name: {viewTransition.global.cancel};"
 					>
 						<XIcon class="size-4" />
 						Cancel
 					</Button>
 				{/if}
 			</div>
-		{:else if settings.get('recording.mode') === 'vad'}
+		{:else if captureSurface.current === 'vad'}
 			<div class="flex w-full flex-col items-center gap-3">
 				<VadRecordingAction pipeline={vadPipeline} />
 			</div>
-		{:else if settings.get('recording.mode') === 'upload'}
-			<div class="flex flex-col items-center gap-4 w-full">
+		{:else if captureSurface.current === 'import'}
+			<div class="flex w-full flex-col items-center gap-4">
 				<FileDropZone
-					accept="{ACCEPT_AUDIO}, {ACCEPT_VIDEO}"
-					maxFiles={10}
-					maxFileSize={25 * MEGABYTE}
+					accept={IMPORT_ACCEPT}
+					maxFiles={MAX_IMPORT_FILES}
+					maxFileSize={MAX_IMPORT_FILE_SIZE}
 					onUpload={async (files) => {
 						if (files.length > 0) {
-							await uploadRecordings({ files });
+							await importFiles({ files });
 						}
 					}}
 					onFileRejected={({ file, reason }) => {
@@ -348,10 +283,13 @@
 							title: 'File rejected',
 						});
 					}}
-					class="h-32 sm:h-36 lg:h-40 xl:h-44 w-full"
+					class="h-32 sm:h-36 w-full"
 				/>
 				<CapturePipeline>
-					<TranscriptionSelector triggerVariant="pipeline" />
+					<TranscriptionSelector
+						variant="pipeline"
+						iconViewTransitionName={viewTransition.pipeline.transcription}
+					/>
 				</CapturePipeline>
 			</div>
 		{/if}
@@ -382,9 +320,9 @@
 
 				{#if audioPlaybackUrlQuery.data}
 					<audio
-						style="view-transition-name: {viewTransition.recording(
+						style:view-transition-name={viewTransition.recording(
 							latestRecording.id,
-						).audio}"
+						).audio}
 						src={audioPlaybackUrlQuery.data}
 						controls
 						class="h-8 w-full"
@@ -394,36 +332,10 @@
 		{/if}
 
 		<div class="flex flex-col items-center gap-3">
-			{#if settings.get('recording.mode') === 'manual'}
+			{#if captureSurface.current === 'manual'}
 				<p class="text-foreground/75 text-center text-sm">
-					Click the microphone{#if manualShortcutLabel}
-						or press
-						<Link
-							tooltip="Configure the recording shortcut"
-							href="/settings/shortcuts"
-						>
-							<Kbd.Root class={shortcutUnavailable ? 'opacity-50' : undefined}
-								>{manualShortcutLabel}</Kbd.Root>
-						</Link>{/if}
-					to start recording{tauri ? ' from anywhere' : ''}.
-				</p>
-			{:else if settings.get('recording.mode') === 'vad'}
-				<p class="text-foreground/75 text-center text-sm">
-					Click the microphone{#if vadShortcutLabel}
-						or press
-						<Link
-							tooltip="Configure the voice activation shortcut"
-							href="/settings/shortcuts"
-						>
-							<Kbd.Root class={shortcutUnavailable ? 'opacity-50' : undefined}
-								>{vadShortcutLabel}</Kbd.Root>
-						</Link>{/if}
-					to start a voice activated session.
-				</p>
-			{:else if settings.get('recording.mode') === 'upload'}
-				{#if tauri && manualShortcutLabel}
-					<p class="text-foreground/75 text-sm">
-						Press
+					{#if manualShortcutLabel}
+						Click the microphone to record{tauri ? ' here' : ''}, or press
 						<Link
 							tooltip="Configure the recording shortcut"
 							href="/settings/shortcuts"
@@ -431,9 +343,37 @@
 							<Kbd.Root class={shortcutUnavailable ? 'opacity-50' : undefined}
 								>{manualShortcutLabel}</Kbd.Root>
 						</Link>
-						to start recording instead.
-					</p>
-				{/if}
+						{tauri ? 'to record from anywhere.' : 'to record.'}
+					{:else if tauri}
+						Click the microphone to record, or
+						<Link tooltip="Set a global shortcut" href="/settings/shortcuts"
+							>set a global shortcut</Link>
+						to record from anywhere.
+					{:else}
+						Click the microphone to start recording.
+					{/if}
+				</p>
+			{:else if captureSurface.current === 'vad'}
+				<p class="text-foreground/75 text-center text-sm">
+					{#if vadShortcutLabel}
+						Click the microphone to listen{tauri ? ' here' : ''}, or press
+						<Link
+							tooltip="Configure the voice activation shortcut"
+							href="/settings/shortcuts"
+						>
+							<Kbd.Root class={shortcutUnavailable ? 'opacity-50' : undefined}
+								>{vadShortcutLabel}</Kbd.Root>
+						</Link>
+						{tauri ? 'to listen from anywhere.' : 'to listen.'}
+					{:else if tauri}
+						Click the microphone to start a voice activated session, or
+						<Link tooltip="Set a global shortcut" href="/settings/shortcuts"
+							>set a global shortcut</Link>
+						to listen from anywhere.
+					{:else}
+						Click the microphone to start a voice activated session.
+					{/if}
+				</p>
 			{/if}
 			<p class="text-muted-foreground text-center text-sm font-light">
 				{#if !tauri}

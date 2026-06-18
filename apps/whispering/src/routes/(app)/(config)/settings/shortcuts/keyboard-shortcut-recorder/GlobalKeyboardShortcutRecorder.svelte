@@ -1,6 +1,8 @@
 <script lang="ts">
+	import * as Alert from '@epicenter/ui/alert';
 	import { Button } from '@epicenter/ui/button';
 	import * as Kbd from '@epicenter/ui/kbd';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { onDestroy } from 'svelte';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { type Command, commands } from '$lib/commands';
@@ -14,15 +16,15 @@
 	import {
 		bindingsOverlap,
 		isEmptyBinding,
+		isTierZeroChord,
 		keyBindingToLabel,
 		parseManualBinding,
 	} from '$lib/utils/key-binding';
 	import { validateGlobalBinding } from '$lib/utils/reserved-shortcuts';
+	import { createGlobalChordRecorder } from './create-global-chord-recorder';
 	import RecorderShell from './RecorderShell.svelte';
 
-	// `tauri` is passed non-null from the Tauri-gated global settings page; the
-	// recorder drives the rdev backend through it. Recording goes through rdev
-	// (not webview keydown) so it can capture the Fn key and physical positions.
+	// `tauri` is passed non-null from the Tauri-gated global settings page.
 	const {
 		command,
 		placeholder = 'Press a key combination',
@@ -36,55 +38,94 @@
 	const binding = $derived(deviceConfig.get(`shortcuts.global.${command.id}`));
 	const label = $derived(binding ? keyBindingToLabel(binding, os.isApple) : null);
 
-	// rdev cannot tap the keyboard until macOS Accessibility is granted, so a
-	// capture popover would open and silently receive nothing. Gate at the door
-	// on the capability owner: when it is not `active`, render a guide CTA instead
-	// of a dead recorder. Always active off macOS (no Accessibility gate there).
-	const canRecord = $derived(dictationCapability.isActive);
+	// The recorder is always available here: chords record straight from the
+	// webview with no Accessibility grant. Only a platform that can never run
+	// global shortcuts at all (Linux Wayland) has nothing to offer.
+	const canRecord = $derived(!dictationCapability.isUnsupported);
 
+	// Which backend reads the keys. When the tap is active (trusted and running) it
+	// sees everything: Fn, modifier-only holds, and chords. Otherwise the webview
+	// reads chords only, with no permission; Fn and holds wait on the grant. The
+	// source follows trust reactively, so granting Accessibility mid-capture (the
+	// tap spins up because capture holds it) upgrades the open recorder in place.
+	const useTapCapture = $derived(dictationCapability.isActive);
+
+	// Whether the recorder popover is open, and whether a capture session is
+	// running inside it.
 	let open = $state(false);
-	let isListening = $state(false);
+	let capturing = $state(false);
 
-	// Accumulate the union of every combo the listener reports during a capture,
-	// then commit when all keys release (sourced from rdev, not the webview).
+	// Accumulated across a tap capture: the held combo, committed on release.
 	let capturedModifiers = new Set<Modifier>();
 	let capturedKeys = new Set<Key>();
-	let unlisten: (() => void) | undefined;
 
-	async function startCapture() {
-		// The capability is `active` (the capture UI only renders when `canRecord`),
-		// so the Rust supervisor already has the tap running; we only flip it into
-		// capture mode. No `start` to call: the FE does not own the tap's lifecycle.
-		isListening = true;
-		capturedModifiers = new Set();
-		capturedKeys = new Set();
+	const chordRecorder = createGlobalChordRecorder({
+		onCapture: (next) => void commitWebviewChord(next),
+	});
+
+	// Exactly one capture brain runs at a time, chosen by trust. If trust flips
+	// while the session is open (the user grants Accessibility), this tears down
+	// the old brain and starts the right one with no reopen.
+	$effect(() => {
+		if (!capturing) return;
+		if (useTapCapture) {
+			capturedModifiers = new Set();
+			capturedKeys = new Set();
+			// `listenForCapture` resolves async; if trust flips and this effect tears
+			// down before it does, detach the moment it lands so the listener cannot
+			// leak (the pattern dictation-capability.svelte.ts uses for the same race).
+			let torn = false;
+			let unlisten: (() => void) | undefined;
+			void tauri.globalShortcuts
+				.listenForCapture((combo) => {
+					for (const modifier of combo.modifiers) capturedModifiers.add(modifier);
+					for (const key of combo.keys) capturedKeys.add(key);
+					// Empty combo = everything released. Commit what we accumulated.
+					if (
+						isEmptyBinding(combo) &&
+						capturedModifiers.size + capturedKeys.size > 0
+					) {
+						void commitTapBinding({
+							modifiers: [...capturedModifiers],
+							keys: [...capturedKeys],
+						});
+					}
+				})
+				.then((fn) => {
+					if (torn) fn();
+					else unlisten = fn;
+				});
+			return () => {
+				torn = true;
+				unlisten?.();
+			};
+		}
+		chordRecorder.start();
+		return () => chordRecorder.stop();
+	});
+
+	async function startSession() {
+		capturing = true;
+		// Tell the supervisor we are capturing. From the dormant floor this spins
+		// the tap up (gated on trust) so an Fn or modifier-only binding is even
+		// recordable; when the tap is already running it just enters capture mode.
+		// An untrusted user lands in `untrusted`, which lights the upgrade hint.
 		await tauri.globalShortcuts.setCapturing(true);
-		unlisten = await tauri.globalShortcuts.listenForCapture((combo) => {
-			for (const modifier of combo.modifiers) capturedModifiers.add(modifier);
-			for (const key of combo.keys) capturedKeys.add(key);
-			// Empty combo = everything released. Commit what we accumulated.
-			if (
-				isEmptyBinding(combo) &&
-				capturedModifiers.size + capturedKeys.size > 0
-			) {
-				void commitCapture();
-			}
-		});
 	}
 
-	async function stopCapture() {
-		isListening = false;
-		unlisten?.();
-		unlisten = undefined;
+	async function stopSession() {
+		if (!capturing) return;
+		capturing = false;
+		// Drop the capture-hold; the tap tears back down to the floor unless a
+		// binding or auto-paste still wants it.
 		await tauri.globalShortcuts.setCapturing(false);
 	}
 
 	// If the recorder is torn down mid-capture (route change, or the popover
-	// dismissed by unmount rather than by onOpenChange), nothing else exits
-	// capture mode, so Rust would stay capturing and silently swallow every
-	// global shortcut. Always leave capture on destroy.
+	// dismissed by unmount), nothing else leaves capture mode, so the supervisor
+	// would keep holding the tap. Always end the session on destroy.
 	onDestroy(() => {
-		if (isListening) void stopCapture();
+		if (capturing) void stopSession();
 	});
 
 	// A gesture's keys must be unique to it. The matcher fires on exact set
@@ -120,14 +161,42 @@
 		return false;
 	}
 
-	async function commitCapture() {
-		const next: KeyBinding = {
-			modifiers: [...capturedModifiers],
-			keys: [...capturedKeys],
-		};
-		await stopCapture();
+	// A webview capture can only legitimately produce a Tier-0 chord (one key plus
+	// a non-Fn modifier). A bare key would bind a lone keypress globally, so refuse
+	// it and point Fn / modifier-only holds at the grant that unlocks the tap. The
+	// recorder stays listening, so the user just adds a modifier and tries again.
+	async function commitWebviewChord(next: KeyBinding) {
+		if (!isTierZeroChord(next)) {
+			report.error({
+				title: 'Add a modifier',
+				description:
+					'A global chord needs a modifier such as Cmd or Ctrl plus one key. To record Fn or a modifier-only hold, grant Accessibility.',
+				cause: {
+					name: 'NotAChord',
+					message: `${keyBindingToLabel(next, os.isApple)} is not a chord the permission-free backend can register.`,
+				},
+			});
+			return;
+		}
 		if (!validateAndReport(next)) return;
+		await finishCapture(next);
+	}
+
+	// A tap capture may be a chord, an Fn hold, or a modifier-only hold: all valid.
+	async function commitTapBinding(next: KeyBinding) {
+		if (!validateAndReport(next)) {
+			capturedModifiers = new Set();
+			capturedKeys = new Set();
+			return;
+		}
+		await finishCapture(next);
+	}
+
+	// Persist first (a Tier-1 binding's `setBindings` keeps the tap held), then
+	// drop the capture-hold, so an Fn binding never flaps the tap off and back on.
+	async function finishCapture(next: KeyBinding) {
 		await persist(next);
+		await stopSession();
 		open = false;
 	}
 
@@ -141,7 +210,7 @@
 	}
 
 	async function clear() {
-		await stopCapture();
+		await stopSession();
 		deviceConfig.set(`shortcuts.global.${command.id}`, null);
 		await shortcuts.sync();
 		report.success({
@@ -166,14 +235,21 @@
 		}
 		if (!validateAndReport(next)) return false;
 		void persist(next).then(() => {
+			void stopSession();
 			open = false;
 		});
 		return true;
 	}
 
+	const recordHelp = $derived(
+		useTapCapture
+			? 'Press a gesture. Fn and modifier-only holds work here.'
+			: 'Press a chord. Fn and holds need Accessibility (see above).',
+	);
+
 	const recorder = {
 		get isListening() {
-			return isListening;
+			return capturing;
 		},
 		get label() {
 			return label;
@@ -181,8 +257,8 @@
 		get manualInitial() {
 			return label ?? '';
 		},
-		start: () => void startCapture(),
-		stop: () => void stopCapture(),
+		start: () => void startSession(),
+		stop: () => void stopSession(),
 		clear: () => void clear(),
 		submitManual,
 	};
@@ -195,32 +271,42 @@
 		{recorder}
 		copy={{
 			placeholder,
-			recordHelp: 'Press a gesture. Fn and modifier-only holds work here.',
+			recordHelp,
 			manualHelp: 'Type a gesture (e.g. fn+space, ctrl+meta)',
 			manualPlaceholder: 'e.g. fn+space',
 			manualButtonLabel: 'Type manually',
 			listeningHint: 'Release to set, Esc to cancel',
 		}}
-	/>
-{:else if dictationCapability.needsAccessibility}
-	<!-- macOS Accessibility ungranted or stale: a recorder here would capture
-	nothing. Show the current binding read-only and route to the re-grant guide. -->
-	<div class="flex items-center justify-end gap-2">
-		{#if label}
-			<Kbd.Root>{label}</Kbd.Root>
-		{/if}
-		<Button
-			variant="outline"
-			size="sm"
-			onclick={() => accessibilityGuide.open()}
-		>
-			Grant Accessibility to record
-		</Button>
-	</div>
+	>
+		{#snippet warning()}
+			{#if dictationCapability.needsAccessibility}
+				<!-- Chords already record without permission; this is the honest
+				upgrade for the holds the webview cannot see, not a wall. -->
+				<Alert.Root variant="warning" class="text-xs">
+					<AlertTriangle class="size-4" />
+					<Alert.Title class="text-xs font-medium">
+						Fn and holds need Accessibility
+					</Alert.Title>
+					<Alert.Description class="space-y-2 text-xs">
+						<p>
+							Chords record here without any permission. To record Fn
+							push-to-talk or a modifier-only hold, grant macOS Accessibility.
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => accessibilityGuide.open()}
+						>
+							Enable Accessibility
+						</Button>
+					</Alert.Description>
+				</Alert.Root>
+			{/if}
+		{/snippet}
+	</RecorderShell>
 {:else}
-	<!-- The tap is unavailable for a non-grant reason (Linux Wayland, or the
-	capability not yet seeded): the macOS guide would be wrong here, so show the
-	current binding read-only with no CTA. -->
+	<!-- Unsupported (Linux Wayland): no global-shortcut backend, so show the
+	current binding read-only with no recorder. -->
 	<div class="flex items-center justify-end gap-2">
 		{#if label}
 			<Kbd.Root>{label}</Kbd.Root>

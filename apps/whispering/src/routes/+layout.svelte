@@ -11,6 +11,10 @@
 
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
+		// We deliberately lengthen the morph below, so honor reduced-motion by
+		// skipping the transition entirely (snap to the new page) rather than
+		// playing a longer animation for someone who asked for less.
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
 		return new Promise((resolve) => {
 			document.startViewTransition(async () => {
@@ -44,3 +48,21 @@
 	}}
 />
 <ModeWatcher defaultMode="dark" track={false} />
+
+<style>
+	/* The default UA view-transition runs 0.25s, which is abrupt for the
+	   cross-page glyph morphs (ADR 0014) that fly the hero record control up
+	   into the topbar. Slow every group and its old/new images by the same
+	   amount so the named glyphs and the page crossfade stay in step. This is
+	   the one knob: SvelteKit has no duration setting, it is pure CSS on the
+	   :root view-transition pseudo-elements (hence :global).
+
+	   0.3s is Material's inter-screen standard and sits in the middle of the
+	   100-400ms band research calls responsive (NN/g: 500ms reads as a drag);
+	   a gentle nudge up from the abrupt 0.25s UA default. */
+	:global(::view-transition-group(*)),
+	:global(::view-transition-old(*)),
+	:global(::view-transition-new(*)) {
+		animation-duration: 0.3s;
+	}
+</style>

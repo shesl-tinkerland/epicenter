@@ -55,12 +55,21 @@ import type { Guid } from '../shared/id.js';
 import { once } from '../shared/once.js';
 import { assertSafeSegment } from '../shared/safe-segment.js';
 import type { Drainable } from '../shared/types.js';
+import type { AgentId } from './agent-id.js';
+import {
+	attachChildDocActor,
+	type ChildDocActor,
+	type ChildDocActorFactory,
+	type ConnectedChildDoc,
+	type ObservableChildDocLayout,
+} from './child-doc-actor.js';
 import { type ConnectionConfig, connectDoc } from './connect-doc.js';
 import { docGuid } from './doc-guid.js';
 import { KV_KEY, TableKey } from './keys.js';
 import { createKv, type Kv, type KvDefinitions } from './kv.js';
 import { onLocalUpdate } from './on-local-update.js';
 import type { Collaboration } from './open-collaboration.js';
+import { assertReferenceTargets } from './reference-check.js';
 import {
 	type BaseRow,
 	type ChildDocDeclaration,
@@ -369,10 +378,44 @@ export type MountComposition<TActions extends ActionRegistry> = {
 };
 
 /**
+ * The daemon child-doc actors a mount registers, keyed by table then by
+ * child-doc field, to a per-body {@link ChildDocActorFactory}. The keys are
+ * typed against the schema (only declared tables, and only each table's declared
+ * child-doc fields), and each factory's `handle` is the field's declared layout
+ * return type. So the app supplies behavior alone: the table, the field's guid
+ * deriver, and the layout all come from the schema, never re-passed at the call
+ * site.
+ *
+ * Registering a field is what makes the daemon host and observe its bodies; a
+ * field left out is opened on demand by browser UI, not held live by the actor.
+ *
+ * Only fields whose layout exposes `observe` can be registered: the loop watches
+ * each body through it, so a layout without one (e.g. `attachPlainText`) collapses
+ * to `never` and the field cannot carry an actor. `attachChatTranscript` does.
+ */
+export type MountActors<TTables extends TableDefinitions> = {
+	[T in keyof TTables]?: TTables[T] extends TableDefinition<
+		any,
+		infer TDecls extends ChildDocDeclarations
+	>
+		? {
+				[F in keyof TDecls]?: ReturnType<LayoutOf<TDecls[F]>> extends {
+					observe(callback: () => void): () => void;
+				}
+					? ChildDocActorFactory<
+							InferTableRow<TTables[T]>['id'],
+							ReturnType<LayoutOf<TDecls[F]>>
+						>
+					: never;
+			}
+		: never;
+};
+
+/**
  * Options for `definition.mount(...)`, the daemon runtime. The mount's display
  * label comes from the definition's `name` (see `defineWorkspace`), so the only
- * per-mount inputs are the sync base URL, the injected node runtime, and the
- * optional composer.
+ * per-mount inputs are the sync base URL, the injected node runtime, the
+ * optional composer, and the optional child-doc actors.
  *
  * `runtime` is the injected node bag from `nodeMountRuntime()`; `.mount()`
  * itself imports no node module. `compose` is optional: omit it to serve the
@@ -404,6 +447,23 @@ export type MountOptions<
 	readonly compose?: (
 		context: MountComposeContext<TTables, TKv, TActions>,
 	) => MountComposition<ActionRegistry>;
+	/**
+	 * Register daemon child-doc actors: the always-on observe loops that host a
+	 * live replica of a row's child doc and watch it (ADR-0014/0015). Keyed by
+	 * table then field, to a per-body factory. Identity and shape (the table, the
+	 * guid, the layout) come from the schema; the factory supplies only behavior.
+	 * See {@link MountActors}.
+	 */
+	readonly actors?: MountActors<TTables>;
+	/**
+	 * The agent identity this daemon answers as (ADR-0015). A conversation row
+	 * names the one agent it is bound to in its `agent` column; the observe loop
+	 * hosts and answers exactly the rows whose `agent` equals this id. Authored in
+	 * configuration (the durable, stable address), not derived from the per-install
+	 * `nodeId`. Omit it for a daemon with no configured agent: it then hosts
+	 * nothing, leaving every conversation to its own bound agent.
+	 */
+	readonly agentId?: AgentId;
 };
 
 export type WorkspaceDefinition<
@@ -455,6 +515,10 @@ export function createWorkspace<
 	TKv extends KvDefinitions,
 >(options: CreateWorkspaceOptions<TTables, TKv>): Workspace<TTables, TKv, {}> {
 	assertSafeSegment(options.id, 'workspace id');
+	// Referential floor: every field.reference(table) column must name a table defined in
+	// this same workspace. Throws here so a dangling target fails at construction, not
+	// silently at query time. A no-op unless a table actually uses field.reference().
+	assertReferenceTargets(options.tables);
 	const ydoc = new Y.Doc({
 		guid: options.id,
 		gc: true,
@@ -683,6 +747,22 @@ export function defineWorkspace<
 					mountOptions.compose
 						? mountOptions.compose({ workspace, scope })
 						: { actions: workspace.actions };
+				// Schema-driven child-doc actors. The coordinator reads the layout
+				// and guid deriver from the definition (never re-passed by the app),
+				// so an actor cannot interpret a body with a layout that disagrees
+				// with the schema. Each actor enrolls its own drain. Runs before
+				// infrastructure so the loops are observing the root table by the
+				// time sync starts to fill it.
+				if (mountOptions.actors) {
+					connectMountActors({
+						actors: mountOptions.actors,
+						workspace,
+						definitions: options.tables,
+						connectBody: runtime.connectChildDoc(ctx, baseURL),
+						selfAgentId: mountOptions.agentId,
+						registerDrain: scope.registerDrain,
+					});
+				}
 				// `attachInfrastructure` serves `composition.actions` to peers and
 				// drains every registered materializer in order on shutdown, so it
 				// runs after compose has registered them.
@@ -836,4 +916,89 @@ function connectTableChildDocs<TTableDefinitions extends TableDefinitions>({
 	}
 
 	return connectedTables as ConnectedTables<TTableDefinitions>;
+}
+
+/**
+ * Wire the schema-driven daemon child-doc actors for a mount, the browser-safe
+ * twin of {@link connectTableChildDocs}.
+ *
+ * For every `(table, field)` the mount registered an actor on, read the field's
+ * layout from the definition and its guid deriver from the workspace's own
+ * `.docs` namespace, then run {@link attachChildDocActor} over the injected node
+ * `connectBody`. The app supplied only the per-body factory, so identity (the
+ * guid) and shape (the layout) stay single-owner: an actor can never read a body
+ * with a layout that disagrees with the schema, the way a hand-passed `layout`
+ * would allow.
+ *
+ * Each actor enrolls its drain through `registerDrain`; its body teardown
+ * cascades off the root `ydoc.destroy()` inside {@link attachChildDocActor}, so
+ * there is no handle to thread back.
+ */
+function connectMountActors<TTableDefinitions extends TableDefinitions>({
+	actors,
+	workspace,
+	definitions,
+	connectBody,
+	selfAgentId,
+	registerDrain,
+}: {
+	actors: MountActors<TTableDefinitions>;
+	workspace: Workspace<TTableDefinitions, KvDefinitions, ActionRegistry>;
+	definitions: TTableDefinitions;
+	connectBody: (guid: string) => ConnectedChildDoc;
+	/**
+	 * The agent identity this daemon answers as, or `undefined` when no agent is
+	 * configured (it then designates nothing). The loop hosts exactly the rows
+	 * whose `agent` equals it.
+	 */
+	selfAgentId: AgentId | undefined;
+	registerDrain: (drainable: ChildDocActor) => void;
+}): void {
+	// `Object.entries` erases the per-table types the public `MountActors` already
+	// enforced, so the loop body works in the widened `string`/`unknown` forms and
+	// casts at the schema reads (layout, guid) and the designation read.
+	for (const [collection, fieldActors] of Object.entries(actors) as [
+		string,
+		Record<string, ChildDocActorFactory<string, unknown>> | undefined,
+	][]) {
+		if (fieldActors === undefined) continue;
+		const definition = definitions[collection as keyof TTableDefinitions]!;
+		// One structural view of the connected table: the loop reads its
+		// schema-derived guid derivers, scans/observes its rows, and reads a row's
+		// bound `agent` to decide designation. `get` returns the row or `null`.
+		const table = workspace.tables[
+			collection as keyof TTableDefinitions
+		] as unknown as {
+			docs: Record<string, RowDocGuid<string>>;
+			scan(): { rows: ReadonlyArray<{ id: string }> };
+			observe(callback: () => void): () => void;
+			get(id: string): { data: { agent?: AgentId } | null };
+		};
+		// The designation contract (ADR-0015): a daemon hosts and answers exactly
+		// the rows bound to the agent it answers as. Composed once here, the single
+		// owner of the rule, so an app's actor factory supplies behavior alone. A
+		// daemon with no configured agent (`selfAgentId` undefined) designates
+		// nothing, so every conversation is left to its own bound agent.
+		const isDesignated = (rowId: string): boolean =>
+			selfAgentId !== undefined && table.get(rowId).data?.agent === selfAgentId;
+
+		for (const [field, actorFor] of Object.entries(fieldActors)) {
+			if (actorFor === undefined) continue;
+			// Layout and guid both come from the schema, never the call site.
+			const declaration = definition.docDecls[field] as ChildDocDeclaration;
+			const layout =
+				typeof declaration === 'function' ? declaration : declaration.layout;
+			const guidEntry = table.docs[field]!;
+			const actor = attachChildDocActor<string, unknown>({
+				rootDoc: workspace.ydoc,
+				table,
+				guidFor: (rowId) => guidEntry.guid(rowId),
+				connectBody,
+				layout: layout as unknown as ObservableChildDocLayout<unknown>,
+				actorFor,
+				isDesignated,
+			});
+			registerDrain(actor);
+		}
+	}
 }

@@ -100,8 +100,9 @@ const DOC_GUID_REGEX =
 
 const aiChatDocBody = type({
 	guid: type('string').narrow((s) => DOC_GUID_REGEX.test(s)),
-	/** Client-minted; doubles as the assistant message id for idempotency. */
-	generationId: 'string > 0',
+	// The generation identity is no longer in the body: the actor reads the
+	// client-minted `generationId` off the unanswered user turn in the doc.
+	// This POST is a wake nudge that names the room and the model.
 	// Same options as the SSE route minus `tools` (doc-as-wire chat is
 	// text-only) and minus `messages` (history lives in the doc).
 	data: chatOptions.omit('tools').merge(modelChoice),
@@ -198,12 +199,7 @@ const aiApp = new Hono<Env>()
 		}),
 		sValidator('json', aiChatDocBody),
 		async (c) => {
-			const {
-				guid,
-				generationId,
-				data,
-				apiKey: userApiKey,
-			} = c.req.valid('json');
+			const { guid, data, apiKey: userApiKey } = c.req.valid('json');
 			const { model, ...options } = data;
 
 			const { data: adapter, error: adapterError } = resolveAdapter({
@@ -231,7 +227,6 @@ const aiApp = new Hono<Env>()
 
 			const { data: generation, error } = await runDocGeneration({
 				room,
-				generationId,
 				signal: abortController.signal,
 				waitUntil: (promise) => c.executionCtx.waitUntil(promise),
 				startStream: (messages) =>

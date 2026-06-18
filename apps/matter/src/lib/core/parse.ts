@@ -89,9 +89,21 @@ export function parseMarkdown(
 }
 
 /**
+ * A row's identity in reference form: its basename without the `.md` extension, the
+ * exact string an author writes in frontmatter (`page: become-the-source`). The ONE
+ * definition of stem-from-name, so the reference validator, the live grid, and the
+ * report layer all read identity the same way instead of each re-slicing the extension.
+ */
+export function stemOf(fileName: string): string {
+	return fileName.endsWith('.md') ? fileName.slice(0, -3) : fileName;
+}
+
+/**
  * A markdown file read into memory: a {@link ParsedFile} plus the file's basename,
  * which is the row identity. The body is the one rich field, kept verbatim and never
- * AST-parsed; the frontmatter is the typed-column layer.
+ * AST-parsed; the frontmatter is the typed-column layer. The reference form of that
+ * identity (basename without `.md`) is {@link stemOf}, kept a derivation off `fileName`
+ * rather than a stored field so hand-built test rows need not carry it.
  */
 export type Row = ParsedFile & {
 	/** The file's basename, used as the row id (no id is minted). */
@@ -101,7 +113,7 @@ export type Row = ParsedFile & {
 /**
  * Parse one file's content into a row, or the parse error that stopped it. The SINGLE
  * definition of "parse one file into the row-or-unreadable split", shared by
- * {@link readFolder} (batch) and the live vault (one delta at a time), so the two
+ * {@link readTable} (batch) and the live vault (one delta at a time), so the two
  * cannot drift. The read-level error (only Rust knows a file is undecodable) is the
  * caller's to add; this covers the parse half.
  */

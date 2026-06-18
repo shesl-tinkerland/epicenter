@@ -4,19 +4,26 @@ export {
 	DEFAULT_BITRATE_KBPS,
 } from './bitrate';
 export {
+	CAPTURE_SURFACE_META,
+	CAPTURE_SURFACE_OPTIONS,
+	type CaptureSurface,
+} from './capture-surfaces';
+export {
 	TIMESLICE_MS,
 	WHISPER_RECOMMENDED_MEDIA_TRACK_CONSTRAINTS,
 } from './media-constraints';
 export {
-	RECORDING_MODE_ICONS,
-	RECORDING_MODE_OPTIONS,
-	RECORDING_MODES,
-	type RecordingMode,
-} from './recording-modes';
-export {
-	RECORDER_STATE_TO_ICON,
-	VAD_STATE_TO_ICON,
-	type VadState,
-	type WhisperingRecordingState,
+	MANUAL_RECORDING_BUTTON,
+	VAD_RECORDING_BUTTON,
+} from './recording-buttons';
+export type {
+	VadState,
+	WhisperingRecordingState,
 } from './recording-states';
+export {
+	RECORDING_TRIGGER_META,
+	RECORDING_TRIGGER_OPTIONS,
+	RECORDING_TRIGGERS,
+	type RecordingTrigger,
+} from './recording-triggers';
 export { RECORDER_OUTPUT_RATE, SAMPLE_RATE_OPTIONS } from './sample-rate';

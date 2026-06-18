@@ -21,37 +21,38 @@ const globalBinding = type({
 	keys: 'string[]',
 }).or('null');
 
-// Default bindings as global gestures, not mnemonic app hotkeys. The rdev matcher
-// fires on exact set equality with no prefix resolution, so no gesture's keys may
-// be a subset of another's (the shorter would fire first and shadow the longer):
-// every default below is a distinct, non-overlapping combo.
+// Default global gestures, not mnemonic app hotkeys. These are the Tier-0 floor:
+// plain chords the `tauri-plugin-global-shortcut` backend registers with no
+// Accessibility grant. The matcher fires on exact set equality with no prefix
+// resolution, so no default's keys may be a subset of another's (the shorter
+// would fire first and shadow the longer): every default below is distinct.
 //
-// Push-to-talk is the default recording key: hold it to record, release to stop.
-// It is a single physical key with no start latency. On Apple keyboards that key
-// is Fn (a single physical key no common shortcut claims); elsewhere it is
-// Ctrl+Win, a held chord that is likewise unclaimed. Tap-to-toggle is a separate
-// command that ships unbound (the in-app record button is its home); bind a key
-// for it in settings if you want a hands-free toggle.
+// Toggle recording is the out-of-the-box gesture: tap to start, tap to stop. A
+// chord is the right tool for a toggle (its press effort resists accidental
+// triggers). Push-to-talk ships unbound: a good hold key is a single physical
+// key, and the only one a laptop has is Fn, which lives behind the opt-in
+// Accessibility tier. Bind Fn (or a chord) for push-to-talk in settings if you
+// want a held key.
 //
-//   macOS:   Fn = push-to-talk,        Cmd + .          = cancel
-//   Windows: Ctrl+Win = push-to-talk,  Ctrl + Shift + . = cancel
+//   macOS:   Cmd + Shift + Space  = toggle,  Cmd + .          = cancel
+//   Windows: Ctrl + Shift + Space = toggle,  Ctrl + Shift + . = cancel
 //
-// Cancel is the platform cancel chord (Cmd + . on macOS, the system cancel gesture
-// since classic Mac OS; Ctrl + Shift + . elsewhere); it carries a modifier so it is
-// safe to hold globally and registers like any other gesture with no session
-// gating. Recipe gestures ship unbound: opt-in only. Exported so the reset
-// path in platform/shortcuts.tauri.ts shares this one source of truth.
-const RECORDING_MODIFIERS: KeyBinding['modifiers'] = os.isApple
-	? ['fn']
-	: ['ctrl', 'meta'];
+// Cancel is the platform cancel chord (Cmd + . on macOS, the system cancel
+// gesture since classic Mac OS; Ctrl + Shift + . elsewhere); it carries a
+// modifier so it is safe to register globally. Recipe gestures ship
+// unbound: opt-in only. Exported so the reset path in platform/shortcuts.tauri.ts
+// shares this one source of truth.
+const TOGGLE_MODIFIERS: KeyBinding['modifiers'] = os.isApple
+	? ['meta', 'shift']
+	: ['ctrl', 'shift'];
 
 const CANCEL_MODIFIERS: KeyBinding['modifiers'] = os.isApple
 	? ['meta']
 	: ['ctrl', 'shift'];
 
 export const DEFAULT_GLOBAL_BINDINGS = {
-	pushToTalk: { modifiers: RECORDING_MODIFIERS, keys: [] },
-	toggleManualRecording: null,
+	pushToTalk: null,
+	toggleManualRecording: { modifiers: TOGGLE_MODIFIERS, keys: ['space'] },
 	cancelRecording: { modifiers: CANCEL_MODIFIERS, keys: ['dot'] },
 	toggleVadRecording: null,
 	openRecipePicker: null,

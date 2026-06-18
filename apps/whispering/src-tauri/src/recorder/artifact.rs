@@ -349,4 +349,46 @@ mod tests {
         assert_eq!(recording_id_from_artifact_filename("abc.webm"), Some("abc"));
         assert_eq!(recording_id_from_artifact_filename("abc.md"), None);
     }
+
+    /// Measures the file round-trip the live path pays today: WAV write + fsync,
+    /// then read + Symphonia decode. This is the "removable" quantity in the
+    /// spec's falsification benchmark, and the thing the parked handoff +
+    /// async-persist optimization would take off the critical path. Not an
+    /// assertion of speed (hardware varies); it asserts the round-trip is
+    /// lossless and prints the numbers. Run with:
+    ///
+    /// ```sh
+    /// cargo test -p whispering file_roundtrip_overhead -- --nocapture
+    /// ```
+    #[test]
+    fn file_roundtrip_overhead() {
+        use std::time::Instant;
+        let dir = std::env::temp_dir();
+        for &secs in &[5usize, 15, 60] {
+            let n = secs * ARTIFACT_RATE as usize;
+            // A quiet sine so the decode does real work on plausible samples.
+            let samples: Vec<f32> = (0..n).map(|i| (i as f32 * 0.05).sin() * 0.25).collect();
+            let path = dir.join(format!("whispering_roundtrip_{secs}s.wav"));
+
+            let t0 = Instant::now();
+            write_pcm_as_wav(&path, &samples).expect("write wav");
+            let write_ms = t0.elapsed().as_secs_f64() * 1000.0;
+
+            let t1 = Instant::now();
+            let bytes = std::fs::read(&path).expect("read wav");
+            let decoded = decode_to_pcm16k_mono(&bytes).expect("decode wav");
+            let read_decode_ms = t1.elapsed().as_secs_f64() * 1000.0;
+
+            assert_eq!(
+                decoded.len(),
+                samples.len(),
+                "round-trip changed the sample count"
+            );
+            println!(
+                "[roundtrip] {secs:>2}s ({n} samples): write+fsync {write_ms:6.2}ms  read+decode {read_decode_ms:6.2}ms  total {:6.2}ms",
+                write_ms + read_decode_ms
+            );
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }

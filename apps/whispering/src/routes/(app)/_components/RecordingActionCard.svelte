@@ -5,9 +5,8 @@
 	import { cn } from '@epicenter/ui/utils';
 	import type { Component, Snippet } from 'svelte';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
-	import { viewTransition } from '$lib/utils/viewTransitions';
 
-	// The caller owns its own state machine, so it resolves which glyph to show
+	// The caller owns its own state machine, so it picks which icon to show
 	// and hands us one `icon`. We only decide presentation: a spinner while
 	// pending, and the destructive "filled" treatment while `active`.
 	let {
@@ -15,6 +14,7 @@
 		description,
 		footer,
 		icon: Icon,
+		iconViewTransitionName,
 		label,
 		onclick,
 		pending = false,
@@ -25,6 +25,14 @@
 		description: string;
 		footer?: Snippet;
 		icon: Component<{ class?: string }>;
+		/**
+		 * When set, names the action glyph for a cross-page view transition while
+		 * the card is at rest. Suppressed automatically while `active`, because the
+		 * live glyph (a stop square, a waveform) is a different object and must not
+		 * morph from the resting mode glyph. Callers pass the name unconditionally;
+		 * the card owns the at-rest gate.
+		 */
+		iconViewTransitionName?: string;
 		label: string;
 		onclick: () => void;
 		pending?: boolean;
@@ -59,7 +67,6 @@
 	>
 		<span
 			aria-hidden="true"
-			style="view-transition-name: {viewTransition.global.microphone};"
 			class={cn(
 				'flex size-14 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/70 text-foreground shadow-inner transition-colors duration-200 sm:size-16',
 				active && 'border-destructive/45 bg-destructive/10 text-destructive',
@@ -68,9 +75,14 @@
 			{#if pending}
 				<Spinner class="size-7" />
 			{:else}
-				<Icon
-					class={cn('size-7', active && 'size-6 fill-current stroke-[1.75]')}
-				/>
+				<span
+					class="inline-flex"
+					style:view-transition-name={active ? undefined : iconViewTransitionName}
+				>
+					<Icon
+						class={cn('size-7', active && 'size-6 fill-current stroke-[1.75]')}
+					/>
+				</span>
 			{/if}
 		</span>
 		<span class="flex min-w-0 flex-1 flex-col gap-1">

@@ -7,13 +7,20 @@
  *
  * ```txt
  * {
- *   id: string;            // assistant: the client-minted generationId
+ *   id: string;            // assistant: equals the client-minted generationId
  *   role: 'user' | 'assistant';
  *   createdAt: number;
  *   content: Y.Text;       // token appends land here
+ *   generationId?: string  // user: the assistant id this turn awaits (the work queue)
  *   finish?: ChatDocFinish // server, written at most once; absence = not terminal
  * }
  * ```
+ *
+ * The user turn carries its own `generationId`: the durable, client-minted id
+ * that names the assistant answer it awaits and doubles as that answer's
+ * message id. An unanswered user turn IS the work queue, so an actor that only
+ * observes the doc (no HTTP kickoff body) reads the identity from the turn
+ * itself.
  *
  * Single writer per map: the creating client for user messages, the server
  * generation actor for assistant messages. Both sides import this module so
@@ -21,6 +28,7 @@
  * raw Y types.
  */
 
+import type { ModelMessage } from '@tanstack/ai';
 import * as Y from 'yjs';
 
 /**
@@ -40,8 +48,28 @@ export type ChatDocMessage = {
 	role: 'user' | 'assistant';
 	createdAt: number;
 	text: string;
+	/**
+	 * User turns only: the assistant id this turn awaits, used by the actor as
+	 * the idempotent assistant message id. Absent on assistant messages.
+	 */
+	generationId?: string;
+	/**
+	 * User turns only: a client-owned request to cancel the in-flight answer to
+	 * this turn. The client writes it (single writer per field); the actor reads
+	 * it back mid-answer and writes a `cancelled` finish. A retry that re-points
+	 * the turn's `generationId` clears it, so the fresh generation is not born
+	 * cancelled.
+	 */
+	cancelRequestedAt?: number;
 	finish?: ChatDocFinish;
 };
+
+/**
+ * A user turn that is ready to be answered: its `generationId` is present (so
+ * the actor has the idempotent assistant id) and {@link findUnansweredTurn} has
+ * confirmed no answer or active generation exists yet.
+ */
+export type AnswerableTurn = ChatDocMessage & { generationId: string };
 
 /**
  * Unfinished assistant messages younger than this are presumed live. Older
@@ -58,7 +86,10 @@ function messagesArray(doc: Y.Doc): Y.Array<Y.Map<unknown>> {
 
 /**
  * Append one user message. One transaction, one map; the caller mints the
- * id (any unique string) and never writes to the map again.
+ * id (any unique string) and the `generationId` (the assistant answer this
+ * turn awaits). The caller never rewrites the id or content; only the
+ * `generationId` may be re-pointed on retry via
+ * {@link setLatestUserTurnGenerationId}, and only by this same client.
  */
 export function appendUserMessage(
 	doc: Y.Doc,
@@ -66,7 +97,8 @@ export function appendUserMessage(
 		id,
 		content,
 		createdAt,
-	}: { id: string; content: string; createdAt: number },
+		generationId,
+	}: { id: string; content: string; createdAt: number; generationId: string },
 ): void {
 	doc.transact(() => {
 		const map = new Y.Map<unknown>();
@@ -75,9 +107,60 @@ export function appendUserMessage(
 		map.set('role', 'user');
 		map.set('createdAt', createdAt);
 		map.set('content', text);
+		map.set('generationId', generationId);
 		text.insert(0, content);
 		messagesArray(doc).push([map]);
 	});
+}
+
+/**
+ * Re-point the latest user turn's `generationId`, returning the id written or
+ * `undefined` when no user turn has synced yet. Retry after a terminal answer
+ * (failed or interrupted) mints a fresh id so the actor starts a new
+ * generation instead of colliding with the answer already keyed to the old
+ * id. The user turn belongs to the creating client, so re-pointing its
+ * `generationId` stays single-writer.
+ */
+export function setLatestUserTurnGenerationId(
+	doc: Y.Doc,
+	generationId: string,
+): string | undefined {
+	const messages = messagesArray(doc);
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const entry = messages.get(index);
+		if (entry instanceof Y.Map && entry.get('role') === 'user') {
+			doc.transact(() => {
+				entry.set('generationId', generationId);
+				// A retry is a fresh generation; drop any stale cancel request so it
+				// is not born cancelled.
+				entry.delete('cancelRequestedAt');
+			});
+			return generationId;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Stamp a client-owned cancel request on the latest user turn, returning the
+ * timestamp written or `undefined` when no user turn has synced yet. The turn
+ * belongs to the creating client, so writing `cancelRequestedAt` stays
+ * single-writer; the actor reads it back mid-answer (its read-back departure
+ * from the snapshot-once HTTP path) and writes a `cancelled` finish.
+ */
+export function requestLatestUserTurnCancel(
+	doc: Y.Doc,
+	cancelRequestedAt: number,
+): number | undefined {
+	const messages = messagesArray(doc);
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const entry = messages.get(index);
+		if (entry instanceof Y.Map && entry.get('role') === 'user') {
+			doc.transact(() => entry.set('cancelRequestedAt', cancelRequestedAt));
+			return cancelRequestedAt;
+		}
+	}
+	return undefined;
 }
 
 /**
@@ -144,16 +227,35 @@ export function readChatDocMessages(doc: Y.Doc): ChatDocMessage[] {
 		if (role !== 'user' && role !== 'assistant') continue;
 		if (typeof createdAt !== 'number') continue;
 		if (!(content instanceof Y.Text)) continue;
+		const generationId = entry.get('generationId');
+		const cancelRequestedAt = entry.get('cancelRequestedAt');
 		const finish = entry.get('finish') as ChatDocFinish | undefined;
 		messages.push({
 			id,
 			role,
 			createdAt,
 			text: content.toString(),
+			...(typeof generationId === 'string' && { generationId }),
+			...(typeof cancelRequestedAt === 'number' && { cancelRequestedAt }),
 			...(finish !== undefined && { finish }),
 		});
 	}
 	return messages;
+}
+
+/**
+ * The latest user message in transcript order, or `undefined` when none has
+ * synced yet. The actor answers this turn, taking its `generationId` as the
+ * idempotent assistant message id. Pure over a snapshot; never touches the doc.
+ */
+export function findLatestUserTurn(
+	messages: readonly ChatDocMessage[],
+): ChatDocMessage | undefined {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (message?.role === 'user') return message;
+	}
+	return undefined;
 }
 
 /**
@@ -176,6 +278,47 @@ export function findActiveChatDocGeneration(
 		}
 	}
 	return undefined;
+}
+
+/**
+ * The latest user turn that is ready to be answered, or `undefined` when there
+ * is nothing to answer yet. This is the single answer predicate the observing
+ * actor reconciles: a turn qualifies only when it carries a `generationId`, no
+ * message is already keyed to that id (the existence-based claim), and no recent
+ * unfinished assistant turn is still streaming.
+ *
+ * Pure over a snapshot; never touches the doc. It is deliberately turn-or-
+ * nothing: the HTTP generation path keeps its own 400-vs-409 taxonomy for its
+ * response, but the actor only needs "answer this turn, or nothing".
+ */
+export function findUnansweredTurn(
+	messages: readonly ChatDocMessage[],
+	now: number,
+): AnswerableTurn | undefined {
+	const turn = findLatestUserTurn(messages);
+	if (turn?.generationId === undefined) return undefined;
+	// Existence IS the claim: a message keyed to this id means the turn is
+	// already claimed or answered.
+	if (messages.some((message) => message.id === turn.generationId)) {
+		return undefined;
+	}
+	// A recent unfinished assistant turn is still live; let it finish first.
+	if (findActiveChatDocGeneration(messages, now)) return undefined;
+	return turn as AnswerableTurn;
+}
+
+/**
+ * Snapshot the transcript as a provider prompt. Empty messages (an interrupted
+ * assistant turn that never received a token) carry no signal and are dropped.
+ * The transcript module owns this conversion because it owns the message shape;
+ * both the actor and the HTTP generation path freeze their prompt this way.
+ */
+export function chatDocToPrompt(
+	messages: readonly ChatDocMessage[],
+): ModelMessage[] {
+	return messages
+		.filter((message) => message.text.length > 0)
+		.map((message) => ({ role: message.role, content: message.text }));
 }
 
 /**
@@ -224,14 +367,33 @@ export function attachChatTranscript(doc: Y.Doc) {
 		},
 		/**
 		 * Append one user message. Single writer: the creating client mints the id
-		 * and never writes to the message again.
+		 * and the `generationId` (the assistant answer this turn awaits) and never
+		 * rewrites the id or content.
 		 */
 		appendUser(message: {
 			id: string;
 			content: string;
 			createdAt: number;
+			generationId: string;
 		}): void {
 			appendUserMessage(doc, message);
+		},
+		/**
+		 * Re-point the latest user turn's `generationId` for a retry. Returns the
+		 * id written, or `undefined` when no user turn has synced yet. See
+		 * {@link setLatestUserTurnGenerationId}.
+		 */
+		remintGeneration(generationId: string): string | undefined {
+			return setLatestUserTurnGenerationId(doc, generationId);
+		},
+		/**
+		 * Request cancellation of the latest user turn's in-flight answer. The
+		 * client owns this field; the actor reads it back mid-answer and writes a
+		 * `cancelled` finish. Returns the timestamp written, or `undefined` when no
+		 * user turn has synced yet. See {@link requestLatestUserTurnCancel}.
+		 */
+		requestCancel(cancelRequestedAt: number): number | undefined {
+			return requestLatestUserTurnCancel(doc, cancelRequestedAt);
 		},
 	};
 }

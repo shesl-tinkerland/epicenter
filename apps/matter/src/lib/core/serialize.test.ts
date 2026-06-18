@@ -85,8 +85,8 @@ describe('edit cycle (parse -> edit -> serialize -> parse)', () => {
 		).toBe('# Body\ntext');
 	});
 
-	test('an invalid-against-the-model value survives by value (stays editable)', () => {
-		// `duration` held as a string while the model wants an integer: still valid
+	test('an invalid-against-the-contract value survives by value (stays editable)', () => {
+		// `duration` held as a string while the contract wants an integer: still valid
 		// YAML, so it round-trips and the grid keeps showing it INVALID to fix.
 		const raw = '---\nduration: "1240s"\n---\nbody';
 		const out = editField(raw, 'title', 'New');

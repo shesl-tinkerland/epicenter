@@ -34,6 +34,7 @@ import {
 	appendAssistantMessage,
 	type ChatDocFinish,
 	findActiveChatDocGeneration,
+	findLatestUserTurn,
 	readChatDocMessages,
 } from '@epicenter/workspace/ai';
 import { EventType, type ModelMessage, type StreamChunk } from '@tanstack/ai';
@@ -92,18 +93,12 @@ const FAILED_MESSAGE_MAX_CHARS = 240;
 
 export async function runDocGeneration({
 	room,
-	generationId,
 	signal,
 	waitUntil,
 	startStream,
 }: {
 	/** The room that owns the conversation doc. */
 	room: Pick<ResolvedRoom, 'getDoc' | 'sync'>;
-	/**
-	 * Client-minted id, doubling as the assistant message id. A replayed
-	 * kickoff with the same id is a no-op 409.
-	 */
-	generationId: string;
 	/**
 	 * Aborts when the client stops or disconnects. The caller also wires it
 	 * into the provider stream; here it classifies the terminal outcome
@@ -122,6 +117,17 @@ export async function runDocGeneration({
 
 	const messages = readChatDocMessages(replica);
 
+	// The unanswered user turn IS the work queue: its client-minted
+	// `generationId` is the identity the actor reads from the doc, not from an
+	// HTTP body. No user turn (or one synced without a generationId) means there
+	// is nothing valid to answer yet.
+	const latestUserTurn = findLatestUserTurn(messages);
+	if (latestUserTurn?.generationId === undefined) {
+		replica.destroy();
+		return AiChatError.NoUserMessage();
+	}
+	// Narrowed to `string`, so the capturing closures below see it as defined.
+	const generationId = latestUserTurn.generationId;
 	if (messages.some((message) => message.id === generationId)) {
 		replica.destroy();
 		return AiChatError.GenerationAlreadyExists({ generationId });
@@ -130,10 +136,6 @@ export async function runDocGeneration({
 	if (findActiveChatDocGeneration(messages, startedAt)) {
 		replica.destroy();
 		return AiChatError.GenerationInProgress();
-	}
-	if (!messages.some((message) => message.role === 'user')) {
-		replica.destroy();
-		return AiChatError.NoUserMessage();
 	}
 
 	// Prompt frozen at kickoff. Empty messages (an interrupted assistant

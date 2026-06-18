@@ -1,14 +1,14 @@
 <script lang="ts">
-	import MicIcon from '@lucide/svelte/icons/mic';
-	import SquareIcon from '@lucide/svelte/icons/square';
 	import { createMutation } from '@tanstack/svelte-query';
 	import type { Snippet } from 'svelte';
+	import { MANUAL_RECORDING_BUTTON } from '$lib/constants/audio';
 	import {
 		startManualRecording,
 		stopManualRecording,
 	} from '$lib/operations/recording';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
+	import { viewTransition } from '$lib/utils/viewTransitions';
 	import RecordingActionCard from './RecordingActionCard.svelte';
 
 	let {
@@ -35,8 +35,8 @@
 	const isPending = $derived(isStarting || isStopping);
 	const isRecording = $derived(manualRecorder.state === 'RECORDING');
 	const shortcutLabel = $derived(getRecordingShortcutLabel('manual'));
-	const icon = $derived(isRecording ? SquareIcon : MicIcon);
-	const label = $derived(isRecording ? 'Stop recording' : 'Start recording');
+	const button = $derived(MANUAL_RECORDING_BUTTON[manualRecorder.state]);
+	const label = $derived(button.label);
 	const idleDescription = $derived(
 		shortcutLabel ? 'Click or press shortcut' : 'Click to record',
 	);
@@ -65,7 +65,8 @@
 	active={isRecording}
 	{description}
 	footer={isRecording ? undefined : pipeline}
-	{icon}
+	icon={button.Icon}
+	iconViewTransitionName={viewTransition.recordingMode('manual')}
 	{label}
 	pending={isPending}
 	{shortcutLabel}

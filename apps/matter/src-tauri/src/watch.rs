@@ -42,7 +42,11 @@ pub struct WatcherStore {
 /// same `tag`/`rename_all`, so the wire shape and the generated type stay in lockstep
 /// by construction.
 #[derive(Clone, Serialize, ts_rs::TS)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
 #[ts(export, export_to = "../../src/lib/bindings/")]
 pub enum FileDelta {
     /// Read as UTF-8 text: the frontend parses it into a row (or its own
@@ -153,4 +157,164 @@ pub fn watch_folder(
 #[tauri::command]
 pub fn unwatch_folder(id: u32, store: State<WatcherStore>) {
     store.watchers.lock().unwrap().remove(&id);
+}
+
+/// The vault's tables as absolute paths, applying the SAME table-or-vault rule the CLI loader uses
+/// (`src/lib/load/fs.ts` `loadPath`), so the GUI and the CLI agree on what a path is. Altitude is
+/// pure shape:
+///
+///   - a folder with a visible child DIRECTORY is a VAULT; each child directory is a table, sorted
+///     for a deterministic order;
+///   - otherwise (a folder of files, or an empty folder) the root is one table.
+///
+/// A `matter.json` only TYPES the table it sits in; it never decides altitude, so a contract can
+/// never hide child tables. A matter table is flat: a subfolder always means "a level down," never
+/// an attachment. Hidden directories (`.git`, `.obsidian`) are not tables.
+///
+/// So opening a leaf table folder and opening a vault of table folders both flow through one rule,
+/// with no wrong-altitude special case to detect. Errors only if the root itself cannot be listed;
+/// a child that races away mid-scan just does not appear, surfacing on the next re-scan.
+fn scan_vault(root: &Path) -> Result<Vec<String>, String> {
+    let mut dirs = Vec::new();
+    for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            dirs.push(entry.path().to_string_lossy().to_string());
+        }
+    }
+    // No visible child folder makes the root itself the one table (a folder of files, or empty).
+    if dirs.is_empty() {
+        return Ok(vec![root.to_string_lossy().to_string()]);
+    }
+    dirs.sort();
+    Ok(dirs)
+}
+
+/// Watch a VAULT root: stream its table list as a full, sorted snapshot. This is the layer above
+/// `watch_folder`: where that watches ONE folder's files, this watches the root NON-recursively for
+/// the table set changing (a visible child folder appearing or disappearing, which flips the root
+/// between a vault of folders and a single table per `scan_vault`; loose files at the root, a
+/// `README.md` or a `matter.json`, never change the table set), and the JS Vault reacts by composing
+/// or disposing a per-folder `watch_folder`.
+///
+/// Each push is the WHOLE table list, not a precise add/remove delta, and the JS reconciles it
+/// against its current set (the same "a full rebuild is a pure function of truth" stance the
+/// per-table SQLite mirror takes). A remove event cannot be stat-ed to tell folder from file, so
+/// re-listing is both simpler and correct: any debounced change at the root re-scans. A
+/// `matter.json` gained or lost INSIDE a child does not fire here (non-recursive); that child's own
+/// `watch_folder` already carries it, so this layer only owns the table list.
+#[tauri::command]
+pub fn watch_vault(
+    path: String,
+    channel: Channel<Vec<String>>,
+    store: State<WatcherStore>,
+) -> Result<u32, String> {
+    let dir = std::path::PathBuf::from(&path);
+    let root = dir.clone();
+    let tx = channel.clone();
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(100),
+        None,
+        move |result: DebounceEventResult| {
+            // The events are not parsed: any change at the root reduces to "the table list may have
+            // changed, re-scan." A failed scan (root vanished) sends nothing and self-heals on the
+            // next event.
+            let Ok(_events) = result else { return };
+            if let Ok(tables) = scan_vault(&root) {
+                let _ = tx.send(tables);
+            }
+        },
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Arm BEFORE the seed scan so a change during the scan can't slip through the list-then-watch
+    // gap; then send the current table list (always, even a one-table or empty root: both are valid
+    // states, not errors).
+    debouncer
+        .watch(&dir, RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())?;
+    let seed = scan_vault(&dir)?;
+    let _ = channel.send(seed);
+
+    let id = store.next.fetch_add(1, Ordering::Relaxed);
+    store.watchers.lock().unwrap().insert(id, debouncer);
+    Ok(id)
+}
+
+/// Stop a vault root watch. Symmetric with `unwatch_folder`; both drop the debouncer the id keys,
+/// which stops the OS watch. Named apart so each JS layer reads at its own altitude.
+#[tauri::command]
+pub fn unwatch_vault(id: u32, store: State<WatcherStore>) {
+    store.watchers.lock().unwrap().remove(&id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh scratch dir for one case (mirrors `mirror.rs`), wiped first so a re-run starts clean.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "matter-watch-test-{}-{}-{:?}",
+            std::process::id(),
+            name,
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn s(path: &Path) -> String {
+        path.to_string_lossy().to_string()
+    }
+
+    // These mirror `fs.test.ts` ("loadPath: scope inference") so the GUI watcher and the CLI loader
+    // are pinned to the same table-or-vault rule in both languages.
+
+    #[test]
+    fn a_contract_never_hides_child_tables() {
+        // A matter.json only types the folder it sits in; it never decides altitude, so a contract
+        // beside child folders is a vault of those folders, not a single table that hides them.
+        let dir = scratch("contract");
+        std::fs::write(dir.join("matter.json"), "{}").unwrap();
+        std::fs::create_dir_all(dir.join("pages")).unwrap();
+        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir.join("pages"))]);
+    }
+
+    #[test]
+    fn hidden_directories_are_not_tables() {
+        // A flat table with a `.git` stays one table; the hidden dir is not a child table.
+        let dir = scratch("hidden");
+        std::fs::write(dir.join("note.md"), "# hi").unwrap();
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
+    }
+
+    #[test]
+    fn a_root_of_folders_lists_each_child_sorted() {
+        let dir = scratch("vault");
+        std::fs::create_dir_all(dir.join("pages")).unwrap();
+        std::fs::create_dir_all(dir.join("adaptations")).unwrap();
+        assert_eq!(
+            scan_vault(&dir).unwrap(),
+            vec![s(&dir.join("adaptations")), s(&dir.join("pages"))]
+        );
+    }
+
+    #[test]
+    fn a_raw_leaf_with_no_folders_is_one_table() {
+        let dir = scratch("leaf");
+        std::fs::write(dir.join("note.md"), "# hi").unwrap();
+        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
+    }
+
+    #[test]
+    fn an_empty_root_is_one_table() {
+        let dir = scratch("empty");
+        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
+    }
 }

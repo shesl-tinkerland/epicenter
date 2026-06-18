@@ -2,8 +2,10 @@
 	import { fromKv, fromTable } from '@epicenter/svelte';
 	import { InstantString } from '@epicenter/workspace';
 	import {
+		type AgentId,
 		type Conversation,
 		type ConversationId,
+		DEFAULT_AGENT_ID,
 		generateConversationId,
 	} from '@epicenter/zhongwen';
 	import { Button } from '@epicenter/ui/button';
@@ -36,11 +38,13 @@
 	let activeConversationId = $state<ConversationId | undefined>();
 
 	/**
-	 * Write only the cheap list row. The transcript child doc is opened lazily by
-	 * `ConversationView`, keyed by the row id. The model is an app constant
-	 * (`ZHONGWEN_MODEL`), so it is not stored per conversation.
+	 * Write only the cheap list row, bound to `agent` for life (ADR-0015). The
+	 * transcript child doc is opened lazily by `ConversationView`, keyed by the row
+	 * id. The model is an app constant (`ZHONGWEN_MODEL`), so it is not stored per
+	 * conversation. This is the one place a conversation's `agent` is written;
+	 * switching agents later is a fork, never a rewrite here.
 	 */
-	function createConversationRow(): ConversationId {
+	function createConversationRow(agent: AgentId): ConversationId {
 		const id = generateConversationId();
 		const timestamp = InstantString.now();
 		zhongwen.tables.conversations.set({
@@ -48,6 +52,7 @@
 			title: 'New Chat',
 			createdAt: timestamp,
 			updatedAt: timestamp,
+			agent,
 		});
 		return id;
 	}
@@ -61,11 +66,11 @@
 		const first = readSortedConversations().find(
 			(conversation) => conversation.id !== skip,
 		);
-		return first?.id ?? createConversationRow();
+		return first?.id ?? createConversationRow(DEFAULT_AGENT_ID);
 	}
 
-	function createConversation(): ConversationId {
-		const id = createConversationRow();
+	function createConversation(agent: AgentId = DEFAULT_AGENT_ID): ConversationId {
+		const id = createConversationRow(agent);
 		activeConversationId = id;
 		return id;
 	}

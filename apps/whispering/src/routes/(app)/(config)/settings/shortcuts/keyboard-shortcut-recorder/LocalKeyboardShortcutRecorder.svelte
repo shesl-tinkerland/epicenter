@@ -14,7 +14,7 @@
 	import { os } from '#platform/os';
 	import { getShortcutDisplayLabel } from '$lib/utils/keyboard';
 	import { type PressedKeys } from '$lib/utils/createPressedKeys.svelte';
-	import { createKeyRecorder } from './create-key-recorder.svelte';
+	import { createLocalKeyRecorder } from './create-local-key-recorder.svelte';
 	import RecorderShell from './RecorderShell.svelte';
 
 	const {
@@ -52,7 +52,7 @@
 	}
 
 	// svelte-ignore state_referenced_locally -- pressedKeys is the stable recorder handle for this mounted shortcut table.
-	const keyRecorder = createKeyRecorder({
+	const keyRecorder = createLocalKeyRecorder({
 		pressedKeys,
 		onRegister: async (keyCombination: KeyboardEventSupportedKey[]) => {
 			const conflict = conflictingCommand(keyCombination);

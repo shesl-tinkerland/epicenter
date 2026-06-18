@@ -23,15 +23,15 @@ export function attachRecordingOverlay() {
 
 	const overlayStatus = $derived.by((): RecordingOverlayStatus | null => {
 		if (manualRecorder.state === 'RECORDING')
-			return { mode: 'manual', state: 'RECORDING' };
+			return { trigger: 'manual', state: 'RECORDING' };
 		if (
 			vadRecorder.state === 'LISTENING' ||
 			vadRecorder.state === 'SPEECH_DETECTED'
 		)
-			return { mode: 'vad', state: vadRecorder.state };
+			return { trigger: 'vad', state: vadRecorder.state };
 		// The Polish pass runs after the recorder is idle, so the pill stays on
 		// the same spot through recording -> polishing -> gone.
-		if (polishHud.active) return { mode: 'polishing' };
+		if (polishHud.active) return { phase: 'polishing' };
 		return null;
 	});
 
@@ -45,11 +45,11 @@ export function attachRecordingOverlay() {
 				RECORDING_OVERLAY_ACTION,
 				(event) => {
 					if (!overlayStatus) return;
-					if (overlayStatus.mode === 'polishing') {
+					if ('phase' in overlayStatus) {
 						if (event.payload === 'ship-raw') polishHud.shipRaw();
 						return;
 					}
-					if (overlayStatus.mode === 'manual') {
+					if (overlayStatus.trigger === 'manual') {
 						if (event.payload === 'cancel') void cancelRecording();
 						else void stopManualRecording();
 						return;

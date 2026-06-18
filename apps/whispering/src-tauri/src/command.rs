@@ -11,8 +11,13 @@ use std::process::Command;
 pub async fn open_accessibility_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        // Deep-link straight to Privacy & Security > Accessibility. This
+        // `x-apple.systempreferences:` scheme is honored by System Settings from
+        // Ventura through Sequoia; the older `x-apple.systemsettings:` form was
+        // not claimed by any app and failed with kLSApplicationNotFoundErr, so
+        // the button only ever hit its manual-instructions fallback.
         let status = Command::new("/usr/bin/open")
-            .arg("x-apple.systemsettings:com.apple.SystemSettings.extension")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
             .status()
             .map_err(|e| format!("Failed to open accessibility settings: {}", e))?;
 

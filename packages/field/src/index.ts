@@ -19,7 +19,9 @@ export {
 	type Field,
 	type FieldOf,
 	type Kind,
+	REFERENCE_KEYWORD,
 	recognize,
+	referenceTargetOf,
 	storageOf,
 } from './field';
 export { InstantString } from './instant-string';

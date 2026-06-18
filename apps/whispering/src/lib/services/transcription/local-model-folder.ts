@@ -22,7 +22,6 @@ import {
 	type LocalModelConfig,
 	modelEntryName,
 } from '$lib/constants/local-models';
-import { isModelFileSizeValid } from '$lib/services/transcription/model-file';
 import {
 	commands,
 	type DownloadProgress,
@@ -138,24 +137,23 @@ function modelSizeChecks(model: LocalModelConfig): {
 export function createModelStorage(model: LocalModelConfig) {
 	return {
 		/**
-		 * Whether a valid install exists in the folder. Rust resolves the entry
-		 * through any link and reports each file's size (`null` when missing or a
-		 * dead link); JS owns the threshold. One path serves downloaded, linked,
-		 * and hand-dropped installs, so a linked-but-broken model reads as not
-		 * installed. Never rejects; any error reads as not installed.
+		 * Whether a valid install exists in the folder. JS passes the catalog's
+		 * expected sizes; Rust resolves the entry through any link, stats each file,
+		 * and returns the completeness verdict (the 90% rule lives in Rust next to
+		 * the stat). One path serves downloaded, linked, and hand-dropped installs,
+		 * so a linked-but-broken model reads as not installed. Never rejects; any
+		 * error reads as not installed.
 		 */
 		async isInstalled(): Promise<boolean> {
 			const { filenames, expected } = modelSizeChecks(model);
-			const { data: sizes } = await commands.resolveModelFileSizes(
+			const { data: statuses } = await commands.resolveModelFiles(
 				model.engine,
 				modelEntryName(model),
 				filenames,
+				expected,
 			);
-			if (!sizes || sizes.length !== expected.length) return false;
-			return expected.every((expectedBytes, index) => {
-				const size = sizes[index];
-				return size != null && isModelFileSizeValid(size, expectedBytes);
-			});
+			if (!statuses || statuses.length !== expected.length) return false;
+			return statuses.every((status) => status.complete);
 		},
 
 		/**

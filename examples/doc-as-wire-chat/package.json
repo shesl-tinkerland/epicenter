@@ -1,0 +1,28 @@
+{
+	"name": "@epicenter/example-doc-as-wire-chat",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"relay": "bun run src/relay.ts",
+		"actor": "bun run src/actor.ts",
+		"client": "bun run src/client.ts",
+		"smoke": "bun run src/smoke.ts",
+		"smoke:cancel": "bun run src/smoke-cancel.ts",
+		"smoke:binding": "bun run src/smoke-binding.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@epicenter/sync": "workspace:*",
+		"@epicenter/workspace": "workspace:*",
+		"@tanstack/ai": "catalog:",
+		"@tanstack/ai-gemini": "catalog:",
+		"lib0": "catalog:",
+		"nanoid": "catalog:",
+		"yjs": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"typescript": "catalog:"
+	}
+}

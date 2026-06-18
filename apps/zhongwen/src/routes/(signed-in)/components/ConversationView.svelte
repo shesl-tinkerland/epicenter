@@ -28,13 +28,14 @@
 		type ChatDocMessage,
 	} from '@epicenter/workspace/ai';
 	import {
+		agentConfig,
 		type ConversationId,
 		ZHONGWEN_MODEL,
+		ZHONGWEN_SYSTEM_PROMPT,
 	} from '@epicenter/zhongwen';
 	import { onDestroy } from 'svelte';
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { requireZhongwen } from '$lib/session';
-	import { ZHONGWEN_SYSTEM_PROMPT } from '../chat/system-prompt';
 	import ChatInput from './ChatInput.svelte';
 	import ChatMessage from './ChatMessage.svelte';
 
@@ -143,6 +144,20 @@
 	}
 
 	/**
+	 * Nudge the conversation's bound agent. A `'cloud'`-runtime agent answers over
+	 * the HTTP route, so a cloud-bound conversation kicks it off here. Any other
+	 * runtime is an always-on actor that answers over sync, so the browser does
+	 * nothing: nudging it too would answer the same turn twice (the D3 hazard). The
+	 * catalog owns that routing fork (`agentConfig().runtime`); the bound agent is
+	 * immutable, so this decision never flips mid-conversation.
+	 */
+	function nudgeBoundAgent() {
+		const agent = readRow()?.agent;
+		if (agent === undefined || agentConfig(agent)?.runtime !== 'cloud') return;
+		void kickoffGeneration();
+	}
+
+	/**
 	 * Start one server actor for this transcript doc. The AbortController is local
 	 * UI state; durable progress and terminal outcome stay in the Yjs doc.
 	 */
@@ -158,7 +173,6 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					guid: docHandle.guid,
-					generationId: generateId(),
 					data: {
 						model: ZHONGWEN_MODEL,
 						systemPrompts: [ZHONGWEN_SYSTEM_PROMPT],
@@ -189,23 +203,41 @@
 	function sendMessage(content: string) {
 		const text = content.trim();
 		if (!text || isGenerating) return;
+		// The turn carries the assistant id it awaits: the actor reads this
+		// generationId off the doc, so the kickoff POST need not carry it.
 		docHandle.appendUser({
 			id: generateId(),
 			content: text,
 			createdAt: Date.now(),
+			generationId: generateId(),
 		});
 		const title = readRow()?.title;
 		zhongwen.tables.conversations.update(conversationId, {
 			title: title === 'New Chat' ? text.slice(0, 50) : title,
 			updatedAt: InstantString.now(),
 		});
-		void kickoffGeneration();
+		nudgeBoundAgent();
+	}
+
+	/**
+	 * Stop the in-flight answer. Aborting the local kickoff fetch only stops the
+	 * transitional HTTP path on this device; the durable cancel is the write the
+	 * always-on actor reads back, so it works after a disconnect and from any
+	 * device. Single writer: the cancel lands on this client's own user turn.
+	 */
+	function stopGeneration() {
+		kickoffController?.abort();
+		docHandle.requestCancel(Date.now());
 	}
 
 	function retry() {
 		sendError = null;
 		dismissedError = false;
-		void kickoffGeneration();
+		// A terminal answer (failed or interrupted) is already keyed to the old
+		// generationId. Re-mint the turn's generationId so the actor starts a
+		// fresh generation instead of replaying the no-op 409.
+		docHandle.remintGeneration(generateId());
+		nudgeBoundAgent();
 	}
 </script>
 
@@ -256,5 +288,5 @@
 	bind:value={inputValue}
 	{isGenerating}
 	onSend={sendMessage}
-	onStop={() => kickoffController?.abort()}
+	onStop={stopGeneration}
 />

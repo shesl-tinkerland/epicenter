@@ -44,6 +44,10 @@ export type FieldComponent = Component<FieldProps>;
  */
 const WIDGETS = {
 	string: StringField,
+	// A reference value is the target row's stem; the floor widget is a plain stem
+	// text input, so it reuses StringField (which reads only the cell value, never the
+	// schema). Upgrade to a row picker that reads the `x-ref` target later.
+	reference: StringField,
 	integer: NumericField,
 	number: NumericField,
 	boolean: BooleanField,

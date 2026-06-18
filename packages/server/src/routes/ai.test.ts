@@ -129,7 +129,6 @@ describe('AI chat route HTTP responses', () => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					guid: 'not a doc guid',
-					generationId: 'gen-1',
 					data: { model: 'gpt-5.4-mini' },
 				}),
 			},
@@ -148,7 +147,6 @@ describe('AI chat route HTTP responses', () => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					guid: 'epicenter-zhongwen.conversations.abc123.messages',
-					generationId: 'gen-1',
 					data: { model: 'gpt-5.4-mini' },
 				}),
 			},

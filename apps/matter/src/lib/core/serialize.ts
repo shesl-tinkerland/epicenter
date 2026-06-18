@@ -13,7 +13,7 @@
  * needs; exact quoting, whitespace, and frontmatter comments are not preserved.
  * That is the deliberate clean break from surgical, byte-preserving write-back:
  * "frontmatter is columns" and "byte-identical frontmatter" are in tension, and
- * the column reading wins. An invalid-AGAINST-THE-MODEL value is still a valid
+ * the column reading wins. An invalid-AGAINST-THE-CONTRACT value is still a valid
  * YAML scalar, so it survives here by value and stays editable in place; only an
  * UNPARSEABLE file would lose, and the grid never writes those.
  *

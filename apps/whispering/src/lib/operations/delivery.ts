@@ -4,11 +4,16 @@ import { report } from '$lib/report';
 import { services } from '$lib/services';
 import { settings } from '$lib/state/settings.svelte';
 
-type TranscriptionSource = 'recording' | 'upload';
+/**
+ * Where a transcript originated: a live `recording` or an imported file
+ * (`import`). Shapes the success copy and flows in from the pipeline's
+ * `deliverySource`.
+ */
+export type TranscriptionSource = 'recording' | 'import';
 
 const TRANSCRIPTION_SUCCESS_COPY = {
 	recording: '📝 Recording transcribed',
-	upload: '📁 File transcribed',
+	import: '📁 File transcribed',
 } as const satisfies Record<TranscriptionSource, string>;
 
 /**

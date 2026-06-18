@@ -19,6 +19,10 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
+		"resources": [
+			"recorder-state-icons/studio_microphone.png",
+			"recorder-state-icons/red_large_square.png"
+		],
 		"longDescription": "Seamlessly integrate speech-to-text transcriptions anywhere on your desktop. Powered by OpenAI's Whisper API.",
 		"shortDescription": "Press shortcut → speak → get text. Free and open source ❤️",
 		"createUpdaterArtifacts": true,

@@ -3,7 +3,7 @@ import { report } from '$lib/report';
 /**
  * TODO(wave-4): rebuild on Recipes. The old picker captured the current
  * selection and opened a Tauri window listing saved actions; that window and its
- * candidate UI were deleted in the ADR 0013 rewrite. Wave 4 rebuilds the shared
+ * candidate UI were deleted in the ADR 0021 rewrite. Wave 4 rebuilds the shared
  * picker over the Recipe library (source = selection/transcript, runner =
  * `runRecipe({ input, recipe })`).
  */

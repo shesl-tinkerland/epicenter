@@ -53,7 +53,7 @@ import type { Brand } from 'wellcrafted/brand';
 import type { JsonValue } from 'wellcrafted/json';
 import type { CalendarDateString } from './calendar-date-string';
 import type { DateTimeString } from './datetime-string';
-import { JSON_SCHEMA_KEYWORD } from './field';
+import { JSON_SCHEMA_KEYWORD, REFERENCE_KEYWORD } from './field';
 import { INSTANT_STRING_PATTERN, type InstantString } from './instant-string';
 
 type BrandedString = string & Brand<string>;
@@ -71,6 +71,46 @@ function string<T extends string = string>(
 ): string extends T ? TString : T extends BrandedString ? TUnsafe<T> : never {
 	return Type.String(opts) as string extends T
 		? TString
+		: T extends BrandedString
+			? TUnsafe<T>
+			: never;
+}
+
+/**
+ * Cross-row reference field: a string column that points at a row in another table.
+ *
+ * - `field.reference('pages')` -> `TUnsafe<string>`, `Static<>` = `string`.
+ * - `field.reference<PageId>('pages')` -> `TUnsafe<PageId>`, `Static<>` = `PageId`.
+ * - `field.reference<'draft'>('x')` -> `never` (compile-time), for the same reason
+ *   `field.string<'draft'>()` is: a literal subtype is not enforced at runtime.
+ *
+ * The VALUE is the target row's stem / id; the `table` argument is recorded in the
+ * at-rest schema under {@link REFERENCE_KEYWORD} so `recognize` classifies the column as
+ * kind `reference` and recovers its target. This composes the two existing tricks:
+ * `Type.Unsafe` carries the brand on `Static<>` (as in {@link string}) while the marker
+ * rides on the emitted wire-form (as in {@link json}). It is ALWAYS `TUnsafe` (even
+ * unbranded), because the marker-bearing wire-form must be decoupled from the inferred
+ * `Static<>`. Value validation is plain-string (the marker is non-standard, so
+ * `Value.Check` ignores it); whether the target ROW exists is cross-table integrity,
+ * enforced outside this leaf.
+ *
+ * The brand is type-safe at the call site; the `table` STRING is not (the column is
+ * authored before its workspace knows the full table set), so a dangling target is caught
+ * at workspace construction, not here.
+ */
+function reference<T extends string = string>(
+	table: string,
+	opts?: TStringOptions,
+): string extends T
+	? TUnsafe<string>
+	: T extends BrandedString
+		? TUnsafe<T>
+		: never {
+	return Type.Unsafe({
+		...Type.String(opts),
+		[REFERENCE_KEYWORD]: table,
+	}) as string extends T
+		? TUnsafe<string>
 		: T extends BrandedString
 			? TUnsafe<T>
 			: never;
@@ -225,6 +265,7 @@ function json<S extends TSchema>(inner: S): TUnsafe<Static<S>> {
  */
 export const field = {
 	string,
+	reference,
 	url,
 	number,
 	integer,
