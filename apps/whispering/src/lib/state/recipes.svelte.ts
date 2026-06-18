@@ -8,9 +8,8 @@
  * ```typescript
  * import { recipes } from '$lib/state/recipes.svelte';
  *
- * // Read reactively
- * const recipe = recipes.get(id);
- * const all = recipes.sorted; // alphabetical by name
+ * // Read reactively: built-ins first, then the user's own (alphabetical)
+ * const list = recipes.pickable;
  *
  * // Write
  * recipes.set(recipe);
@@ -42,28 +41,6 @@ function createRecipes() {
 		},
 
 		/**
-		 * All recipes as a reactive SvelteMap.
-		 *
-		 * Components reading this re-render per-key when recipes change.
-		 */
-		get all() {
-			return map;
-		},
-
-		/** Get a recipe by ID. Returns undefined if not found. */
-		get(id: string) {
-			return map.get(id);
-		},
-
-		/**
-		 * The user's own recipes as a sorted array (alphabetical by name). Memoized
-		 * via `$derived`. Stable reference until the SvelteMap changes.
-		 */
-		get sorted(): Recipe[] {
-			return sorted;
-		},
-
-		/**
 		 * Every recipe the user can pick: built-ins first, then their own. This is
 		 * what the picker and the library list. Memoized via `$derived`.
 		 */
@@ -76,19 +53,9 @@ function createRecipes() {
 			whispering.tables.recipes.set(recipe);
 		},
 
-		/** Partially update a recipe by ID. */
-		update(id: string, partial: Partial<Omit<Recipe, 'id' | '_v'>>) {
-			return whispering.tables.recipes.update(id, partial);
-		},
-
 		/** Delete a recipe by ID. */
 		delete(id: string) {
 			whispering.tables.recipes.delete(id);
-		},
-
-		/** Total number of recipes. */
-		get count() {
-			return map.size;
 		},
 	};
 }
