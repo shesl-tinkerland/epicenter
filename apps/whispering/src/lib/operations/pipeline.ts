@@ -101,11 +101,11 @@ export async function processRecordingPipeline({
 	// Run Polish over the raw transcript, then deliver the POLISHED text. The raw
 	// stays on `recordings.transcript` (persisted by transcribeAndPersist) so
 	// "show original" is recoverable. We hold delivery until Polish finishes and
-	// deliver once: typing the raw at the cursor and then re-typing the polished
-	// version would double-type, the exact problem the old
-	// transcription/recipe cursor asymmetry existed to dodge. Polish is the only
-	// thing on the automatic path; there is no auto-running Recipe. See ADR 0021
-	// and the runtime flow in
+	// deliver once, with the final text: delivering the raw and then the polished
+	// version would land two copies (a clipboard the user might paste mid-polish,
+	// or two cursor pastes), the exact race the deliver-after-polish rule exists to
+	// dodge. Polish is the only thing on the automatic path; there is no
+	// auto-running Recipe. See ADR 0021 and the runtime flow in
 	// specs/20260616T230000-cleanup-and-portable-formats-greenfield.md.
 	// Show the floating "Polishing..." HUD only when an AI pass is actually about
 	// to run (not in speed mode), and hand its abort signal to runPolish so the
