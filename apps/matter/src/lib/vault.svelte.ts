@@ -22,9 +22,10 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { SvelteMap } from 'svelte/reactivity';
+import { extractErrorMessage } from 'wellcrafted/error';
 import { assess, type VaultIntegrity } from './core/integrity';
 import { basename } from './core/path';
-import { createTable, type TableHandle } from './table.svelte';
+import { createTable, type LiveStatus, type TableHandle } from './table.svelte';
 
 /**
  * Open `root` as a live vault. Synchronous and IO-free: the table set starts empty and fills from
@@ -87,19 +88,29 @@ export function createVault(root: string) {
 	);
 
 	// Opening a vault IS observing it: arm the root watch now. `watch_vault` seeds the current
-	// membership, then streams a snapshot per change, all through `reconcile`. `whenReady` resolves
-	// once the watch is armed (the seed scan finished before the invoke resolved) and rejects if it
-	// could not be armed; the shell gates on it with `{#await}`.
-	const channel = new Channel<string[]>();
-	channel.onmessage = reconcile;
+	// membership, then streams a snapshot per change, all through `reconcile`. `status` carries
+	// readiness as reactive state: the FIRST table list (the seed, always at least one path) flips
+	// it to `ready`, so the same signal that fills `tables` is the one that opens the shell, with no
+	// window between them where a populated vault reads as empty. The invoke no longer carries
+	// readiness; it only captures the id for `dispose` and turns an arming or seed-send failure into
+	// `error`.
+	let status = $state<LiveStatus>({ kind: 'loading' });
 	let watchId: number | undefined;
 	let disposed = false;
-	const whenReady = invoke<number>('watch_vault', { path: root, channel }).then(
-		(id) => {
+	const channel = new Channel<string[]>();
+	channel.onmessage = (paths) => {
+		reconcile(paths);
+		if (!disposed && status.kind === 'loading') status = { kind: 'ready' };
+	};
+	void invoke<number>('watch_vault', { path: root, channel })
+		.then((id) => {
 			if (disposed) void invoke('unwatch_vault', { id });
 			else watchId = id;
-		},
-	);
+		})
+		.catch((error: unknown) => {
+			if (!disposed)
+				status = { kind: 'error', message: extractErrorMessage(error) };
+		});
 
 	/** Stop the root watch AND every composed table watch. The keyed route component calls this on teardown. */
 	function dispose(): void {
@@ -112,8 +123,13 @@ export function createVault(root: string) {
 	return {
 		folderName,
 		root,
-		whenReady,
 		dispose,
+		/** The vault's readiness: `loading` until the first table list lands, then `ready` (a
+		 *  readable root always resolves to at least one table, so `tables` is non-empty here), or
+		 *  `error` if the watch could not be armed. Read it reactively; the shell renders on it. */
+		get status(): LiveStatus {
+			return status;
+		},
 		/** The vault's live tables, sorted by folder name. A pure read with no side effects. */
 		get tables(): TableHandle[] {
 			return orderedTables;

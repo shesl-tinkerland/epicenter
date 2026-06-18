@@ -11,9 +11,10 @@
  * ONE path (`applyDeltas`) into ONE `SvelteMap`.
  *
  * Lifecycle: opening a table IS observing it, so the watcher starts at
- * construction. `whenReady` resolves once it is armed (the seed scan has run, so
- * the store holds the folder's current contents) and rejects if it cannot be, which
- * the UI gates on with `{#await}`. `dispose()` stops the OS watch. The keyed route
+ * construction. `status` is the readiness as REACTIVE state, not a promise: the same
+ * batch that seeds the store flips it from `loading` to `ready`, so a ready table is a
+ * populated one (or a genuinely empty folder) with no window between the two to race;
+ * an arming failure makes it `error`. The UI switches on it. `dispose()` stops the OS watch. The keyed route
  * component (`/vault/[id]`) owns one table's lifetime, constructing it on mount and
  * disposing it on destroy, so no module singleton or standing effect drives the
  * watcher; the set of open tabs is just a persisted list (`open-vaults.svelte.ts`).
@@ -43,6 +44,17 @@ import {
 	type TableRead,
 	type UnreadableFile,
 } from './core/table';
+
+/**
+ * The readiness lifecycle of a live watched resource (a {@link createTable} or the
+ * {@link createVault} that composes them). It is REACTIVE state, not a promise: `ready` is set by
+ * the same signal that applies the first batch, so "armed" and "populated" are one fact with no
+ * window between them for the UI to mis-read. `error` carries the reason the watch could not arm.
+ */
+export type LiveStatus =
+	| { kind: 'loading' }
+	| { kind: 'ready' }
+	| { kind: 'error'; message: string };
 
 /**
  * Open `path` as a live table. Synchronous and IO-free: the store starts empty
@@ -255,22 +267,30 @@ export function createTable(path: string) {
 		});
 	}
 
-	// Opening a vault IS observing it: arm the OS watcher now. `watch_folder` seeds the store
-	// with the folder's current contents, then streams a batch per change, all through
-	// `applyDeltas`. `whenReady` resolves once the watch is armed (the seed scan finishes
-	// before `watch_folder` resolves, so even an empty folder resolves rather than hanging)
-	// and rejects if it cannot be armed; the UI gates on it with `{#await}`.
-	const channel = new Channel<FileDelta[]>();
-	channel.onmessage = applyDeltas;
+	// Opening a table IS observing it: arm the OS watcher now. `watch_folder` seeds the store with
+	// the folder's current contents, then streams a batch per change, all through `applyDeltas`.
+	// `status` carries readiness as reactive state: the FIRST batch (the seed, always sent even for
+	// an empty folder) flips it to `ready`, so the same signal that populates the store is the one
+	// that opens the grid, with no window between them. The invoke no longer carries readiness; it
+	// only captures the id for `dispose` and turns an arming or seed-send failure into `error`.
+	let status = $state<LiveStatus>({ kind: 'loading' });
 	let watchId: number | undefined;
 	let disposed = false;
-	const whenReady = invoke<number>('watch_folder', { path, channel }).then(
-		(id) => {
+	const channel = new Channel<FileDelta[]>();
+	channel.onmessage = (deltas) => {
+		applyDeltas(deltas);
+		if (!disposed && status.kind === 'loading') status = { kind: 'ready' };
+	};
+	void invoke<number>('watch_folder', { path, channel })
+		.then((id) => {
 			// Disposed before the id arrived: drop the watcher that just resolved.
 			if (disposed) void invoke('unwatch_folder', { id });
 			else watchId = id;
-		},
-	);
+		})
+		.catch((error: unknown) => {
+			if (!disposed)
+				status = { kind: 'error', message: extractErrorMessage(error) };
+		});
 	/** Stop the OS watch. The keyed route component calls this when it is torn down (a tab switch or close). */
 	function dispose(): void {
 		disposed = true;
@@ -284,9 +304,12 @@ export function createTable(path: string) {
 		saveBody,
 		matchingFileNames,
 		dispose,
-		/** Resolves once the OS watcher is armed (the folder is being observed), with the
-		 *  seed contents already applied; rejects if it could not be armed. */
-		whenReady,
+		/** The table's readiness: `loading` until the first batch lands, then `ready` (the folder is
+		 *  live, possibly an empty folder), or `error` if the watch could not be armed. Read it
+		 *  reactively; the grid renders on `ready`. */
+		get status(): LiveStatus {
+			return status;
+		},
 		/** The current classified folder. A pure read with no side effects. */
 		get read(): TableRead {
 			return read;
@@ -309,7 +332,7 @@ export type TableHandle = ReturnType<typeof createTable>;
  * The slice of a {@link TableHandle} the grid renders from: the folder name, the
  * classified read, and the two save commands. This is the narrow dependency boundary
  * `TableGrid` depends on, NOT the full table handle, so the grid cannot reach the
- * watcher lifecycle (`whenReady` / `dispose` / `path` / `mirrorVersion`) it has no
+ * watcher lifecycle (`status` / `dispose` / `path` / `mirrorVersion`) it has no
  * business touching, and a `Pick` of the live handle satisfies it for free.
  */
 export type TableView = Pick<

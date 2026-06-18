@@ -26,9 +26,15 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	{#await table.whenReady}
+	{#if table.status.kind === 'loading'}
 		<Loading class="flex-1" label="Loading {table.folderName}" />
-	{:then _}
+	{:else if table.status.kind === 'error'}
+		<Empty.Root class="flex-1 border-0">
+			<Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media>
+			<Empty.Title>Couldn't watch {table.folderName}</Empty.Title>
+			<Empty.Description>{table.status.message}</Empty.Description>
+		</Empty.Root>
+	{:else}
 		{#if table.writeError}
 			<Alert.Root variant="destructive" class="rounded-none border-x-0 border-t-0 py-2">
 				<Alert.Description class="text-xs">
@@ -37,13 +43,5 @@
 			</Alert.Root>
 		{/if}
 		<TableGrid {table} {filter} {assessment} />
-	{:catch error}
-		<Empty.Root class="flex-1 border-0">
-			<Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media>
-			<Empty.Title>Couldn't watch {table.folderName}</Empty.Title>
-			<Empty.Description>
-				{error instanceof Error ? error.message : String(error)}
-			</Empty.Description>
-		</Empty.Root>
-	{/await}
+	{/if}
 </div>

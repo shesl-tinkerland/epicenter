@@ -2,7 +2,6 @@
 	import * as Empty from '@epicenter/ui/empty';
 	import { Loading } from '@epicenter/ui/loading';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
-	import LayersIcon from '@lucide/svelte/icons/layers';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { routes, TABLE_PARAM } from '$lib/routes';
@@ -42,60 +41,48 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	{#await vault.whenReady}
+	{#if vault.status.kind === 'loading'}
 		<Loading class="flex-1" label="Loading {vault.folderName}" />
-	{:then _}
-		<!-- A readable root always resolves to at least one table (the root itself when it has no
-		     child folders), so this empty case is the brief gap before the first table list lands,
-		     not a dead end. -->
-		{#if vault.tables.length === 0}
-			<Empty.Root class="flex-1 border-0">
-				<Empty.Media variant="icon"><LayersIcon /></Empty.Media>
-				<Empty.Title>No tables yet</Empty.Title>
-				<Empty.Description>
-					{vault.folderName} is empty. Add a folder of markdown and it appears here.
-				</Empty.Description>
-			</Empty.Root>
-		{:else}
-			<div class="flex min-h-10 items-center gap-1 overflow-x-auto border-b px-2 py-1">
-				{#each vault.tables as table (table.folderName)}
-					{@const active = activeTable?.folderName === table.folderName}
-					<button
-						type="button"
-						onclick={() =>
-							goto(routes.table(table.folderName), {
-								// A table switch is a render selection, not navigation: replaceState so
-								// each click doesn't stack a history entry, keepFocus/noScroll so the
-								// switcher stays put and the grid doesn't jump.
-								replaceState: true,
-								keepFocus: true,
-								noScroll: true,
-							})}
-						class={[
-							'shrink-0 rounded-md px-2.5 py-1 text-sm transition',
-							active
-								? 'bg-muted font-medium text-foreground'
-								: 'text-muted-foreground hover:bg-muted/50',
-						]}
-					>
-						{table.folderName}
-					</button>
-				{/each}
-			</div>
-			{#if activeTable}
-				{#key activeTable}
-					<TablePane table={activeTable} assessment={activeAssessment} />
-				{/key}
-			{/if}
-			<IntegrityPanel integrity={vault.integrity} />
-		{/if}
-	{:catch error}
+	{:else if vault.status.kind === 'error'}
 		<Empty.Root class="flex-1 border-0">
 			<Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media>
 			<Empty.Title>Couldn't open {vault.folderName}</Empty.Title>
-			<Empty.Description>
-				{error instanceof Error ? error.message : String(error)}
-			</Empty.Description>
+			<Empty.Description>{vault.status.message}</Empty.Description>
 		</Empty.Root>
-	{/await}
+	{:else}
+		<!-- ready: a readable root always resolves to at least one table (the root itself when it
+		     has no child folders), so `tables` is non-empty here and there is no empty-vault case
+		     left to guard. -->
+		<div class="flex min-h-10 items-center gap-1 overflow-x-auto border-b px-2 py-1">
+			{#each vault.tables as table (table.folderName)}
+				{@const active = activeTable?.folderName === table.folderName}
+				<button
+					type="button"
+					onclick={() =>
+						goto(routes.table(table.folderName), {
+							// A table switch is a render selection, not navigation: replaceState so
+							// each click doesn't stack a history entry, keepFocus/noScroll so the
+							// switcher stays put and the grid doesn't jump.
+							replaceState: true,
+							keepFocus: true,
+							noScroll: true,
+						})}
+					class={[
+						'shrink-0 rounded-md px-2.5 py-1 text-sm transition',
+						active
+							? 'bg-muted font-medium text-foreground'
+							: 'text-muted-foreground hover:bg-muted/50',
+					]}
+				>
+					{table.folderName}
+				</button>
+			{/each}
+		</div>
+		{#if activeTable}
+			{#key activeTable}
+				<TablePane table={activeTable} assessment={activeAssessment} />
+			{/key}
+		{/if}
+		<IntegrityPanel integrity={vault.integrity} />
+	{/if}
 </div>
