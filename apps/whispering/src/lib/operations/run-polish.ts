@@ -4,7 +4,7 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import { isErr, Ok, type Result } from 'wellcrafted/result';
-import { buildSystemPrompt } from '$lib/operations/build-system-prompt';
+import { buildPolishSystemPrompt } from '$lib/operations/build-system-prompt';
 import { complete, hasCompletionKey } from '$lib/operations/completion';
 import { settings } from '$lib/state/settings.svelte';
 
@@ -67,7 +67,7 @@ export async function runPolish({
 	if (!polishWillRun(input)) return Ok(input);
 
 	const result = await complete({
-		systemPrompt: buildSystemPrompt(
+		systemPrompt: buildPolishSystemPrompt(
 			settings.get('polish.instructions'),
 			settings.get('dictionary'),
 		),
