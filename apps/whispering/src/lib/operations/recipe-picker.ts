@@ -1,15 +1,32 @@
+import { tauri } from '#platform/tauri';
+import { captureSelection } from '$lib/operations/selection';
 import { report } from '$lib/report';
+import { recipePicker } from '$lib/state/recipe-picker.svelte';
 
 /**
- * TODO(wave-4): rebuild on Recipes. The old picker captured the current
- * selection and opened a Tauri window listing saved actions; that window and its
- * candidate UI were deleted in the ADR 0021 rewrite. Wave 4 rebuilds the shared
- * picker over the Recipe library (source = selection/transcript, runner =
- * `runRecipe({ input, recipe })`).
+ * Capture the foreground app's current selection, then raise the in-app recipe
+ * picker over it. The capture (a synthetic copy) runs while the other app is
+ * still focused; only then do we focus Whispering's window so the palette is
+ * visible. The user picks a recipe and the picker runs it on the selection.
+ *
+ * Desktop only (registered through the Tauri command seam). A future floating
+ * picker window will drop the window-focus step. See ADR 0021.
  */
 export async function openRecipePicker() {
-	report.info({
-		title: 'Recipes are on the way',
-		description: 'The recipe picker is coming in the next update.',
-	});
+	const { data: selection, error } = await captureSelection();
+	if (error) {
+		report.error({ title: "Couldn't read your selection", cause: error });
+		return;
+	}
+	const input = selection?.trim() ? selection : '';
+	if (!input) {
+		report.info({
+			title: 'Nothing selected',
+			description:
+				'Select some text, then open the recipe picker to reshape it.',
+		});
+		return;
+	}
+	await tauri?.mainWindow.focus();
+	recipePicker.open(input);
 }
