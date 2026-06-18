@@ -140,14 +140,16 @@ pub fn watch_folder(
     // Arm the watcher BEFORE scanning so a change during the scan can't slip
     // through the read-then-watch gap; then push the current contents as the
     // first batch (the seed). Dropping the debouncer on any early return stops
-    // the OS watch, so a failed scan never leaks a watcher.
+    // the OS watch, so a failed scan or seed send never leaks a watcher.
     debouncer
         .watch(&dir, RecursiveMode::NonRecursive)
         .map_err(|e| e.to_string())?;
+    // Always send the seed, even when empty: the frontend leaves "loading" only on its first
+    // batch, so an empty folder must still get one (empty) batch or its grid would wait forever.
+    // The send is load-bearing: a seed that can't be delivered fails the watch rather than arming
+    // a watcher whose frontend is stuck on a spinner. Later debounced sends stay best-effort.
     let seed = scan(&dir)?;
-    if !seed.is_empty() {
-        let _ = channel.send(seed);
-    }
+    channel.send(seed).map_err(|e| e.to_string())?;
 
     let id = store.next.fetch_add(1, Ordering::Relaxed);
     store.watchers.lock().unwrap().insert(id, debouncer);
@@ -232,12 +234,15 @@ pub fn watch_vault(
 
     // Arm BEFORE the seed scan so a change during the scan can't slip through the list-then-watch
     // gap; then send the current table list (always, even a one-table or empty root: both are valid
-    // states, not errors).
+    // states, not errors). The seed send is load-bearing: the frontend leaves "loading" only on its
+    // first table list, so a seed that can't be delivered fails the watch rather than arming a
+    // watcher whose shell hangs on a spinner. Later debounced sends stay best-effort (the watch
+    // self-heals on the next event).
     debouncer
         .watch(&dir, RecursiveMode::NonRecursive)
         .map_err(|e| e.to_string())?;
     let seed = scan_vault(&dir)?;
-    let _ = channel.send(seed);
+    channel.send(seed).map_err(|e| e.to_string())?;
 
     let id = store.next.fetch_add(1, Ordering::Relaxed);
     store.watchers.lock().unwrap().insert(id, debouncer);
