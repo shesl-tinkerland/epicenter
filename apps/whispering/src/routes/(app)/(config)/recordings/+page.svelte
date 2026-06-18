@@ -169,6 +169,7 @@
 				return renderComponent(TranscriptDialog, {
 					recordingId: row.id,
 					transcript: transcript,
+					polishedTranscript: row.original.polishedTranscript,
 					onDelete: () => {
 						confirmationDialog.open({
 							title: 'Delete recording',

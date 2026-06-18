@@ -53,6 +53,7 @@ export async function processRecordingPipeline({
 		recordedAt: now,
 		recordedAtZone: IanaTimeZone.current(),
 		transcript: '',
+		polishedTranscript: null,
 		duration: durationMs,
 		transcription: null,
 	});
@@ -127,6 +128,14 @@ export async function processRecordingPipeline({
 			description: polishError.message,
 		});
 	}
+
+	// Persist the polished text alongside the raw transcript so the history shows
+	// what was actually delivered, with the original one click away. Null whenever
+	// no Polish pass produced a result: speed mode (no AI call) or a polish failure
+	// (the fallback delivers the raw words, so there is no polished version).
+	recordings.update(recordingId, {
+		polishedTranscript: willPolish && !polishError ? polishedText : null,
+	});
 
 	// The transcript is "ready" once it is polished and about to be delivered, so
 	// the completion sound and the resolved loading notice both fire here.

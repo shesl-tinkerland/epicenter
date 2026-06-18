@@ -299,6 +299,7 @@
 				<TranscriptDialog
 					recordingId={latestRecording.id}
 					transcript={latestRecording.transcript}
+					polishedTranscript={latestRecording.polishedTranscript}
 					rows={1}
 					disabled={!latestRecording.transcript.trim()}
 					onDelete={() => {

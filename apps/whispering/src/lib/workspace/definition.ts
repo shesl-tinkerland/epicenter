@@ -77,6 +77,10 @@ const recordings = defineTable({
 	// correction on top and delivers the polished text, but the raw words stay
 	// here underneath so "show original" is always one click away. See ADR 0021.
 	transcript: field.string(),
+	// The delivered polished text, when a Polish pass ran. Null in speed mode and
+	// on a polish-failure fallback, where no polished version exists. The history
+	// shows this (what was actually delivered) and falls back to `transcript`.
+	polishedTranscript: nullable(field.string()),
 	duration: nullable(field.number()),
 	transcription: nullable(field.json(TranscriptionOutcome)),
 });
