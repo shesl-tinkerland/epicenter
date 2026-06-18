@@ -130,12 +130,13 @@ export async function processRecordingPipeline({
 	}
 
 	// Persist the polished text alongside the raw transcript so the history shows
-	// what was actually delivered, with the original one click away. Null whenever
-	// no Polish pass produced a result: speed mode (no AI call) or a polish failure
-	// (the fallback delivers the raw words, so there is no polished version).
-	recordings.update(recordingId, {
-		polishedTranscript: willPolish && !polishError ? polishedText : null,
-	});
+	// what was actually delivered, with the original one click away. Only write
+	// when a Polish pass actually produced a result: `recordings.set` already left
+	// `polishedTranscript` null, so speed mode (no AI call) and a polish failure
+	// (the fallback delivers the raw words) need no second write.
+	if (willPolish && !polishError) {
+		recordings.update(recordingId, { polishedTranscript: polishedText });
+	}
 
 	// The transcript is "ready" once it is polished and about to be delivered, so
 	// the completion sound and the resolved loading notice both fire here.
