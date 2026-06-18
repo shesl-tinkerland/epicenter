@@ -1,7 +1,8 @@
 # 0021. Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library
 
-- **Status:** Proposed
-- **Date:** 2026-06-16 (evolved twice the same day; see Evolution)
+- **Status:** Accepted
+- **Date:** 2026-06-16 (evolved twice the same day; see Evolution). Accepted
+  2026-06-18 once Polish, the Dictionary, and the Recipe library + picker shipped.
 
 ## Context
 
@@ -197,6 +198,17 @@ Wave 1 of the build renames them to `polish.*`, `dictionary`, and `recipes`.
   rather than a v1 blocker.
 - **Streaming the polish output.** Rejected for v1: the category delivers once
   behind an overlay; we write the cursor once.
+- **A floating Tauri picker window in v1.** Deferred. The old picker was a
+  separate always-on-top webview that floated over whatever app you were dictating
+  into. That fidelity is the right end state (the canonical flow is dictation into
+  another app, where an in-window surface is invisible, the same reason the Polish
+  HUD lives on the floating pill), but rebuilding the window lifecycle and the
+  main-to-picker event handshake is the heaviest piece of the feature. v1 ships an
+  in-app command-palette picker instead: the shortcut captures the source
+  (selection or clipboard) while the other app is still focused, then focuses the
+  Whispering window and opens the palette. It is complete and self-contained; the
+  cost is a window raise instead of a true floating overlay. The floating window is
+  a clean follow-up.
 - **Extract `@epicenter/recipes` now.** Lost: one consumer is not a seam.
 
 ## Open questions
@@ -207,3 +219,5 @@ Wave 1 of the build renames them to `polish.*`, `dictionary`, and `recipes`.
   homophone collisions?
 - Does per-context (per-app) recipe selection become "modes," and what is its
   data shape?
+- When does the floating Tauri picker window replace the in-app palette, and does
+  it reuse the recording-overlay window surface or stand up its own?
