@@ -18,28 +18,28 @@ export const BUILTIN_RECIPES: Recipe[] = [
 		name: 'Email',
 		instructions:
 			'Rewrite the text as a clear, friendly email. Keep the meaning and every concrete detail; fix the tone, flow, and structure. Do not invent a greeting or sign-off unless the text implies one.',
-		icon: null,
+		icon: '✉️',
 	},
 	{
 		id: 'builtin:reply',
 		name: 'Reply',
 		instructions:
 			'Write a concise, natural reply to the message. Match its tone, answer what it asks, and keep it short.',
-		icon: null,
+		icon: '↩️',
 	},
 	{
 		id: 'builtin:notes',
 		name: 'Notes',
 		instructions:
 			"Turn the text into concise bullet-point notes. One idea per bullet, in the speaker's own words, no preamble.",
-		icon: null,
+		icon: '📝',
 	},
 	{
 		id: 'builtin:todos',
 		name: 'To-dos',
 		instructions:
 			'Extract the action items as a checklist. One to-do per line, each starting with a verb. Drop anything that is not an action.',
-		icon: null,
+		icon: '✅',
 	},
 ];
 

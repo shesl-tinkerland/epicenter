@@ -94,6 +94,9 @@
 				<li class="flex items-start justify-between gap-4 py-3">
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
+							{#if recipe.icon}
+								<span aria-hidden="true">{recipe.icon}</span>
+							{/if}
 							<span class="font-medium">{recipe.name}</span>
 							{#if builtin}
 								<Badge variant="secondary">Built-in</Badge>
@@ -139,9 +142,27 @@
 			</Modal.Description>
 		</Modal.Header>
 		<div class="space-y-4 p-4">
-			<div class="grid gap-2">
-				<Label for="recipe-name">Name</Label>
-				<Input id="recipe-name" placeholder="e.g. Email" bind:value={working.name} />
+			<div class="flex gap-2">
+				<div class="grid w-20 shrink-0 gap-2">
+					<Label for="recipe-icon">Icon</Label>
+					<Input
+						id="recipe-icon"
+						placeholder="🪄"
+						class="text-center"
+						bind:value={
+							() => working.icon ?? '',
+							(value) => (working = { ...working, icon: value.trim() || null })
+						}
+					/>
+				</div>
+				<div class="grid flex-1 gap-2">
+					<Label for="recipe-name">Name</Label>
+					<Input
+						id="recipe-name"
+						placeholder="e.g. Email"
+						bind:value={working.name}
+					/>
+				</div>
 			</div>
 			<div class="grid gap-2">
 				<Label for="recipe-instructions">Instruction</Label>

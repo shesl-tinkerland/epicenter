@@ -58,6 +58,9 @@
 				<Command.Group>
 					{#each recipes.pickable as recipe (recipe.id)}
 						<Command.Item value={recipe.name} onSelect={() => run(recipe)}>
+							{#if recipe.icon}
+								<span aria-hidden="true">{recipe.icon}</span>
+							{/if}
 							<span class="flex-1 truncate">{recipe.name}</span>
 							{#if isBuiltinRecipeId(recipe.id)}
 								<Badge variant="secondary">Built-in</Badge>

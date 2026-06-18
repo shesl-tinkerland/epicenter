@@ -63,11 +63,6 @@ function createRecipes() {
 			return sorted;
 		},
 
-		/** The built-in recipes that ship in code (read-only). */
-		get builtins(): Recipe[] {
-			return BUILTIN_RECIPES;
-		},
-
 		/**
 		 * Every recipe the user can pick: built-ins first, then their own. This is
 		 * what the picker and the library list. Memoized via `$derived`.
