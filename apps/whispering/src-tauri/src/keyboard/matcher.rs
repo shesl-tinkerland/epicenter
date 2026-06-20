@@ -444,10 +444,10 @@ mod tests {
         let events = run(
             &mut matcher,
             &[
-                (Press, M(Fn)),          // ptt fires immediately
-                (Press, K(Key::Space)),  // extra key: ignored
+                (Press, M(Fn)),         // ptt fires immediately
+                (Press, K(Key::Space)), // extra key: ignored
                 (Release, K(Key::Space)),
-                (Release, M(Fn)),        // ptt releases
+                (Release, M(Fn)), // ptt releases
             ],
         );
         assert_eq!(
@@ -506,10 +506,7 @@ mod tests {
             ("first".to_string(), binding(&[Meta], &[Key::KeyD])),
             ("second".to_string(), binding(&[Meta], &[Key::KeyD])),
         ]);
-        let events = run(
-            &mut matcher,
-            &[(Press, M(Meta)), (Press, K(Key::KeyD))],
-        );
+        let events = run(&mut matcher, &[(Press, M(Meta)), (Press, K(Key::KeyD))]);
         assert_eq!(events, vec![("first".to_string(), Pressed)]);
     }
 }

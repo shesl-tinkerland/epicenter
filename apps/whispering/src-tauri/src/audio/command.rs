@@ -34,7 +34,8 @@ pub async fn encode_recording_for_upload(
     tauri::async_runtime::spawn_blocking(move || {
         let samples = crate::timing::measure("encode.read+decode", || {
             read_artifact_samples(&app_handle, &recording_id)
-        })?;
+        })
+        .map_err(|e| e.to_string())?;
         // 16 kHz is the rate every `read_artifact_samples` output lands on
         // (see `recorder::artifact::ARTIFACT_RATE`); pass it through so the
         // encoder's source-to-48k resample sees the right input rate.

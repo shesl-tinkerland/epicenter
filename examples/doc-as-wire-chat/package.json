@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"relay": "bun run src/relay.ts",
-		"actor": "bun run src/actor.ts",
+		"worker": "bun run src/worker.ts",
 		"client": "bun run src/client.ts",
 		"smoke": "bun run src/smoke.ts",
 		"smoke:cancel": "bun run src/smoke-cancel.ts",

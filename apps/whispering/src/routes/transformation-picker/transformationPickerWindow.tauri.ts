@@ -1,22 +1,24 @@
-import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Ok, tryAsync } from 'wellcrafted/result';
+import { defineWindowEvent, defineWindowSignal } from '$lib/window-events';
 
 const WINDOW_LABEL = 'transformation-picker';
 
 /**
- * Event names for handing the captured selection from the main window (where the
+ * Channels for handing the captured selection from the main window (where the
  * shortcut fires and the copy is simulated) to the picker window (a separate
  * webview, so a module variable can't cross the boundary; Tauri events can).
  *
- * - `:input` carries the captured text TO the picker window.
- * - `:ready` is the picker window asking for the input on first mount, before
- *   the main window knows it exists. The main window answers with `:input`.
- *   Re-opens skip this: the page is already mounted, so the proactive `:input`
- *   from `openWithSelection` reaches it directly.
+ * - `pickerInput` carries the captured text TO the picker window.
+ * - `pickerReady` is the picker window asking for the input on first mount,
+ *   before the main window knows it exists. The main window answers with
+ *   `pickerInput`. Re-opens skip this: the page is already mounted, so the
+ *   proactive `pickerInput` from `openWithSelection` reaches it directly.
  */
-export const PICKER_INPUT_EVENT = 'transformation-picker:input';
-export const PICKER_READY_EVENT = 'transformation-picker:ready';
+export const pickerInput = defineWindowEvent<{ input: string }>(
+	'transformation-picker:input',
+);
+export const pickerReady = defineWindowSignal('transformation-picker:ready');
 
 /** The most recent captured selection, replayed when the window asks for it. */
 let pendingInput = '';
@@ -34,8 +36,8 @@ let responderRegistered = false;
 function registerInputResponder(): void {
 	if (responderRegistered) return;
 	responderRegistered = true;
-	void listen(PICKER_READY_EVENT, () => {
-		void emit(PICKER_INPUT_EVENT, { input: pendingInput });
+	void pickerReady.listen(() => {
+		void pickerInput.emit({ input: pendingInput });
 	});
 }
 
@@ -54,7 +56,7 @@ export async function openWithSelection(input: string): Promise<void> {
 		await existingWindow.show();
 		// setFocus often fails on macOS; ignore.
 		await existingWindow.setFocus().catch(() => {});
-		await emit(PICKER_INPUT_EVENT, { input });
+		await pickerInput.emit({ input });
 		return;
 	}
 

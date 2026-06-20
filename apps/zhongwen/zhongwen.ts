@@ -28,7 +28,7 @@ import {
 	type Id,
 	type InferTableRow,
 } from '@epicenter/workspace';
-import { attachChatTranscript } from '@epicenter/workspace/ai';
+import { attachChatConversation } from '@epicenter/workspace/ai';
 import { Type } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
 
@@ -43,15 +43,16 @@ export const generateConversationId = (): ConversationId =>
 /**
  * Zhongwen runs a single Chinese-tuned model. It is an app constant, not a
  * per-conversation choice, so it is never stored on the conversation row. Both
- * answer paths read it: the browser sends it with the HTTP kickoff (the server
- * derives the provider from the catalog), and the always-on daemon actor builds
- * its Gemini adapter from it directly.
+ * answer paths read it: the browser passes it to the Epicenter provider it answers
+ * cloud conversations with (the metered `/api/ai/chat` stream), and the always-on
+ * daemon worker builds its Gemini adapter from it directly.
  */
 export const ZHONGWEN_MODEL = 'gemini-3.5-flash' satisfies ServableModel;
 
 /**
- * The hosted cloud agent's stable address (ADR-0015). A new conversation is bound
- * to this agent, so the cloud generation path (the metered HTTP route) answers it.
+ * The hosted cloud agent's stable address (ADR-0025). A new conversation is bound
+ * to this agent, so the browser answers it in-process, sourcing tokens from the
+ * metered `/api/ai/chat` stream via the Epicenter provider (ADR-0033).
  * The binding is immutable: to talk to a different agent you fork the conversation,
  * so a conversation's history only ever reaches its one bound agent. An always-on
  * daemon answers instead when a conversation is bound to that daemon's agent id.
@@ -65,13 +66,14 @@ export type { AgentId };
 /**
  * One agent Zhongwen can bind a conversation to: its durable {@link AgentId},
  * a display `label` for the picker, the `model` it answers with, the action keys
- * it may call as tools (ADR-0010; none yet), and where its runtime lives.
+ * it may call as tools (ADR-0021; none yet), and where its runtime lives.
  *
- * `runtime` is the routing fork the browser reads: a `'cloud'` agent answers over
- * the metered HTTP route, so the browser nudges it; a `'daemon'` agent is an
- * always-on actor that answers over sync, so the browser stays out of the way
- * (nudging both would answer one turn twice, the D3 hazard). The catalog is the
- * one place that fork is declared.
+ * `runtime` is the routing fork the browser reads: a `'cloud'` agent is answered
+ * in-process by the browser (the Epicenter provider sourcing tokens from the
+ * metered `/api/ai/chat` stream); a `'daemon'` agent is an always-on resident
+ * worker that answers over sync, so the browser stays out of the way (both
+ * answering would answer one turn twice, the D3 hazard). The catalog is the one
+ * place that fork is declared (ADR-0033).
  */
 export type AgentConfig = {
 	readonly id: AgentId;
@@ -82,14 +84,15 @@ export type AgentConfig = {
 };
 
 /**
- * The agents a Zhongwen conversation can be bound to (ADR-0015). Config, not
+ * The agents a Zhongwen conversation can be bound to (ADR-0025). Config, not
  * presence: the picker lists every entry here whether or not its runtime is live,
  * because the conversation doc is a durable mailbox: a turn bound to an offline
  * daemon waits in the doc until that daemon wakes and answers. Presence only ever
  * decorates this list with a live/offline hint; it never gates what can be bound.
  *
- * The hosted cloud agent is always available (its runtime is the serverless
- * route). The home daemon is the always-on actor a user co-deploys; binding a
+ * The hosted cloud agent is always available (the browser answers it in-process
+ * against the hosted inference stream, no daemon required). The home daemon is the
+ * always-on worker a user co-deploys; binding a
  * conversation to it is what a later "co-deploy a live daemon" slice brings online.
  */
 export const ZHONGWEN_AGENTS = [
@@ -119,8 +122,8 @@ export const DEFAULT_AGENT_ID: AgentId = CLOUD_AGENT_ID;
 /**
  * The catalog entry for a bound `agent`, or `undefined` for an id no longer in
  * the catalog (a conversation bound before the agent was removed). Callers read
- * `runtime` to route: `agentConfig(id)?.runtime === 'cloud'` is "the browser
- * answers this one"; anything else is left to a daemon over sync.
+ * `runtime` to route: anything that is not a resident `'daemon'` the browser
+ * answers in-process; a `'daemon'` agent is left to answer over sync.
  */
 export function agentConfig(id: AgentId): AgentConfig | undefined {
 	return ZHONGWEN_AGENTS.find((agent) => agent.id === id);
@@ -129,8 +132,8 @@ export function agentConfig(id: AgentId): AgentConfig | undefined {
 /**
  * The bilingual system prompt every Zhongwen answer is generated under. An app
  * constant like {@link ZHONGWEN_MODEL}, shared by both answer paths so they
- * produce the same voice: the browser sends it with the HTTP kickoff, and the
- * always-on daemon actor passes it to its provider. It lives here, in the
+ * produce the same voice: the browser passes it to the Epicenter provider, and the
+ * always-on daemon worker passes it to its provider. It lives here, in the
  * isomorphic contract, rather than in a route folder so the node daemon can read
  * it without importing browser code.
  */
@@ -159,16 +162,16 @@ const conversationsTable = defineTable({
 	createdAt: field.instant(),
 	updatedAt: field.instant(),
 	/**
-	 * The agent this conversation is bound to (ADR-0015), set once at creation and
-	 * never reassigned. {@link CLOUD_AGENT_ID} routes to the cloud generation path
-	 * (the browser nudges the HTTP route); a daemon's agent id routes to that
-	 * always-on actor over sync, and the browser skips its kickoff. One immutable
+	 * The agent this conversation is bound to (ADR-0025), set once at creation and
+	 * never reassigned. {@link CLOUD_AGENT_ID} routes to the browser answering
+	 * in-process (the Epicenter provider); a daemon's agent id routes to that
+	 * always-on worker over sync, and the browser stays out. One immutable
 	 * field is who was addressed and who answered, for every turn: the history
 	 * cannot disagree with itself, and the conversation's content only ever reaches
 	 * this one agent. Switching agents is a fork, not a write here.
 	 */
 	agent: field.string<AgentId>(),
-}).docs({ messages: attachChatTranscript });
+}).docs({ messages: attachChatConversation });
 export type Conversation = InferTableRow<typeof conversationsTable>;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,7 +183,7 @@ export type Conversation = InferTableRow<typeof conversationsTable>;
  *
  * Conversation transcripts are not rows: each `conversations.messages` handle
  * opens a synced child doc derived from the conversation id and streamed into
- * by the server generation actor.
+ * by the server generation worker.
  */
 export const zhongwenWorkspace = defineWorkspace({
 	id: 'epicenter-zhongwen',

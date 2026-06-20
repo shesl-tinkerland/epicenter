@@ -1,27 +1,27 @@
 /**
- * UIMessage boundary: persisted chat rows on one side, TanStack AI types on the other.
+ * Render boundary: a synced conversation-doc message on one side, TanStack AI's
+ * `UIMessage` on the other.
  *
- * Opensidian stores chat messages in the workspace CRDT as JSON-compatible data,
- * but the chat UI and model adapters speak TanStack AI's `UIMessage` / `MessagePart`
- * types at runtime. Keeping the conversion in one file makes schema drift loud: if
- * either side changes shape, TypeScript fails here instead of letting the mismatch
- * leak through the app.
+ * Since the render-from-doc migration, chat history is not a `chatMessages` table
+ * read into `createChat`; it is the conversation transcript child doc
+ * (`attachChatTranscript`), snapshotted as `ChatDocMessage[]`. The chat
+ * components still speak TanStack AI's `UIMessage` / `MessagePart` at runtime, so
+ * this one file converts a doc snapshot into a `UIMessage`. Keeping it here makes
+ * drift loud: if either side changes shape, TypeScript fails here.
  */
 
+import type { ChatDocMessage } from '@epicenter/workspace/ai';
 import type { UIMessage } from '@tanstack/ai-svelte';
-import type { ChatMessage, ChatMessageId } from 'opensidian';
-import type { JsonValue } from 'wellcrafted/json';
+
+// Derive the part type from UIMessage so the cast guards the union the UI
+// actually consumes (@tanstack/ai-client's MessagePart).
+type UiMessagePart = UIMessage['parts'][number];
 
 type Expect<T extends true> = T;
 type Equal<TLeft, TRight> =
 	(<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2
 		? true
 		: false;
-
-// Derive the part type from UIMessage so the drift check and the cast guard
-// the union the UI actually consumes (@tanstack/ai-client's MessagePart), not
-// the structurally similar server union in @tanstack/ai.
-type UiMessagePart = UIMessage['parts'][number];
 
 type ExpectedPartTypes =
 	| 'text'
@@ -34,34 +34,24 @@ type ExpectedPartTypes =
 	| 'thinking'
 	| 'structured-output';
 
-type _ChatMessageIdDriftCheck = Expect<Equal<ChatMessage['id'], ChatMessageId>>;
 type _PartTypeDriftCheck = Expect<
 	Equal<UiMessagePart['type'], ExpectedPartTypes>
 >;
 
 /**
- * Convert one persisted workspace chat message into TanStack AI's runtime message.
+ * Convert one transcript-doc message snapshot into TanStack AI's runtime message.
  *
- * This is the single boundary where the JSON-backed `parts` array is retyped to
- * `MessagePart[]` for the UI layer.
+ * The doc's body parts (`ChatDocPart`: text today; tool-call / tool-result once
+ * Phase B lands) are the persisted subset of `MessagePart`, structurally
+ * compatible with the render union, so this is a cast over a re-keyed envelope
+ * (`createdAt` becomes a `Date`). It is the single place a doc snapshot becomes a
+ * `UIMessage`.
  */
-export function toUiMessage(msg: ChatMessage): UIMessage {
+export function chatDocMessageToUiMessage(message: ChatDocMessage): UIMessage {
 	return {
-		id: msg.id,
-		role: msg.role,
-		parts: msg.parts as unknown as UiMessagePart[],
-		createdAt: new Date(msg.createdAt),
+		id: message.id,
+		role: message.role,
+		parts: message.parts as unknown as UiMessagePart[],
+		createdAt: new Date(message.createdAt),
 	};
-}
-
-/**
- * Serialize live TanStack AI parts for the chatMessages table.
- *
- * The inverse of {@link toUiMessage}'s cast: parts are plain
- * structuredClone-compatible objects, so they store as-is. Routing writes
- * through here also checks the parts against the TanStack AI union at
- * compile time before they become untyped JSON.
- */
-export function toPersistedParts(parts: UiMessagePart[]): JsonValue[] {
-	return parts as unknown as JsonValue[];
 }

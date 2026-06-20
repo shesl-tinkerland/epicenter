@@ -1,9 +1,9 @@
 /**
- * End-to-end check: bind a conversation to the actor's agent, write a turn, wait
+ * End-to-end check: bind a conversation to the worker's agent, write a turn, wait
  * for the streamed `finish` to sync back. Proves observe -> stream -> finish over
  * the real observe loop and a real WebSocket. Exits 0 on success.
  *
- * Run: `bun run src/smoke.ts`  (after the relay and actor are up).
+ * Run: `bun run src/smoke.ts`  (after the relay and worker are up).
  */
 
 import { nanoid } from 'nanoid';
@@ -13,7 +13,7 @@ import { connectPeer } from './transport';
 
 const WORKSPACE = process.env.ROOM ?? 'epicenter-demo';
 const PORT = process.env.PORT ?? 8787;
-const AGENT = process.env.AGENT ?? 'demo-actor';
+const AGENT = process.env.AGENT ?? 'demo-agent';
 
 const rootDoc = new Y.Doc({ gc: true });
 connectPeer({ url: `ws://localhost:${PORT}/${WORKSPACE}`, doc: rootDoc });

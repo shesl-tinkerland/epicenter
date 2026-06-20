@@ -14,7 +14,7 @@ metadata:
 
 ## Upstream Grounding
 
-When TanStack AI behavior, `createChat`, streamed message parts, tool calling, approvals, provider adapters, or Svelte bindings affect correctness, ask DeepWiki a narrow question against `tanstack/ai` before relying on memory. Use it to orient, then verify decisive details against local installed types, source, or official docs before changing code.
+When TanStack AI behavior, `createChat`, streamed message parts, tool calling, approvals, provider adapters, or Svelte bindings affect correctness, ask DeepWiki a narrow question against `TanStack/ai` before relying on memory. Use it to orient, then verify decisive details against local installed types, source, or official docs before changing code.
 
 Skip DeepWiki for repo-local chat persistence and UI patterns already visible in the app.
 

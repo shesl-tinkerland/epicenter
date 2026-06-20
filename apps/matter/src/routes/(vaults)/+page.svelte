@@ -9,9 +9,10 @@
 	<Empty.Media variant="icon"><FolderOpenIcon /></Empty.Media>
 	<Empty.Title>Open a vault</Empty.Title>
 	<Empty.Description>
-		Choose a directory of markdown. Matter reads the whole vault at once, so references resolve
-		across its tables: each immediate child folder is one table. A single table folder opens on its
-		own too.
+		Choose a directory of markdown. A folder is a table once it has a matter.json, so Matter reads
+		the marked folders at once and references resolve across them. Point it at a folder of marked
+		tables, or open a single table folder on its own. An unmarked folder can be adopted as a table
+		once it is open.
 	</Empty.Description>
 	<Empty.Content>
 		<Button onclick={openVaults.open}>

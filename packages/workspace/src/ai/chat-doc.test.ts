@@ -11,10 +11,13 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import {
 	appendAssistantMessage,
+	appendUserMessage,
 	attachChatTranscript,
 	type ChatDocMessage,
+	chatDocToPrompt,
 	findLatestUserTurn,
 	findUnansweredTurn,
+	readChatDocMessages,
 } from './chat-doc.js';
 
 describe('attachChatTranscript', () => {
@@ -86,7 +89,7 @@ describe('attachChatTranscript', () => {
 			createdAt: 1,
 			generationId: 'a1',
 		});
-		// The server generation actor writes assistant messages via the free
+		// The server generation worker writes assistant messages via the free
 		// function; the client handle reads them through the same doc.
 		const writer = appendAssistantMessage(doc, { id: 'a1', createdAt: 2 });
 		writer.appendText('answer');
@@ -191,6 +194,191 @@ describe('attachChatTranscript', () => {
 	});
 });
 
+describe('the parts body', () => {
+	test('a user turn is one text part; read derives its text from that part', () => {
+		const doc = new Y.Doc({ guid: 'chat-user-part' });
+		appendUserMessage(doc, {
+			id: 'u1',
+			content: 'hello',
+			createdAt: 1,
+			generationId: 'g1',
+		});
+
+		const message = readChatDocMessages(doc)[0];
+		expect(message?.parts).toEqual([{ type: 'text', content: 'hello' }]);
+		expect(message?.text).toBe('hello');
+		doc.destroy();
+	});
+
+	test('streamed deltas suffix-append into one trailing text part, not one part per call', () => {
+		const doc = new Y.Doc({ guid: 'chat-stream-part' });
+		const writer = appendAssistantMessage(doc, { id: 'a1', createdAt: 1 });
+		writer.appendText('你');
+		writer.appendText('好');
+		writer.finish({ kind: 'completed' }, { text: '!' });
+
+		const message = readChatDocMessages(doc)[0];
+		// One text part holds the whole stream; the body is not fragmented per delta.
+		expect(message?.parts).toEqual([{ type: 'text', content: '你好!' }]);
+		expect(message?.text).toBe('你好!');
+		expect(message?.finish).toEqual({ kind: 'completed' });
+		doc.destroy();
+	});
+
+	test('an assistant turn with no tokens is an empty body (the thinking marker)', () => {
+		const doc = new Y.Doc({ guid: 'chat-empty-part' });
+		appendAssistantMessage(doc, { id: 'a1', createdAt: 1 });
+
+		const message = readChatDocMessages(doc)[0];
+		expect(message?.parts).toEqual([]);
+		expect(message?.text).toBe('');
+		doc.destroy();
+	});
+
+	test('chatDocToPrompt walks parts and is identical to the single-content output for text', () => {
+		const doc = new Y.Doc({ guid: 'chat-prompt-part' });
+		appendUserMessage(doc, {
+			id: 'u1',
+			content: 'hi',
+			createdAt: 1,
+			generationId: 'a1',
+		});
+		const writer = appendAssistantMessage(doc, { id: 'a1', createdAt: 2 });
+		writer.appendText('answer');
+		writer.finish({ kind: 'completed' });
+		// An interrupted assistant turn with no tokens: carries no signal, dropped.
+		appendAssistantMessage(doc, { id: 'a2', createdAt: 3 });
+
+		expect(chatDocToPrompt(readChatDocMessages(doc))).toEqual([
+			{ role: 'user', content: 'hi' },
+			{ role: 'assistant', content: 'answer' },
+		]);
+		doc.destroy();
+	});
+
+	test('observe fires when a token appends into a part Y.Text', () => {
+		const doc = new Y.Doc({ guid: 'chat-observe-part' });
+		const transcript = attachChatTranscript(doc);
+		const writer = appendAssistantMessage(doc, { id: 'a1', createdAt: 1 });
+
+		let fired = 0;
+		const unobserve = transcript.observe(() => fired++);
+		writer.appendText('token');
+		expect(fired).toBeGreaterThan(0);
+
+		unobserve();
+		doc.destroy();
+	});
+
+	test('reads tool-call and tool-result parts, deriving text from text parts only', () => {
+		// Phase 1 never writes tool parts, so build them raw to cover the reader's
+		// durable branches: a synced Local Books answer is text + a recipe + a result.
+		const doc = new Y.Doc({ guid: 'chat-tool-parts' });
+		doc.transact(() => {
+			const map = new Y.Map<unknown>();
+			const parts = new Y.Array<Y.Map<unknown>>();
+
+			const textPart = new Y.Map<unknown>();
+			const prose = new Y.Text();
+			prose.insert(0, 'Here are the rows:');
+			textPart.set('type', 'text');
+			textPart.set('content', prose);
+
+			const callPart = new Y.Map<unknown>();
+			const args = new Y.Text();
+			args.insert(0, '{"sql":"select 1"}');
+			callPart.set('type', 'tool-call');
+			callPart.set('id', 'tc1');
+			callPart.set('name', 'runSql');
+			callPart.set('arguments', args);
+			callPart.set('input', { sql: 'select 1' });
+			callPart.set('state', 'input-complete');
+
+			const resultPart = new Y.Map<unknown>();
+			resultPart.set('type', 'tool-result');
+			resultPart.set('toolCallId', 'tc1');
+			resultPart.set('content', '1 row');
+			resultPart.set('state', 'complete');
+
+			parts.push([textPart, callPart, resultPart]);
+			map.set('id', 'a1');
+			map.set('role', 'assistant');
+			map.set('createdAt', 1);
+			map.set('parts', parts);
+			doc.getArray<Y.Map<unknown>>('messages').push([map]);
+		});
+
+		const message = readChatDocMessages(doc)[0];
+		expect(message?.parts).toEqual([
+			{ type: 'text', content: 'Here are the rows:' },
+			{
+				type: 'tool-call',
+				id: 'tc1',
+				name: 'runSql',
+				arguments: '{"sql":"select 1"}',
+				input: { sql: 'select 1' },
+				state: 'input-complete',
+			},
+			{
+				type: 'tool-result',
+				toolCallId: 'tc1',
+				content: '1 row',
+				state: 'complete',
+			},
+		]);
+		// Derived text is the prose only; the tool parts do not leak into it.
+		expect(message?.text).toBe('Here are the rows:');
+		doc.destroy();
+	});
+
+	test('skips a malformed part but keeps the well-formed ones around it', () => {
+		const doc = new Y.Doc({ guid: 'chat-malformed-part' });
+		doc.transact(() => {
+			const map = new Y.Map<unknown>();
+			const parts = new Y.Array<Y.Map<unknown>>();
+
+			const good = new Y.Map<unknown>();
+			const text = new Y.Text();
+			text.insert(0, 'kept');
+			good.set('type', 'text');
+			good.set('content', text);
+
+			// A foreign part with an unknown type: a hole, not a crash.
+			const foreign = new Y.Map<unknown>();
+			foreign.set('type', 'mystery');
+
+			parts.push([good, foreign]);
+			map.set('id', 'a1');
+			map.set('role', 'assistant');
+			map.set('createdAt', 1);
+			map.set('parts', parts);
+			doc.getArray<Y.Map<unknown>>('messages').push([map]);
+		});
+
+		const message = readChatDocMessages(doc)[0];
+		expect(message?.parts).toEqual([{ type: 'text', content: 'kept' }]);
+		doc.destroy();
+	});
+
+	test('a pre-parts message (legacy content, no parts) is skipped: the clean break', () => {
+		const doc = new Y.Doc({ guid: 'chat-legacy' });
+		doc.transact(() => {
+			const map = new Y.Map<unknown>();
+			const content = new Y.Text();
+			content.insert(0, 'old answer');
+			map.set('id', 'a1');
+			map.set('role', 'assistant');
+			map.set('createdAt', 1);
+			map.set('content', content); // old shape, no `parts` array
+			doc.getArray<Y.Map<unknown>>('messages').push([map]);
+		});
+
+		// No migration reader: a message without `parts` reads as nothing.
+		expect(readChatDocMessages(doc)).toEqual([]);
+		doc.destroy();
+	});
+});
+
 describe('findUnansweredTurn', () => {
 	const now = 1_000;
 	const userTurn = (
@@ -199,6 +387,7 @@ describe('findUnansweredTurn', () => {
 		id: 'u1',
 		role: 'user',
 		createdAt: now,
+		parts: [{ type: 'text', content: 'ask' }],
 		text: 'ask',
 		generationId: 'gen-1',
 		...overrides,
@@ -224,6 +413,7 @@ describe('findUnansweredTurn', () => {
 			id: 'gen-1',
 			role: 'assistant',
 			createdAt: now,
+			parts: [],
 			text: '',
 		};
 		expect(findUnansweredTurn([userTurn(), claimed], now)).toBeUndefined();
@@ -234,6 +424,7 @@ describe('findUnansweredTurn', () => {
 			id: 'other',
 			role: 'assistant',
 			createdAt: now,
+			parts: [{ type: 'text', content: 'streaming' }],
 			text: 'streaming',
 		};
 		// The user turn (gen-2) is unanswered, but a separate generation is live.

@@ -1,15 +1,16 @@
 /**
  * `matter check <path>`: certify a vault's integrity from the command line.
  *
- * One pipeline, scope inferred from the path (`load/fs`): point it at a table folder and it checks
- * that one table; point it at a vault of table folders and it checks the whole vault, references
- * and all. The path becomes `TableInput[]`, `assess` classifies it once, the `core` selectors
- * (`toViolations`, `summarize`) project that one structure, and `report/` renders it into the human
- * text, the `--json`, and the exit code, so every surface agrees by construction.
+ * One pipeline over the path's scope (`load/fs` `loadPath`, ADR-0029/0032): point it at a
+ * marked table folder and it checks that one table; point it at a folder of tables and it checks
+ * them all, references and all (a folder is a table XOR a container). The path becomes `TableInput[]`,
+ * `assess` classifies it once, the `core` selectors (`toViolations`, `summarize`) project that one
+ * structure, and `report/` renders it into the human text, the `--json`, and the exit code, so
+ * every surface agrees by construction.
  *
- * A single-table check is a one-table vault: its references have no target tables loaded, so every
- * reference is `missing-target`. Those are un-evaluable in isolation, surfaced as a note, not a
- * failure: checking `pages/` must not fail for references only the whole vault can resolve.
+ * A lone table (`tables.length === 1`) has no sibling tables loaded, so every reference is
+ * `missing-target`. Those are un-evaluable in isolation, surfaced as a note, not a failure:
+ * checking `pages/` alone must not fail for references only its sibling tables can resolve.
  */
 
 import { describeExpected } from '../lib/core/expected';
@@ -89,13 +90,11 @@ function writeText(
 }
 
 function writeJson(
-	scope: 'table' | 'vault',
 	summary: Summary,
 	failures: readonly Violation[],
 	unevaluable: readonly Violation[],
 ): void {
 	const payload = {
-		scope,
 		violations: failures.map(serializeViolation),
 		unevaluableReferences: unevaluable.map(serializeViolation),
 		summary,
@@ -110,24 +109,25 @@ async function main(): Promise<number> {
 		return 2;
 	}
 
-	const { scope, tables } = await loadPath(args.path);
+	const tables = await loadPath(args.path);
 	const integrity = assess(tables);
 	const summary = summarize(integrity);
 	const violations = toViolations(integrity);
 
-	// Single-table scope cannot load any target table, so every reference is missing-target and
-	// un-evaluable in isolation: hold those out of the failures as notes. (dangling cannot occur
-	// in table scope; it needs the target table present.)
-	const isTableScope = scope === 'table';
-	const unevaluable = isTableScope
+	// A lone table (no sibling tables in scope) cannot load any target table, so every reference is
+	// missing-target and un-evaluable in isolation: hold those out of the failures as notes.
+	// (dangling cannot occur for a lone table; it needs the target table present.) With marked
+	// child tables loaded, the scope is the closed universe, so references resolve or dangle.
+	const isLoneTable = tables.length === 1;
+	const unevaluable = isLoneTable
 		? violations.filter((violation) => violation.kind === 'missing-target')
 		: [];
-	const failures = isTableScope
+	const failures = isLoneTable
 		? violations.filter((violation) => violation.kind !== 'missing-target')
 		: violations;
 
 	if (args.json) {
-		writeJson(scope, summary, failures, unevaluable);
+		writeJson(summary, failures, unevaluable);
 	} else {
 		writeText(summary, failures, unevaluable);
 	}

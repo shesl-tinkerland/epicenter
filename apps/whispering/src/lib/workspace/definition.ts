@@ -188,7 +188,6 @@ const sound = {
 	'sound.vadStop': defineKv(field.boolean(), () => true),
 	'sound.transcriptionComplete': defineKv(field.boolean(), () => true),
 	'sound.transformationComplete': defineKv(field.boolean(), () => true),
-	'sound.pauseMediaDuringRecording': defineKv(field.boolean(), () => false),
 } as const;
 
 /**
@@ -243,6 +242,14 @@ const recording = {
 		field.select(RECORDING_TRIGGERS),
 		() => 'manual' as const,
 	),
+	// Pause system media playback while your voice is being captured, resume it
+	// after. On by default: hearing music while you talk disrupts dictation, and
+	// pausing media during voice capture is the least-astonishing behavior (it is
+	// what a phone call does to your music). Discoverable without a nudge via the
+	// settings toggle's description and the home-row quick toggle. A roaming
+	// preference, not a per-device capability, so it follows you across machines
+	// like the sound toggles.
+	'recording.pausePlayback': defineKv(field.boolean(), () => true),
 } as const;
 
 /**
@@ -312,7 +319,10 @@ const shortcuts = {
 	// These getDefault thunks are the single source for the in-app shortcut
 	// defaults. The web backend (platform/shortcuts.browser.ts) reads them back
 	// through `settings.getDefault('shortcut.*')` instead of redeclaring them, so
-	// the schema and the backend can never drift.
+	// the schema and the backend can never drift. Values are the readable manual
+	// grammar (`parseManualBinding`): `'space'`, `'c'`, `'ctrl+shift+a'`. The cell
+	// stays `field.string()`, so this is a value re-spelling, not a migration; a
+	// stale logical value (e.g. a stored `' '`) fails the parse and reads as unset.
 	//
 	// Push-to-talk ships unbound in-app: a stray Space-style tap would fire
 	// start+immediate-stop and feed a junk recording to the pipeline, so the safe
@@ -323,7 +333,7 @@ const shortcuts = {
 	),
 	'shortcut.toggleManualRecording': defineKv(
 		nullable(field.string()),
-		(): string | null => ' ',
+		(): string | null => 'space',
 	),
 	// Renamed from `shortcut.cancelManualRecording` (cancel now aborts manual or
 	// VAD capture, so the "manual" qualifier is gone). No migration: pre-release,

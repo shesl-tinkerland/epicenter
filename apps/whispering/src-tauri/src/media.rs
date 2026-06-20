@@ -1,188 +1,75 @@
-use serde::{Deserialize, Serialize};
+//! Pause and resume system media playback around recording.
+//!
+//! The frontend `recordingMedia` chain calls `pause_playback` on capture start
+//! and `resume_playback` on capture end, trading opaque `String` session tokens:
+//! `pause_playback` returns a token for each session it paused, and the frontend
+//! hands that same set back to `resume_playback`. Token contents are
+//! platform-private (macOS output-active bundle ids, Windows AUMIDs, Linux MPRIS
+//! bus names) and the frontend never interprets them.
+//!
+//! Recording never waits on, and never fails because of, playback control: both
+//! commands are infallible across IPC and the caller fires and forgets. Platform
+//! failures are logged on the Rust side, never surfaced to the frontend (which
+//! has no recovery for them). One platform module is compiled per target;
+//! unsupported targets are silent no-ops.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum MediaPlayer {
-    Music,
-    Spotify,
-}
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct MediaControlFailure {
-    player: MediaPlayer,
-    message: String,
-    permission_denied: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PauseActiveMediaOutcome {
-    paused: Vec<MediaPlayer>,
-    failures: Vec<MediaControlFailure>,
-}
-
-impl MediaPlayer {
-    fn app_name(self) -> &'static str {
-        match self {
-            MediaPlayer::Music => "Music",
-            MediaPlayer::Spotify => "Spotify",
-        }
-    }
-}
-
+/// Pause every system media session currently playing. Returns one opaque token
+/// per session paused, to hand back to `resume_playback`. Pausing is gated to
+/// never *start* playback: only sessions observed playing are touched, and the
+/// dedicated pause command (never a play/pause toggle) is sent.
 #[tauri::command]
 #[specta::specta]
-pub async fn pause_active_media() -> Result<PauseActiveMediaOutcome, String> {
+pub async fn pause_playback() -> Vec<String> {
+    // Infallible across IPC: recording never waits on, nor fails because of,
+    // playback control, and the frontend has no recovery for a pause failure.
+    // A platform failure is logged here (the cause belongs in the Rust log, not
+    // the wire) and reported as "paused nothing", so the resume side has no
+    // token to act on.
     #[cfg(target_os = "macos")]
-    {
-        tokio::task::spawn_blocking(pause_active_media_sync)
-            .await
-            .map_err(|e| format!("Failed to pause active media: {}", e))?
-    }
+    let result = macos::pause_playing().await;
+    #[cfg(target_os = "windows")]
+    let result = windows::pause_playing().await;
+    #[cfg(target_os = "linux")]
+    let result = linux::pause_playing().await;
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    let result: Result<Vec<String>, String> = Ok(Vec::new());
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(PauseActiveMediaOutcome {
-            paused: Vec::new(),
-            failures: Vec::new(),
-        })
-    }
+    result.unwrap_or_else(|err| {
+        log::warn!("pause_playback failed, leaving system playback untouched: {err}");
+        Vec::new()
+    })
 }
 
+/// Resume the sessions named by `sessions`, which must be tokens returned by a
+/// prior `pause_playback`. A session that vanished, was already resumed by the
+/// user, or can't be resumed is silently skipped. Safety rule: we only ever send
+/// *play* to a session we personally paused.
 #[tauri::command]
 #[specta::specta]
-pub async fn resume_media(players: Vec<MediaPlayer>) -> Result<Vec<MediaControlFailure>, String> {
+pub async fn resume_playback(sessions: Vec<String>) {
+    // Infallible across IPC, mirroring `pause_playback`: a resume failure is not
+    // something the frontend can act on, so the cause is logged here rather than
+    // returned.
     #[cfg(target_os = "macos")]
-    {
-        tokio::task::spawn_blocking(move || resume_media_sync(players))
-            .await
-            .map_err(|e| format!("Failed to resume media: {}", e))?
-    }
+    let result = macos::resume(sessions).await;
+    #[cfg(target_os = "windows")]
+    let result = windows::resume(sessions).await;
+    #[cfg(target_os = "linux")]
+    let result = linux::resume(sessions).await;
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    let result: Result<(), String> = {
+        let _ = sessions;
+        Ok(())
+    };
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = players;
-        Ok(Vec::new())
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn pause_active_media_sync() -> Result<PauseActiveMediaOutcome, String> {
-    let mut paused = Vec::new();
-    let mut failures = Vec::new();
-
-    for player in [MediaPlayer::Music, MediaPlayer::Spotify] {
-        match pause_player(player) {
-            Ok(true) => paused.push(player),
-            Ok(false) => {}
-            Err(message) => failures.push(failure(player, message)),
-        }
-    }
-
-    Ok(PauseActiveMediaOutcome { paused, failures })
-}
-
-#[cfg(target_os = "macos")]
-fn resume_media_sync(players: Vec<MediaPlayer>) -> Result<Vec<MediaControlFailure>, String> {
-    let mut failures = Vec::new();
-
-    for player in players {
-        if let Err(message) = resume_player(player) {
-            failures.push(failure(player, message));
-        }
-    }
-
-    Ok(failures)
-}
-
-#[cfg(target_os = "macos")]
-fn pause_player(player: MediaPlayer) -> Result<bool, String> {
-    if !is_app_running(player.app_name()) {
-        return Ok(false);
-    }
-
-    let script = format!(
-        r#"
-tell application "{app_name}"
-	if player state is playing then
-		pause
-		return "paused"
-	end if
-end tell
-return "idle"
-"#,
-        app_name = player.app_name()
-    );
-
-    run_osascript(&script).map(|output| output.trim() == "paused")
-}
-
-#[cfg(target_os = "macos")]
-fn resume_player(player: MediaPlayer) -> Result<(), String> {
-    // The FE only asks us to resume players we actually paused, so this guard
-    // only fires when the user quit the app mid-recording. It still matters:
-    // `tell application "X" to play` would cold-launch a quit app otherwise.
-    if !is_app_running(player.app_name()) {
-        return Ok(());
-    }
-
-    let script = format!(
-        r#"
-tell application "{app_name}" to play
-"#,
-        app_name = player.app_name()
-    );
-
-    run_osascript(&script).map(|_| ())
-}
-
-#[cfg(target_os = "macos")]
-fn is_app_running(app_name: &str) -> bool {
-    use std::process::Command;
-
-    Command::new("/usr/bin/pgrep")
-        .args(["-x", app_name])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
-}
-
-#[cfg(target_os = "macos")]
-fn run_osascript(script: &str) -> Result<String, String> {
-    use std::process::Command;
-
-    let output = Command::new("/usr/bin/osascript")
-        .args(["-e", script])
-        .output()
-        .map_err(|e| format!("Failed to run osascript: {}", e))?;
-
-    if output.status.success() {
-        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if stderr.is_empty() {
-        return Err(format!(
-            "osascript exited with code {:?}",
-            output.status.code()
-        ));
-    }
-
-    Err(stderr)
-}
-
-#[cfg(target_os = "macos")]
-fn failure(player: MediaPlayer, message: String) -> MediaControlFailure {
-    // macOS Automation denial surfaces as "Not authorized to send Apple
-    // events ... (-1743)". Match only those two reliable markers: a looser
-    // "permission" substring would mislabel an unrelated error and then latch
-    // the one-time permission hint shut for the rest of the session.
-    let lower = message.to_lowercase();
-    let permission_denied = lower.contains("not authorized") || lower.contains("-1743");
-    MediaControlFailure {
-        player,
-        permission_denied,
-        message,
+    if let Err(err) = result {
+        log::warn!("resume_playback failed: {err}");
     }
 }

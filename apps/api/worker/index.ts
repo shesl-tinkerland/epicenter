@@ -104,5 +104,9 @@ app.on(
 // Legacy redirect: /billing -> /dashboard.
 app.get('/billing', (c) => c.redirect('/dashboard'));
 
-export default app;
+// The Worker exposes the Hono fetch handler (the full URL surface above).
+// `app.fetch` is bound, so destructuring it is safe.
+export default {
+	fetch: app.fetch,
+};
 export { Room };

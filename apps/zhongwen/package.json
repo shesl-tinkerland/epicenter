@@ -20,6 +20,7 @@
 		"deploy": "wrangler deploy"
 	},
 	"dependencies": {
+		"@epicenter/ai-adapters": "workspace:*",
 		"@epicenter/app-shell": "workspace:*",
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/client": "workspace:*",
@@ -30,7 +31,6 @@
 		"@epicenter/workspace": "workspace:*",
 		"@lucide/svelte": "catalog:",
 		"@tanstack/ai": "catalog:",
-		"@tanstack/ai-gemini": "catalog:",
 		"arktype": "catalog:",
 		"dompurify": "^3.4.10",
 		"marked": "^17.0.5",

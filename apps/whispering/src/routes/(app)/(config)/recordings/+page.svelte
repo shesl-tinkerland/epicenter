@@ -56,6 +56,7 @@
 	import { createCopyFn } from '$lib/utils/createCopyFn';
 	import LatestTransformationRunOutputByRecordingId from './LatestTransformationRunOutputByRecordingId.svelte';
 	import RenderAudioUrl from './RenderAudioUrl.svelte';
+	import TranscriptionStatusBadge from './TranscriptionStatusBadge.svelte';
 	import { RecordingRowActions } from './row-actions';
 
 	/**
@@ -217,6 +218,17 @@
 				const id = getValue<string>();
 				return renderComponent(RenderAudioUrl, { id });
 			},
+		},
+		{
+			id: 'status',
+			meta: { label: 'Status' },
+			accessorFn: ({ id }) => id,
+			header: 'Status',
+			enableSorting: false,
+			cell: ({ getValue }) =>
+				renderComponent(TranscriptionStatusBadge, {
+					recordingId: getValue<string>(),
+				}),
 		},
 		{
 			id: 'actions',

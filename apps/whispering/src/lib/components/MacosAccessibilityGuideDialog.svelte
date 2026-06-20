@@ -79,20 +79,37 @@
 	// The Rust supervisor pushes the capability change, so the dialog flips to its
 	// granted state the moment the supervisor sees the grant, with no reload.
 	const isGranted = $derived(dictationCapability.isActive);
+
+	// A stale grant (`broken`) is the only case that needs the remove-and-re-add
+	// dance; never-granted (and the pre-seed `unknown`) just needs the switch
+	// flipped on a row `openSystemSettings` already added. This drives the title,
+	// the description, and which steps the guide renders, so a first-timer is never
+	// told to remove a Whispering that isn't in their list yet.
+	const variant = $derived(
+		dictationCapability.isStale ? 're-add' : 'first-grant',
+	);
 </script>
 
 <Dialog.Root bind:open={accessibilityGuide.isOpen}>
-	<Dialog.Content class="sm:max-w-2xl">
+	<Dialog.Content class="sm:max-w-lg">
 		<Dialog.Header>
-			<Dialog.Title>Enable Accessibility</Dialog.Title>
+			<Dialog.Title>
+				{variant === 're-add' ? 'Re-grant Accessibility' : 'Enable Accessibility'}
+			</Dialog.Title>
 			<Dialog.Description>
-				macOS needs you to turn on Accessibility for Whispering before it can
-				fire your global shortcut and paste where you're typing. After an app
-				update it usually has to be removed and re-added.
+				{#if variant === 're-add'}
+					Whispering already has Accessibility, but it's not firing. That usually
+					means a stale entry from an app update. Open System Settings below, then
+					remove Whispering from the list and add it back.
+				{:else}
+					macOS needs Accessibility before Whispering can fire your global
+					shortcut and paste where you're typing. Open System Settings below, then
+					switch Whispering on. It'll already be in the list.
+				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<MacosAccessibilityGuide />
+		<MacosAccessibilityGuide {variant} />
 
 		<Dialog.Footer>
 			{#if isGranted}

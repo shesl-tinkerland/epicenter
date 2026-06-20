@@ -70,7 +70,11 @@ impl DownloadManager {
     /// surfaces here as an `Err`. The caller, which knows it requested the cancel,
     /// treats that error as a clean stop. Always unregisters, so a finished or
     /// aborted id is safe to cancel again (a no-op).
-    pub(crate) async fn run<T>(&self, id: &str, fut: impl Future<Output = T> + Send + 'static) -> Result<T, String>
+    pub(crate) async fn run<T>(
+        &self,
+        id: &str,
+        fut: impl Future<Output = T> + Send + 'static,
+    ) -> Result<T, String>
     where
         T: Send + 'static,
     {

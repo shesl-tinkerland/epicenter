@@ -9,6 +9,7 @@
 import type { Result } from 'wellcrafted/result';
 import type {
 	commands,
+	IpcRecorderError,
 	LocalModelState,
 	ModelStateEvent,
 	ModelStatus,
@@ -24,12 +25,25 @@ type Equal<X, Y> =
 		? true
 		: false;
 
-// stop_recording: fallible, returns the artifact struct.
+// stop_recording: fallible, returns the artifact struct. The error is the
+// structured `RecorderError` IPC enum, not a bare string: this assertion is the
+// contract proof that the recorder boundary stays typed.
 type _StopRecording = Expect<
 	Equal<
 		ReturnType<typeof commands.stopRecording>,
-		Promise<Result<RecordingArtifact, string>>
+		Promise<Result<RecordingArtifact, IpcRecorderError>>
 	>
+>;
+
+// pause_playback / resume_playback: infallible across IPC. A platform failure
+// is logged in Rust and never surfaces as an error the frontend must handle, so
+// these stay plain Promises with no Result wrap.
+type _PausePlayback = Expect<
+	Equal<ReturnType<typeof commands.pausePlayback>, Promise<string[]>>
+>;
+
+type _ResumePlayback = Expect<
+	Equal<ReturnType<typeof commands.resumePlayback>, Promise<void>>
 >;
 
 // transcribe_recording: fallible, takes recordingId plus the per-call spec.
@@ -104,7 +118,9 @@ type _ModelStatusShape = Expect<
 	>
 >;
 
-// open_accessibility_settings: fallible, returns unit as null.
+// open_accessibility_settings: fallible, returns unit as null. Deliberately a
+// bare-string error (tier 2): the frontend wraps it into one PermissionsError
+// variant and only displays the message; it never branches on the cause.
 type _OpenAccessibilitySettings = Expect<
 	Equal<
 		ReturnType<typeof commands.openAccessibilitySettings>,
@@ -112,7 +128,10 @@ type _OpenAccessibilitySettings = Expect<
 	>
 >;
 
-// encode_recording_for_upload: hand-rolled, raw bytes success path.
+// encode_recording_for_upload: hand-rolled, raw bytes success path. Error stays
+// a bare string (tier 2): `tauri::ipc::Response` is not `specta::Type`, so this
+// command lives outside the generated surface, and the frontend treats a
+// failure as best-effort ("compression skipped"), never branching on it.
 type _EncodeRecordingForUpload = Expect<
 	Equal<
 		ReturnType<typeof commands.encodeRecordingForUpload>,

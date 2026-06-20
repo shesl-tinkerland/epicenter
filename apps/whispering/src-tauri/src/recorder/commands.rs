@@ -1,6 +1,7 @@
 use crate::recorder::artifact::{
     clear_artifacts, delete_artifacts, write_artifact, RecordingArtifact,
 };
+use crate::recorder::error::RecorderError;
 use crate::recorder::recorder::{Recorder, Result};
 use log::{debug, info, warn};
 use serde::Serialize;
@@ -33,7 +34,7 @@ pub async fn enumerate_recording_devices(
     debug!("Enumerating recording devices");
     let recorder = recorder
         .lock()
-        .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+        .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
     recorder.enumerate_devices()
 }
 
@@ -53,7 +54,7 @@ pub async fn init_recording_session(
     {
         let mut recorder = recorder
             .lock()
-            .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
         recorder.init_session(
             device_identifier,
             recording_id,
@@ -78,7 +79,7 @@ pub async fn start_recording(
     {
         let mut recorder = recorder
             .lock()
-            .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
         recorder.start_recording()?;
     }
     emit_recording_state(&app_handle, RecordingState::Recording);
@@ -101,10 +102,10 @@ pub async fn stop_recording(
     let (recording_id, samples) = {
         let mut recorder = recorder
             .lock()
-            .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
         let id = recorder
             .session_id()
-            .ok_or_else(|| "no active recording session at stop".to_string())?;
+            .ok_or_else(|| RecorderError::failed("no active recording session at stop"))?;
         let samples = recorder.stop_recording()?;
         (id, samples)
     };
@@ -133,7 +134,7 @@ pub async fn cancel_recording(
     {
         let mut recorder = recorder
             .lock()
-            .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
         recorder.cancel_recording()?;
     }
     emit_recording_state(&app_handle, RecordingState::Idle);
@@ -150,7 +151,7 @@ pub async fn close_recording_session(
     {
         let mut recorder = recorder
             .lock()
-            .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
         recorder.close_session()?;
     }
     emit_recording_state(&app_handle, RecordingState::Idle);
@@ -165,7 +166,7 @@ pub async fn get_current_recording_id(
     debug!("Getting current recording ID");
     let recorder = recorder
         .lock()
-        .map_err(|e| format!("Failed to lock recorder: {e}"))?;
+        .map_err(|e| RecorderError::failed(format!("Failed to lock recorder: {e}")))?;
     Ok(recorder.get_current_recording_id())
 }
 
@@ -184,7 +185,7 @@ pub async fn delete_recording_artifacts(
     info!("Deleting {} recording artifacts", recording_ids.len());
     tokio::task::spawn_blocking(move || delete_artifacts(&app_handle, &recording_ids))
         .await
-        .map_err(|e| format!("Task join error: {e}"))?
+        .map_err(|e| RecorderError::failed(format!("Task join error: {e}")))?
 }
 
 /// Delete every recording artifact while preserving markdown sidecars.
@@ -198,5 +199,5 @@ pub async fn clear_recording_artifacts(app_handle: AppHandle) -> Result<u32> {
     info!("Clearing recording artifacts");
     tokio::task::spawn_blocking(move || clear_artifacts(&app_handle))
         .await
-        .map_err(|e| format!("Task join error: {e}"))?
+        .map_err(|e| RecorderError::failed(format!("Task join error: {e}")))?
 }

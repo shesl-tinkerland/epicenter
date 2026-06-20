@@ -26,8 +26,8 @@ use thiserror::Error;
 use crate::download::{stream_to_file, DownloadManager, DownloadProgress};
 
 use super::config::Engine;
-use super::model_import::{unlink_symlink, WHISPER_EXTENSIONS};
 use super::model_cache::{engine_models_path, is_contained_entry_name};
+use super::model_import::{unlink_symlink, WHISPER_EXTENSIONS};
 
 #[derive(Error, Debug, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "name")]
@@ -108,10 +108,8 @@ pub fn list_model_entries(
     engine: Engine,
     app_handle: AppHandle,
 ) -> Result<Vec<ModelEntry>, ModelFolderError> {
-    let models_dir =
-        engine_models_path(&app_handle, engine).map_err(|message| ModelFolderError::ReadFailed {
-            message,
-        })?;
+    let models_dir = engine_models_path(&app_handle, engine)
+        .map_err(|message| ModelFolderError::ReadFailed { message })?;
     let Ok(read_dir) = std::fs::read_dir(&models_dir) else {
         // The folder is created on first download/link; absence means empty.
         return Ok(Vec::new());
@@ -292,7 +290,9 @@ pub async fn download_model(
 ) -> Result<(), ModelFolderError> {
     if !is_contained_entry_name(&entry_name) {
         return Err(ModelFolderError::InvalidEntryName {
-            message: format!("Model entry name must be a single models-folder entry, got: {entry_name}"),
+            message: format!(
+                "Model entry name must be a single models-folder entry, got: {entry_name}"
+            ),
         });
     }
     if files.is_empty() {
@@ -385,15 +385,18 @@ async fn run_staged_download(
     if is_directory {
         // Clear any leftover staging from an interrupted run, then start clean.
         let _ = tokio::fs::remove_dir_all(&staging).await;
-        tokio::fs::create_dir_all(&staging)
-            .await
-            .map_err(|e| ModelFolderError::DownloadFailed {
+        tokio::fs::create_dir_all(&staging).await.map_err(|e| {
+            ModelFolderError::DownloadFailed {
                 message: format!("create staging directory: {e}"),
-            })?;
+            }
+        })?;
         for file in &files {
             if !is_contained_entry_name(&file.filename) {
                 return Err(ModelFolderError::InvalidEntryName {
-                    message: format!("Model file name must be a single entry, got: {}", file.filename),
+                    message: format!(
+                        "Model file name must be a single entry, got: {}",
+                        file.filename
+                    ),
                 });
             }
             let file_path = staging.join(&file.filename);

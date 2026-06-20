@@ -1,7 +1,7 @@
 /**
  * Tauri-only capability namespace. Everything that requires the Tauri
  * runtime lives in this file: fs, permissions, window, tray,
- * globalShortcuts, autostart. The subset that needs TanStack caching,
+ * keyboard, autostart. The subset that needs TanStack caching,
  * error transformation, or invalidation is exposed in the same shape
  * (no sub-namespace), with each leaf picking one canonical call form.
  *
@@ -48,12 +48,15 @@ import {
 	isEnabled as isAutostartEnabled,
 } from '@tauri-apps/plugin-autostart';
 import { readFile } from '@tauri-apps/plugin-fs';
+import {
+	register as registerShortcut,
+	unregisterAll as unregisterAllShortcuts,
+} from '@tauri-apps/plugin-global-shortcut';
 import { openPath as revealPath } from '@tauri-apps/plugin-opener';
 import { exit } from '@tauri-apps/plugin-process';
 import mime from 'mime';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 import { Ok, tryAsync } from 'wellcrafted/result';
-import { os } from '#platform/os';
 import { goto } from '$app/navigation';
 import type { WhisperingRecordingState } from '$lib/constants/audio';
 import { defineMutation, defineQuery, queryClient } from '$lib/rpc/client';
@@ -62,9 +65,16 @@ import type {
 	CommandBinding,
 	DictationCapability,
 	KeyBinding,
-	MediaPlayer,
 } from '$lib/tauri/commands';
 import { commands, events } from '$lib/tauri/commands';
+
+/**
+ * A Tier-0 chord resolved to the accelerator the plugin registers under. The
+ * caller (`platform/shortcuts.tauri.ts`) resolves each binding once via
+ * `resolveBinding`, so `registerChords` registers the string instead of
+ * re-deriving it.
+ */
+export type ChordRegistration = { commandId: string; accelerator: string };
 
 // fs ----------------------------------------------------------------
 const FsError = defineErrors({
@@ -122,22 +132,19 @@ const PermissionsError = defineErrors({
 
 const permissions = {
 	accessibility: {
+		// Rust owns the platform dispatch (macOS prompts via the permissions
+		// plugin, elsewhere a no-op), so the FE just calls the command. The prompt
+		// cannot grant in place; the live grant is observed by the Rust tap
+		// supervisor, so the Result here only reports whether the nudge fired.
 		async request() {
-			if (!os.isApple) return Ok(true);
 			return tryAsync({
-				try: async () => {
-					const { requestAccessibilityPermission } = await import(
-						'tauri-plugin-macos-permissions-api'
-					);
-					return requestAccessibilityPermission();
-				},
+				try: () => commands.requestAccessibilityPermission(),
 				catch: (error) =>
 					PermissionsError.RequestAccessibility({ cause: error }),
 			});
 		},
 
 		async openSettings() {
-			if (!os.isApple) return Ok(undefined);
 			const { error } = await commands.openAccessibilitySettings();
 			if (error !== null) {
 				return PermissionsError.OpenAccessibilitySettings({ cause: error });
@@ -147,30 +154,29 @@ const permissions = {
 	},
 
 	microphone: {
+		// One transport for every platform: Rust owns "what does the OS say about
+		// mic access" (macOS via the permissions plugin, Windows via the consent
+		// store, `unknown` elsewhere). Only an explicit `denied` gates; `granted`
+		// and `unknown` both read as available, so a missing consent entry never
+		// newly blocks a setup that was recording fine, and the recorder's
+		// stream-open fallback still classifies any real denial.
 		async check() {
-			if (!os.isApple) return Ok(true);
 			return tryAsync({
-				try: async () => {
-					const { checkMicrophonePermission } = await import(
-						'tauri-plugin-macos-permissions-api'
-					);
-					return checkMicrophonePermission();
-				},
+				try: async () =>
+					(await commands.getMicrophonePermission()) !== 'denied',
 				catch: (error) => PermissionsError.CheckMicrophone({ cause: error }),
 			});
 		},
 
+		// Elicit a grant the way the platform allows (macOS prompt, Windows privacy
+		// page when denied); the caller re-checks afterward. No platform can grant
+		// in place, so this only reports whether the nudge itself succeeded.
 		async request() {
-			if (!os.isApple) return Ok(true);
-			return tryAsync({
-				try: async () => {
-					const { requestMicrophonePermission } = await import(
-						'tauri-plugin-macos-permissions-api'
-					);
-					return requestMicrophonePermission();
-				},
-				catch: (error) => PermissionsError.RequestMicrophone({ cause: error }),
-			});
+			const { error } = await commands.requestMicrophonePermission();
+			if (error !== null) {
+				return PermissionsError.RequestMicrophone({ cause: error });
+			}
+			return Ok(undefined);
 		},
 	},
 };
@@ -244,15 +250,23 @@ async function initTray() {
 	});
 }
 
-// globalShortcuts ---------------------------------------------------
-// The desktop trigger backend is the rdev listener in `src-tauri/src/keyboard`.
-// It emits a `{ commandId, state }` event on every binding transition; we push
-// the user's bindings down with `set_keyboard_shortcuts` and dispatch the
-// events back into the command layer (the single convergence point). No
-// accelerator strings cross this boundary: the registrar parses them to
-// `KeyBinding` before pushing (see `platform/shortcuts.tauri.ts`). The trigger and
-// capture topics are the generated `events.shortcutTriggerEvent` /
-// `events.shortcutCaptureEvent`, so no topic string is mirrored here.
+// keyboard ----------------------------------------------------------
+// The desktop keyboard subsystem (mirrors `src-tauri/src/keyboard`): both
+// shortcut tiers, the dictation capability, and chord capture. Two backends
+// feed one convergence point (`dispatchCommandTrigger`):
+//
+//   Tier 0 (default, no permission): `tauri-plugin-global-shortcut`. The
+//     registrar maps each chord binding to an accelerator and registers it; the
+//     plugin's own callback delivers Pressed/Released. This is the floor, so it
+//     needs no Accessibility grant.
+//   Tier 1 (opt-in): the rdev/tap listener in `src-tauri/src/keyboard`, for the
+//     Fn and modifier-only holds the plugin cannot express. It emits a
+//     `{ commandId, state }` event on every transition (`events.shortcutTriggerEvent`)
+//     and reports its `DictationCapability` (`events.dictationCapabilityEvent`).
+//
+// Backend selection lives in `platform/shortcuts.tauri.ts`: a binding that maps
+// to an accelerator goes to the plugin, the rest to the tap. No accelerator
+// strings reach the tap; it matches the structured `KeyBinding`.
 
 // autostart ---------------------------------------------------------
 const AutostartError = defineErrors({
@@ -321,22 +335,56 @@ const tray = {
 		}),
 };
 
-const globalShortcuts = {
+const keyboard = {
 	/**
-	 * Replace the full set of registered global shortcuts on the rdev backend.
-	 * The registrar computes the complete list from device-config and pushes it
-	 * on startup and on every change; replace-all keeps the FE the single source
-	 * of truth with no add/remove bookkeeping.
+	 * Register the Tier-0 chord backend (`tauri-plugin-global-shortcut`). Replaces
+	 * the whole set: unregister everything, then register each resolved chord
+	 * under its accelerator. The plugin's own callback delivers Pressed/Released,
+	 * which we dispatch into the command layer (the convergence point the browser
+	 * backend also feeds). Bindings with no accelerator (Fn, modifier-only) are
+	 * the Tier-1 tap's job (see `setBindings`). Carbon's `RegisterEventHotKey`
+	 * needs no Accessibility grant, so this is the floor.
+	 */
+	registerChords: async (chords: ChordRegistration[]) => {
+		await unregisterAllShortcuts();
+		const { dispatchCommandTrigger } = await import('$lib/commands');
+		for (const { commandId, accelerator } of chords) {
+			await registerShortcut(accelerator, (event) =>
+				dispatchCommandTrigger(commandId, event.state),
+			);
+		}
+	},
+
+	/** Unregister every plugin-registered chord (teardown). */
+	unregisterChords: () => unregisterAllShortcuts(),
+
+	/**
+	 * Replace the full set of bindings the Tier-1 tap owns (the Fn / modifier-only
+	 * holds; chords go to the plugin). The registrar computes the complete list
+	 * from device-config and pushes it on startup and on every change; replace-all
+	 * keeps the FE the single source of truth with no add/remove bookkeeping. The
+	 * supervisor spins the tap up when this is non-empty and tears it down when it
+	 * empties (unless auto-paste still wants it).
 	 */
 	setBindings: (bindings: CommandBinding[]) =>
 		commands.setKeyboardShortcuts(bindings),
+
+	/**
+	 * Tell the tap supervisor whether auto-paste-at-cursor is on. Paste writes
+	 * through the same macOS Accessibility grant the tap reads through, so when it
+	 * is on the supervisor holds the tap to track that grant (and surface the
+	 * notice if it is missing) even with no binding. Pushed on startup and on
+	 * every output-settings change.
+	 */
+	setAutoPasteEnabled: (enabled: boolean) =>
+		commands.setAutoPasteEnabled(enabled),
 
 	/**
 	 * The current dictation capability, for the FE's seed on attach. The Rust
 	 * supervisor owns the rdev tap's lifecycle and trust gating, so there is no
 	 * `start`: the tap is already running whenever the capability is `active`.
 	 */
-	getCapability: (): Promise<DictationCapability> =>
+	getDictationCapability: (): Promise<DictationCapability> =>
 		commands.getDictationCapability(),
 
 	/**
@@ -345,7 +393,7 @@ const globalShortcuts = {
 	 * `dispatchCommandTrigger`, the single convergence point both trigger
 	 * backends share, so this stays pure transport.
 	 */
-	startListening: async () => {
+	startTriggerDispatch: async () => {
 		const { dispatchCommandTrigger } = await import('$lib/commands');
 		return events.shortcutTriggerEvent.listen(
 			({ payload: { commandId, state } }) =>
@@ -378,7 +426,9 @@ const globalShortcuts = {
 	 * unlisten fn. The supervisor owns the meaning, so the FE just renders the
 	 * value instead of inferring liveness or re-probing the OS.
 	 */
-	onCapabilityChanged: (onChange: (capability: DictationCapability) => void) =>
+	onDictationCapabilityChanged: (
+		onChange: (capability: DictationCapability) => void,
+	) =>
 		events.dictationCapabilityEvent.listen(({ payload }) =>
 			onChange(payload.capability),
 		),
@@ -386,8 +436,8 @@ const globalShortcuts = {
 
 // media -------------------------------------------------------------
 const media = {
-	pause: () => commands.pauseActiveMedia(),
-	resume: (players: MediaPlayer[]) => commands.resumeMedia(players),
+	pause: () => commands.pausePlayback(),
+	resume: (sessions: string[]) => commands.resumePlayback(sessions),
 };
 
 // opener ------------------------------------------------------------
@@ -415,7 +465,7 @@ export const tauriOnly = {
 	fs,
 	permissions,
 	tray,
-	globalShortcuts,
+	keyboard,
 	autostart,
 	media,
 	opener,

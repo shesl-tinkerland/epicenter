@@ -48,7 +48,11 @@ import { createDisposableCache } from '../cache/disposable-cache.js';
 // barrel never traverses the node-only mount runtime. `.mount()` is a pure
 // coordinator that receives every node capability through its `runtime`
 // argument (built by `nodeMountRuntime()` from `@epicenter/workspace/node`).
-import type { Mount, SessionMountContext } from '../daemon/define-mount.js';
+import type {
+	Mount,
+	MountSession,
+	SessionMountContext,
+} from '../daemon/define-mount.js';
 import type { NodeMountRuntime } from '../daemon/mount-runtime.js';
 import { type ActionRegistry, defineActions } from '../shared/actions.js';
 import type { Guid } from '../shared/id.js';
@@ -57,12 +61,14 @@ import { assertSafeSegment } from '../shared/safe-segment.js';
 import type { Drainable } from '../shared/types.js';
 import type { AgentId } from './agent-id.js';
 import {
-	attachChildDocActor,
-	type ChildDocActor,
-	type ChildDocActorFactory,
+	attachChildDocWorker,
+	type ChildDocWorker,
+	type ChildDocWorkerContext,
+	type ChildDocWorkerFactory,
+	type ChildDocWorkerHandle,
 	type ConnectedChildDoc,
 	type ObservableChildDocLayout,
-} from './child-doc-actor.js';
+} from './child-doc-worker.js';
 import { type ConnectionConfig, connectDoc } from './connect-doc.js';
 import { docGuid } from './doc-guid.js';
 import { KV_KEY, TableKey } from './keys.js';
@@ -378,8 +384,8 @@ export type MountComposition<TActions extends ActionRegistry> = {
 };
 
 /**
- * The daemon child-doc actors a mount registers, keyed by table then by
- * child-doc field, to a per-body {@link ChildDocActorFactory}. The keys are
+ * The daemon child-doc workers a mount registers, keyed by table then by
+ * child-doc field, to a per-body {@link ChildDocWorkerFactory}. The keys are
  * typed against the schema (only declared tables, and only each table's declared
  * child-doc fields), and each factory's `handle` is the field's declared layout
  * return type. So the app supplies behavior alone: the table, the field's guid
@@ -387,13 +393,13 @@ export type MountComposition<TActions extends ActionRegistry> = {
  * site.
  *
  * Registering a field is what makes the daemon host and observe its bodies; a
- * field left out is opened on demand by browser UI, not held live by the actor.
+ * field left out is opened on demand by browser UI, not held live by the worker.
  *
  * Only fields whose layout exposes `observe` can be registered: the loop watches
  * each body through it, so a layout without one (e.g. `attachPlainText`) collapses
- * to `never` and the field cannot carry an actor. `attachChatTranscript` does.
+ * to `never` and the field cannot carry a worker. `attachChatTranscript` does.
  */
-export type MountActors<TTables extends TableDefinitions> = {
+export type MountWorkers<TTables extends TableDefinitions> = {
 	[T in keyof TTables]?: TTables[T] extends TableDefinition<
 		any,
 		infer TDecls extends ChildDocDeclarations
@@ -402,7 +408,7 @@ export type MountActors<TTables extends TableDefinitions> = {
 				[F in keyof TDecls]?: ReturnType<LayoutOf<TDecls[F]>> extends {
 					observe(callback: () => void): () => void;
 				}
-					? ChildDocActorFactory<
+					? MountWorkerFactory<
 							InferTableRow<TTables[T]>['id'],
 							ReturnType<LayoutOf<TDecls[F]>>
 						>
@@ -412,10 +418,48 @@ export type MountActors<TTables extends TableDefinitions> = {
 };
 
 /**
+ * Per-body context a mount's worker factory receives: the generic observe-loop
+ * body context ({@link ChildDocWorkerContext}: the row id, the layout handle, and
+ * the body `Y.Doc`) plus the daemon's mount environment, the two things every
+ * hosted body shares but the loop itself stays agnostic to:
+ *
+ *  - `session` is the mount's signed-in capability kit ({@link MountSession}: the
+ *    `AuthedFetch`, the owner id, the sockets). Always present, because workers
+ *    are only ever wired under a `defineSessionMount` open. A factory uses it to
+ *    answer on the cloud (e.g. `createAiChatFetch(session.fetch)` for the metered
+ *    inference backend).
+ *  - `baseURL` is the resolved sync base URL the daemon authenticates against, so
+ *    a factory's cloud calls target the same deployment its sync does.
+ *
+ * The generic loop ({@link attachChildDocWorker}) never sees these: its test and
+ * the `doc-as-wire-chat` example drive it with no session, so the mount
+ * environment is injected here, at the daemon coordinator, not threaded through
+ * the transport-agnostic loop.
+ */
+export type MountWorkerContext<
+	TRowId extends string,
+	THandle,
+> = ChildDocWorkerContext<TRowId, THandle> & {
+	readonly session: MountSession;
+	readonly baseURL: string;
+};
+
+/**
+ * Build the per-body behavior for one hosted child doc, with the daemon's mount
+ * environment in hand ({@link MountWorkerContext}). The mount-facing twin of
+ * {@link ChildDocWorkerFactory}: the app registers one of these per child-doc
+ * field, and {@link connectMountWorkers} adapts it down to the loop's plain
+ * factory by injecting `session` and `baseURL`.
+ */
+export type MountWorkerFactory<TRowId extends string, THandle> = (
+	context: MountWorkerContext<TRowId, THandle>,
+) => ChildDocWorkerHandle;
+
+/**
  * Options for `definition.mount(...)`, the daemon runtime. The mount's display
  * label comes from the definition's `name` (see `defineWorkspace`), so the only
  * per-mount inputs are the sync base URL, the injected node runtime, the
- * optional composer, and the optional child-doc actors.
+ * optional composer, and the optional child-doc workers.
  *
  * `runtime` is the injected node bag from `nodeMountRuntime()`; `.mount()`
  * itself imports no node module. `compose` is optional: omit it to serve the
@@ -448,15 +492,15 @@ export type MountOptions<
 		context: MountComposeContext<TTables, TKv, TActions>,
 	) => MountComposition<ActionRegistry>;
 	/**
-	 * Register daemon child-doc actors: the always-on observe loops that host a
-	 * live replica of a row's child doc and watch it (ADR-0014/0015). Keyed by
+	 * Register daemon child-doc workers: the always-on observe loops that host a
+	 * live replica of a row's child doc and watch it (ADR-0024/0025). Keyed by
 	 * table then field, to a per-body factory. Identity and shape (the table, the
 	 * guid, the layout) come from the schema; the factory supplies only behavior.
-	 * See {@link MountActors}.
+	 * See {@link MountWorkers}.
 	 */
-	readonly actors?: MountActors<TTables>;
+	readonly workers?: MountWorkers<TTables>;
 	/**
-	 * The agent identity this daemon answers as (ADR-0015). A conversation row
+	 * The agent identity this daemon answers as (ADR-0025). A conversation row
 	 * names the one agent it is bound to in its `agent` column; the observe loop
 	 * hosts and answers exactly the rows whose `agent` equals this id. Authored in
 	 * configuration (the durable, stable address), not derived from the per-install
@@ -747,20 +791,25 @@ export function defineWorkspace<
 					mountOptions.compose
 						? mountOptions.compose({ workspace, scope })
 						: { actions: workspace.actions };
-				// Schema-driven child-doc actors. The coordinator reads the layout
+				// Schema-driven child-doc workers. The coordinator reads the layout
 				// and guid deriver from the definition (never re-passed by the app),
-				// so an actor cannot interpret a body with a layout that disagrees
-				// with the schema. Each actor enrolls its own drain. Runs before
+				// so a worker cannot interpret a body with a layout that disagrees
+				// with the schema. Each worker enrolls its own drain. Runs before
 				// infrastructure so the loops are observing the root table by the
 				// time sync starts to fill it.
-				if (mountOptions.actors) {
-					connectMountActors({
-						actors: mountOptions.actors,
+				if (mountOptions.workers) {
+					connectMountWorkers({
+						workers: mountOptions.workers,
 						workspace,
 						definitions: options.tables,
 						connectBody: runtime.connectChildDoc(ctx, baseURL),
 						selfAgentId: mountOptions.agentId,
 						registerDrain: scope.registerDrain,
+						// The mount environment every worker factory answers with: the
+						// signed-in session (guaranteed by `defineSessionMount`) and the
+						// resolved sync base URL its cloud calls target.
+						session: ctx.session,
+						baseURL,
 					});
 				}
 				// `attachInfrastructure` serves `composition.actions` to peers and
@@ -869,7 +918,7 @@ function connectTableChildDocs<TTableDefinitions extends TableDefinitions>({
 				const bodyDoc = new Y.Doc({ guid, gc: true });
 				// A body is a doc like any other; `connectDoc` is the same wiring the
 				// root uses. No action registry: the body's only writers are the
-				// `attach*` layout and the server generation actor streaming in.
+				// `attach*` layout and the server generation worker streaming in.
 				const { idb } = connectDoc(bodyDoc, connection);
 				// Recency: a local edit bumps a column on the row. One observer per
 				// shared body Y.Doc (built here, not per `open`), torn down on
@@ -919,30 +968,32 @@ function connectTableChildDocs<TTableDefinitions extends TableDefinitions>({
 }
 
 /**
- * Wire the schema-driven daemon child-doc actors for a mount, the browser-safe
+ * Wire the schema-driven daemon child-doc workers for a mount, the browser-safe
  * twin of {@link connectTableChildDocs}.
  *
- * For every `(table, field)` the mount registered an actor on, read the field's
+ * For every `(table, field)` the mount registered a worker on, read the field's
  * layout from the definition and its guid deriver from the workspace's own
- * `.docs` namespace, then run {@link attachChildDocActor} over the injected node
+ * `.docs` namespace, then run {@link attachChildDocWorker} over the injected node
  * `connectBody`. The app supplied only the per-body factory, so identity (the
- * guid) and shape (the layout) stay single-owner: an actor can never read a body
+ * guid) and shape (the layout) stay single-owner: a worker can never read a body
  * with a layout that disagrees with the schema, the way a hand-passed `layout`
  * would allow.
  *
- * Each actor enrolls its drain through `registerDrain`; its body teardown
- * cascades off the root `ydoc.destroy()` inside {@link attachChildDocActor}, so
+ * Each worker enrolls its drain through `registerDrain`; its body teardown
+ * cascades off the root `ydoc.destroy()` inside {@link attachChildDocWorker}, so
  * there is no handle to thread back.
  */
-function connectMountActors<TTableDefinitions extends TableDefinitions>({
-	actors,
+function connectMountWorkers<TTableDefinitions extends TableDefinitions>({
+	workers,
 	workspace,
 	definitions,
 	connectBody,
 	selfAgentId,
 	registerDrain,
+	session,
+	baseURL,
 }: {
-	actors: MountActors<TTableDefinitions>;
+	workers: MountWorkers<TTableDefinitions>;
 	workspace: Workspace<TTableDefinitions, KvDefinitions, ActionRegistry>;
 	definitions: TTableDefinitions;
 	connectBody: (guid: string) => ConnectedChildDoc;
@@ -952,16 +1003,24 @@ function connectMountActors<TTableDefinitions extends TableDefinitions>({
 	 * whose `agent` equals it.
 	 */
 	selfAgentId: AgentId | undefined;
-	registerDrain: (drainable: ChildDocActor) => void;
+	registerDrain: (drainable: ChildDocWorker) => void;
+	/**
+	 * The mount environment injected into every per-body factory: the signed-in
+	 * session and the resolved sync base URL ({@link MountWorkerContext}). The
+	 * generic loop never sees these; this coordinator adapts the app's
+	 * session-aware factory down to the loop's plain one.
+	 */
+	session: MountSession;
+	baseURL: string;
 }): void {
-	// `Object.entries` erases the per-table types the public `MountActors` already
+	// `Object.entries` erases the per-table types the public `MountWorkers` already
 	// enforced, so the loop body works in the widened `string`/`unknown` forms and
 	// casts at the schema reads (layout, guid) and the designation read.
-	for (const [collection, fieldActors] of Object.entries(actors) as [
+	for (const [collection, fieldWorkers] of Object.entries(workers) as [
 		string,
-		Record<string, ChildDocActorFactory<string, unknown>> | undefined,
+		Record<string, MountWorkerFactory<string, unknown>> | undefined,
 	][]) {
-		if (fieldActors === undefined) continue;
+		if (fieldWorkers === undefined) continue;
 		const definition = definitions[collection as keyof TTableDefinitions]!;
 		// One structural view of the connected table: the loop reads its
 		// schema-derived guid derivers, scans/observes its rows, and reads a row's
@@ -974,31 +1033,36 @@ function connectMountActors<TTableDefinitions extends TableDefinitions>({
 			observe(callback: () => void): () => void;
 			get(id: string): { data: { agent?: AgentId } | null };
 		};
-		// The designation contract (ADR-0015): a daemon hosts and answers exactly
+		// The designation contract (ADR-0025): a daemon hosts and answers exactly
 		// the rows bound to the agent it answers as. Composed once here, the single
-		// owner of the rule, so an app's actor factory supplies behavior alone. A
+		// owner of the rule, so an app's worker factory supplies behavior alone. A
 		// daemon with no configured agent (`selfAgentId` undefined) designates
 		// nothing, so every conversation is left to its own bound agent.
 		const isDesignated = (rowId: string): boolean =>
 			selfAgentId !== undefined && table.get(rowId).data?.agent === selfAgentId;
 
-		for (const [field, actorFor] of Object.entries(fieldActors)) {
-			if (actorFor === undefined) continue;
+		for (const [field, workerFor] of Object.entries(fieldWorkers)) {
+			if (workerFor === undefined) continue;
 			// Layout and guid both come from the schema, never the call site.
 			const declaration = definition.docDecls[field] as ChildDocDeclaration;
 			const layout =
 				typeof declaration === 'function' ? declaration : declaration.layout;
 			const guidEntry = table.docs[field]!;
-			const actor = attachChildDocActor<string, unknown>({
+			// Adapt the app's session-aware factory down to the loop's plain one by
+			// injecting the mount environment. The loop stays transport-agnostic; the
+			// daemon environment lives only here.
+			const loopWorkerFor: ChildDocWorkerFactory<string, unknown> = (context) =>
+				workerFor({ ...context, session, baseURL });
+			const worker = attachChildDocWorker<string, unknown>({
 				rootDoc: workspace.ydoc,
 				table,
 				guidFor: (rowId) => guidEntry.guid(rowId),
 				connectBody,
 				layout: layout as unknown as ObservableChildDocLayout<unknown>,
-				actorFor,
+				workerFor: loopWorkerFor,
 				isDesignated,
 			});
-			registerDrain(actor);
+			registerDrain(worker);
 		}
 	}
 }

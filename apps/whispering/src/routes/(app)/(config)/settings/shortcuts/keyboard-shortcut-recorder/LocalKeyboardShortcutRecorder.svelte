@@ -1,142 +1,135 @@
 <script lang="ts">
-	import * as Alert from '@epicenter/ui/alert';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import { type Command, commands } from '$lib/commands';
-	import type { KeyboardEventSupportedKey } from '$lib/constants/keyboard';
+	import { onDestroy } from 'svelte';
+	import type { Command } from '$lib/commands';
 	import { report } from '$lib/report';
-	import { localShortcuts } from '$lib/services/local-shortcut-manager';
-	import {
-		arrayToShortcutString,
-		type CommandId,
-		shortcutStringToArray,
-	} from '$lib/services/local-shortcut-manager';
-	import { settings } from '$lib/state/settings.svelte';
+	import { shortcuts } from '#platform/shortcuts';
 	import { os } from '#platform/os';
-	import { getShortcutDisplayLabel } from '$lib/utils/keyboard';
-	import { type PressedKeys } from '$lib/utils/createPressedKeys.svelte';
-	import { createKeyRecorder } from './create-key-recorder.svelte';
+	import type { KeyBinding } from '$lib/tauri/commands';
+	import {
+		keyBindingToLabel,
+		keyBindingToString,
+		parseManualBinding,
+	} from '$lib/utils/key-binding';
+	import { createChordRecorder } from './create-chord-recorder';
 	import RecorderShell from './RecorderShell.svelte';
 
 	const {
 		command,
 		placeholder,
-		pressedKeys,
 	}: {
 		command: Command;
 		placeholder?: string;
-		pressedKeys: PressedKeys;
 	} = $props();
 
-	const shortcutValue = $derived(settings.get(`shortcut.${command.id}`));
-	const label = $derived(
-		shortcutValue ? getShortcutDisplayLabel(shortcutValue) : null,
-	);
+	const binding = $derived(shortcuts.current(command.id));
+	const label = $derived(binding ? keyBindingToLabel(binding, os.isApple) : null);
 
-	// The other command whose in-app binding is the same key set as `next`, if
-	// any. The keydown matcher fires every command whose set matches, so two
-	// commands sharing a set would both trigger. Refuse the collision at write
-	// time, the way the global recorder refuses an overlapping rdev gesture.
-	function conflictingCommand(
-		next: KeyboardEventSupportedKey[],
-	): Command | null {
-		const nextKey = [...next].sort().join('+');
-		for (const other of commands) {
-			if (other.id === command.id) continue;
-			const otherValue = settings.get(`shortcut.${other.id}`);
-			if (!otherValue) continue;
-			if (shortcutStringToArray(otherValue).sort().join('+') === nextKey) {
-				return other;
-			}
-		}
-		return null;
+	// Whether the recorder popover is open, and whether a capture session is
+	// running inside it.
+	let open = $state(false);
+	let capturing = $state(false);
+
+	const chordRecorder = createChordRecorder({
+		onCapture: (next) => void commit(next),
+	});
+
+	function startSession() {
+		capturing = true;
+		chordRecorder.start();
 	}
 
-	// svelte-ignore state_referenced_locally -- pressedKeys is the stable recorder handle for this mounted shortcut table.
-	const keyRecorder = createKeyRecorder({
-		pressedKeys,
-		onRegister: async (keyCombination: KeyboardEventSupportedKey[]) => {
-			const conflict = conflictingCommand(keyCombination);
-			if (conflict) {
-				report.error({
-					title: 'That shortcut is already in use',
-					description: `Those keys already trigger "${conflict.title}". Pick a different combination.`,
-					cause: {
-						name: 'DuplicateLocalShortcut',
-						message: `${getShortcutDisplayLabel(arrayToShortcutString(keyCombination))} is bound to "${conflict.title}".`,
-					},
-				});
-				return;
-			}
-			const { error: unregisterError } = await localShortcuts.unregisterCommand({
-				commandId: command.id as CommandId,
-			});
-			if (unregisterError) {
-				report.error({
-					title: 'Error unregistering local shortcut',
-					cause: unregisterError,
-				});
-			}
-			const { error: registerError } = await localShortcuts.registerCommand({
-				command,
-				keyCombination,
-			});
+	function stopSession() {
+		if (!capturing) return;
+		capturing = false;
+		chordRecorder.stop();
+	}
 
-			if (registerError) {
-				report.error({
-					title: 'Error registering local shortcut',
-					cause: registerError,
-				});
-				return;
-			}
+	// If the recorder is torn down mid-capture (route change or the popover
+	// dismissed by unmount), the window listeners would leak; always stop.
+	onDestroy(stopSession);
 
-			settings.set(
-				`shortcut.${command.id}`,
-				arrayToShortcutString(keyCombination),
-			);
+	// Report why a binding is refused (the seam owns the policy: an exact duplicate
+	// would make the matcher fire two commands). Returns true when refused.
+	function rejectConflict(next: KeyBinding): boolean {
+		const reason = shortcuts.findConflict(command.id, next);
+		if (!reason) return false;
+		report.error({
+			title: 'That shortcut is already in use',
+			description: reason,
+			cause: {
+				name: 'ShortcutConflict',
+				message: `${keyBindingToLabel(next, os.isApple)}: ${reason}`,
+			},
+		});
+		return true;
+	}
 
-			report.success({
-				title: `Local shortcut set to ${keyCombination}`,
-				description: `Press the shortcut to trigger "${command.title}"`,
-			});
-		},
-		onClear: async () => {
-			const { error: unregisterError } = await localShortcuts.unregisterCommand({
-				commandId: command.id as CommandId,
-			});
-			if (unregisterError) {
-				report.error({
-					title: 'Error clearing local shortcut',
-					cause: unregisterError,
-				});
-			}
-			settings.set(`shortcut.${command.id}`, null);
+	async function persist(next: KeyBinding) {
+		await shortcuts.set(command.id, next);
+		report.success({
+			title: `Local shortcut set to ${keyBindingToLabel(next, os.isApple)}`,
+			description: `Press the shortcut to trigger "${command.title}"`,
+		});
+	}
 
-			report.success({
-				title: 'Local shortcut cleared',
-				description: `Please set a new shortcut to trigger "${command.title}"`,
+	// On a clean capture: refuse a collision (stay listening so the user can retry),
+	// otherwise persist and close.
+	async function commit(next: KeyBinding) {
+		if (rejectConflict(next)) return;
+		await persist(next);
+		stopSession();
+		open = false;
+	}
+
+	function submitManual(raw: string): boolean {
+		const next = parseManualBinding(raw);
+		if (!next) {
+			report.error({
+				title: 'Invalid shortcut',
+				description: 'Try e.g. ctrl+shift+a, space, or a single key like f5.',
+				cause: {
+					name: 'InvalidManualShortcut',
+					message: `"${raw}" is not a valid combination.`,
+				},
 			});
-		},
-	});
+			return false;
+		}
+		if (rejectConflict(next)) return false;
+		void persist(next).then(() => {
+			stopSession();
+			open = false;
+		});
+		return true;
+	}
+
+	async function clear() {
+		stopSession();
+		await shortcuts.clear(command.id);
+		report.success({
+			title: 'Local shortcut cleared',
+			description: `Please set a new shortcut to trigger "${command.title}"`,
+		});
+	}
 
 	const recorder = {
 		get isListening() {
-			return keyRecorder.isListening;
+			return capturing;
 		},
 		get label() {
 			return label;
 		},
 		get manualInitial() {
-			return shortcutValue ?? '';
+			return binding ? keyBindingToString(binding) : '';
 		},
-		start: () => keyRecorder.start(),
-		stop: () => keyRecorder.stop(),
-		clear: () => keyRecorder.clear(),
-		submitManual: (raw: string) =>
-			keyRecorder.register(raw.split('+') as KeyboardEventSupportedKey[]),
+		start: startSession,
+		stop: stopSession,
+		clear: () => void clear(),
+		submitManual,
 	};
 </script>
 
 <RecorderShell
+	bind:open
 	title={command.title}
 	{recorder}
 	copy={{
@@ -145,19 +138,6 @@
 		manualHelp: 'Enter shortcut manually (e.g., ctrl+shift+a)',
 		manualPlaceholder: 'e.g., ctrl+shift+a',
 		manualButtonLabel: 'Edit manually',
+		listeningHint: 'Release to set, Esc to cancel',
 	}}
->
-	{#snippet warning()}
-		{#if os.isApple}
-			<Alert.Root variant="warning" class="text-xs">
-				<AlertTriangle class="size-4" />
-				<Alert.Title class="text-xs font-medium">Apple Keyboard Note</Alert.Title>
-				<Alert.Description class="text-xs">
-					Some Option+key combinations (E, I, N, U, `) may not record properly.
-					Try recording in reverse (press letter first, then Option) or edit
-					manually.
-				</Alert.Description>
-			</Alert.Root>
-		{/if}
-	{/snippet}
-</RecorderShell>
+/>

@@ -8,7 +8,7 @@ import {
 	enumerateDevices,
 	getRecordingStream,
 } from '$lib/services/device-stream';
-import { categorizeRecorderError } from './categorize-error';
+import { categorizeBrowserStreamError } from './categorize-error';
 import type {
 	NavigatorRecordingParams,
 	RecorderService,
@@ -32,9 +32,16 @@ function createNavigatorRecorder() {
 		mediaRecorder: MediaRecorder;
 		recordedChunks: Blob[];
 		startedAtMs: number;
+		stopLevelMeter: (() => void) | null;
 	}) {
-		const { recordingId, stream, mediaRecorder, recordedChunks, startedAtMs } =
-			args;
+		const {
+			recordingId,
+			stream,
+			mediaRecorder,
+			recordedChunks,
+			startedAtMs,
+			stopLevelMeter,
+		} = args;
 		const subscribers = new Set<(s: WhisperingRecordingState) => void>();
 		let currentState: WhisperingRecordingState = 'RECORDING';
 
@@ -49,6 +56,7 @@ function createNavigatorRecorder() {
 		};
 
 		const teardown = () => {
+			stopLevelMeter?.();
 			cleanupRecordingStream(stream);
 			notify('IDLE');
 		};
@@ -122,12 +130,13 @@ function createNavigatorRecorder() {
 			selectedDeviceId,
 			recordingId,
 			bitrateKbps,
+			onLevel,
 		}: NavigatorRecordingParams) => {
 			const { data: streamResult, error: acquireStreamError } =
 				await getRecordingStream({ selectedDeviceId });
 			if (acquireStreamError) {
 				return (
-					categorizeRecorderError(acquireStreamError) ??
+					categorizeBrowserStreamError(acquireStreamError) ??
 					RecorderError.StreamAcquisition({ cause: acquireStreamError })
 				);
 			}
@@ -157,12 +166,19 @@ function createNavigatorRecorder() {
 			mediaRecorder.start(TIMESLICE_MS);
 			const startedAtMs = Date.now();
 
+			// Tap the same stream for the pill's meter. Independent of the
+			// MediaRecorder (both can read one stream), torn down with the session.
+			const stopLevelMeter = onLevel
+				? startMicLevelMeter(stream, onLevel)
+				: null;
+
 			const session = buildSession({
 				recordingId,
 				stream,
 				mediaRecorder,
 				recordedChunks,
 				startedAtMs,
+				stopLevelMeter,
 			});
 
 			return Ok({ session, deviceAcquisition: deviceOutcome });
@@ -172,6 +188,45 @@ function createNavigatorRecorder() {
 
 export const ManualRecorderLive =
 	createNavigatorRecorder() satisfies RecorderService<NavigatorRecordingParams>;
+
+/**
+ * Tap a live MediaStream and report raw mic loudness (RMS) each animation frame,
+ * so the web pill's meter reacts to the actual voice instead of sitting flat.
+ * Emits the same quantity the VAD recorder does (`computeFrameRms`) and the Rust
+ * CPAL worker does on desktop, so all three feed the pill one quantity and the
+ * shared `foldMicLevel` curve renders identically. Returns a stop function that
+ * tears down the audio graph; call it when the recording ends.
+ */
+function startMicLevelMeter(
+	stream: MediaStream,
+	onLevel: (level: number) => void,
+): () => void {
+	const audioContext = new AudioContext();
+	// Recording is user-initiated, so the context is normally running; resume
+	// defensively in case the autoplay policy left it suspended.
+	void audioContext.resume();
+	const source = audioContext.createMediaStreamSource(stream);
+	const analyser = audioContext.createAnalyser();
+	analyser.fftSize = 1024;
+	source.connect(analyser);
+
+	const samples = new Float32Array(analyser.fftSize);
+	let frame = 0;
+	const tick = () => {
+		analyser.getFloatTimeDomainData(samples);
+		let sumOfSquares = 0;
+		for (const sample of samples) sumOfSquares += sample * sample;
+		onLevel(Math.sqrt(sumOfSquares / samples.length));
+		frame = requestAnimationFrame(tick);
+	};
+	frame = requestAnimationFrame(tick);
+
+	return () => {
+		cancelAnimationFrame(frame);
+		source.disconnect();
+		void audioContext.close();
+	};
+}
 
 /**
  * Determines the best supported audio MIME type for the current browser.

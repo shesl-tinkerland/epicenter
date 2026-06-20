@@ -230,10 +230,8 @@ pub fn link_local_model(
     validate_entry_name(engine, &entry_name)?;
     validate_source_shape(engine, &source)?;
 
-    let models_dir =
-        engine_models_path(&app_handle, engine).map_err(|message| ModelImportError::LinkFailed {
-            message,
-        })?;
+    let models_dir = engine_models_path(&app_handle, engine)
+        .map_err(|message| ModelImportError::LinkFailed { message })?;
     std::fs::create_dir_all(&models_dir).map_err(|e| ModelImportError::LinkFailed {
         message: format!("create models folder: {e}"),
     })?;

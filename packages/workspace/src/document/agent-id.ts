@@ -4,7 +4,7 @@
  * An agent is a participant declared by configuration (a hosted cloud agent, an
  * always-on home daemon, a laptop daemon) with a fixed model, a curated toolset,
  * and a runtime. The `AgentId` is how a conversation names the one agent it is
- * bound to (`conversations.agent`, ADR-0015): the durable, human-authored address
+ * bound to (`conversations.agent`, ADR-0025): the durable, human-authored address
  * that survives a redeploy or a move to a new machine, unlike the per-install
  * {@link NodeId} (transport identity) or the Yjs `clientID` (runtime CRDT identity)
  * that churn underneath it.

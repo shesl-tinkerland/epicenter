@@ -4,6 +4,9 @@ import {
 	type InferErrors,
 } from 'wellcrafted/error';
 import type { Result } from 'wellcrafted/result';
+import type { WriteTextOutcome } from '$lib/tauri/bindings.gen';
+
+export type { WriteTextOutcome };
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -45,18 +48,21 @@ export type TextService = {
 	copyToClipboard: (text: string) => Promise<Result<void, TextError>>;
 
 	/**
-	 * Writes the provided text at the current cursor position.
-	 * Uses the clipboard sandwich technique to preserve the user's existing clipboard content.
+	 * Delivers the provided text to the current cursor position, falling back to
+	 * the clipboard when it cannot paste.
 	 *
-	 * This method:
-	 * 1. Saves the current clipboard
-	 * 2. Writes the text to clipboard
-	 * 3. Simulates paste (Cmd+V on macOS, Ctrl+V elsewhere)
-	 * 4. Restores the original clipboard
+	 * On desktop this decides from the Accessibility grant *before* attempting the
+	 * synthetic paste (an untrusted ⌘V silently no-ops): when it can paste, it uses
+	 * the clipboard sandwich (save → write → ⌘V → restore) to preserve the user's
+	 * clipboard; when it cannot, it leaves the transcript on the clipboard. On web
+	 * it can only ever copy, so it always reports `leftOnClipboard`.
 	 *
+	 * @returns where the text landed — `pasted` at the cursor, or `leftOnClipboard`.
 	 * @param text The text to write at the cursor position.
 	 */
-	writeToCursor: (text: string) => MaybePromise<Result<void, TextError>>;
+	writeToCursor: (
+		text: string,
+	) => MaybePromise<Result<WriteTextOutcome, TextError>>;
 
 	/**
 	 * Simulates pressing the Enter/Return key.

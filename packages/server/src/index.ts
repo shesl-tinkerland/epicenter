@@ -28,6 +28,11 @@ export {
 	requireBearerUser,
 	requireCookieOrBearerUser,
 } from './middleware/require-auth.js';
+// Room-resolution helpers, deployment-agnostic and exported for composing apps:
+//   createDurableObjectRooms  resolve a room stub from its opaque name with no
+//                          request context.
+//   doName                 build a room's owner-scoped DO name.
+export { doName } from './owner.js';
 // Ownership composition: the deployment constructs the rule once via
 // `personal()` or `shared({ admit })` and threads it into every mount
 // primitive that needs the partition. See ./ownership.ts for the design
@@ -41,7 +46,8 @@ export {
 // Re-export the Cloudflare Durable Object class so each deployment's
 // wrangler.jsonc can resolve `class_name: "Room"` against this entrypoint.
 export { Room } from './room/backends/cloudflare/durable-object.js';
-export { mountAiApp } from './routes/ai.js';
+export { createDurableObjectRooms } from './room/backends/cloudflare/registry.js';
+export { mountAiApp, resolveAdapter } from './routes/ai.js';
 export { mountAssetsApp } from './routes/assets.js';
 // Reusable surfaces. Each `mount*` bundles auth + ownership + the route
 // mount, accepting only the deployment-controlled knobs (ownership rule,

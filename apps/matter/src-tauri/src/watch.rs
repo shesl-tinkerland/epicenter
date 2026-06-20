@@ -159,53 +159,73 @@ pub fn unwatch_folder(id: u32, store: State<WatcherStore>) {
     store.watchers.lock().unwrap().remove(&id);
 }
 
-/// The vault's tables as absolute paths, applying the SAME table-or-vault rule the CLI loader uses
-/// (`src/lib/load/fs.ts` `loadPath`), so the GUI and the CLI agree on what a path is. Altitude is
-/// pure shape:
+/// Whether a folder is a table: it contains a `matter.json` (ADR-0029). One metadata check,
+/// mirroring `isMarked` in the CLI loader (`src/lib/load/fs.ts`). A marker that is absent (or
+/// somehow not a regular file) means "not a table."
+fn is_marked(dir: &Path) -> bool {
+    dir.join("matter.json").is_file()
+}
+
+/// The vault's tables as absolute paths, applying the SAME marker rule the CLI loader uses
+/// (`src/lib/load/fs.ts` `loadPath`, ADR-0029/0032), so the GUI and the CLI agree on what a
+/// path is. A folder is a table XOR a container of tables, never both (ADR-0032):
 ///
-///   - a folder with a visible child DIRECTORY is a VAULT; each child directory is a table, sorted
-///     for a deterministic order;
-///   - otherwise (a folder of files, or an empty folder) the root is one table.
+///   - a MARKED root IS a single table (its `.md` files are rows); its subfolders are ignored;
+///   - an UNMARKED root is a container, and its immediate marked child folders are the tables,
+///     sorted.
 ///
-/// A `matter.json` only TYPES the table it sits in; it never decides altitude, so a contract can
-/// never hide child tables. A matter table is flat: a subfolder always means "a level down," never
-/// an attachment. Hidden directories (`.git`, `.obsidian`) are not tables.
+/// No recursion either way: depth is reached by opening the deeper folder. An unmarked folder is
+/// not data (an attachment bundle, junk, or an organizational dir) and is skipped. Hidden
+/// directories (`.git`, `.obsidian`) are skipped before the marker is even checked. An unmarked
+/// root with no marked children lists NOTHING ("no tables here"), the honest answer in the
+/// declared-store model, where the old shape rule would have called the same folder one table.
 ///
-/// So opening a leaf table folder and opening a vault of table folders both flow through one rule,
-/// with no wrong-altitude special case to detect. Errors only if the root itself cannot be listed;
-/// a child that races away mid-scan just does not appear, surfacing on the next re-scan.
+/// Errors only when an UNMARKED root cannot be listed; a marked root is reported without reading
+/// its children (its table-ness does not depend on them), so it never fails here. A child that
+/// races away mid-scan just does not appear, surfacing on the next re-scan.
 fn scan_vault(root: &Path) -> Result<Vec<String>, String> {
-    let mut dirs = Vec::new();
+    // A marked root IS the table; its subfolders never load as subtables (ADR-0032).
+    if is_marked(root) {
+        return Ok(vec![root.to_string_lossy().to_string()]);
+    }
+    // An unmarked root is a container: its marked immediate children are the tables, sorted.
+    let mut children = Vec::new();
     for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.file_name().to_string_lossy().starts_with('.') {
             continue;
         }
-        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
-            dirs.push(entry.path().to_string_lossy().to_string());
+        if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        if is_marked(&path) {
+            children.push(path.to_string_lossy().to_string());
         }
     }
-    // No visible child folder makes the root itself the one table (a folder of files, or empty).
-    if dirs.is_empty() {
-        return Ok(vec![root.to_string_lossy().to_string()]);
-    }
-    dirs.sort();
-    Ok(dirs)
+    children.sort();
+    Ok(children)
 }
 
 /// Watch a VAULT root: stream its table list as a full, sorted snapshot. This is the layer above
 /// `watch_folder`: where that watches ONE folder's files, this watches the root NON-recursively for
-/// the table set changing (a visible child folder appearing or disappearing, which flips the root
-/// between a vault of folders and a single table per `scan_vault`; loose files at the root, a
-/// `README.md` or a `matter.json`, never change the table set), and the JS Vault reacts by composing
-/// or disposing a per-folder `watch_folder`.
+/// the table set changing, and the JS Vault reacts by composing or disposing a per-folder
+/// `watch_folder`. Under the marker rule (ADR-0029/0032) the set changes when a top-level entry appears
+/// or disappears: a child directory (a table when the root is an unmarked container) OR the root's
+/// own `matter.json` (which flips the root between BEING the single table and being a container of
+/// its marked children, ADR-0032). The root's `matter.json` is no longer an inert loose file;
+/// re-scanning on any root event already accounts for it.
 ///
 /// Each push is the WHOLE table list, not a precise add/remove delta, and the JS reconciles it
 /// against its current set (the same "a full rebuild is a pure function of truth" stance the
 /// per-table SQLite mirror takes). A remove event cannot be stat-ed to tell folder from file, so
-/// re-listing is both simpler and correct: any debounced change at the root re-scans. A
-/// `matter.json` gained or lost INSIDE a child does not fire here (non-recursive); that child's own
-/// `watch_folder` already carries it, so this layer only owns the table list.
+/// re-listing is both simpler and correct: any debounced change at the root re-scans (ADR-0029/0032).
+///
+/// Live-detection depth: the watch is non-recursive, so a `matter.json`
+/// gained or lost INSIDE an existing child folder does NOT fire here, and a child that is not yet a
+/// table has no `watch_folder` of its own to carry it. V1 surfaces such a flip on the next reopen
+/// (or an app-initiated refresh, e.g. the "adopt folder" action, which knows it just wrote a
+/// marker). Watching one level deeper for `matter.json` only is the future refinement.
 #[tauri::command]
 pub fn watch_vault(
     path: String,
@@ -272,33 +292,30 @@ mod tests {
         path.to_string_lossy().to_string()
     }
 
-    // These mirror `fs.test.ts` ("loadPath: scope inference") so the GUI watcher and the CLI loader
-    // are pinned to the same table-or-vault rule in both languages.
-
-    #[test]
-    fn a_contract_never_hides_child_tables() {
-        // A matter.json only types the folder it sits in; it never decides altitude, so a contract
-        // beside child folders is a vault of those folders, not a single table that hides them.
-        let dir = scratch("contract");
+    /// Mark a folder as a table by writing a `matter.json` into it (the `{}` untyped marker).
+    fn mark(dir: &Path) {
+        std::fs::create_dir_all(dir).unwrap();
         std::fs::write(dir.join("matter.json"), "{}").unwrap();
-        std::fs::create_dir_all(dir.join("pages")).unwrap();
-        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir.join("pages"))]);
     }
 
+    // These mirror `fs.test.ts` ("loadPath: a folder is a table XOR a container of tables") so the
+    // GUI watcher and the CLI loader are pinned to the same marker rule (ADR-0029/0032) in both
+    // languages.
+
     #[test]
-    fn hidden_directories_are_not_tables() {
-        // A flat table with a `.git` stays one table; the hidden dir is not a child table.
-        let dir = scratch("hidden");
+    fn a_marked_folder_with_no_marked_children_is_a_lone_table() {
+        let dir = scratch("lone");
+        mark(&dir);
         std::fs::write(dir.join("note.md"), "# hi").unwrap();
-        std::fs::create_dir_all(dir.join(".git")).unwrap();
         assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
     }
 
     #[test]
-    fn a_root_of_folders_lists_each_child_sorted() {
+    fn an_unmarked_folder_yields_its_marked_children_sorted() {
         let dir = scratch("vault");
-        std::fs::create_dir_all(dir.join("pages")).unwrap();
-        std::fs::create_dir_all(dir.join("adaptations")).unwrap();
+        mark(&dir.join("pages"));
+        mark(&dir.join("adaptations"));
+        // The root itself is not marked: it is just a container of tables, not a table.
         assert_eq!(
             scan_vault(&dir).unwrap(),
             vec![s(&dir.join("adaptations")), s(&dir.join("pages"))]
@@ -306,15 +323,43 @@ mod tests {
     }
 
     #[test]
-    fn a_raw_leaf_with_no_folders_is_one_table() {
-        let dir = scratch("leaf");
-        std::fs::write(dir.join("note.md"), "# hi").unwrap();
+    fn a_marked_folder_is_just_itself_even_with_marked_children() {
+        // XOR (ADR-0032): a marked folder IS the table; its subfolders are ignored, even when they
+        // are themselves marked. The sharp edge: marking a container hides its child tables.
+        let dir = scratch("nest");
+        mark(&dir);
+        mark(&dir.join("drafts"));
+        mark(&dir.join("archive"));
         assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
     }
 
     #[test]
-    fn an_empty_root_is_one_table() {
-        let dir = scratch("empty");
+    fn an_unmarked_subfolder_under_a_marked_folder_is_ignored() {
+        // An attachment bundle: a marked folder's subfolders are ignored regardless (ADR-0032), so
+        // an unmarked `images/` never becomes a table.
+        let dir = scratch("attachments");
+        mark(&dir);
+        std::fs::create_dir_all(dir.join("images")).unwrap();
+        std::fs::write(dir.join("images").join("cover.md"), "# img").unwrap();
         assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir)]);
+    }
+
+    #[test]
+    fn an_unmarked_folder_with_no_marked_children_lists_nothing() {
+        // Not a table, and no marked children: "no tables here," not a single table.
+        let dir = scratch("nothing");
+        std::fs::write(dir.join("note.md"), "# hi").unwrap();
+        std::fs::create_dir_all(dir.join("images")).unwrap();
+        assert_eq!(scan_vault(&dir).unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_hidden_marked_child_of_a_container_is_never_a_table() {
+        // The container branch is where the hidden-skip bites: a hidden dir is skipped before the
+        // marker is even checked, while a real sibling table still loads.
+        let dir = scratch("hidden");
+        mark(&dir.join("pages"));
+        mark(&dir.join(".git"));
+        assert_eq!(scan_vault(&dir).unwrap(), vec![s(&dir.join("pages"))]);
     }
 }

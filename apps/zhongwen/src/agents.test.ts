@@ -1,11 +1,13 @@
 /**
- * The agent catalog's routing invariants (ADR-0015).
+ * The agent catalog's routing invariants (ADR-0025/0033).
  *
- * The browser nudges the HTTP route for, and only for, a conversation whose bound
- * agent has `runtime: 'cloud'` (`ConversationView.nudgeBoundAgent`); everything
- * else is left to a daemon over sync. These tests pin the catalog data that fork
- * reads, so flipping the cloud agent's runtime (which would silently strand the
- * cloud path: no nudge, no daemon) fails here instead of in the UI.
+ * The browser answers a conversation in-process (the Epicenter provider sourcing
+ * tokens from `/api/ai/chat`) for, and only for, a bound agent that is NOT
+ * daemon-runtime; a daemon-runtime agent is a resident listener left to answer
+ * ambiently over sync (`ConversationView` reads `agentConfig().runtime`). These
+ * tests pin the catalog data that fork reads, so flipping the cloud agent's
+ * runtime (which would silently strand it: the browser would stop answering and
+ * defer to a daemon that isn't there) fails here instead of in the UI.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -18,7 +20,7 @@ import {
 } from '../zhongwen.js';
 
 describe('agent catalog', () => {
-	test('the cloud agent is cloud-runtime so the browser nudges its HTTP route', () => {
+	test('the cloud agent is cloud-runtime so the browser answers it in-process', () => {
 		expect(agentConfig(CLOUD_AGENT_ID)?.runtime).toBe('cloud');
 	});
 
@@ -30,7 +32,7 @@ describe('agent catalog', () => {
 		expect(agentConfig(asAgentId('zhongwen-home'))?.runtime).toBe('daemon');
 	});
 
-	test('an id no longer in the catalog resolves to undefined, never nudged', () => {
+	test('an id no longer in the catalog resolves to undefined, never answered', () => {
 		expect(agentConfig(asAgentId('gone'))).toBeUndefined();
 	});
 

@@ -81,10 +81,14 @@ describe('validateContract (the matter.json gate)', () => {
 		expect(validateContract([]).error?.name).toBe('NotAnObject');
 	});
 
-	test('rejects a missing fields object', () => {
-		const { error } = validateContract({ views: {} });
-		expect(error?.name).toBe('MissingFields');
-		expect(error?.message).toMatch(/fields/);
+	// No `fields` map is no longer a contract error: it is the untyped marker, classified by
+	// `parseContract`. As a typed contract a fields-less object is simply zero declared fields.
+	test('an object with no fields map is a zero-field contract, not an error', () => {
+		const { data, error } = validateContract({ views: {} });
+		expect(error).toBeNull();
+		if (error) throw new Error(error.message);
+		expect(data.fields).toEqual([]);
+		expect(data.untyped).toEqual([]);
 	});
 
 	// Per-field degrade: a field outside the palette does not error the contract. It is
@@ -116,18 +120,38 @@ describe('validateContract (the matter.json gate)', () => {
 	});
 });
 
-describe('parseContract (raw text)', () => {
-	test('rejects invalid JSON with an error rather than throwing', () => {
-		const { error } = parseContract('{ not json');
-		expect(error?.name).toBe('InvalidJson');
-		expect(error?.message).toMatch(/JSON/);
+describe('parseContract (raw text classifies the marker)', () => {
+	test('invalid JSON is an error rather than a throw', () => {
+		const parsed = parseContract('{ not json');
+		expect(parsed.kind).toBe('error');
+		if (parsed.kind !== 'error') throw new Error('expected error');
+		expect(parsed.error.name).toBe('InvalidJson');
+		expect(parsed.error.message).toMatch(/JSON/);
 	});
 
-	test('parses a valid file', () => {
-		const { data, error } = parseContract(
-			'{"fields":{"title":{"type":"string"}}}',
-		);
-		expect(error).toBeNull();
-		expect(data?.fields).toHaveLength(1);
+	test('a non-object top level is an error (a claimed but broken contract)', () => {
+		const parsed = parseContract('42');
+		expect(parsed.kind).toBe('error');
+		if (parsed.kind !== 'error') throw new Error('expected error');
+		expect(parsed.error.name).toBe('NotAnObject');
+	});
+
+	test('an empty object {} is the untyped marker, not an error', () => {
+		expect(parseContract('{}').kind).toBe('untyped');
+		// Any object lacking a `fields` map is the same untyped marker.
+		expect(parseContract('{"views":{}}').kind).toBe('untyped');
+	});
+
+	test('a non-empty fields map is a typed contract, distinct from the {} marker', () => {
+		const parsed = parseContract('{"fields":{"title":{"type":"string"}}}');
+		expect(parsed.kind).toBe('typed');
+		if (parsed.kind !== 'typed') throw new Error('expected typed');
+		expect(parsed.contract.fields).toHaveLength(1);
+	});
+
+	test('an empty fields map {"fields":{}} is untyped, same as {}', () => {
+		// Empty `fields` declares no schema, so it is the untyped raw grid, not a strict
+		// zero-field table: the `{}`-vs-`{"fields":{}}` flip (permissive vs strict) was a footgun.
+		expect(parseContract('{"fields":{}}').kind).toBe('untyped');
 	});
 });

@@ -6,6 +6,7 @@
 	import ContentShell from './_components/ContentShell.svelte';
 	import GlobalDialogs from './_components/GlobalDialogs.svelte';
 	import VerticalNav from './_components/VerticalNav.svelte';
+	import RecordingPillHost from '$lib/recording-overlay/RecordingPillHost.svelte';
 
 	let { children } = $props();
 
@@ -40,3 +41,7 @@
 {/if}
 
 <GlobalDialogs />
+
+<!-- The shared dictation pill. Renders only on web (desktop uses a native
+     overlay window); persists across navigation as a session-root sibling. -->
+<RecordingPillHost />

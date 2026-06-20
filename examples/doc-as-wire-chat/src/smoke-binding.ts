@@ -1,11 +1,11 @@
 /**
  * Agent-binding check (S4): a conversation bound to an agent nobody runs is
- * ignored; one bound to the actor's agent is answered. Proves the row's `agent`
+ * ignored; one bound to the worker's agent is answered. Proves the row's `agent`
  * decides who answers, by construction (the observe loop hosts only its own
  * conversations), not the topology.
  *
- * Run: `bun run src/smoke-binding.ts`  (after the relay and an actor answering
- * as `demo-actor` are up).
+ * Run: `bun run src/smoke-binding.ts`  (after the relay and a worker answering
+ * as `demo-agent` are up).
  */
 
 import { nanoid } from 'nanoid';
@@ -15,7 +15,7 @@ import { connectPeer } from './transport';
 
 const WORKSPACE = process.env.ROOM ?? 'epicenter-demo';
 const PORT = process.env.PORT ?? 8787;
-const SELF_AGENT = process.env.AGENT ?? 'demo-actor';
+const SELF_AGENT = process.env.AGENT ?? 'demo-agent';
 
 const rootDoc = new Y.Doc({ gc: true });
 connectPeer({ url: `ws://localhost:${PORT}/${WORKSPACE}`, doc: rootDoc });
@@ -63,7 +63,7 @@ console.log(
 	`✓ conversation bound to "nobody-runs-this-agent" was ignored (no answer in 3s)`,
 );
 
-// A conversation bound to the actor's agent MUST be answered.
+// A conversation bound to the worker's agent MUST be answered.
 const answered = await askAndWaitForAnswer(SELF_AGENT, 12_000);
 if (!answered) {
 	console.error(

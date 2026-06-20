@@ -15,6 +15,10 @@ import { API_ROUTES } from '@epicenter/constants/api-routes';
 import type { OwnerId } from '@epicenter/identity';
 
 export { createAiChatFetch } from './ai-chat-fetch.js';
+export {
+	createEpicenterProviderChatStream,
+	type EpicenterProviderData,
+} from './epicenter-provider.js';
 
 export type EpicenterClientOptions = {
 	/** Base URL of the Epicenter server (no trailing slash required). */

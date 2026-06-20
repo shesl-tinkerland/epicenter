@@ -14,7 +14,7 @@
  *  - `apps/opensidian/mount.ts`                      -> `opensidian()` mount factory
  */
 
-import { field, jsonValue } from '@epicenter/field';
+import { field } from '@epicenter/field';
 import { filesTable } from '@epicenter/filesystem';
 import {
 	defineActions,
@@ -26,7 +26,7 @@ import {
 	nullable,
 	type WorkspaceFromDefinition,
 } from '@epicenter/workspace';
-import { Type } from 'typebox';
+import { attachChatConversation } from '@epicenter/workspace/ai';
 import type { Brand } from 'wellcrafted/brand';
 
 /**
@@ -85,7 +85,8 @@ export const generateChatMessageId = (): ChatMessageId =>
  *
  * Stores the thread title, optional parent/subpage relationship, source
  * message linkage, and the chosen model. The provider is derived from the
- * model by the catalog, so it is not stored.
+ * model by the catalog, so it is not stored. The turns themselves are not rows:
+ * each conversation's `messages` handle opens its synced transcript child doc.
  */
 const conversationsTable = defineTable({
 	id: field.string<ConversationId>(),
@@ -96,23 +97,8 @@ const conversationsTable = defineTable({
 	model: field.string(),
 	createdAt: field.instant(),
 	updatedAt: field.instant(),
-});
+}).docs({ messages: attachChatConversation });
 export type Conversation = InferTableRow<typeof conversationsTable>;
-
-/**
- * Chat messages: the persisted content of each conversation turn.
- *
- * Stores the role, structured content parts, and creation timestamp so the UI
- * can replay the exact chat history without depending on live model state.
- */
-const chatMessagesTable = defineTable({
-	id: field.string<ChatMessageId>(),
-	conversationId: field.string<ConversationId>(),
-	role: field.select(['user', 'assistant', 'system']),
-	parts: field.json(Type.Array(jsonValue)),
-	createdAt: field.instant(),
-});
-export type ChatMessage = InferTableRow<typeof chatMessagesTable>;
 
 /**
  * Tool trust: per-tool approval preferences for chat actions.
@@ -146,7 +132,6 @@ export const opensidianWorkspace = defineWorkspace({
 	tables: {
 		files: filesTable,
 		conversations: conversationsTable,
-		chatMessages: chatMessagesTable,
 		toolTrust: toolTrustTable,
 	},
 	kv: {},

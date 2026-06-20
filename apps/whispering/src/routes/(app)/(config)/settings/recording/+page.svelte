@@ -6,7 +6,7 @@
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import { createMutation } from '@tanstack/svelte-query';
 	import { mutationOptions } from 'wellcrafted/query';
-	import { SettingSelect } from '$lib/components/settings';
+	import { SettingSelect, SettingSwitch } from '$lib/components/settings';
 	import {
 		BITRATE_OPTIONS,
 		RECORDING_TRIGGER_OPTIONS,
@@ -48,6 +48,12 @@
 			description="Choose how recording starts: {RECORDING_TRIGGER_OPTIONS.map(
 				(option) => option.label.toLowerCase(),
 			).join(', ')}"
+		/>
+
+		<SettingSwitch
+			key="recording.pausePlayback"
+			label="Pause playback while recording"
+			description="Whispering pauses media playing on your computer (music, video, browser tabs) while your voice is being captured, and resumes it after. In voice activated mode it pauses only while you actually speak, so music keeps playing between phrases. Works with most apps in your system media controls; a few can't be paused this way."
 		/>
 
 		{#if settings.get('recording.trigger') === 'manual'}

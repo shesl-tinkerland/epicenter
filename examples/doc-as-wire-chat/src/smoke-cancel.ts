@@ -1,10 +1,10 @@
 /**
  * Durable-cancel check (S3): write a turn, wait until the answer starts
- * streaming, write `cancelRequestedAt`, and assert the actor stops mid-stream and
+ * streaming, write `cancelRequestedAt`, and assert the worker stops mid-stream and
  * writes a `cancelled` finish. Run with the echo stream (no GEMINI_API_KEY) so
  * the answer is slow enough to catch mid-flight.
  *
- * Run: `bun run src/smoke-cancel.ts`  (after the relay and actor are up).
+ * Run: `bun run src/smoke-cancel.ts`  (after the relay and worker are up).
  */
 
 import { nanoid } from 'nanoid';
@@ -14,7 +14,7 @@ import { connectPeer } from './transport';
 
 const WORKSPACE = process.env.ROOM ?? 'epicenter-demo';
 const PORT = process.env.PORT ?? 8787;
-const AGENT = process.env.AGENT ?? 'demo-actor';
+const AGENT = process.env.AGENT ?? 'demo-agent';
 
 const rootDoc = new Y.Doc({ gc: true });
 connectPeer({ url: `ws://localhost:${PORT}/${WORKSPACE}`, doc: rootDoc });
@@ -70,6 +70,6 @@ if (kind !== 'cancelled') {
 	process.exit(1);
 }
 console.log(
-	'SMOKE-CANCEL OK · actor stopped mid-stream and wrote finish: cancelled',
+	'SMOKE-CANCEL OK · worker stopped mid-stream and wrote finish: cancelled',
 );
 process.exit(0);

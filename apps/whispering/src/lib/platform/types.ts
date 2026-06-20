@@ -11,6 +11,7 @@
  */
 
 import type { Command } from '$lib/commands';
+import type { KeyBinding } from '$lib/tauri/commands';
 
 /**
  * Contract for `#platform/shortcuts`: the per-platform shortcut backend. The
@@ -34,6 +35,24 @@ export type Shortcuts = {
 	 * instead of reaching into platform storage and re-deriving the `tauri` branch.
 	 */
 	currentLabel(commandId: Command['id']): string;
+	/**
+	 * The command's current binding (`null` when unbound). What the recorder reads
+	 * to show and prefill the binding, instead of reaching into platform storage
+	 * and re-deriving the storage-key scheme the backend already owns.
+	 */
+	current(commandId: Command['id']): KeyBinding | null;
+	/** Persist a binding for this command and push it to the platform runtime. */
+	set(commandId: Command['id'], binding: KeyBinding): Promise<void>;
+	/** Clear this command's binding and push the removal. */
+	clear(commandId: Command['id']): Promise<void>;
+	/**
+	 * Why `binding` cannot be assigned to this command, or `null` when it is
+	 * allowed. The policy is per-tier and lives in the backend: the in-app tier
+	 * refuses an exact duplicate (its matcher fires every command whose set
+	 * matches); the global tier refuses a reserved gesture or one that overlaps
+	 * another (its matcher has no prefix resolution).
+	 */
+	findConflict(commandId: Command['id'], binding: KeyBinding): string | null;
 };
 
 /**

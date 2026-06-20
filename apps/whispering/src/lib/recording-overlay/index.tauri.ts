@@ -1,4 +1,3 @@
-import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
 	currentMonitor,
@@ -7,10 +6,10 @@ import {
 } from '@tauri-apps/api/window';
 import { createLogger } from 'wellcrafted/logger';
 import {
-	RECORDING_OVERLAY_MIC_LEVEL,
-	RECORDING_OVERLAY_READY,
-	RECORDING_OVERLAY_STATUS,
 	type RecordingOverlayStatus,
+	recordingOverlayMicLevel,
+	recordingOverlayReady,
+	recordingOverlayStatus,
 } from '$lib/recording-overlay/events';
 
 const log = createLogger('whispering/recording-overlay');
@@ -78,9 +77,11 @@ async function computeOverlayPosition(): Promise<LogicalPosition | null> {
  * boolean flag) also prevents a duplicate listener if two creations race.
  */
 function ensureReadyListener(): Promise<void> {
-	readyListenerRegistered ??= listen(RECORDING_OVERLAY_READY, () => {
-		if (latestStatus) void emit(RECORDING_OVERLAY_STATUS, latestStatus);
-	}).then(() => undefined);
+	readyListenerRegistered ??= recordingOverlayReady
+		.listen(() => {
+			if (latestStatus) void recordingOverlayStatus.emit(latestStatus);
+		})
+		.then(() => undefined);
 	return readyListenerRegistered;
 }
 
@@ -165,7 +166,7 @@ async function applyStatus(status: RecordingOverlayStatus | null) {
 		return;
 	}
 
-	await emit(RECORDING_OVERLAY_STATUS, status);
+	await recordingOverlayStatus.emit(status);
 }
 
 /**
@@ -194,7 +195,7 @@ function reportLevel(level: number): void {
 	// a session it can race ahead of the overlay window existing. A missed level
 	// frame is invisible, so a rejected emit must never surface as an unhandled
 	// rejection.
-	void emitTo(WINDOW_LABEL, RECORDING_OVERLAY_MIC_LEVEL, level).catch(() => {});
+	void recordingOverlayMicLevel.emitTo(WINDOW_LABEL, level).catch(() => {});
 }
 
 export const recordingOverlay = { sync, reportLevel };

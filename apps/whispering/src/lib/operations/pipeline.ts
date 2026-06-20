@@ -13,6 +13,7 @@ import { runTransformation } from '$lib/operations/transform';
 import { report } from '$lib/report';
 import { services } from '$lib/services';
 import type { RecorderStopResult } from '$lib/services/recorder/types';
+import { dictationLifecycle } from '$lib/state/dictation-lifecycle.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 import { settings } from '$lib/state/settings.svelte';
 import { transformations } from '$lib/state/transformations.svelte';
@@ -50,6 +51,13 @@ export async function processRecordingPipeline({
 	const recordingId =
 		source.kind === 'artifact' ? source.artifact.id : source.recordingId;
 
+	// A live dictation (not a file import) drives the dictation pill. The
+	// recorder is already idle by the time we get here, so the lifecycle hands
+	// the pill from `recording` to `transcribing`. File imports have their own
+	// surface, so they leave the dictation lifecycle untouched.
+	const isDictation = deliverySource === 'recording';
+	if (isDictation) dictationLifecycle.markTranscribing();
+
 	recordings.set({
 		id: recordingId,
 		title: '',
@@ -77,35 +85,65 @@ export async function processRecordingPipeline({
 					error: extractErrorMessage(saveError),
 				},
 			});
-			report.error({
-				title: 'Failed to save recording',
-				description:
-					'We could not write the recording bytes; transcription cannot continue.',
-				cause: saveError,
-			});
+			if (isDictation) {
+				// No toast in the dictation path: the failure goes to the notification
+				// (when unfocused) and the recordings row.
+				dictationLifecycle.markFailed({
+					tier: 'transcription',
+					error: saveError,
+				});
+			} else {
+				report.error({
+					title: 'Failed to save recording',
+					description:
+						'We could not write the recording bytes; transcription cannot continue.',
+					cause: saveError,
+				});
+			}
 			return;
 		}
 	}
 
-	const transcribeLoading = report.loading({
-		title: '📋 Transcribing...',
-		description: 'Your recording is being transcribed...',
-	});
+	// File import has no pill, so it keeps a progress toast; the dictation path is
+	// driven by the lifecycle markers above (the pill), with no toast.
+	const transcribeLoading = isDictation
+		? null
+		: report.loading({
+				title: '📋 Transcribing...',
+				description: 'Your recording is being transcribed...',
+			});
 
 	const { data: transcribedText, error: transcribeError } =
 		await transcribeAndPersist(recordingId);
 
 	if (transcribeError) {
-		transcribeLoading.reject({ cause: transcribeError });
+		if (isDictation) {
+			dictationLifecycle.markFailed({
+				tier: 'transcription',
+				error: transcribeError,
+			});
+		} else {
+			transcribeLoading?.reject({ cause: transcribeError });
+		}
 		return;
 	}
 
 	sound.playSoundIfEnabled('transcriptionComplete');
-	const transcribeNotice = await deliverTranscriptionResult({
-		text: transcribedText,
-		source: deliverySource,
-	});
-	transcribeLoading.resolve(transcribeNotice);
+	const { outcome: transcriptDelivery, notice: transcribeNotice } =
+		await deliverTranscriptionResult({
+			text: transcribedText,
+			source: deliverySource,
+		});
+	if (isDictation) {
+		// The transcript is the dictation receipt; the transformation below, if
+		// any, runs as a background enhancement (logged in transformation runs)
+		// rather than reopening the pill. Every reach is a success (the transcript
+		// is saved), so this is always `delivered`; the reach decides whether the
+		// pill flashes (clean `output`) or persists (a reduced `clipboard`).
+		dictationLifecycle.markDelivered(transcriptDelivery.reach);
+	} else {
+		transcribeLoading?.resolve(transcribeNotice);
+	}
 
 	const transformationId = settings.get('transformation.selectedId');
 	if (!transformationId) return;
@@ -125,11 +163,13 @@ export async function processRecordingPipeline({
 		return;
 	}
 
-	const transformLoading = report.loading({
-		title: '🔄 Running transformation...',
-		description:
-			'Applying your selected transformation to the transcribed text...',
-	});
+	const transformLoading = isDictation
+		? null
+		: report.loading({
+				title: '🔄 Running transformation...',
+				description:
+					'Applying your selected transformation to the transcribed text...',
+			});
 
 	const { data: transformedText, error: transformError } =
 		await runTransformation({
@@ -138,15 +178,18 @@ export async function processRecordingPipeline({
 			recordingId,
 		});
 	if (transformError) {
-		transformLoading.reject({ cause: transformError });
+		// The transformation failed, but the transcript was already delivered, so
+		// the dictation is not a failure: the durable transformation run records
+		// the error. File import surfaces it on its toast.
+		transformLoading?.reject({ cause: transformError });
 		return;
 	}
 
 	sound.playSoundIfEnabled('transformationComplete');
 
-	const transformNotice = await deliverTransformationResult({
+	const { notice: transformNotice } = await deliverTransformationResult({
 		text: transformedText,
 		recordingId,
 	});
-	transformLoading.resolve(transformNotice);
+	transformLoading?.resolve(transformNotice);
 }

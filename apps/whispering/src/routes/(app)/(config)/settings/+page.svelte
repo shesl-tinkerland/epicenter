@@ -2,6 +2,7 @@
 	import * as Field from '@epicenter/ui/field';
 	import { Switch } from '@epicenter/ui/switch';
 	import { createMutation, createQuery } from '@tanstack/svelte-query';
+	import OutputDeliveryControls from '$lib/components/OutputDeliveryControls.svelte';
 	import { SettingSelect, SettingSwitch } from '$lib/components/settings';
 	import { report } from '$lib/report';
 	import { autostartKeys } from '$lib/tauri/autostart-keys';
@@ -83,22 +84,7 @@
 				Applies immediately after an audio transcription finishes.
 			</Field.Description>
 			<Field.Group>
-				<SettingSwitch
-					key="output.transcription.clipboard"
-					label="Copy transcript to clipboard"
-				/>
-
-				<SettingSwitch
-					key="output.transcription.cursor"
-					label="Paste transcript at cursor"
-				/>
-
-				{#if tauri && settings.get('output.transcription.cursor')}
-					<SettingSwitch
-						key="output.transcription.enter"
-						label="Press Enter after pasting transcript"
-					/>
-				{/if}
+				<OutputDeliveryControls scope="transcription" />
 			</Field.Group>
 		</Field.Set>
 
@@ -110,22 +96,7 @@
 				Applies after you run a saved transformation on a transcription.
 			</Field.Description>
 			<Field.Group>
-				<SettingSwitch
-					key="output.transformation.clipboard"
-					label="Copy transformed text to clipboard"
-				/>
-
-				<SettingSwitch
-					key="output.transformation.cursor"
-					label="Paste transformed text at cursor"
-				/>
-
-				{#if tauri && settings.get('output.transformation.cursor')}
-					<SettingSwitch
-						key="output.transformation.enter"
-						label="Press Enter after pasting transformed text"
-					/>
-				{/if}
+				<OutputDeliveryControls scope="transformation" />
 			</Field.Group>
 		</Field.Set>
 

@@ -2,7 +2,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { createLogger } from 'wellcrafted/logger';
 import { Err, Ok, type Result } from 'wellcrafted/result';
 import type { WhisperingRecordingState } from '$lib/constants/audio';
-import { categorizeRecorderError } from '$lib/services/recorder/categorize-error';
+import { recorderErrorFromIpc } from '$lib/services/recorder/categorize-error';
 import {
 	asDeviceIdentifier,
 	type CpalRecordingParams,
@@ -74,7 +74,7 @@ const enumerateDevices = async (): Promise<Result<Device[], RecorderError>> => {
 		await commands.enumerateRecordingDevices();
 	if (enumerateRecordingDevicesError !== null) {
 		return (
-			categorizeRecorderError(enumerateRecordingDevicesError) ??
+			recorderErrorFromIpc(enumerateRecordingDevicesError) ??
 			RecorderError.EnumerateDevices({
 				cause: enumerateRecordingDevicesError,
 			})
@@ -242,12 +242,11 @@ function createCpalRecorder() {
 
 			const deviceIds = devices.map((d) => d.id);
 			const fallbackDeviceId = deviceIds.at(0);
+			// Empty device list: there is no microphone to fall back to, whether or
+			// not one was previously selected. Same condition, same recovery as a
+			// device that vanishes mid-open, so it surfaces the one NoInputDevice.
 			if (!fallbackDeviceId) {
-				return RecorderError.NoDevice({
-					message: selectedDeviceId
-						? "We couldn't find the selected microphone. Make sure it's connected and try again!"
-						: "We couldn't find any microphones. Make sure they're connected and try again!",
-				});
+				return RecorderError.NoInputDevice();
 			}
 
 			const deviceOutcome: DeviceAcquisitionOutcome = (() => {
@@ -282,7 +281,7 @@ function createCpalRecorder() {
 				);
 			if (initRecordingSessionError !== null)
 				return (
-					categorizeRecorderError(initRecordingSessionError) ??
+					recorderErrorFromIpc(initRecordingSessionError) ??
 					RecorderError.InitFailed({
 						cause: initRecordingSessionError,
 					})
@@ -297,7 +296,7 @@ function createCpalRecorder() {
 				if (closeError !== null)
 					log.error(RecorderError.StartFailed({ cause: closeError }));
 				return (
-					categorizeRecorderError(startRecordingError) ??
+					recorderErrorFromIpc(startRecordingError) ??
 					RecorderError.StartFailed({ cause: startRecordingError })
 				);
 			}

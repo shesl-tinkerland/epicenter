@@ -16,7 +16,7 @@ import type { SessionMountContext } from '../daemon/define-mount.js';
 import type { NodeMountRuntime } from '../daemon/mount-runtime.js';
 import { defineActions, defineQuery } from '../shared/actions.js';
 import type { AgentId } from './agent-id.js';
-import type { ConnectedChildDoc } from './child-doc-actor.js';
+import type { ConnectedChildDoc } from './child-doc-worker.js';
 import { defineTable } from './define-table.js';
 import { defineWorkspace } from './workspace.js';
 
@@ -28,7 +28,7 @@ const demoWorkspace = defineWorkspace({
 		conversations: defineTable({
 			id: field.string(),
 			title: field.string(),
-			// Designation: the actor loop hosts only rows bound to the agent the
+			// Designation: the worker loop hosts only rows bound to the agent the
 			// daemon answers as (the mount's `agentId`).
 			agent: field.string<AgentId>(),
 		}).docs({ messages: attachChatTranscript }),
@@ -196,13 +196,13 @@ describe('definition.mount', () => {
 		expect(runtime.actions).toBe(spy.actions);
 	});
 
-	test('with actors: hosts child docs at the schema-derived guid, drains the actor', () => {
+	test('with workers: hosts child docs at the schema-derived guid, drains the worker', () => {
 		const spy: AttachSpy = { childDocGuids: [] };
 		const mount = demoWorkspace.mount({
 			runtime: stubRuntime(spy),
 			// This daemon answers as the `daemon-agent` agent.
 			agentId: 'daemon-agent' as AgentId,
-			actors: {
+			workers: {
 				// The app registers behavior only: no table, guid, or layout passed.
 				conversations: { messages: () => ({}) },
 			},
@@ -210,7 +210,7 @@ describe('definition.mount', () => {
 
 		const runtime = open(mount);
 
-		// The actor is registered for ordered teardown even before any row exists.
+		// The worker is registered for ordered teardown even before any row exists.
 		expect(spy.materializers).toHaveLength(1);
 
 		// A row bound to this daemon's agent drives the loop to host its transcript

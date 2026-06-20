@@ -92,7 +92,7 @@
 					onSuccess: async (transcribedText) => {
 						sound.playSoundIfEnabled('transcriptionComplete');
 
-						const notice = await deliverTranscriptionResult({
+						const { notice } = await deliverTranscriptionResult({
 							text: transcribedText,
 						});
 						loading.resolve(notice);

@@ -36,7 +36,13 @@ shapes, see `docs/adr/`.
   rows surface in `scan()`, never silently dropped.
 - **Child doc**: a separate Y.Doc per row field (for example a transcript), reached
   through `ws.tables.X.docs.field.open(rowId)`. The workspace owns guid derivation.
-- **Materializer**: projects workspace data into another store (markdown, sqlite).
+- **Worker**: running behavior that observes workspace state and writes results
+  back. Workers may be local (every node runs them) or agent-bound (one
+  configured agent answers).
+- **Agent**: the durable address a row or conversation binds to. An agent names
+  who should answer; the worker is the runtime that answers as it.
+- **Materializer**: a local, addressless worker that projects workspace data into
+  another store (markdown, sqlite).
 - **`attach*` vs `create*`**: `attach*` are side-effectful primitives that register
   listeners at call time; `create*` are pure construction.
 

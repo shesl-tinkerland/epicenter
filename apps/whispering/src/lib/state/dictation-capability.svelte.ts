@@ -2,6 +2,7 @@ import { tauri } from '#platform/tauri';
 import type { DictationCapability } from '$lib/tauri/commands';
 
 const OVERRIDABLE_DICTATION_CAPABILITIES = [
+	'inactive',
 	'untrusted',
 	'active',
 	'broken',
@@ -69,14 +70,16 @@ function createDictationCapability() {
 			return effective() === 'unsupported';
 		},
 		/**
-		 * The global tap cannot fire right now, for any settled reason
-		 * (`untrusted`, `broken`, or `unsupported`). Excludes `active` (it works)
-		 * and `unknown` (the pre-seed sub-tick, so the keycap does not flash dim
-		 * before the first value lands). Views use this to dim the shortcut keycap.
+		 * The tap cannot fire right now, for any settled reason (`untrusted`,
+		 * `broken`, or `unsupported`). Excludes `active` (it works), `unknown` (the
+		 * pre-seed sub-tick, so the keycap does not flash dim before the first
+		 * value lands), and `inactive` (no Tier-1 binding is bound, so the tap is
+		 * off by design and the chord shortcuts still work through the plugin).
+		 * Views use this to dim the shortcut keycap.
 		 */
 		get isUnavailable(): boolean {
 			const s = effective();
-			return s !== 'active' && s !== 'unknown';
+			return s !== 'active' && s !== 'unknown' && s !== 'inactive';
 		},
 
 		/**
@@ -108,11 +111,11 @@ function createDictationCapability() {
 			detached = false;
 			const t = tauri;
 			let unlisten: (() => void) | undefined;
-			void t.globalShortcuts.getCapability().then((capability) => {
+			void t.keyboard.getDictationCapability().then((capability) => {
 				if (!detached && status === 'unknown') status = capability;
 			});
-			void t.globalShortcuts
-				.onCapabilityChanged((capability) => {
+			void t.keyboard
+				.onDictationCapabilityChanged((capability) => {
 					status = capability;
 				})
 				.then((fn) => {

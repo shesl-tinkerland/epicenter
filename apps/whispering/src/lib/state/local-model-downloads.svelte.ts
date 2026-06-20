@@ -14,7 +14,7 @@
  * deleted outside the app), so `refresh()` re-checks disk; the selector calls
  * it from the same window-focus rescan that refreshes folder entries.
  *
- * Shape mirrors `local-model.svelte.ts`: factory function with `$state`
+ * Shape mirrors `recordings.svelte.ts`: factory function with `$state`
  * closure variables and a return object exposing a reactive getter plus
  * operations.
  */

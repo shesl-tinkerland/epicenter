@@ -6,7 +6,6 @@
 	import { report } from '$lib/report';
 	import { shortcuts } from '#platform/shortcuts';
 	import { tauri } from '#platform/tauri';
-	import { createPressedKeys } from '$lib/utils/createPressedKeys.svelte';
 	import GlobalKeyboardShortcutRecorder from './keyboard-shortcut-recorder/GlobalKeyboardShortcutRecorder.svelte';
 	import LocalKeyboardShortcutRecorder from './keyboard-shortcut-recorder/LocalKeyboardShortcutRecorder.svelte';
 	import ShortcutFormatHelp from './keyboard-shortcut-recorder/ShortcutFormatHelp.svelte';
@@ -14,22 +13,9 @@
 
 	// One shortcut system per platform: the desktop app uses global (system-wide,
 	// rdev) shortcuts; the browser uses in-app (focused-tab) shortcuts. They never
-	// coexist, so this page shows whichever one this platform has.
-
-	// Browser-only: the local recorder records shortcuts from window keydown. On
-	// desktop the global recorder records through the rdev backend instead, so
-	// this (and its window keydown listener) is never created there. Its presence
-	// also marks local mode for the template below.
-	const pressedKeys = tauri
-		? undefined
-		: createPressedKeys({
-				onUnsupportedKey: (key) => {
-					report.info({
-						title: 'Unsupported key',
-						description: `The key "${key}" is not supported. Please try a different key.`,
-					});
-				},
-			});
+	// coexist, so this page shows whichever one this platform has. Each recorder
+	// owns its own physical-key capture (createChordRecorder), so the page hands
+	// in no capture state.
 
 	function reset() {
 		shortcuts.reset();
@@ -84,14 +70,13 @@
 				/>
 			{/snippet}
 		</ShortcutTable>
-	{:else if pressedKeys}
+	{:else}
 		<ShortcutTable>
 			{#snippet row(command)}
 				{@const def = shortcuts.defaultLabel(command.id)}
 				<LocalKeyboardShortcutRecorder
 					{command}
 					placeholder={def ? `Default: ${def}` : 'Set shortcut'}
-					{pressedKeys}
 				/>
 			{/snippet}
 		</ShortcutTable>

@@ -3,11 +3,13 @@
  *
  * This is the layer above {@link createTable}. A Table watches ONE folder's files; a Vault watches
  * the ROOT (`watch_vault`, depth-1) for its table set changing, and composes a `createTable` per
- * table the watcher resolves. `watch_vault` applies the same table-or-vault rule as the CLI loader
- * (`load/fs.ts` `loadPath`), where altitude is pure shape: a folder of folders is a vault of those
- * Tables, while a folder of files (or an empty folder) is itself a single Table on the root, so
- * opening a leaf folder and opening a parent both work. A `matter.json` only types a Table; it never
- * decides altitude. It owns its Tables' lifetimes:
+ * table the watcher resolves. `watch_vault` applies the same marker rule as the CLI loader
+ * (`load/fs.ts` `loadPath`, ADR-0029/0032): a folder is a table XOR a container of tables. A marked
+ * root IS the single table (its subfolders are ignored); an unmarked root is a container whose
+ * immediate marked child folders are the tables. An unmarked folder is not data and is skipped, so
+ * opening a marked leaf and opening a container of marked folders both work; depth is reached by
+ * re-opening the deeper folder, never by loading two levels at once. The marker's contents type a
+ * Table; its presence is what makes the folder a Table at all. It owns its Tables' lifetimes:
  * dispose the Vault and every Table watch and the root watch stop. The Vault declares nothing
  * itself: it is the live union of its Tables' self-declared contracts, discovered, not configured.
  *
@@ -54,10 +56,10 @@ export function createVault(root: string) {
 	const tables = new SvelteMap<string, TableHandle>();
 
 	/**
-	 * Reconcile the live tables against a fresh table list (the whole set `watch_vault` resolved,
-	 * which is the child folders, or the root itself when the root is a single table): dispose the
-	 * folders that left, compose the folders that arrived, leave the rest untouched so an unrelated
-	 * change (a loose file written at the root) churns nothing.
+	 * Reconcile the live tables against a fresh table list (the whole set `watch_vault` resolved:
+	 * the root itself when marked, else its immediate marked child folders): dispose the folders
+	 * that left, compose the folders that arrived, leave the rest untouched so an unrelated change
+	 * (a loose file written at the root) churns nothing.
 	 */
 	function reconcile(paths: string[]): void {
 		// A snapshot can still arrive after dispose (the seed, or a debounced batch already in flight
@@ -134,11 +136,27 @@ export function createVault(root: string) {
 		tables.clear();
 	}
 
+	/**
+	 * Adopt the root folder as a table by writing the canonical untyped marker
+	 * (`matter.json` = `{}`) into it (ADR-0029). A folder is a table iff it has a marker, so an
+	 * unmarked root shows no tables until adopted. Writing the marker at the root is a top-level
+	 * change the non-recursive root watch already sees, so it re-scans and surfaces the now-marked
+	 * root as a table live: there is nothing to reconcile here. The empty state calls this.
+	 */
+	async function adopt(): Promise<void> {
+		await invoke('write_entry', {
+			path: root,
+			fileName: 'matter.json',
+			content: '{}',
+		});
+	}
+
 	return {
 		folderName,
 		root,
 		whenReady,
 		dispose,
+		adopt,
 		/** The vault's SQLite projection. The per-tab WHERE filter queries it; the filter's freshness
 		 *  signal (`mirror.version`) and query seam live here, not on the vault. */
 		mirror,

@@ -28,10 +28,12 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 use crate::audio::resample_mono;
+use crate::recorder::error::RecorderError;
 
-/// Simple result type using String for errors. Errors cross the IPC
-/// boundary as plain strings so the JS side renders them in toasts.
-pub type Result<T> = std::result::Result<T, String>;
+/// Recorder result type. Errors cross the IPC boundary as the internally
+/// tagged `RecorderError` enum (`{ name, message }`) so the JS side switches
+/// on `error.name` instead of matching message text.
+pub type Result<T> = std::result::Result<T, RecorderError>;
 
 /// Target rate for every recording. All local transcription engines
 /// (whispercpp, parakeet, moonshine) want 16 kHz mono; the cloud
@@ -92,7 +94,7 @@ impl Recorder {
         let host = cpal::default_host();
         let devices = host
             .input_devices()
-            .map_err(|e| format!("Failed to get input devices: {e}"))?
+            .map_err(|e| RecorderError::classify_cpal("Failed to get input devices", e))?
             .filter_map(|device| device.name().ok())
             .collect();
 
@@ -181,13 +183,13 @@ impl Recorder {
         let tx = self
             .cmd_tx
             .as_ref()
-            .ok_or_else(|| "No recording session initialized".to_string())?;
+            .ok_or_else(|| RecorderError::failed("No recording session initialized"))?;
         let (reply_tx, reply_rx) = mpsc::channel();
         tx.send(RecorderCmd::Start(reply_tx))
-            .map_err(|e| format!("Failed to send start command: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to send start command: {e}")))?;
         reply_rx
             .recv()
-            .map_err(|e| format!("Failed to receive start confirmation: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to receive start confirmation: {e}")))?;
         Ok(())
     }
 
@@ -196,13 +198,13 @@ impl Recorder {
         let tx = self
             .cmd_tx
             .as_ref()
-            .ok_or_else(|| "No recording session initialized".to_string())?;
+            .ok_or_else(|| RecorderError::failed("No recording session initialized"))?;
         let (reply_tx, reply_rx) = mpsc::channel();
         tx.send(RecorderCmd::Stop(reply_tx))
-            .map_err(|e| format!("Failed to send stop command: {e}"))?;
+            .map_err(|e| RecorderError::failed(format!("Failed to send stop command: {e}")))?;
         reply_rx
             .recv()
-            .map_err(|e| format!("Worker dropped stop reply: {e}"))?
+            .map_err(|e| RecorderError::failed(format!("Worker dropped stop reply: {e}")))?
     }
 
     /// Cancel the active recording, discarding any in-flight samples.
@@ -342,7 +344,7 @@ fn finalize(buffer: Vec<f32>, device_rate: u32) -> Result<Vec<f32>> {
         buffer
     } else {
         resample_mono(buffer, device_rate, TARGET_RATE)
-            .map_err(|e| format!("resample failed: {e}"))?
+            .map_err(|e| RecorderError::failed(format!("resample failed: {e}")))?
     };
 
     let mut samples = samples;
@@ -362,10 +364,13 @@ fn find_device(host: &cpal::Host, device_name: &str) -> Result<Device> {
     if device_name.to_lowercase() == "default" {
         return host
             .default_input_device()
-            .ok_or_else(|| "No default input device available".to_string());
+            .ok_or_else(|| RecorderError::no_input_device("No default input device available"));
     }
 
-    let devices: Vec<_> = host.input_devices().map_err(|e| e.to_string())?.collect();
+    let devices: Vec<_> = host
+        .input_devices()
+        .map_err(|e| RecorderError::classify_cpal("Failed to list input devices", e))?
+        .collect();
     for device in devices {
         if let Ok(name) = device.name() {
             if name == device_name {
@@ -373,7 +378,9 @@ fn find_device(host: &cpal::Host, device_name: &str) -> Result<Device> {
             }
         }
     }
-    Err(format!("Device '{device_name}' not found"))
+    Err(RecorderError::no_input_device(format!(
+        "Device '{device_name}' not found"
+    )))
 }
 
 /// Get the best supported configuration for voice recording.
@@ -386,12 +393,29 @@ fn get_optimal_config(
 ) -> Result<cpal::SupportedStreamConfig> {
     let target_sample_rate = preferred_sample_rate.unwrap_or(TARGET_RATE);
 
+    // A device that yields no input configs is unusable as an input, whether the
+    // query *errors* or returns *empty*: both mean "this mic can't tell us how to
+    // record from it," so both classify as NoInputDevice ("connect a microphone")
+    // rather than a generic Failed the user can't act on.
+    //
+    // On macOS (cpal 0.16) the error case is *always* BackendSpecific, never the
+    // typed DeviceNotAvailable, so classify_cpal alone would mislabel a vanished
+    // mic as Failed. Collapse that fallback to NoInputDevice here, while still
+    // surfacing a permission denial if cpal reported one in the description
+    // (Windows WASAPI E_ACCESSDENIED).
     let configs: Vec<_> = device
         .supported_input_configs()
-        .map_err(|e| e.to_string())?
+        .map_err(
+            |e| match RecorderError::classify_cpal("Failed to query input configs", e) {
+                RecorderError::Failed { message } => RecorderError::NoInputDevice { message },
+                classified => classified,
+            },
+        )?
         .collect();
     if configs.is_empty() {
-        return Err("No supported input configurations".to_string());
+        return Err(RecorderError::no_input_device(
+            "No supported input configurations",
+        ));
     }
 
     let supported_formats = [SampleFormat::F32, SampleFormat::I16, SampleFormat::U16];
@@ -400,7 +424,9 @@ fn get_optimal_config(
         .filter(|config| supported_formats.contains(&config.sample_format()))
         .collect();
     if compatible_configs.is_empty() {
-        return Err("No configurations with supported sample formats (F32, I16, U16)".to_string());
+        return Err(RecorderError::failed(
+            "No configurations with supported sample formats (F32, I16, U16)",
+        ));
     }
 
     // Mono at target rate if possible.
@@ -443,7 +469,11 @@ fn get_optimal_config(
         }
     }
 
-    if best_config.is_none() {
+    // No mono config matched a rate window above; fall back to the first
+    // compatible config. `compatible_configs` is non-empty here (guarded
+    // earlier), so a config always exists: there is no "no suitable
+    // configuration" failure left to model.
+    Ok(best_config.unwrap_or_else(|| {
         let config = compatible_configs[0];
         let (min, max) = (config.min_sample_rate().0, config.max_sample_rate().0);
         let rate = if min <= target_sample_rate && max >= target_sample_rate {
@@ -451,10 +481,8 @@ fn get_optimal_config(
         } else {
             min
         };
-        best_config = Some(config.with_sample_rate(cpal::SampleRate(rate)));
-    }
-
-    best_config.ok_or_else(|| "Failed to find suitable audio configuration".to_string())
+        config.with_sample_rate(cpal::SampleRate(rate))
+    }))
 }
 
 /// Build the cpal input stream. The callback's only job is to downmix to
@@ -480,7 +508,7 @@ fn build_input_stream(
                 err_fn,
                 None,
             )
-            .map_err(|e| format!("Failed to build F32 stream: {e}"))?,
+            .map_err(|e| RecorderError::classify_cpal("Failed to build F32 stream", e))?,
         SampleFormat::I16 => device
             .build_input_stream(
                 config,
@@ -490,7 +518,7 @@ fn build_input_stream(
                 err_fn,
                 None,
             )
-            .map_err(|e| format!("Failed to build I16 stream: {e}"))?,
+            .map_err(|e| RecorderError::classify_cpal("Failed to build I16 stream", e))?,
         SampleFormat::U16 => device
             .build_input_stream(
                 config,
@@ -500,8 +528,12 @@ fn build_input_stream(
                 err_fn,
                 None,
             )
-            .map_err(|e| format!("Failed to build U16 stream: {e}"))?,
-        _ => return Err(format!("Unsupported sample format: {sample_format:?}")),
+            .map_err(|e| RecorderError::classify_cpal("Failed to build U16 stream", e))?,
+        _ => {
+            return Err(RecorderError::failed(format!(
+                "Unsupported sample format: {sample_format:?}"
+            )))
+        }
     };
 
     Ok(stream)

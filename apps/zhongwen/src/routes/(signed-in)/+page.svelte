@@ -38,7 +38,7 @@
 	let activeConversationId = $state<ConversationId | undefined>();
 
 	/**
-	 * Write only the cheap list row, bound to `agent` for life (ADR-0015). The
+	 * Write only the cheap list row, bound to `agent` for life (ADR-0025). The
 	 * transcript child doc is opened lazily by `ConversationView`, keyed by the row
 	 * id. The model is an app constant (`ZHONGWEN_MODEL`), so it is not stored per
 	 * conversation. This is the one place a conversation's `agent` is written;

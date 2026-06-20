@@ -1,11 +1,12 @@
 /**
  * `matter check` command tests against fixtures and the bundled example vault. These pin the
- * command contract, not the UI: scope inference, exit codes, the un-evaluable-reference note for a
- * single table, the `--json` shape, and the fatal tiers.
+ * command contract, not the UI: the marker-based scope (ADR-0029), exit codes, the
+ * un-evaluable-reference note for a lone table, the `--json` shape, and the fatal tiers.
  *
- *   - exit 0  every loaded row is healthy (an untyped folder counts; references un-evaluable in
- *             isolation are a note, not a failure)
- *   - exit 1  a loaded row needs attention, or a vault reference does not resolve
+ *   - exit 0  every loaded row is healthy (an untyped `{}` folder counts; a path that is not a
+ *             table and has no marked children is "no tables", not a failure; references
+ *             un-evaluable in isolation are a note, not a failure)
+ *   - exit 1  a loaded row needs attention, or a cross-table reference does not resolve
  *   - exit 2  a folder is unreadable or a matter.json is a corrupt contract
  */
 
@@ -52,11 +53,21 @@ describe('matter check: single-table scope', () => {
 		);
 	});
 
-	test('exit 0 treats an untyped folder (no matter.json) as valid', async () => {
+	test('exit 0 treats an untyped folder (a {} marker) as valid', async () => {
 		const result = await runCheck([`${fixtureRoot}/missing-model`]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).toBe('');
 		expect(result.stdout).toContain('untyped');
+	});
+
+	test('exit 0 with no tables when the path is not a table and has no marked children', async () => {
+		// A folder with no matter.json and no marked children is not a table (ADR-0029): there is
+		// nothing to check, so it is "no tables here", not an untyped pass.
+		const result = await runCheck([`${fixtureRoot}/not-a-table`]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).toBe('');
+		expect(result.stdout).toContain('0 tables');
+		expect(result.stdout).not.toContain('untyped');
 	});
 
 	test('exit 0 notes references as un-evaluable when checking one table', async () => {
@@ -81,11 +92,10 @@ describe('matter check: vault scope', () => {
 		expect(result.stdout).not.toContain('references not checked');
 	});
 
-	test('--json carries the scope, serialized violations, and summary', async () => {
+	test('--json carries the serialized violations and summary', async () => {
 		const result = await runCheck(['--json', exampleVault]);
 		const report = JSON.parse(result.stdout);
 		expect(result.exitCode).toBe(1);
-		expect(report.scope).toBe('vault');
 		expect(
 			report.violations.every(
 				(v: { kind: string }) => v.kind === 'dangling-reference',

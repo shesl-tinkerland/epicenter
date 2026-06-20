@@ -120,45 +120,6 @@ describe('AI chat route HTTP responses', () => {
 		expect(body.error).not.toHaveProperty('status');
 	});
 
-	test('doc route rejects a malformed guid with 400 before touching any room', async () => {
-		const app = createTestApp();
-		const res = await app.request(
-			API_ROUTES.ai.chatDoc.pattern,
-			{
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					guid: 'not a doc guid',
-					data: { model: 'gpt-5.4-mini' },
-				}),
-			},
-			{ OPENAI_API_KEY: 'sk-test' },
-		);
-
-		expect(res.status).toBe(400);
-	});
-
-	test('doc route returns 503 ProviderNotConfigured when the house key is missing', async () => {
-		const app = createTestApp();
-		const res = await app.request(
-			API_ROUTES.ai.chatDoc.pattern,
-			{
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					guid: 'epicenter-zhongwen.conversations.abc123.messages',
-					data: { model: 'gpt-5.4-mini' },
-				}),
-			},
-			// No env: OPENAI_API_KEY is undefined; fails before any room access.
-			{},
-		);
-
-		expect(res.status).toBe(AiChatErrorStatus.ProviderNotConfigured);
-		const body = (await res.json()) as { error: { name: string } };
-		expect(body.error.name).toBe('ProviderNotConfigured');
-	});
-
 	test('shared mode rejects a non-admitted user with 403 NotAdmitted before any AI key is read', async () => {
 		const app = createTestApp(shared({ admit: () => false }));
 		const res = await app.request(

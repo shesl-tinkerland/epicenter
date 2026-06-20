@@ -45,20 +45,21 @@
 			?.querySelector(`[data-candidate-index="${selectedIndex}"]`)
 			?.scrollIntoView({ block: 'nearest' });
 	});
+
+	// Tailwind classes per diff segment kind; unchanged words stay unstyled.
+	const SEGMENT_CLASS = {
+		equal: '',
+		insert: 'rounded-sm bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+		delete:
+			'rounded-sm bg-red-500/10 text-red-700/70 line-through dark:text-red-300/60',
+	} as const satisfies Record<DiffSegment['type'], string>;
 </script>
 
 {#snippet diffInline(segments: DiffSegment[])}
 	<p class="text-sm leading-relaxed whitespace-pre-wrap">
-		{#each segments as seg, i (i)}
-			{#if seg.type === 'equal'}<span>{seg.text}</span
-				>{:else if seg.type === 'insert'}<span
-					class="rounded-sm bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-					>{seg.text}</span
-				>{:else}<span
-					class="rounded-sm bg-red-500/10 text-red-700/70 line-through dark:text-red-300/60"
-					>{seg.text}</span
-				>{/if}
-		{/each}
+		{#each segments as seg, i (i)}<span class={SEGMENT_CLASS[seg.type]}
+				>{seg.text}</span
+			>{/each}
 	</p>
 {/snippet}
 

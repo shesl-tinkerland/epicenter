@@ -62,7 +62,11 @@ pub fn create_recording_overlay(app: &AppHandle) {
         .corner_radius(OVERLAY_HEIGHT / 2.0)
         // accept_first_mouse so a click lands on the stop/cancel button even
         // when the panel is not the active window (it never activates).
-        .with_window(|w| w.decorations(false).transparent(true).accept_first_mouse(true))
+        .with_window(|w| {
+            w.decorations(false)
+                .transparent(true)
+                .accept_first_mouse(true)
+        })
         .collection_behavior(
             CollectionBehavior::new()
                 .can_join_all_spaces()

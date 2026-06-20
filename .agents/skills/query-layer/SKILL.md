@@ -14,7 +14,7 @@ metadata:
 
 ## Upstream Grounding
 
-When TanStack Query behavior, Svelte adapter types, cache invalidation semantics, optimistic updates, or mutation lifecycle callbacks affect correctness, ask DeepWiki a narrow question against `tanstack/query` before relying on memory. Use it to orient, then verify decisive details against local installed types, source, or official docs before changing code.
+When TanStack Query behavior, Svelte adapter types, cache invalidation semantics, optimistic updates, or mutation lifecycle callbacks affect correctness, ask DeepWiki a narrow question against `TanStack/query` before relying on memory. Use it to orient, then verify decisive details against local installed types, source, or official docs before changing code.
 
 Skip DeepWiki for stable basics and repo-local patterns already documented below.
 

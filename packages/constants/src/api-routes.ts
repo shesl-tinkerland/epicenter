@@ -71,16 +71,6 @@ export const API_ROUTES = {
 			prefixPattern: '/api/ai/*',
 			url: (baseURL: string) => `${stripTrailing(baseURL)}/api/ai/chat`,
 		},
-		/**
-		 * Doc-as-wire generation kickoff. The transcript lives in a synced
-		 * Yjs child doc; the server appends assistant tokens to it as a sync
-		 * peer instead of streaming SSE back. The request stays open for the
-		 * whole generation; aborting the fetch cancels the generation.
-		 */
-		chatDoc: {
-			pattern: '/api/ai/chat/doc',
-			url: (baseURL: string) => `${stripTrailing(baseURL)}/api/ai/chat/doc`,
-		},
 	},
 } as const;
 // The billing prefix (`/api/billing`) lives in apps/api/worker/billing/routes.ts:

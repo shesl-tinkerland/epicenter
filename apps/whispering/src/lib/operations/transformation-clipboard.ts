@@ -92,7 +92,7 @@ export async function runTransformationOnClipboard() {
 
 	sound.playSoundIfEnabled('transformationComplete');
 
-	const successNotice = await deliverTransformationResult({
+	const { notice: successNotice } = await deliverTransformationResult({
 		text: transformedText,
 		recordingId: null,
 	});

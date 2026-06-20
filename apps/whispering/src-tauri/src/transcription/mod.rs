@@ -54,7 +54,9 @@ pub async fn transcribe_recording(
     let samples = crate::timing::measure("transcribe.read+decode", || {
         read_artifact_samples(&app_handle, &recording_id)
     })
-    .map_err(|e| TranscriptionError::AudioReadError { message: e })?;
+    .map_err(|e| TranscriptionError::AudioReadError {
+        message: e.to_string(),
+    })?;
 
     let cache = model_cache.inner().clone();
     tauri::async_runtime::spawn_blocking(move || cache.transcribe(samples, spec))

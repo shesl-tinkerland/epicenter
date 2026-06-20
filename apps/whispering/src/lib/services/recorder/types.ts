@@ -116,9 +116,6 @@ export const RecorderError = defineErrors({
 		message: `Failed to enumerate recording devices: ${extractErrorMessage(cause)}`,
 		cause,
 	}),
-	NoDevice: ({ message }: { message: string }) => ({
-		message,
-	}),
 	MicrophonePermissionDenied: ({ cause }: { cause?: unknown } = {}) => ({
 		message:
 			'Microphone access was denied. Please grant microphone permission in your system or browser settings and try again.',
@@ -162,6 +159,13 @@ export type RecorderError = InferErrors<typeof RecorderError>;
 type BaseRecordingParams = {
 	selectedDeviceId: DeviceIdentifier | null;
 	recordingId: string;
+	/**
+	 * Optional sink for live mic loudness (raw RMS, ~0 silent to ~0.3 loud
+	 * speech), called continuously while recording so the pill can draw a meter.
+	 * The navigator recorder taps its MediaStream to drive this; the CPAL recorder
+	 * ignores it because Rust emits the level straight to the overlay window.
+	 */
+	onLevel?: (level: number) => void;
 };
 
 /**

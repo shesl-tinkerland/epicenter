@@ -183,3 +183,61 @@ A **real** folder opens the exact same way: pick it in the picker (it watches on
 flat folder with its own `matter.json`, edits write to those actual files, and it
 persists across reloads, so you only pick it once). The app needs no dev-only mode
 to tell the two apart, the sandbox is just a folder you opened.
+
+## Verifying the adopt flow
+
+`dev:fixture` opens the sample's `drafts` folder, which is **already a table** (it
+has a `matter.json`), so it never shows the "adopt" empty state. To see and test
+adopt you must open an **unmarked** folder: one with no `matter.json` and no marked
+subfolders. That empty state, with its "Adopt this folder as a table" button, only
+appears when `vault.tables.length === 0`.
+
+The result of adopt is provable without the GUI, because adopt only writes a `{}`
+marker and `loadPath` is what reads it back:
+
+```sh
+T=$(mktemp -d)/notes && mkdir -p "$T"
+printf -- '---\ntitle: First note\n---\nhello\n'  > "$T/note-a.md"
+printf -- '---\ntitle: Second note\n---\nworld\n' > "$T/note-b.md"
+bun run check "$T"            # BEFORE: "0 tables" (unmarked, not a table)
+printf '{}' > "$T/matter.json"
+bun run check "$T"            # AFTER:  "1 untyped (1 table, 2 rows)"
+```
+
+That confirms the classification half. The GUI adds one thing on top: the root
+watcher must re-scan **live** when the button writes the marker. To verify that end
+to end:
+
+1. Create a throwaway **unmarked** folder with a couple of notes (no `matter.json`):
+
+   ```sh
+   mkdir -p ~/matter-adopt-test
+   printf -- '---\ntitle: First note\n---\nhello\n'  > ~/matter-adopt-test/note-a.md
+   printf -- '---\ntitle: Second note\n---\nworld\n' > ~/matter-adopt-test/note-b.md
+   ```
+
+2. With the app running (`bun run dev` or `bun run dev:fixture`), open
+   `~/matter-adopt-test` in the folder picker. It is unmarked with no marked
+   children, so it shows **"Not a table yet"** with an **"Adopt this folder as a
+   table"** button.
+
+3. Click adopt. The app writes `matter.json` (`{}`); the root watcher sees the new
+   top-level marker, re-scans, and the folder appears **live as one untyped table**
+   with `note-a` and `note-b` as rows and a `title` column. No reload needed.
+
+4. Confirm the marker landed:
+
+   ```sh
+   cat ~/matter-adopt-test/matter.json   # -> {}
+   ```
+
+If the table does not appear after the click, run step 4 anyway to localize it:
+
+- `matter.json` is `{}` but the grid stays empty -> the **write works, the live
+  re-scan did not fire**. Reopen the folder; if the table shows after reopen, that
+  is a root-watcher bug (the non-recursive watch missed the marker create).
+- `matter.json` is absent and an error shows under the button -> the **write
+  failed**; the message under the button is the cause (permissions, path).
+
+Empty-folder variant: an unmarked folder with **no** `.md` adopts the same way and
+shows a table with zero rows. Clean up with `rm -rf ~/matter-adopt-test`.

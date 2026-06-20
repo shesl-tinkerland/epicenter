@@ -1,28 +1,26 @@
 /**
- * `/api/ai` sub-app: AI chat across OpenAI and Gemini, over two transports.
+ * `/api/ai` sub-app: AI chat across OpenAI and Gemini over one transport.
  *
- *   - `/api/ai/chat`      SSE streaming; history arrives in the POST body.
- *   - `/api/ai/chat/doc`  Doc-as-wire; history lives in a synced Yjs
- *                         conversation doc and the server streams assistant
- *                         tokens into it as a sync peer (see
- *                         `../ai/doc-generation.ts`). The request stays open
- *                         for the whole generation; aborting it cancels.
+ *   - `/api/ai/chat`  SSE streaming; history arrives in the POST body, tokens
+ *                     stream back over the open HTTP connection.
  *
- * The two transports are not interchangeable, and SSE is not legacy. SSE
- * carries interactive tool-calling chat: tools run in the client against its
- * local workspace and mutations wait on human approval mid-turn. A doc-as-wire
- * sync peer cannot express that, because the actor snapshots the prompt once,
- * writes as the single owner of the assistant message, and never reads the doc
- * back mid-generation. Doc-as-wire is for server-authored text streamed into a
- * synced doc (cross-device continuity, background completion). Folding SSE onto
- * doc-as-wire would mean rebuilding client tool execution and approval as a
- * two-writer doc protocol, a different and harder primitive.
+ * This is a stateless, metered inference stream: it sees a prompt and returns
+ * tokens, and it never reads or writes a conversation doc (ADR-0033). A
+ * conversation is a synced doc written only by an in-process peer (a browser tab
+ * or a daemon); the cloud is a blind relay plus this token stream. The browser's
+ * Epicenter provider posts here for house-key inference and writes the tokens
+ * into its own local doc, which syncs to every device.
+ *
+ * Tool-calling chat runs the tools in the client against its local workspace,
+ * with mutations waiting on human approval mid-turn; the client drives that loop
+ * and this route is only its inference backend.
  *
  * Library-side, billing-free. The deployment composes any plan or credit
- * gating in front of this app via `mountAiApp`'s `policies`. apps/api
- * passes `chargeAiCreditsWithAutumn`; a self-hosted shared-wiki deployment
- * passes no policies. Both routes carry `data.model` in the body, which is
- * what the billing policy reads; the provider is derived from the catalog.
+ * gating in front of this app via `mountAiApp`'s `policies`. apps/api passes
+ * `chargeAiCreditsWithAutumn` (reserve -> 402 -> confirm in this one request);
+ * a self-hosted shared-wiki deployment passes no policies. The body carries
+ * `data.model`, which the billing policy reads; the provider is derived from the
+ * catalog.
  *
  * BYOK: callers may pass `apiKey` in the request body, in which case the
  * deployment's provider key is ignored. No billing implications; the
@@ -34,6 +32,10 @@
  * both at deploy time; see apps/api/wrangler.jsonc for why.
  */
 
+import {
+	createAdapterForModel,
+	HOUSE_KEY_ENV_VAR,
+} from '@epicenter/ai-adapters';
 import {
 	AiChatError,
 	AiChatErrorStatus,
@@ -52,15 +54,11 @@ import {
 	type Tool,
 	toServerSentEventsResponse,
 } from '@tanstack/ai';
-import { createGeminiChat } from '@tanstack/ai-gemini';
-import { createOpenaiChat } from '@tanstack/ai-openai';
 import { type } from 'arktype';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { describeRoute } from 'hono-openapi';
 import { Ok, type Result } from 'wellcrafted/result';
-import { runDocGeneration } from '../ai/doc-generation.js';
 import { createRequireOwnership } from '../middleware/require-ownership.js';
-import { doName } from '../owner.js';
 import type { OwnershipRule } from '../ownership.js';
 import type { Env } from '../types.js';
 
@@ -89,32 +87,11 @@ const aiChatBody = type({
 });
 
 /**
- * Canonical content-doc guid grammar: four dot-separated safe segments
- * (`workspaceId.collection.rowId.field`, see `docGuid` in
- * `@epicenter/workspace`). Ownership scoping happens upstream via
- * `doName(ownerId, guid)`; this only rejects strings that could never name
- * a content doc.
- */
-const DOC_GUID_REGEX =
-	/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*){3}$/;
-
-const aiChatDocBody = type({
-	guid: type('string').narrow((s) => DOC_GUID_REGEX.test(s)),
-	// The generation identity is no longer in the body: the actor reads the
-	// client-minted `generationId` off the unanswered user turn in the doc.
-	// This POST is a wake nudge that names the room and the model.
-	// Same options as the SSE route minus `tools` (doc-as-wire chat is
-	// text-only) and minus `messages` (history lives in the doc).
-	data: chatOptions.omit('tools').merge(modelChoice),
-	/** Caller-provided API key for BYOK. When present, the deployment's house key is bypassed. */
-	'apiKey?': 'string | undefined',
-});
-
-/**
  * Resolve the provider adapter for a request: BYOK key wins, else the
- * deployment's house key, else `ProviderNotConfigured`.
+ * deployment's house key, else `ProviderNotConfigured`. Exported so the catalog's
+ * model -> provider switch stays in one place.
  */
-function resolveAdapter({
+export function resolveAdapter({
 	model,
 	userApiKey,
 	env,
@@ -126,118 +103,58 @@ function resolveAdapter({
 	AnyTextAdapter,
 	ReturnType<typeof AiChatError.ProviderNotConfigured>['error']
 > {
-	// The catalog entry is discriminated on `provider`, so this switch narrows
-	// `entry.id` to the matching SDK model union: each adapter call is typed
-	// with no cast.
+	// Key policy stays here: BYOK wins, else the deployment's per-provider house
+	// key, else `ProviderNotConfigured`. The env var that holds each house key is
+	// single-homed in `@epicenter/ai-adapters`; adapter construction is delegated
+	// there too.
 	const entry = MODELS_BY_ID[model];
-	switch (entry.provider) {
-		case 'openai': {
-			const apiKey = userApiKey ?? env.OPENAI_API_KEY;
-			if (!apiKey) {
-				return AiChatError.ProviderNotConfigured({ provider: entry.provider });
-			}
-			return Ok(createOpenaiChat(entry.id, apiKey));
-		}
-		case 'gemini': {
-			const apiKey = userApiKey ?? env.GEMINI_API_KEY;
-			if (!apiKey) {
-				return AiChatError.ProviderNotConfigured({ provider: entry.provider });
-			}
-			return Ok(createGeminiChat(entry.id, apiKey));
-		}
-		default:
-			return entry satisfies never;
+	const houseKey = env[HOUSE_KEY_ENV_VAR[entry.provider]];
+	const apiKey = userApiKey ?? houseKey;
+	if (!apiKey) {
+		return AiChatError.ProviderNotConfigured({ provider: entry.provider });
 	}
+	return Ok(createAdapterForModel(model, apiKey));
 }
 
 /**
  * `/api/ai/chat` sub-app. Auth and credit policies are supplied by the
  * deployment via {@link mountAiApp}.
  */
-const aiApp = new Hono<Env>()
-	.post(
-		API_ROUTES.ai.chat.pattern,
-		describeRoute({
-			description: 'Stream AI chat completions via SSE',
-			tags: ['ai'],
-		}),
-		sValidator('json', aiChatBody),
-		async (c) => {
-			const { messages, data, apiKey: userApiKey } = c.req.valid('json');
-			const { model, tools, ...options } = data;
+const aiApp = new Hono<Env>().post(
+	API_ROUTES.ai.chat.pattern,
+	describeRoute({
+		description: 'Stream AI chat completions via SSE',
+		tags: ['ai'],
+	}),
+	sValidator('json', aiChatBody),
+	async (c) => {
+		const { messages, data, apiKey: userApiKey } = c.req.valid('json');
+		const { model, tools, ...options } = data;
 
-			const { data: adapter, error: adapterError } = resolveAdapter({
-				model,
-				userApiKey,
-				env: c.env,
-			});
-			if (adapterError) {
-				return c.json(
-					{ data: null, error: adapterError },
-					AiChatErrorStatus.ProviderNotConfigured,
-				);
-			}
+		const { data: adapter, error: adapterError } = resolveAdapter({
+			model,
+			userApiKey,
+			env: c.env,
+		});
+		if (adapterError) {
+			return c.json(
+				{ data: null, error: adapterError },
+				AiChatErrorStatus.ProviderNotConfigured,
+			);
+		}
 
-			const abortController = new AbortController();
-			const stream = chat({
-				adapter,
-				messages: messages as Array<ModelMessage>,
-				...options,
-				tools: tools as Array<Tool> | undefined,
-				abortController,
-			});
+		const abortController = new AbortController();
+		const stream = chat({
+			adapter,
+			messages: messages as Array<ModelMessage>,
+			...options,
+			tools: tools as Array<Tool> | undefined,
+			abortController,
+		});
 
-			return toServerSentEventsResponse(stream, { abortController });
-		},
-	)
-	.post(
-		API_ROUTES.ai.chatDoc.pattern,
-		describeRoute({
-			description:
-				'Generate an AI chat turn into a synced Yjs conversation doc',
-			tags: ['ai'],
-		}),
-		sValidator('json', aiChatDocBody),
-		async (c) => {
-			const { guid, data, apiKey: userApiKey } = c.req.valid('json');
-			const { model, ...options } = data;
-
-			const { data: adapter, error: adapterError } = resolveAdapter({
-				model,
-				userApiKey,
-				env: c.env,
-			});
-			if (adapterError) {
-				return c.json(
-					{ data: null, error: adapterError },
-					AiChatErrorStatus.ProviderNotConfigured,
-				);
-			}
-
-			const room = c.var.rooms.get(doName(c.var.ownerId, guid));
-
-			// Stop = the client aborting this fetch. Forward the request
-			// signal so the provider stream cancels and the actor writes
-			// `finish: cancelled` (its final sync rides ctx.waitUntil).
-			const abortController = new AbortController();
-			const requestSignal = c.req.raw.signal;
-			if (requestSignal.aborted) abortController.abort();
-			else
-				requestSignal.addEventListener('abort', () => abortController.abort());
-
-			const { data: generation, error } = await runDocGeneration({
-				room,
-				signal: abortController.signal,
-				waitUntil: (promise) => c.executionCtx.waitUntil(promise),
-				startStream: (messages) =>
-					chat({ adapter, messages, ...options, abortController }),
-			});
-			if (error) {
-				return c.json({ data: null, error }, AiChatErrorStatus[error.name]);
-			}
-			return c.json({ data: generation, error: null });
-		},
-	);
+		return toServerSentEventsResponse(stream, { abortController });
+	},
+);
 
 /**
  * Mount the AI surface on a deployment's server app.

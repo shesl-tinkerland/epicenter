@@ -52,7 +52,7 @@
 						onError: (error) => loading.reject({ cause: error }),
 						onSuccess: async (transformedText) => {
 							sound.playSoundIfEnabled('transformationComplete');
-							const notice = await deliverTransformationResult({
+							const { notice } = await deliverTransformationResult({
 								text: transformedText,
 								recordingId,
 							});

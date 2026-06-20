@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { loadVault } from '../load/fs';
+import { loadPath } from '../load/fs';
 import { classifyRows } from './conformance';
 import { validateContract } from './contract';
 import type { Row } from './parse';
@@ -185,7 +185,7 @@ describe('projects a vault into one db whose tables JOIN', () => {
 	test('adaptations JOIN pages on the reference column returns the resolved rows', async () => {
 		// Load the fixture and project every typed table into one in-memory db, exactly as the Vault
 		// fills its shared .matter db (each folder -> a table named for the folder).
-		const tables = await loadVault(exampleVault);
+		const tables = await loadPath(exampleVault);
 		const db = new Database(':memory:');
 		for (const table of tables) {
 			if (table.status !== 'readable' || table.read.view.mode !== 'typed')

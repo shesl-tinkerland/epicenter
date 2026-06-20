@@ -23,9 +23,9 @@ export const TextServiceLive = {
 		}),
 
 	writeToCursor: async (text) => {
-		const { error } = await commands.writeText(text);
+		const { data, error } = await commands.writeText(text);
 		if (error !== null) return TextError.WriteToCursor({ cause: error });
-		return Ok(undefined);
+		return Ok(data);
 	},
 
 	simulateEnterKeystroke: async () => {

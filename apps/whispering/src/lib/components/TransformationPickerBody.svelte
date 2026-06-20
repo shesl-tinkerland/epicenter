@@ -66,15 +66,6 @@
 	});
 </script>
 
-{#snippet renderTransformationIdTitle(transformation: Transformation)}
-	<div class="flex items-center gap-2">
-		<Badge variant="id" class="shrink-0 max-w-16 truncate">
-			{transformation.id}
-		</Badge>
-		<span class="font-medium truncate"> {transformation.title} </span>
-	</div>
-{/snippet}
-
 <Command.Root loop class={className}>
 	<Command.Input {placeholder} bind:ref={inputElement} />
 	<Command.Empty>No transformation found.</Command.Empty>
@@ -86,7 +77,12 @@
 				class="flex items-center justify-between gap-2 p-2"
 			>
 				<div class="flex flex-col min-w-0">
-					{@render renderTransformationIdTitle(transformation)}
+					<div class="flex items-center gap-2">
+						<Badge variant="id" class="shrink-0 max-w-16 truncate">
+							{transformation.id}
+						</Badge>
+						<span class="font-medium truncate"> {transformation.title} </span>
+					</div>
 					{#if transformation.description}
 						<span class="text-sm text-muted-foreground line-clamp-2">
 							{transformation.description}

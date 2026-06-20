@@ -22,13 +22,16 @@ use transcription::{
 };
 
 pub mod command;
-use command::open_accessibility_settings;
+use command::{
+    get_microphone_permission, open_accessibility_settings, request_accessibility_permission,
+    request_microphone_permission,
+};
 
 pub mod download;
 use download::{cancel_download, DownloadManager};
 
 pub mod media;
-use media::{pause_active_media, resume_media};
+use media::{pause_playback, resume_playback};
 
 // Flag-gated (`WHISPERING_TIMING`) latency instrumentation for the desktop
 // audio pipeline. The `timing_note!` macro it exports is used across the
@@ -68,6 +71,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             transcribe_recording,
             prewarm_model,
             open_accessibility_settings,
+            request_accessibility_permission,
+            get_microphone_permission,
+            request_microphone_permission,
             set_unload_policy,
             get_transcription_state,
             link_local_model,
@@ -77,9 +83,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             download_model,
             reveal_models_folder,
             cancel_download,
-            pause_active_media,
-            resume_media,
+            pause_playback,
+            resume_playback,
             keyboard::commands::set_keyboard_shortcuts,
+            keyboard::commands::set_auto_paste_enabled,
             keyboard::commands::set_keyboard_capturing,
             keyboard::commands::get_dictation_capability,
         ])
@@ -234,6 +241,7 @@ pub async fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
@@ -263,7 +271,7 @@ pub async fn run() {
             // views. There is no FE-driven start: trust is a fact about the
             // process that holds the tap, so the tap holder owns it.
             #[cfg(desktop)]
-            app.manage(keyboard::KeyboardListener::new(app.handle().clone()));
+            app.manage(keyboard::TapController::new(app.handle().clone()));
 
             // Create the recording overlay as a non-activating NSPanel up front
             // (hidden); the frontend shows it when recording starts.
@@ -326,68 +334,127 @@ pub async fn run() {
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-/// Writes text at the cursor position using the clipboard sandwich technique
+/// Where `write_text` left the transcript.
 ///
-/// This method preserves the user's existing clipboard content by:
-/// 1. Saving the current clipboard content
-/// 2. Writing the new text to clipboard
-/// 3. Simulating a paste operation (Cmd+V on macOS, Ctrl+V elsewhere)
-/// 4. Restoring the original clipboard content
+/// - `Pasted`: a synthetic paste landed it at the cursor and the user's original
+///   clipboard was restored.
+/// - `LeftOnClipboard`: delivery could not paste (no Accessibility grant, or the
+///   paste itself failed), so the transcript was left on the clipboard as the
+///   fallback — always one ⌘V away.
 ///
-/// This approach is faster than typing character-by-character and preserves
-/// the user's clipboard, making it ideal for inserting transcribed text.
+/// The frontend maps this to the dictation pill's delivery reach.
+#[derive(Clone, Copy, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum WriteTextOutcome {
+    Pasted,
+    LeftOnClipboard,
+}
+
+/// Wait after writing the transcript to the clipboard before posting ⌘V. The
+/// clipboard write is synchronous (the plugin blocks on the OS pasteboard), so
+/// this is not "waiting for the clipboard" — it gives the freshly built event tap
+/// a beat to come up before the keystroke is posted.
+const PRE_PASTE_SETTLE: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Wait after posting ⌘V before restoring the user's original clipboard. enigo
+/// exposes no paste-completion signal (`CGEventPost` returns nothing), so this is
+/// the window the target app has to consume the paste before the old clipboard
+/// goes back. Restore too early and a slow app pastes the original content
+/// instead of the transcript. Espanso's equivalent default is 300ms; ours is
+/// 100ms (mirrored by `COPY_SETTLE_MS` in selection.ts — keep them in step).
+const PRE_RESTORE_SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Delivers text to the cursor, falling back to the clipboard when it cannot.
+///
+/// The reach is decided from the live Accessibility *capability* before the
+/// keystroke, not from the keystroke's result. A `Broken` grant — one that still
+/// reads as trusted via `AXIsProcessTrusted` but whose synthetic events the OS
+/// drops — lets the paste return `Ok` while nothing lands, so observing the
+/// result is unreliable. When we can paste, the clipboard sandwich (save → write
+/// → paste → restore) preserves the user's clipboard; when we cannot, the
+/// transcript is left on the clipboard as the fallback. The transcript is
+/// independently saved to history either way, so this is a reduced reach, never
+/// data loss.
 #[tauri::command]
 #[specta::specta]
-async fn write_text(app: tauri::AppHandle, text: String) -> Result<(), String> {
-    // 1. Save current clipboard content
+async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutcome, String> {
+    // Can a synthetic ⌘V actually land right now? On macOS, gate on the
+    // supervisor's capability, not a bare `AXIsProcessTrusted`. The supervisor
+    // folds the tap's liveness into the value, so `Active` alone is paste-capable.
+    // `Broken` is a stale post-update grant that still reads as trusted — so
+    // `is_trusted()`, and enigo's own `Enigo::new` permission check (which calls
+    // the same API), would both wave it through — but whose ⌘V the OS silently
+    // drops while `enigo` still returns `Ok`. The old `is_trusted()` gate took
+    // that path: it reported `Pasted` and restored the clipboard over the
+    // transcript, a silent loss. Refuse it here. Every other desktop has no
+    // Accessibility gate, so they paste unconditionally.
+    #[cfg(target_os = "macos")]
+    let can_paste = {
+        use crate::keyboard::{DictationCapability, TapController};
+        app.state::<TapController>().capability() == DictationCapability::Active
+    };
+    #[cfg(not(target_os = "macos"))]
+    let can_paste = true;
+
+    if !can_paste {
+        app.clipboard()
+            .write_text(&text)
+            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+        return Ok(WriteTextOutcome::LeftOnClipboard);
+    }
+
+    // Clipboard sandwich: borrow the clipboard to carry the paste, restore it only
+    // once the paste has provably landed.
     let original_clipboard = app.clipboard().read_text().ok();
 
-    // 2. Write new text to clipboard
     app.clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
 
-    // Small delay to ensure clipboard is updated
-    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    // Let the event tap settle before posting the keystroke (see PRE_PASTE_SETTLE).
+    tokio::time::sleep(PRE_PASTE_SETTLE).await;
 
-    // 3. Simulate paste operation using virtual key codes (layout-independent)
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    // Simulate paste using virtual key codes (layout-independent). Issue every
+    // press/release even on a mid-sequence error so a failure can never leave the
+    // modifier stuck down.
+    let paste_result = (|| -> Result<(), String> {
+        let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        let (modifier, v_key) = (Key::Meta, Key::Other(9)); // Virtual key code for V on macOS
+        #[cfg(target_os = "windows")]
+        let (modifier, v_key) = (Key::Control, Key::Other(0x56)); // VK_V on Windows
+        #[cfg(target_os = "linux")]
+        let (modifier, v_key) = (Key::Control, Key::Unicode('v')); // Fallback for Linux
 
-    // Use virtual key codes for V to work with any keyboard layout
-    #[cfg(target_os = "macos")]
-    let (modifier, v_key) = (Key::Meta, Key::Other(9)); // Virtual key code for V on macOS
-    #[cfg(target_os = "windows")]
-    let (modifier, v_key) = (Key::Control, Key::Other(0x56)); // VK_V on Windows
-    #[cfg(target_os = "linux")]
-    let (modifier, v_key) = (Key::Control, Key::Unicode('v')); // Fallback for Linux
+        let press_modifier = enigo.key(modifier, Direction::Press);
+        let press_v = enigo.key(v_key, Direction::Press);
+        let release_v = enigo.key(v_key, Direction::Release);
+        let release_modifier = enigo.key(modifier, Direction::Release);
+        press_modifier
+            .and(press_v)
+            .and(release_v)
+            .and(release_modifier)
+            .map_err(|e| format!("Failed to simulate paste: {}", e))
+    })();
 
-    // Press modifier + V
-    enigo
-        .key(modifier, Direction::Press)
-        .map_err(|e| format!("Failed to press modifier key: {}", e))?;
-    enigo
-        .key(v_key, Direction::Press)
-        .map_err(|e| format!("Failed to press V key: {}", e))?;
+    if paste_result.is_err() {
+        // Trusted but the paste still failed (rare). The transcript is already on
+        // the clipboard from above; keep it there rather than restoring it away.
+        return Ok(WriteTextOutcome::LeftOnClipboard);
+    }
 
-    // Release V + modifier (in reverse order for proper cleanup)
-    enigo
-        .key(v_key, Direction::Release)
-        .map_err(|e| format!("Failed to release V key: {}", e))?;
-    enigo
-        .key(modifier, Direction::Release)
-        .map_err(|e| format!("Failed to release modifier key: {}", e))?;
+    // Give the target app the paste-consume window before restoring the clipboard
+    // (see PRE_RESTORE_SETTLE).
+    tokio::time::sleep(PRE_RESTORE_SETTLE).await;
 
-    // Small delay to ensure paste completes
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    // 4. Restore original clipboard content
+    // Restore the user's original clipboard now that the paste has landed.
     if let Some(content) = original_clipboard {
         app.clipboard()
             .write_text(&content)
             .map_err(|e| format!("Failed to restore clipboard: {}", e))?;
     }
 
-    Ok(())
+    Ok(WriteTextOutcome::Pasted)
 }
 
 /// Simulates pressing the Enter/Return key

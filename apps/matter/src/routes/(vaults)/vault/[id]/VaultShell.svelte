@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Button } from '@epicenter/ui/button';
 	import * as Empty from '@epicenter/ui/empty';
 	import { Loading } from '@epicenter/ui/loading';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
@@ -31,22 +32,49 @@
 		vault.tables.find((table) => table.folderName === activeName) ??
 			vault.tables[0],
 	);
+
+	// Adopt the root as a table (writes the `{}` marker). The watcher re-scans on the new marker and
+	// surfaces the table live, so success needs no manual refresh; only a write failure shows here.
+	let adopting = $state(false);
+	let adoptError = $state<string | undefined>(undefined);
+	async function adopt(): Promise<void> {
+		adopting = true;
+		adoptError = undefined;
+		try {
+			await vault.adopt();
+		} catch (error) {
+			adoptError = error instanceof Error ? error.message : String(error);
+		} finally {
+			adopting = false;
+		}
+	}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
 	{#await vault.whenReady}
 		<Loading class="flex-1" label="Loading {vault.folderName}" />
 	{:then _}
-		<!-- A readable root always resolves to at least one table (the root itself when it has no
-		     child folders), so this empty case is the brief gap before the first table list lands,
-		     not a dead end. -->
+		<!-- No tables means this folder is not marked and has no marked children (ADR-0029): matter is
+		     a declared store, so it shows nothing until a folder is adopted. Offer to adopt the root
+		     (write a `{}` marker); the watcher then surfaces it as an untyped table live. -->
 		{#if vault.tables.length === 0}
 			<Empty.Root class="flex-1 border-0">
 				<Empty.Media variant="icon"><LayersIcon /></Empty.Media>
-				<Empty.Title>No tables yet</Empty.Title>
+				<Empty.Title>Not a table yet</Empty.Title>
 				<Empty.Description>
-					{vault.folderName} is empty. Add a folder of markdown and it appears here.
+					{vault.folderName} has no matter.json, so matter shows nothing here. Adopt it to
+					create an untyped table from the markdown already inside, or add a matter.json
+					yourself.
 				</Empty.Description>
+				<Empty.Content>
+					<Button onclick={adopt} disabled={adopting}>
+						<LayersIcon />
+						{adopting ? 'Adopting...' : 'Adopt this folder as a table'}
+					</Button>
+					{#if adoptError}
+						<p class="text-sm text-destructive">{adoptError}</p>
+					{/if}
+				</Empty.Content>
 			</Empty.Root>
 		{:else}
 			<div class="flex min-h-10 items-center gap-1 overflow-x-auto border-b px-2 py-1">

@@ -116,7 +116,7 @@ function createManualRecorder() {
 			},
 		}),
 
-		async startRecording() {
+		async startRecording(onLevel?: (level: number) => void) {
 			if (_starting) return ManualRecorderError.AlreadyRecording();
 			_starting = true;
 			try {
@@ -127,7 +127,7 @@ function createManualRecorder() {
 				if (_current) return ManualRecorderError.AlreadyRecording();
 				const params = manualRecorderConfig.resolveStartParams(nanoid());
 				const { data, error: startRecordingError } =
-					await ManualRecorderLive.startRecording(params);
+					await ManualRecorderLive.startRecording({ ...params, onLevel });
 
 				if (startRecordingError) return Err(startRecordingError);
 
