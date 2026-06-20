@@ -64,6 +64,7 @@
 		{level}
 		onStop={() => sendAction('stop')}
 		onCancel={() => sendAction('cancel')}
+		onShipRaw={() => sendAction('ship-raw')}
 		onReveal={focusMainWindow}
 	/>
 </div>

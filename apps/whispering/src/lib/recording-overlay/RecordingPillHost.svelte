@@ -22,6 +22,7 @@
 			level={webPillLevel.level}
 			onStop={() => dispatchPillAction('stop')}
 			onCancel={() => dispatchPillAction('cancel')}
+			onShipRaw={() => dispatchPillAction('ship-raw')}
 		/>
 	</div>
 {/if}

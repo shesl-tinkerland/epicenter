@@ -135,17 +135,23 @@ export async function processRecordingPipeline({
 	// dodge. Polish is the only thing on the automatic path; there is no
 	// auto-running Recipe. See ADR 0041.
 	//
-	// Show the floating "Polishing..." HUD only when an AI pass is actually about
-	// to run (not in speed mode), and hand its abort signal to runPolish so the
-	// HUD's "ship raw" control can cancel the in-flight pass. begin/end bracket the
-	// call so the pill is torn down on success, failure, or abort.
+	// The "Polishing…" HUD and its ship-raw control live on the dictation pill, so
+	// the lifecycle's polishing phase and the abort signal are dictation-only: file
+	// import has no pill to cancel from and keeps its own progress toast. The pill
+	// shows the HUD only when an AI pass actually runs (not in speed mode); begin/end
+	// bracket the call so the controller is dropped on success, failure, or abort.
 	const willPolish = polishWillRun(transcribedText);
-	const signal = willPolish ? polishHud.begin() : undefined;
+	const showPolishHud = willPolish && isDictation;
+	let signal: AbortSignal | undefined;
+	if (showPolishHud) {
+		dictationLifecycle.markPolishing();
+		signal = polishHud.begin();
+	}
 	const { data: polishedText, error: polishError } = await runPolish({
 		input: transcribedText,
 		signal,
 	});
-	if (willPolish) polishHud.end();
+	if (showPolishHud) polishHud.end();
 	// Polish is best-effort: a failed AI pass carries the raw transcript in
 	// `fallback`, so a transcript is never lost to a polish error. Surface the
 	// failure without blocking delivery.

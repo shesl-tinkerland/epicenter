@@ -22,6 +22,7 @@
 		level,
 		onStop,
 		onCancel,
+		onShipRaw,
 		onReveal,
 	}: {
 		/** What to display, or `null` when the dictation is idle (hidden). */
@@ -32,6 +33,8 @@
 		onStop: () => void;
 		/** Discard the live manual recording. */
 		onCancel: () => void;
+		/** Skip the in-flight Polish pass and deliver the raw transcript now. */
+		onShipRaw: () => void;
 		/** Reveal Whispering by raising the main window (desktop). Omitted on web,
 		 * where the app window is already in front. */
 		onReveal?: () => void;
@@ -79,7 +82,10 @@
 	} as const satisfies Record<DeliveryReach, Chip>;
 
 	const chip = $derived.by((): Chip | null => {
-		if (!status || status.phase === 'recording') return null;
+		// `recording` renders the meter and `polishing` its own HUD (with an action),
+		// so neither is a plain chip.
+		if (!status || status.phase === 'recording' || status.phase === 'polishing')
+			return null;
 		switch (status.phase) {
 			case 'transcribing':
 				return {
@@ -119,6 +125,11 @@
 	function handleCancel(event: MouseEvent) {
 		event.stopPropagation();
 		onCancel();
+	}
+
+	function handleShipRaw(event: MouseEvent) {
+		event.stopPropagation();
+		onShipRaw();
 	}
 </script>
 
@@ -189,6 +200,25 @@
 						<XIcon class="size-4" />
 					</button>
 				{/if}
+			</div>
+		{:else if status.phase === 'polishing'}
+			<!-- The Polish HUD: same spot as the meter, a spinner and "Polishing…"
+			     label masking the ~1s AI pass, plus a single ship-raw control to skip
+			     it and take the raw transcript now (ADR 0041). -->
+			<div class="icon">
+				<LoaderCircleIcon class="size-4 animate-spin" />
+			</div>
+			<span class="label">Polishing…</span>
+			<div class="actions">
+				<button
+					type="button"
+					class="action cancel"
+					aria-label="Ship raw transcript now"
+					title="Ship raw transcript now"
+					onclick={handleShipRaw}
+				>
+					<XIcon class="size-4" />
+				</button>
 			</div>
 		{:else if chip}
 			<!-- One chip block for every non-recording phase. A failure is glanceable
