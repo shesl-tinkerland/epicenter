@@ -108,5 +108,6 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) | A daemon answers through the first inference backend it can satisfy: byok, else opted-in metered, else host without answering | Accepted |
 | [0039](0039-dictation-feedback-is-a-projection-of-one-lifecycle-state.md) | Dictation feedback is a projection of one lifecycle state, not an event log | Accepted |
 | [0040](0040-a-cursor-write-that-cannot-paste-falls-back-to-the-clipboard-decided-from-the-grant.md) | A cursor write that cannot paste falls back to the clipboard, decided from the grant | Accepted |
+| [0041](0041-replace-transformations-with-a-dictionary-polish-and-a-portable-recipe-library.md) | Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library | Accepted |
 
 When you add an ADR, add its row here.
