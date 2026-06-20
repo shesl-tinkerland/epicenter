@@ -4,11 +4,11 @@
  * Turns a user passphrase into the keyring that drives a value-level encrypted
  * vault (see `createEncryptedYkvLww`). This is the one piece that makes the vault
  * zero-knowledge: the key comes from a passphrase the server never sees, not
- * from a server-issued keyring (ADR 0005). The encrypted-KV primitive is
+ * from a server-issued keyring (ADR 0043). The encrypted-KV primitive is
  * key-source agnostic, so this module is the entire difference between
  * encrypted-at-rest and end-to-end.
  *
- * ## Key flow (ADR 0005)
+ * ## Key flow (ADR 0043)
  *
  * ```txt
  * passphrase + salt ─Argon2id─► KEK ─unwraps─► master key ─► keyring
@@ -31,7 +31,7 @@
  * There is deliberately NO HKDF step between the master key and the keyring.
  * HKDF scoping (the server path's `deriveWorkspaceKey`) isolates many workspaces
  * sharing one root key; a vault has its own random master key and a single
- * namespace, so there is no sibling to isolate from. ADR 0005's key flow goes
+ * namespace, so there is no sibling to isolate from. ADR 0043's key flow goes
  * master key → keyring directly, and so does this.
  *
  * ## Brute-force surface, stated honestly

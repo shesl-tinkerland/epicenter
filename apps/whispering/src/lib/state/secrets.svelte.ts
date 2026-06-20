@@ -20,9 +20,9 @@ import { createVault, type Vault, VaultError, type VaultState } from './vault';
  *
  * A secret has exactly one home at a time. Enabling sync *migrates* each secret
  * off the device into the vault and clears the device copy; disabling migrates
- * back. This is not VS Code-style layered override resolution (ADR 0004 rejected
+ * back. This is not VS Code-style layered override resolution (ADR 0041 rejected
  * that): there is no precedence stack, just a single runtime-chosen home, which
- * is the one place ADR 0004 allows destination to be a user choice.
+ * is the one place ADR 0041 allows destination to be a user choice.
  *
  * Reads return an explicit {@link SecretRead}, never a blank string for a locked
  * vault, so a caller can tell "not unlocked yet" apart from "never set". That is
@@ -38,15 +38,15 @@ import { createVault, type Vault, VaultError, type VaultState } from './vault';
  * participate in Svelte's tracking scope, so the readiness UI could never react to
  * it). The cost of this shape is real and honest: the vault is a Y.Doc and must
  * hydrate, so a read taken before the gate sees the un-hydrated `absent` default
- * (the blank-key window ADR 0004 guards against). That is a wiring bug, not a
+ * (the blank-key window ADR 0041 guards against). That is a wiring bug, not a
  * runtime state, so it fails loudly in dev rather than passing silently.
  */
 
 /**
  * The keys the facade routes between the device and the vault, and the set it
  * migrates on sync enable/disable, are {@link SECRET_KEYS} — owned by the device
- * handle (ADR 0004: the device handle exposes its secret keys directly, no
- * registry). ADR 0004's secret-name guard test keeps account-synced KV from ever
+ * handle (ADR 0041: the device handle exposes its secret keys directly, no
+ * registry). ADR 0041's secret-name guard test keeps account-synced KV from ever
  * matching one of these. `SecretKey` is re-exported for callers of this facade.
  */
 export type { SecretKey };
@@ -78,7 +78,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
 	// value set locally now, or a value/metadata delivered over the relay later.
 	// `vaultState` already covers lifecycle transitions (lock/unlock/provision);
 	// this covers content. The subscription outlives the module singleton, which
-	// is fine until the per-account lifecycle (ADR 0005) gives the vault a real
+	// is fine until the per-account lifecycle (ADR 0042) gives the vault a real
 	// dispose.
 	let revision = $state(0);
 	vault.onChange(() => {
@@ -99,7 +99,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
 	 * The boot gate, enforced loudly. Every read and write assumes the vault has
 	 * hydrated; the layout awaits {@link whenReady} once before anything reads a
 	 * secret. A call that beats the gate would read the un-hydrated `absent`
-	 * default and could mis-home a secret (the blank-key window ADR 0004 guards
+	 * default and could mis-home a secret (the blank-key window ADR 0041 guards
 	 * against), so it is a wiring bug, not a runtime condition: surface it rather
 	 * than letting it pass. It reports and returns rather than throwing, because a
 	 * pre-gate device read is usually still correct (`localStorage` is sync); only
@@ -195,7 +195,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
 		 * Abandon the vault without the passphrase: the recovery path for a forgotten
 		 * passphrase. Wipes this device's vault and returns to device-only, leaving
 		 * the device secrets empty to regenerate. This is the "losing the passphrase
-		 * loses the synced values" outcome ADR 0005 calls acceptable, made reachable;
+		 * loses the synced values" outcome ADR 0042 calls acceptable, made reachable;
 		 * without it a `locked` vault no one can unlock is a dead end (`disableSync`
 		 * needs unlocking to migrate, `unlock` rejects the wrong passphrase, `enableSync`
 		 * is already provisioned).
@@ -204,7 +204,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
 		 * preserves keys by migrating them back; `forget` accepts their loss. When relay
 		 * sync lands, `forget` must detach-and-wipe this device's local replica WITHOUT
 		 * propagating CRDT deletes, so forgetting the passphrase on one device never
-		 * destroys a sibling device's still-unlockable vault (ADR 0005). Local-only v1
+		 * destroys a sibling device's still-unlockable vault (ADR 0042). Local-only v1
 		 * has no relay, so the local teardown below is already that detach.
 		 */
 		forget(): void {
@@ -233,7 +233,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
 /**
  * The Whispering secrets singleton.
  *
- * The vault is its own Y.Doc and room (ADR 0005), persisted locally through
+ * The vault is its own Y.Doc and room (ADR 0042), persisted locally through
  * IndexedDB so `locked` vs `device-only` survives a reload. Relay sync (the
  * cross-device half) and desktop OS-keychain auto-unlock are later waves; this is
  * local-only for now. Mirrors `whispering.browser.ts`, which attaches
@@ -247,7 +247,7 @@ export function createSecrets({ vault }: { vault: Vault }) {
  * relay's `/owners/:ownerId/rooms/:guid` partitioning) under the framework's
  * dispose-on-sign-out / remount-on-sign-in lifecycle. The guid stays a stable
  * per-app constant; the owner lives in the persistence layer, not the guid string.
- * See ADR 0005. Until then a fixed guid is correct: no auth, no relay, one
+ * See ADR 0042. Until then a fixed guid is correct: no auth, no relay, one
  * implicit local owner.
  */
 const VAULT_DOC_GUID = 'epicenter-whispering-vault';

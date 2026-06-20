@@ -13,7 +13,7 @@ import type * as Y from 'yjs';
 
 /**
  * The vault: a passphrase-locked, end-to-end-encrypted credential store
- * (ADR 0005). Pure crypto and lock lifecycle. It knows nothing about the device
+ * (ADR 0042). Pure crypto and lock lifecycle. It knows nothing about the device
  * handle, about which secrets are provider keys, or about the UI. That routing
  * lives one layer up in `secrets.svelte.ts`; the vault is just the encrypted box.
  *

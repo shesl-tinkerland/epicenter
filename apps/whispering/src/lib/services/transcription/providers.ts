@@ -34,7 +34,7 @@ type CloudProvider = {
 	/**
 	 * The provider's API key: a secret, so it routes through the credential
 	 * facade (`secrets.get`), not raw `deviceConfig`. `SecretKey` (not the wider
-	 * `DeviceConfigKey`) makes that structural, per ADR 0004.
+	 * `DeviceConfigKey`) makes that structural, per ADR 0041.
 	 */
 	apiKeyConfigKey: SecretKey;
 	/**

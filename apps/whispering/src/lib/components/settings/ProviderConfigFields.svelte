@@ -227,25 +227,27 @@
 	const fields = $derived(PROVIDER_FIELDS[provider]);
 
 	/**
-	 * This component is the user-facing vault control point named in ADR 0004: the
+	 * This component is the user-facing vault control point named in ADR 0041: the
 	 * one settings surface that reads and writes provider API keys. Keys are secrets,
 	 * so they route through the credential facade (`secrets`), never raw `deviceConfig`.
 	 * Endpoints, base URLs, and model IDs are not secrets and stay on `deviceConfig`.
 	 *
 	 * There are deliberately no vault lifecycle controls here (no enable-sync
-	 * passphrase prompt, no unlock/lock/forget). The vault is owner-scoped (ADR 0005):
-	 * it must be instantiated per signed-in account through `attachLocalStorage({
-	 * server, ownerId })` and does not exist for a signed-out user. Whispering has no
-	 * auth yet, so `secrets` runs on the local-only placeholder singleton and cannot
-	 * sync across devices. Shipping a passphrase prompt now would provision a
-	 * local-only vault while implying cross-device sync works. Those controls land in
-	 * the wave that makes the workspace account-aware; until then the facade stays in
-	 * its `device-only` home and this surface is plain device-local key entry.
+	 * passphrase prompt, no unlock/lock/forget). The vault is owner-scoped (ADR 0042):
+	 * when an account is available it attaches per signed-in account through
+	 * `attachLocalStorage({ server, ownerId })`; with no account it runs as a
+	 * local-only, per-device singleton that matches the host workspace's own
+	 * persistence and cannot sync across devices. Whispering has no auth yet, so
+	 * `secrets` runs on that local-only singleton, which stays `absent` with no
+	 * provisioning UI. Shipping a passphrase prompt now would provision a local-only
+	 * vault while implying cross-device sync works. Those controls land in the wave
+	 * that makes the workspace account-aware; until then the facade stays in its
+	 * `device-only` home and this surface is plain device-local key entry.
 	 */
 
 	/**
 	 * Whether a field's config key is a secret (a provider API key). `SECRET_KEYS` is
-	 * the single source of truth (ADR 0004), so adding a secret there routes it here
+	 * the single source of truth (ADR 0041), so adding a secret there routes it here
 	 * without touching this component.
 	 */
 	function isSecretKey(key: ProviderField['configKey']): key is SecretKey {

@@ -65,7 +65,7 @@ export const DEFAULT_GLOBAL_BINDINGS = {
  * The provider API keys: the device entries that are secrets. Grouped on their
  * own so the secret set has a single source of truth. {@link SECRET_KEYS} is
  * derived from these keys, and the secrets facade routes exactly this set between
- * the device and the vault (ADR 0004/0005). Adding a provider key here makes it a
+ * the device and the vault (ADR 0041/0042). Adding a provider key here makes it a
  * device entry and a vault-migratable secret in one line; there is no second list
  * to keep in step.
  */
@@ -196,7 +196,7 @@ export type DeviceConfigKey = keyof DeviceConfigDefs & string;
 
 /**
  * The device entries that are secrets: provider API keys. The secrets facade
- * routes exactly this set between the device and the vault (ADR 0004/0005).
+ * routes exactly this set between the device and the vault (ADR 0041/0042).
  * Derived from {@link SECRET_DEFINITIONS}, so it stays complete by construction;
  * there is no parallel list to maintain.
  */

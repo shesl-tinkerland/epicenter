@@ -9,7 +9,7 @@
 	branch picked. Pure view: it owns no app lifecycle, so the nav branch is free
 	to remount it on a breakpoint change.
 
-	The secret-vault boot gate (ADR 0005). The credential facade reads
+	The secret-vault boot gate (ADR 0041). The credential facade reads
 	synchronously and reactively, but only once the vault has hydrated from
 	IndexedDB. A page that reads a secret before then would see the un-hydrated
 	default, which the facade flags loudly as a wiring bug. So hold the page
