@@ -256,6 +256,7 @@ export type WirePeer = {
 	nodeId: string;
 	connectedAt: number;
 	actions: Record<string, unknown>;
+	agentId?: string;
 };
 export type PresenceFrame = { type: 'presence'; peers: WirePeer[] };
 

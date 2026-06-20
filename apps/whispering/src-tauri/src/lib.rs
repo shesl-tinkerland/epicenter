@@ -336,8 +336,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Where `write_text` left the transcript.
 ///
-/// - `Pasted`: a synthetic paste landed it at the cursor and the user's original
-///   clipboard was restored.
+/// - `Pasted`: a synthetic paste landed it at the cursor and the clipboard was
+///   restored to whatever the caller had staged there (see `write_text`).
 /// - `LeftOnClipboard`: delivery could not paste (no Accessibility grant, or the
 ///   paste itself failed), so the transcript was left on the clipboard as the
 ///   fallback — always one ⌘V away.
@@ -356,12 +356,16 @@ pub enum WriteTextOutcome {
 /// a beat to come up before the keystroke is posted.
 const PRE_PASTE_SETTLE: std::time::Duration = std::time::Duration::from_millis(50);
 
-/// Wait after posting ⌘V before restoring the user's original clipboard. enigo
-/// exposes no paste-completion signal (`CGEventPost` returns nothing), so this is
-/// the window the target app has to consume the paste before the old clipboard
-/// goes back. Restore too early and a slow app pastes the original content
-/// instead of the transcript. Espanso's equivalent default is 300ms; ours is
-/// 100ms (mirrored by `COPY_SETTLE_MS` in selection.ts — keep them in step).
+/// Wait after posting ⌘V before restoring the clipboard. enigo exposes no
+/// paste-completion signal (`CGEventPost` returns nothing), so this is the window
+/// the target app has to consume the paste before the clipboard is restored.
+/// Restore too early and a slow app pastes the prior contents instead of the
+/// transcript. Espanso's `restore_clipboard_delay` defaults to 300ms for the same
+/// race; ours is 100ms — snappier, at the cost of reach on a slow app.
+///
+/// `COPY_SETTLE_MS` in selection.ts is the same magnitude but guards a *different*
+/// race — it waits for an OS clipboard *write* to land before a read, not for a
+/// paste to be *consumed* before a restore — so the two need not move together.
 const PRE_RESTORE_SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Delivers text to the cursor, falling back to the clipboard when it cannot.
@@ -370,8 +374,15 @@ const PRE_RESTORE_SETTLE: std::time::Duration = std::time::Duration::from_millis
 /// keystroke, not from the keystroke's result. A `Broken` grant — one that still
 /// reads as trusted via `AXIsProcessTrusted` but whose synthetic events the OS
 /// drops — lets the paste return `Ok` while nothing lands, so observing the
-/// result is unreliable. When we can paste, the clipboard sandwich (save → write
-/// → paste → restore) preserves the user's clipboard; when we cannot, the
+/// result is unreliable.
+///
+/// The clipboard is the paste transport: we save what's there, write the
+/// transcript, paste, then restore what we saved — so `write_text` leaves the
+/// clipboard exactly as it found it. The *intended* final clipboard state is the
+/// caller's to stage, not ours: `deliverResult` in delivery.ts copies the
+/// transcript to the clipboard first when clipboard output is on, so our restore
+/// returns it to the transcript; when clipboard output is off, the restore returns
+/// the user's untouched clipboard. When we cannot paste (or the paste fails), the
 /// transcript is left on the clipboard as the fallback. The transcript is
 /// independently saved to history either way, so this is a reduced reach, never
 /// data loss.

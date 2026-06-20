@@ -112,7 +112,11 @@ async function deliverResult({
 	const cursorRequested = settings.get(`output.${settingsScope}.cursor`);
 
 	// The clipboard is the configured destination when requested, and doubles as
-	// the transport and fallback for a cursor write. Best-effort: a clipboard write
+	// the transport and fallback for a cursor write. This call also pre-stages the
+	// clipboard's intended final state: `write_text` borrows and restores the
+	// clipboard around its paste (see its docstring in src-tauri), so whatever we
+	// leave here is what survives — the transcript when clipboard output is on, or
+	// the user's untouched clipboard when it is off. Best-effort: a clipboard write
 	// effectively never fails, and the transcript is in history regardless, so its
 	// error does not change the reach.
 	if (clipboardRequested) await services.text.copyToClipboard(text);

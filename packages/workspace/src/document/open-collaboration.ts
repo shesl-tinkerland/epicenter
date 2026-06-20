@@ -115,6 +115,12 @@ export type OpenCollaborationConfig<TActions extends ActionRegistry> = {
 	 * with `ActionNotFound`.
 	 */
 	actions: TActions;
+	/**
+	 * The catalog agent this peer answers as (ADR-0025), published in presence so
+	 * peers can see which agent ids are live. Set only by a resident agent mount
+	 * (e.g. a daemon); omit for ordinary participants and content docs.
+	 */
+	agentId?: string;
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -206,6 +212,7 @@ export function openCollaboration<TActions extends ActionRegistry>(
 	const presencePublishFrame = JSON.stringify({
 		type: 'presence_publish',
 		actions: ownManifest,
+		agentId: config.agentId,
 	} satisfies PresencePublishFrame);
 
 	function handleDispatchResultFrame(text: string): boolean {

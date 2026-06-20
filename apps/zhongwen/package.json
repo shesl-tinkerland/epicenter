@@ -7,6 +7,7 @@
 	"exports": {
 		".": "./zhongwen.ts",
 		"./browser": "./zhongwen.browser.ts",
+		"./engine": "./epicenter-engine.ts",
 		"./mount": "./mount.ts"
 	},
 	"scripts": {

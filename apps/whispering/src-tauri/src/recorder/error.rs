@@ -12,9 +12,7 @@
 //! not modeled: the frontend would discard the distinction, so it would be a
 //! decorative name on a string. The detail still travels, in `message`.
 
-use std::fmt::Display;
-
-use cpal::{BuildStreamError, DevicesError, SupportedStreamConfigsError};
+use cpal::{Error as CpalError, ErrorKind};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -52,73 +50,23 @@ impl RecorderError {
         }
     }
 
-    /// Classify a cpal stream/device error.
+    /// Classify a cpal error by its typed `ErrorKind`.
     ///
-    /// cpal types "device gone" as `DeviceNotAvailable` but does not type
-    /// "permission denied": a denial only arrives as a `BackendSpecific`
-    /// description string. So the device case is matched by variant
-    /// (locale-proof), and only the permission signal is recovered from text.
-    /// That text match is the one irreducible heuristic here. cpal refuses to
-    /// type it, and the frontend's pre-record permission check is the primary
-    /// gate regardless, so this only catches a denial surfacing at stream-open.
-    pub(crate) fn classify_cpal(context: &str, err: impl CpalStreamError + Display) -> Self {
+    /// cpal 0.18 collapsed its three error enums into one `cpal::Error` carrying
+    /// a typed `ErrorKind`. Each backend maps an OS denial to
+    /// `ErrorKind::PermissionDenied` (coreaudio's `Unauthorized`, WASAPI's
+    /// `E_ACCESSDENIED`, an ALSA permission error) and a vanished device to
+    /// `ErrorKind::DeviceNotAvailable` at the source, so the classification is
+    /// locale-proof: no description-string matching. Everything else collapses
+    /// to `Failed`, which the frontend labels by the command that failed. The
+    /// frontend's pre-record permission check is still the primary gate; this
+    /// only catches a denial surfacing at stream-open.
+    pub(crate) fn classify_cpal(context: &str, err: CpalError) -> Self {
         let message = format!("{context}: {err}");
-        if err.is_device_unavailable() {
-            return Self::NoInputDevice { message };
-        }
-        if let Some(description) = err.backend_description() {
-            let lower = description.to_lowercase();
-            if lower.contains("access is denied")
-                || lower.contains("permission")
-                || lower.contains("0x80070005")
-            {
-                return Self::PermissionDenied { message };
-            }
-        }
-        Self::Failed { message }
-    }
-}
-
-/// Bridges cpal's stream/device error types, which share `DeviceNotAvailable`
-/// and `BackendSpecific { err }` shapes but no common trait, so `classify_cpal`
-/// can match the device case by variant instead of by string. `DevicesError` is
-/// the exception: it has only a `BackendSpecific` arm, so it can never report an
-/// unavailable device.
-pub(crate) trait CpalStreamError {
-    fn is_device_unavailable(&self) -> bool;
-    fn backend_description(&self) -> Option<&str>;
-}
-
-impl CpalStreamError for DevicesError {
-    fn is_device_unavailable(&self) -> bool {
-        false
-    }
-    fn backend_description(&self) -> Option<&str> {
-        let DevicesError::BackendSpecific { err } = self;
-        Some(&err.description)
-    }
-}
-
-impl CpalStreamError for SupportedStreamConfigsError {
-    fn is_device_unavailable(&self) -> bool {
-        matches!(self, SupportedStreamConfigsError::DeviceNotAvailable)
-    }
-    fn backend_description(&self) -> Option<&str> {
-        match self {
-            SupportedStreamConfigsError::BackendSpecific { err } => Some(&err.description),
-            _ => None,
-        }
-    }
-}
-
-impl CpalStreamError for BuildStreamError {
-    fn is_device_unavailable(&self) -> bool {
-        matches!(self, BuildStreamError::DeviceNotAvailable)
-    }
-    fn backend_description(&self) -> Option<&str> {
-        match self {
-            BuildStreamError::BackendSpecific { err } => Some(&err.description),
-            _ => None,
+        match err.kind() {
+            ErrorKind::PermissionDenied => Self::PermissionDenied { message },
+            ErrorKind::DeviceNotAvailable => Self::NoInputDevice { message },
+            _ => Self::Failed { message },
         }
     }
 }
@@ -126,13 +74,6 @@ impl CpalStreamError for BuildStreamError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cpal::BackendSpecificError;
-
-    fn backend(description: &str) -> BackendSpecificError {
-        BackendSpecificError {
-            description: description.to_string(),
-        }
-    }
 
     fn name_of(err: &RecorderError) -> &'static str {
         match err {
@@ -142,96 +83,58 @@ mod tests {
         }
     }
 
-    // The typed device-gone variant must classify as NoInputDevice, regardless
-    // of which cpal error enum carries it.
+    // The macOS bug fix, now locale-proof: a TCC mic denial reaches cpal 0.18 as
+    // ErrorKind::PermissionDenied (coreaudio's Unauthorized), so it classifies
+    // as PermissionDenied instead of the old generic Failed. Same path on
+    // Windows (E_ACCESSDENIED) and Linux (ALSA permission), by construction.
     #[test]
-    fn typed_device_not_available_is_no_input_device() {
-        let from_configs = RecorderError::classify_cpal(
-            "ctx",
-            SupportedStreamConfigsError::DeviceNotAvailable,
-        );
-        assert_eq!(name_of(&from_configs), "NoInputDevice");
-
-        let from_build =
-            RecorderError::classify_cpal("ctx", BuildStreamError::DeviceNotAvailable);
-        assert_eq!(name_of(&from_build), "NoInputDevice");
+    fn permission_denied_kind_is_permission_denied() {
+        let err = RecorderError::classify_cpal("ctx", CpalError::new(ErrorKind::PermissionDenied));
+        assert_eq!(name_of(&err), "PermissionDenied");
     }
 
-    // The one irreducible heuristic: a permission denial only arrives as a
-    // BackendSpecific description string. Windows WASAPI Initialize surfaces
-    // E_ACCESSDENIED here as "... access is denied ... (0x80070005)".
+    // A vanished or absent device classifies as NoInputDevice ("connect a mic").
     #[test]
-    fn backend_permission_strings_are_permission_denied() {
-        for description in [
-            "The device access is denied",
-            "Some failure: permission to access the microphone",
-            "WASAPI error 0x80070005",
-            // Case-insensitive: classify lowercases before matching.
-            "ACCESS IS DENIED",
+    fn device_not_available_kind_is_no_input_device() {
+        let err = RecorderError::classify_cpal("ctx", CpalError::new(ErrorKind::DeviceNotAvailable));
+        assert_eq!(name_of(&err), "NoInputDevice");
+    }
+
+    // Every other kind is the catch-all the frontend labels by failing command.
+    #[test]
+    fn other_kinds_are_failed() {
+        for kind in [
+            ErrorKind::BackendError,
+            ErrorKind::UnsupportedConfig,
+            ErrorKind::DeviceBusy,
+            ErrorKind::HostUnavailable,
+            ErrorKind::Other,
         ] {
-            let err = RecorderError::classify_cpal(
-                "ctx",
-                BuildStreamError::BackendSpecific { err: backend(description) },
-            );
-            assert_eq!(
-                name_of(&err),
-                "PermissionDenied",
-                "expected PermissionDenied for {description:?}"
-            );
+            let err = RecorderError::classify_cpal("ctx", CpalError::new(kind));
+            assert_eq!(name_of(&err), "Failed", "expected Failed for {kind:?}");
         }
     }
 
-    // A BackendSpecific failure with no permission signal is the catch-all.
-    // This is also the macOS reality for supported_input_configs failures,
-    // which cpal 0.16 always returns as BackendSpecific (never the typed
-    // DeviceNotAvailable variant).
-    #[test]
-    fn backend_without_permission_signal_is_failed() {
-        let err = RecorderError::classify_cpal(
-            "Failed to query input configs",
-            SupportedStreamConfigsError::BackendSpecific {
-                err: backend("An unknown error unknown to the coreaudio-rs API occurred"),
-            },
-        );
-        assert_eq!(name_of(&err), "Failed");
-    }
-
-    // DevicesError has only a BackendSpecific arm, so it can never report an
-    // unavailable device by variant: it must fall through to the text check.
-    #[test]
-    fn devices_error_never_reports_unavailable_by_variant() {
-        let err = RecorderError::classify_cpal(
-            "ctx",
-            DevicesError::BackendSpecific { err: backend("host unavailable") },
-        );
-        assert_eq!(name_of(&err), "Failed");
-    }
-
-    // Regression guard for the get_optimal_config site (recorder.rs): on macOS
-    // a vanished mic surfaces as a non-permission BackendSpecific from
-    // supported_input_configs(), which classify_cpal alone labels Failed. The
-    // call site remaps that Failed fallback to NoInputDevice; a permission
-    // signal must survive the remap unchanged.
+    // Regression guard for the get_optimal_config site (recorder.rs): a device
+    // that yields no input configs is unusable, so the call site remaps a Failed
+    // config-query error to NoInputDevice. A permission denial must survive that
+    // remap unchanged rather than being downgraded.
     #[test]
     fn config_query_failed_fallback_remaps_to_no_input_device() {
-        let remap = |e: SupportedStreamConfigsError| match RecorderError::classify_cpal("ctx", e) {
+        let remap = |e: CpalError| match RecorderError::classify_cpal("ctx", e) {
             RecorderError::Failed { message } => RecorderError::NoInputDevice { message },
             classified => classified,
         };
 
-        // Non-permission BackendSpecific (the macOS vanished-mic case) -> NoInputDevice.
+        // A generic backend failure -> NoInputDevice.
         assert_eq!(
-            name_of(&remap(SupportedStreamConfigsError::BackendSpecific {
-                err: backend("An unknown error unknown to the coreaudio-rs API occurred"),
-            })),
+            name_of(&remap(CpalError::new(ErrorKind::BackendError))),
             "NoInputDevice"
         );
 
-        // A permission denial in the description must NOT be downgraded.
+        // A permission denial must NOT be downgraded.
         assert_eq!(
-            name_of(&remap(SupportedStreamConfigsError::BackendSpecific {
-                err: backend("access is denied (0x80070005)"),
-            })),
+            name_of(&remap(CpalError::new(ErrorKind::PermissionDenied))),
             "PermissionDenied"
         );
     }
@@ -241,7 +144,7 @@ mod tests {
     fn message_includes_context() {
         let err = RecorderError::classify_cpal(
             "Failed to build F32 stream",
-            BuildStreamError::DeviceNotAvailable,
+            CpalError::new(ErrorKind::DeviceNotAvailable),
         );
         let RecorderError::NoInputDevice { message } = err else {
             panic!("expected NoInputDevice");

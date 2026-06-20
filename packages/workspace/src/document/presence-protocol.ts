@@ -40,12 +40,17 @@ export const ActionManifestSchema = Type.Record(
  *
  * `nodeId` routes dispatches; `connectedAt` lets receivers render an
  * "online since" affordance; `actions` is the peer's published manifest, or
- * `{}` if the peer has not (yet) published one.
+ * `{}` if the peer has not (yet) published one. `agentId` is the catalog agent
+ * this peer answers as (ADR-0025), present only on a peer that mounted with one
+ * (a resident daemon) and absent for ordinary participants. It is the join key
+ * a picker uses to decorate a durable agent as live: the catalog owns the
+ * agent's properties, presence only reports which agent ids are online now.
  */
 export const PeerSchema = Type.Object({
 	nodeId: Type.String(),
 	connectedAt: Type.Number(),
 	actions: ActionManifestSchema,
+	agentId: Type.Optional(Type.String()),
 });
 export type Peer = Static<typeof PeerSchema>;
 
@@ -62,14 +67,17 @@ export const PresenceFrameSchema = Type.Object({
 export type PresenceFrame = Static<typeof PresenceFrameSchema>;
 
 /**
- * Client -> server: publish this node's action manifest. The relay stores
- * the manifest against the sending socket's nodeId and rebroadcasts
- * presence so peers see the update. Sent once on connect; re-sent if the
- * local action registry changes.
+ * Client -> server: publish this node's action manifest, and optionally the
+ * catalog agent it answers as. The relay stores both against the sending
+ * socket's nodeId and rebroadcasts presence so peers see the update. Sent once
+ * on connect; re-sent if the local action registry changes. `agentId` is set
+ * only by a peer that mounted as a resident agent (ADR-0025); ordinary
+ * participants omit it.
  */
 export const PresencePublishFrameSchema = Type.Object({
 	type: Type.Literal('presence_publish'),
 	actions: ActionManifestSchema,
+	agentId: Type.Optional(Type.String()),
 });
 export type PresencePublishFrame = Static<typeof PresencePublishFrameSchema>;
 

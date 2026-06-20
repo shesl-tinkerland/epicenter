@@ -821,6 +821,10 @@ export function defineWorkspace<
 					{
 						baseURL,
 						actions: composition.actions,
+						// Publish the mount's agent so peers can decorate it as live in
+						// a picker (ADR-0025); the same id the child-doc workers use for
+						// designation. Absent when the mount answers as no named agent.
+						agentId: mountOptions.agentId,
 						materializers: drains,
 					},
 				);

@@ -1,6 +1,6 @@
 # 0025. Agent conversations are durable child docs driven by an observing worker
 
-- **Status:** Proposed
+- **Status:** Accepted (amended 2026-06-19)
 - **Date:** 2026-06-16
 
 ## Context
@@ -29,9 +29,22 @@ process that answers as it (the role distinction is pinned in
 [ADR-0024](0024-an-always-on-worker-runs-app-semantics-beside-the-app-blind-anchor.md)).
 Presence can decorate the configured agent list
 with live/offline status and capabilities, but it is not durable routing truth.
-The binding is the row field. The cloud agent is `epicenter-cloud`, whose current
-runtime is the metered HTTP route; a daemon answers when a conversation is bound
-to its agent id.
+The binding is the row field, and it names a *writer* of the transcript, not a
+token source. A binding is one of two kinds. A **durable writer** is an always-on
+daemon agent (a home or laptop daemon): it answers ambiently over sync and
+survives the client closing, so a turn it owns is answered even while every
+browser is shut. An **ephemeral writer** is the open browser tab itself, bound
+through the `epicenter-cloud` agent: it answers in-process while it is open and
+stops when it closes. The cloud is never a writer and never an owner:
+`epicenter-cloud` does not name a server that answers, it names the open tab
+answering with Epicenter's metered inference as its engine. Which engine a writer
+uses (a local key, the user's metered account, a proxied cloud stream) is an
+orthogonal sub-choice it resolves for itself
+([ADR-0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md)),
+and the metered route streams tokens while writing no doc
+([ADR-0033](0033-a-conversation-has-one-transport-and-two-triggers.md)). Whether
+the writer survives you leaving is the whole reason the choice matters, and it is
+the only thing the binding decides.
 
 This single field is the whole binding, and the collapse it buys is the reason it is
 immutable. Because the agent never changes, the conversation's content only ever
@@ -49,8 +62,15 @@ in to keep history honest; the immutable binding refuses both.
 Each daemon reconciles the conversations bound to the agent it answers as: it
 observes their transcripts, answers any unanswered turn, and is idempotent through
 the durable client-minted `generationId` used as the assistant message id. There is
-no claim and no race, because exactly one agent is named per conversation (and CRDT
-merges could not enforce a claimant anyway).
+no claim *field* and no lock: the assistant message keyed to the `generationId`
+is itself the claim (existence is the claim,
+[ADR-0033](0033-a-conversation-has-one-transport-and-two-triggers.md)), so
+whoever appends it first wins and any other observer reconciles the same
+predicate and stops. Naming exactly one owner per conversation is what makes
+contention rare in the first place (and CRDT merges could not enforce a claimant
+anyway); the existence-claim then covers the seams one owner still leaves: a
+restart re-observing its own already-answered turn, or the open tab and its
+daemon overlapping for an instant.
 
 The worker observes the transcript mid-answer so it can honor a durable, client-owned
 cancel field, and it writes the write-once `finish`. Tool calls are the workspace's
@@ -85,15 +105,16 @@ doorbell), never the durable queue (the doc is the mailbox).
   app-aware worker out of the app-blind anchor's availability job
   ([ADR-0024](0024-an-always-on-worker-runs-app-semantics-beside-the-app-blind-anchor.md)).
   The worker itself carries no designation concept. The browser supplies the
-  complementary half: it nudges the cloud agent's HTTP route only when the
-  conversation is bound to the cloud agent (`epicenter-cloud`), and does nothing for
-  a conversation bound to a daemon agent (that daemon answers over sync). So a
-  daemon-bound conversation is answered only by its daemon and a cloud-bound one only
-  by the HTTP path; neither ever answers a turn the other does. The bound agent is
-  immutable, so this split never flips mid-conversation. The cloud agent is therefore
-  never deleted (it is an always-available answerer whose runtime is the metered,
-  serverless route); what C4 removes is the `null`-as-cloud special case, not the
-  route.
+  complementary half by deriving the same fact from the same field: for an
+  ephemeral (`epicenter-cloud`) binding the open tab answers in-process, calling
+  the metered route only as its engine; for a daemon binding it does nothing and
+  lets that daemon answer over sync. So a daemon-bound conversation is answered
+  only by its daemon and an ephemeral one only by the tab that owns it; neither
+  ever answers a turn the other does. The bound agent is immutable, so this split
+  never flips mid-conversation. The `epicenter-cloud` binding is therefore never
+  deleted (it is the always-available ephemeral writer, whose engine is the
+  metered, serverless route); what C4 removes is the `null`-as-cloud special case,
+  not the route.
 - The conversation is a row plus a transcript child doc, and that split is the
   portability seam. The agent is named once on the row at creation and never
   reassigned; the transcript carries no agent identity, so it stays portable content.

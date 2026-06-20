@@ -28,7 +28,10 @@ import {
 	type Id,
 	type InferTableRow,
 } from '@epicenter/workspace';
-import { attachChatConversation } from '@epicenter/workspace/ai';
+import {
+	attachChatConversation,
+	type ChatStream,
+} from '@epicenter/workspace/ai';
 import { Type } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
 
@@ -50,14 +53,17 @@ export const generateConversationId = (): ConversationId =>
 export const ZHONGWEN_MODEL = 'gemini-3.5-flash' satisfies ServableModel;
 
 /**
- * The hosted cloud agent's stable address (ADR-0025). A new conversation is bound
- * to this agent, so the browser answers it in-process, sourcing tokens from the
- * metered `/api/ai/chat` stream via the Epicenter provider (ADR-0033).
- * The binding is immutable: to talk to a different agent you fork the conversation,
- * so a conversation's history only ever reaches its one bound agent. An always-on
- * daemon answers instead when a conversation is bound to that daemon's agent id.
+ * The ephemeral agent's stable address (ADR-0025): the one the open browser tab
+ * owns and answers in-process, sourcing tokens from the metered `/api/ai/chat`
+ * stream via the Epicenter provider (ADR-0033). The id names the *owner* (the
+ * device's tab, which is why the answer stops when you close it), not the engine
+ * (the cloud credits the tokens are billed to): owner ⊥ engine. A new conversation
+ * binds to this agent by default. The binding is immutable: to talk to a different
+ * agent you fork the conversation, so a conversation's history only ever reaches
+ * its one bound agent. An always-on daemon answers instead when a conversation is
+ * bound to that daemon's agent id.
  */
-export const CLOUD_AGENT_ID: AgentId = asAgentId('epicenter-cloud');
+export const THIS_DEVICE_AGENT_ID: AgentId = asAgentId('this-device');
 
 // Re-export the agent address type so app UI binds against one import surface
 // (`@epicenter/zhongwen`) for the agent catalog and the ids it hands the picker.
@@ -66,21 +72,25 @@ export type { AgentId };
 /**
  * One agent Zhongwen can bind a conversation to: its durable {@link AgentId},
  * a display `label` for the picker, the `model` it answers with, the action keys
- * it may call as tools (ADR-0021; none yet), and where its runtime lives.
+ * it may call as tools (ADR-0021; none yet), and the `owner` kind that writes its
+ * conversations.
  *
- * `runtime` is the routing fork the browser reads: a `'cloud'` agent is answered
- * in-process by the browser (the Epicenter provider sourcing tokens from the
- * metered `/api/ai/chat` stream); a `'daemon'` agent is an always-on resident
- * worker that answers over sync, so the browser stays out of the way (both
- * answering would answer one turn twice, the D3 hazard). The catalog is the one
- * place that fork is declared (ADR-0033).
+ * `owner` is the routing fork the browser reads, and it names who writes the
+ * transcript, not where tokens come from (ADR-0025). An `'ephemeral'` agent
+ * (`this-device`) is owned by the open browser tab, which answers in-process
+ * and stops when it closes. A `'durable'` agent is an always-on resident daemon,
+ * which answers over sync and survives the tab closing, so the browser stays out
+ * of the way (both answering would answer one turn twice, the D3 hazard). The
+ * engine each writer uses (a local key, the user's metered account) is an
+ * orthogonal sub-choice it resolves for itself (ADR-0038), never a property of
+ * the owner. The catalog is the one place the owner fork is declared (ADR-0033).
  */
 export type AgentConfig = {
 	readonly id: AgentId;
 	readonly label: string;
 	readonly model: ServableModel;
 	readonly tools: readonly string[];
-	readonly runtime: 'cloud' | 'daemon';
+	readonly owner: 'ephemeral' | 'durable';
 };
 
 /**
@@ -90,43 +100,74 @@ export type AgentConfig = {
  * daemon waits in the doc until that daemon wakes and answers. Presence only ever
  * decorates this list with a live/offline hint; it never gates what can be bound.
  *
- * The hosted cloud agent is always available (the browser answers it in-process
+ * The this-device agent is always available (the open tab answers it in-process
  * against the hosted inference stream, no daemon required). The home daemon is the
  * always-on worker a user co-deploys; binding a
  * conversation to it is what a later "co-deploy a live daemon" slice brings online.
  */
 export const ZHONGWEN_AGENTS = [
 	{
-		id: CLOUD_AGENT_ID,
-		label: 'Epicenter Cloud',
+		id: THIS_DEVICE_AGENT_ID,
+		label: 'This device',
 		model: ZHONGWEN_MODEL,
 		tools: [],
-		runtime: 'cloud',
+		owner: 'ephemeral',
 	},
 	{
 		id: asAgentId('zhongwen-home'),
 		label: 'Home daemon',
 		model: ZHONGWEN_MODEL,
 		tools: [],
-		runtime: 'daemon',
+		owner: 'durable',
 	},
 ] as const satisfies readonly AgentConfig[];
 
 /**
  * The agent a new conversation binds to when the user does not pick one: the
- * always-available cloud agent, so the fast "New Conversation" path answers with
- * no daemon required.
+ * always-available this-device agent, so the fast "New Conversation" path answers
+ * with no daemon required.
  */
-export const DEFAULT_AGENT_ID: AgentId = CLOUD_AGENT_ID;
+export const DEFAULT_AGENT_ID: AgentId = THIS_DEVICE_AGENT_ID;
 
 /**
  * The catalog entry for a bound `agent`, or `undefined` for an id no longer in
  * the catalog (a conversation bound before the agent was removed). Callers read
- * `runtime` to route: anything that is not a resident `'daemon'` the browser
- * answers in-process; a `'daemon'` agent is left to answer over sync.
+ * `owner` to route: an `'ephemeral'` agent the browser answers in-process; a
+ * `'durable'` agent is left to its resident daemon over sync.
  */
 export function agentConfig(id: AgentId): AgentConfig | undefined {
 	return ZHONGWEN_AGENTS.find((agent) => agent.id === id);
+}
+
+/**
+ * One inference backend a peer can power, built lazily: it returns a
+ * {@link ChatStream} when the host can satisfy it (a key is present, the account
+ * is opted in) or `null` when it cannot, so {@link resolveEngine} can fall
+ * through to the next engine in priority order (ADR-0038).
+ */
+export type Engine = () => ChatStream | null;
+
+/**
+ * The `ChatStream` to answer with, taken from the first engine this host can
+ * power, or `null` when it can power none: host the conversation's sync, write
+ * nothing, leave the turn for a configured answerer.
+ *
+ * This is only the *engine* half of answering, where tokens come from. The other
+ * half, *designation* (is this turn mine to write?), is the owner fork and is
+ * decided where each peer naturally decides it, never here: a daemon's observe
+ * loop hosts only the conversations bound to its agent (`row.agent ===
+ * selfAgentId`, ADR-0025), so by the time it resolves an engine the turn is
+ * already its own; a browser tab reads the bound agent's `owner` kind before it
+ * mounts an answerer at all. The two halves are orthogonal (owner ⊥ engine,
+ * ADR-0033/0038), so they are not forced through one function: doing so made the
+ * daemon's designation a tautology (it would only ever pass its own agent).
+ */
+export function resolveEngine(engines: readonly Engine[]): ChatStream | null {
+	for (const engine of engines) {
+		const stream = engine();
+		if (stream) return stream; // first engine this host can power
+	}
+	return null; // no engine here → host, don't answer
 }
 
 /**
@@ -163,7 +204,7 @@ const conversationsTable = defineTable({
 	updatedAt: field.instant(),
 	/**
 	 * The agent this conversation is bound to (ADR-0025), set once at creation and
-	 * never reassigned. {@link CLOUD_AGENT_ID} routes to the browser answering
+	 * never reassigned. {@link THIS_DEVICE_AGENT_ID} routes to the browser answering
 	 * in-process (the Epicenter provider); a daemon's agent id routes to that
 	 * always-on worker over sync, and the browser stays out. One immutable
 	 * field is who was addressed and who answered, for every turn: the history

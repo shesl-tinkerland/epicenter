@@ -8,13 +8,15 @@ export const commands = {
 	/**
 	 *  Delivers text to the cursor, falling back to the clipboard when it cannot.
 	 *
-	 *  The reach is decided from the Accessibility grant *before* the keystroke, not
-	 *  from the keystroke's result: an untrusted synthetic ⌘V silently no-ops on
-	 *  macOS, so observing whether it landed is unreliable. When we can paste, the
-	 *  clipboard sandwich (save → write → paste → restore) preserves the user's
-	 *  clipboard; when we cannot, the transcript is left on the clipboard as the
-	 *  fallback. The transcript is independently saved to history either way, so this
-	 *  is a reduced reach, never data loss.
+	 *  The reach is decided from the live Accessibility *capability* before the
+	 *  keystroke, not from the keystroke's result. A `Broken` grant — one that still
+	 *  reads as trusted via `AXIsProcessTrusted` but whose synthetic events the OS
+	 *  drops — lets the paste return `Ok` while nothing lands, so observing the
+	 *  result is unreliable. When we can paste, the clipboard sandwich (save → write
+	 *  → paste → restore) preserves the user's clipboard; when we cannot, the
+	 *  transcript is left on the clipboard as the fallback. The transcript is
+	 *  independently saved to history either way, so this is a reduced reach, never
+	 *  data loss.
 	 */
 	writeText: (text: string) =>
 		typedError<WriteTextOutcome, string>(

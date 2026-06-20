@@ -47,6 +47,12 @@ export type AttachMountInfrastructureOptions<TActions extends ActionRegistry> =
 		baseURL: string;
 		actions: TActions;
 		/**
+		 * The catalog agent this daemon answers as (ADR-0025), published in
+		 * presence so peers can decorate it as live. Omit for a mount that hosts
+		 * sync without answering as a named agent.
+		 */
+		agentId?: string;
+		/**
 		 * Materializer attachments composed around the same ydoc. Their teardown
 		 * drains are awaited alongside collaboration and log teardown, so a daemon
 		 * shutdown cannot drop projection writes mid-flight. Each drain is bounded
@@ -61,6 +67,7 @@ export function attachMountInfrastructure<TActions extends ActionRegistry>(
 	{
 		baseURL,
 		actions,
+		agentId,
 		materializers = [],
 	}: AttachMountInfrastructureOptions<TActions>,
 ) {
@@ -80,6 +87,7 @@ export function attachMountInfrastructure<TActions extends ActionRegistry>(
 		openWebSocket: ctx.session.openWebSocket,
 		onReconnectSignal: ctx.session.onReconnectSignal,
 		actions,
+		agentId,
 	});
 
 	return {

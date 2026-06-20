@@ -42,6 +42,13 @@ export type Connection = {
 	nodeId: string;
 	connectedAt: number;
 	actions: ActionManifest;
+	/**
+	 * The catalog agent this connection answers as (ADR-0025), set from the
+	 * node's `presence_publish` and mirrored on the wire so a picker can decorate
+	 * a durable agent as live. Undefined until published; ordinary participants
+	 * never set it. Opaque to the relay (forwarded, never inspected).
+	 */
+	agentId?: string;
 };
 
 /**

@@ -39,7 +39,7 @@ export type BoundConversation = Disposable & {
  * ```svelte
  * const convo = bindConversation(
  *   workspace.tables.conversations.docs.messages.open(conversationId),
- *   { answer: runtime === 'daemon' ? undefined : epicenterStream({ ... }) },
+ *   { answer: owner === 'durable' ? undefined : epicenterStream({ ... }) },
  * );
  * // {#each convo.render.visibleMessages as m} … convo.send(t) / convo.stop()
  * ```

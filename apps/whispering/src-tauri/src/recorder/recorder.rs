@@ -95,7 +95,10 @@ impl Recorder {
         let devices = host
             .input_devices()
             .map_err(|e| RecorderError::classify_cpal("Failed to get input devices", e))?
-            .filter_map(|device| device.name().ok())
+            // A device names itself via `description()`. Skip any that can't
+            // describe themselves rather than letting `Display`/`to_string()`
+            // panic on the underlying description failure.
+            .filter_map(|device| device.description().ok().map(|d| d.name().to_string()))
             .collect();
 
         Ok(devices)
@@ -121,12 +124,12 @@ impl Recorder {
         let device = find_device(&host, &device_name)?;
         let config = get_optimal_config(&device, preferred_sample_rate)?;
         let sample_format = config.sample_format();
-        let device_rate = config.sample_rate().0;
+        let device_rate = config.sample_rate();
         let device_channels = config.channels();
 
         let stream_config = cpal::StreamConfig {
             channels: device_channels,
-            sample_rate: cpal::SampleRate(device_rate),
+            sample_rate: device_rate,
             buffer_size: cpal::BufferSize::Default,
         };
 
@@ -144,7 +147,7 @@ impl Recorder {
             // share a thread.
             let stream = match build_input_stream(
                 &device,
-                &stream_config,
+                stream_config,
                 sample_format,
                 device_channels,
                 sample_tx,
@@ -372,8 +375,8 @@ fn find_device(host: &cpal::Host, device_name: &str) -> Result<Device> {
         .map_err(|e| RecorderError::classify_cpal("Failed to list input devices", e))?
         .collect();
     for device in devices {
-        if let Ok(name) = device.name() {
-            if name == device_name {
+        if let Ok(desc) = device.description() {
+            if desc.name() == device_name {
                 return Ok(device);
             }
         }
@@ -398,11 +401,12 @@ fn get_optimal_config(
     // record from it," so both classify as NoInputDevice ("connect a microphone")
     // rather than a generic Failed the user can't act on.
     //
-    // On macOS (cpal 0.16) the error case is *always* BackendSpecific, never the
-    // typed DeviceNotAvailable, so classify_cpal alone would mislabel a vanished
-    // mic as Failed. Collapse that fallback to NoInputDevice here, while still
-    // surfacing a permission denial if cpal reported one in the description
-    // (Windows WASAPI E_ACCESSDENIED).
+    // A query error here means the device can't describe how to record from it,
+    // which for the user is indistinguishable from "no mic," so collapse it to
+    // NoInputDevice. cpal 0.18 types a true denial as PermissionDenied and often
+    // routes a vanished-mic config query to a generic kind (macOS sends the
+    // OSStatus failure to BackendError), so only a Failed is remapped; a
+    // PermissionDenied passes through untouched.
     let configs: Vec<_> = device
         .supported_input_configs()
         .map_err(
@@ -432,18 +436,18 @@ fn get_optimal_config(
     // Mono at target rate if possible.
     for config in &compatible_configs {
         if config.channels() == 1 {
-            let (min, max) = (config.min_sample_rate().0, config.max_sample_rate().0);
+            let (min, max) = (config.min_sample_rate(), config.max_sample_rate());
             if min <= target_sample_rate && max >= target_sample_rate {
-                return Ok(config.with_sample_rate(cpal::SampleRate(target_sample_rate)));
+                return Ok(config.with_sample_rate(target_sample_rate));
             }
         }
     }
 
     // Any channel count at target rate.
     for config in &compatible_configs {
-        let (min, max) = (config.min_sample_rate().0, config.max_sample_rate().0);
+        let (min, max) = (config.min_sample_rate(), config.max_sample_rate());
         if min <= target_sample_rate && max >= target_sample_rate {
-            return Ok(config.with_sample_rate(cpal::SampleRate(target_sample_rate)));
+            return Ok(config.with_sample_rate(target_sample_rate));
         }
     }
 
@@ -454,7 +458,7 @@ fn get_optimal_config(
         if config.channels() != 1 {
             continue;
         }
-        let (min, max) = (config.min_sample_rate().0, config.max_sample_rate().0);
+        let (min, max) = (config.min_sample_rate(), config.max_sample_rate());
         let closest = if target_sample_rate < min {
             min
         } else if target_sample_rate > max {
@@ -465,7 +469,7 @@ fn get_optimal_config(
         let diff = (closest as i32 - target_sample_rate as i32).unsigned_abs();
         if diff < best_diff {
             best_diff = diff;
-            best_config = Some(config.with_sample_rate(cpal::SampleRate(closest)));
+            best_config = Some(config.with_sample_rate(closest));
         }
     }
 
@@ -475,13 +479,13 @@ fn get_optimal_config(
     // configuration" failure left to model.
     Ok(best_config.unwrap_or_else(|| {
         let config = compatible_configs[0];
-        let (min, max) = (config.min_sample_rate().0, config.max_sample_rate().0);
+        let (min, max) = (config.min_sample_rate(), config.max_sample_rate());
         let rate = if min <= target_sample_rate && max >= target_sample_rate {
             target_sample_rate
         } else {
             min
         };
-        config.with_sample_rate(cpal::SampleRate(rate))
+        config.with_sample_rate(rate)
     }))
 }
 
@@ -490,7 +494,7 @@ fn get_optimal_config(
 /// everything else.
 fn build_input_stream(
     device: &Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     sample_format: SampleFormat,
     channels: u16,
     sample_tx: mpsc::Sender<Vec<f32>>,

@@ -80,6 +80,38 @@ describe('Room presence: directed frame on upgrade', () => {
 	});
 });
 
+describe('Room presence: agent designation', () => {
+	test('a published agentId rides the peer entry to other nodes', async () => {
+		const { room } = await makeRoom();
+		const daemonWs = await upgrade(room, 'daemon');
+		await room.webSocketMessage(
+			daemonWs,
+			JSON.stringify({
+				type: 'presence_publish',
+				actions: {},
+				agentId: 'zhongwen-home',
+			}),
+		);
+		// A node connecting after the publish sees the daemon's designation in its
+		// directed snapshot: the join key a picker uses to light up that agent.
+		const observer = await upgrade(room, 'observer');
+		const daemon = presenceFrames(observer)[0]!.peers.find(
+			(p) => p.nodeId === 'daemon',
+		);
+		expect(daemon!.agentId).toBe('zhongwen-home');
+	});
+
+	test('a peer that never publishes an agentId omits it', async () => {
+		const { room } = await makeRoom();
+		await upgrade(room, 'plain');
+		const observer = await upgrade(room, 'observer');
+		const plain = presenceFrames(observer)[0]!.peers.find(
+			(p) => p.nodeId === 'plain',
+		);
+		expect(plain!.agentId).toBeUndefined();
+	});
+});
+
 describe('Room presence: first-socket rebroadcast', () => {
 	test('first socket for a node rebroadcasts the list to existing peers', async () => {
 		const { room } = await makeRoom();

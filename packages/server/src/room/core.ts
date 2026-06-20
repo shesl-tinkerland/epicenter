@@ -247,6 +247,7 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 				nodeId: attachment.nodeId,
 				connectedAt: attachment.connectedAt,
 				actions: attachment.actions,
+				agentId: attachment.agentId,
 			});
 		}
 		return Array.from(seen.values()).sort((a, b) =>
@@ -437,18 +438,22 @@ export function createRoomCore({ updateLog }: { updateLog: RoomUpdateLog }) {
 	}
 
 	/**
-	 * Node -> relay: publish this socket's action manifest. The relay stores
-	 * the manifest against the connection attachment, persists it via
-	 * `serializeAttachment` when the runtime supports hibernation, and
-	 * rebroadcasts presence so peers see the update. A malformed payload is
-	 * dropped silently: the relay never trusts client input but never tears
-	 * down a sync socket for one bad manifest publish either.
+	 * Node -> relay: publish this socket's action manifest and optional agent
+	 * designation. The relay stores both against the connection attachment,
+	 * persists them via `serializeAttachment` when the runtime supports
+	 * hibernation, and rebroadcasts presence so peers see the update. A malformed
+	 * payload is dropped silently: the relay never trusts client input but never
+	 * tears down a sync socket for one bad manifest publish either.
 	 */
 	function handlePresencePublish(socket: RoomSocket, frame: unknown): void {
 		if (!checkPresencePublishFrame.Check(frame)) return;
 		const existing = connections.get(socket);
 		if (!existing) return;
-		const updated: Connection = { ...existing, actions: frame.actions };
+		const updated: Connection = {
+			...existing,
+			actions: frame.actions,
+			agentId: frame.agentId,
+		};
 		connections.set(socket, updated);
 		socket.serializeAttachment?.(updated);
 		broadcastPresence();
