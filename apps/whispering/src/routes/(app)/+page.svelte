@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
-	import * as Collapsible from '@epicenter/ui/collapsible';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { FileDropZone } from '@epicenter/ui/file-drop-zone';
 	import * as Item from '@epicenter/ui/item';
@@ -8,7 +7,6 @@
 	import { Link } from '@epicenter/ui/link';
 	import * as SectionHeader from '@epicenter/ui/section-header';
 	import * as ToggleGroup from '@epicenter/ui/toggle-group';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Heart from '@lucide/svelte/icons/heart';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
@@ -22,11 +20,10 @@
 	import DictationCapabilityNotice from '$lib/components/DictationCapabilityNotice.svelte';
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import {
-		TranscriptionRuntimeConfig,
 		TranscriptionSelector,
+		TranscriptionSetup,
 		TransformationSelector,
 	} from '$lib/components/settings';
-	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
 	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
 	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
 	import {
@@ -220,36 +217,7 @@
 					</p>
 				</div>
 
-				<!--
-					Lead with the recommended setup for the current service and hide the
-					service picker. A first-run user wants the default; the picker is a
-					wall of unfamiliar provider names that reads as "this is a developer
-					tool". Anyone who wants a cloud provider or a different model opens
-					the disclosure below.
-				-->
-				<TranscriptionRuntimeConfig
-					id="home-transcription-service"
-					hideServiceSelect
-					showAdvanced={false}
-				/>
-
-				<Collapsible.Root>
-					<Collapsible.Trigger
-						class="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground [&[data-state=open]>svg]:rotate-180"
-					>
-						Use a different service
-						<ChevronDown class="size-4 transition-transform" />
-					</Collapsible.Trigger>
-					<Collapsible.Content class="pt-4">
-						<TranscriptionServiceSelect
-							id="home-transcription-service-picker"
-							label="Service"
-							bind:selected={() => settings.get('transcription.service'),
-								(selected) =>
-									settings.set('transcription.service', selected)}
-						/>
-					</Collapsible.Content>
-				</Collapsible.Root>
+				<TranscriptionSetup id="home-transcription-service" />
 			</div>
 
 			<!--
