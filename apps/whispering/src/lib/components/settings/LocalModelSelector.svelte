@@ -266,7 +266,7 @@
 				</Item.Actions>
 			</Item.Root>
 		{:else if !value && customEntries.length === 0}
-			<Empty.Root class="py-8">
+			<Empty.Root>
 				<Empty.Media variant="icon">
 					<HardDriveDownload class="size-5" />
 				</Empty.Media>
