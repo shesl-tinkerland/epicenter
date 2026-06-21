@@ -25,20 +25,33 @@ export const RunPolishError = defineErrors({
 export type RunPolishError = InferErrors<typeof RunPolishError>;
 
 /**
- * Whether a Polish AI pass will actually run for `input`: Polish enabled AND a
- * provider key configured AND non-empty input. "On by default once a key
- * exists" is a runtime gate, not a settings flag, so a keyless install (or a
- * user in speed mode) skips the call. The single source for this decision so
- * the pipeline can show the "Polishing..." HUD only when an AI call is really
- * about to happen (no flicker in speed mode); `runPolish` reads it too. Read at
- * use per ADR 0012; nothing is cached.
+ * The Polish control's effective state, derived from two independent facts:
+ * intent (`polish.enabled`, the toggle) and capability (a completion key on the
+ * selected provider). Speed mode is `off`; `on` means a pass will run; and
+ * `needs-key` is the "wanted but blocked" state, intent without capability,
+ * which a bare boolean used to hide by collapsing it into the same `false` as
+ * `off`. The UI reads this so the Settings toggle and the home chip can show
+ * *why* Polish is or is not running, instead of a toggle that reads "on" while
+ * the pipeline silently ships raw. Adding a key is capability, not consent, so
+ * the two facts stay separate concepts even though both must hold to run. Read
+ * at use per ADR 0012; nothing is cached.
+ */
+export type PolishStatus = 'off' | 'on' | 'needs-key';
+
+export function polishStatus(): PolishStatus {
+	if (!settings.get('polish.enabled')) return 'off';
+	return hasCompletionKey() ? 'on' : 'needs-key';
+}
+
+/**
+ * Whether a Polish AI pass will actually run for `input`: the control is `on`
+ * (enabled AND a key configured) AND the input is non-empty. The single source
+ * for this decision so the pipeline shows the "Polishing..." HUD only when an AI
+ * call is really about to happen (no flicker in speed mode or a keyless
+ * install); `runPolish` reads it too.
  */
 export function polishWillRun(input: string): boolean {
-	return (
-		settings.get('polish.enabled') &&
-		hasCompletionKey() &&
-		input.trim().length > 0
-	);
+	return polishStatus() === 'on' && input.trim().length > 0;
 }
 
 /**
