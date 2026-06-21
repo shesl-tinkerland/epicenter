@@ -36,6 +36,7 @@
 		label = 'Transcription Service',
 		description,
 		showAdvanced = true,
+		hideServiceSelect = false,
 		class: className,
 	}: {
 		id?: string;
@@ -43,6 +44,12 @@
 		description?: string | Snippet;
 		/** When false, hide the advanced fields (unload policy, language, prompt). */
 		showAdvanced?: boolean;
+		/**
+		 * When true, hide the service picker and render only the selected
+		 * service's setup. Lets a host (the first-run screen) lead with the
+		 * recommended setup and tuck the picker behind a disclosure of its own.
+		 */
+		hideServiceSelect?: boolean;
 		class?: string;
 	} = $props();
 
@@ -86,14 +93,16 @@
 </script>
 
 <Field.Group class={className}>
-	<TranscriptionServiceSelect
-		{id}
-		{label}
-		{description}
-		bind:selected={() => settings.get('transcription.service'),
-			(selected) =>
-				settings.set('transcription.service', selected)}
-	/>
+	{#if !hideServiceSelect}
+		<TranscriptionServiceSelect
+			{id}
+			{label}
+			{description}
+			bind:selected={() => settings.get('transcription.service'),
+				(selected) =>
+					settings.set('transcription.service', selected)}
+		/>
+	{/if}
 
 	{#if isSelectedServiceUnavailable && selectedTranscriptionProvider}
 		<Alert.Root variant="warning">

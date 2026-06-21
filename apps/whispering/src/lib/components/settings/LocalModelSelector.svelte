@@ -299,7 +299,7 @@
 					{:else}
 						<Button onclick={downloadRecommendedModel}>
 							<Download class="size-4" />
-							Download {recommended.name} ({recommended.size})
+							Download recommended model ({recommended.size})
 						</Button>
 					{/if}
 				</Empty.Content>
