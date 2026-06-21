@@ -208,7 +208,7 @@
 {/snippet}
 
 <div
-	class="flex flex-1 flex-col items-center justify-center w-full px-4 py-12 sm:py-16"
+	class="flex flex-1 flex-col items-center justify-center w-full mx-auto px-4 py-12 sm:py-16"
 >
 	{#if !transcriptionReadiness.isReady}
 		<div class="w-full max-w-5xl space-y-6">
