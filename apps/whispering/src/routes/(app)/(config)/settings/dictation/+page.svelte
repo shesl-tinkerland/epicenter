@@ -3,14 +3,22 @@
 	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Field from '@epicenter/ui/field';
 	import { Input } from '@epicenter/ui/input';
+	import { Link } from '@epicenter/ui/link';
 	import { Textarea } from '@epicenter/ui/textarea';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { SettingSwitch } from '$lib/components/settings';
+	import { polishStatus } from '$lib/operations/run-polish';
 	import { settings } from '$lib/state/settings.svelte';
 
 	const dictionary = $derived(settings.get('dictionary'));
+	// Intent (`polish.enabled`) and capability (a completion key) are separate
+	// facts; the toggle below sets intent, this surfaces when intent is on but
+	// the key is missing so the control never silently reads "on" while the
+	// pipeline ships raw.
+	const polish = $derived(polishStatus());
 
 	let newTerm = $state('');
 
@@ -52,6 +60,19 @@
 					label="Polish transcripts with AI"
 					description="Turn off for speed mode: the raw transcript ships instantly, with no AI call."
 				/>
+
+				{#if polish === 'needs-key'}
+					<div
+						class="border-amber-500/30 bg-amber-500/10 text-foreground flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm"
+					>
+						<KeyRoundIcon class="mt-0.5 size-4 shrink-0 text-amber-500" />
+						<p>
+							Polish is on but has no AI key, so transcripts still ship raw. <Link
+								href="/settings/api-keys">Add a completion key</Link
+							> to start cleaning them up.
+						</p>
+					</div>
+				{/if}
 
 				{#if settings.get('polish.enabled')}
 					<Collapsible.Root>

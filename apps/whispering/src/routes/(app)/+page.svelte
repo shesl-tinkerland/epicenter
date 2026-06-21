@@ -50,6 +50,7 @@
 	import CaptureBehaviorPopover from './_components/CaptureBehaviorPopover.svelte';
 	import CapturePipeline from './_components/CapturePipeline.svelte';
 	import ManualRecordingAction from './_components/ManualRecordingAction.svelte';
+	import PolishPipelineControl from './_components/PolishPipelineControl.svelte';
 	import VadRecordingAction from './_components/VadRecordingAction.svelte';
 
 	const latestRecording = $derived(recordings.sorted[0]);
@@ -245,6 +246,7 @@
 								variant="pipeline"
 								iconViewTransitionName={viewTransition.pipeline.transcription}
 							/>
+							<PolishPipelineControl />
 							<CaptureBehaviorPopover />
 						</CapturePipeline>
 					{/snippet}
@@ -273,6 +275,7 @@
 								variant="pipeline"
 								iconViewTransitionName={viewTransition.pipeline.transcription}
 							/>
+							<PolishPipelineControl />
 							<CaptureBehaviorPopover />
 						</CapturePipeline>
 					{/snippet}
@@ -305,6 +308,7 @@
 						variant="pipeline"
 						iconViewTransitionName={viewTransition.pipeline.transcription}
 					/>
+					<PolishPipelineControl />
 				</CapturePipeline>
 			</div>
 		{/if}
