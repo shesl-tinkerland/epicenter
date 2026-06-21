@@ -183,15 +183,8 @@
 
 <svelte:head> <title>Whispering</title> </svelte:head>
 
-{#snippet hero(layout: 'center' | 'split')}
-	<SectionHeader.Root
-		class={[
-			'flex flex-col gap-3',
-			layout === 'split'
-				? 'items-center text-center lg:items-start lg:text-left'
-				: 'items-center text-center',
-		]}
-	>
+{#snippet hero()}
+	<SectionHeader.Root class="flex flex-col items-center gap-3 text-center">
 		<div class="flex items-center gap-3">
 			<img src={studioMicrophone} alt="" class="size-12" />
 			<SectionHeader.Title
@@ -208,74 +201,73 @@
 {/snippet}
 
 <div
-	class="flex flex-1 flex-col items-center justify-center w-full mx-auto px-4 py-12 sm:py-16"
+	class="flex flex-1 flex-col items-center justify-center w-full px-4 py-12 sm:py-16"
 >
 	{#if !transcriptionReadiness.isReady}
-		<div class="w-full max-w-5xl space-y-6">
-			<DictationCapabilityNotice />
-			<div
-				class="grid items-start gap-8 lg:grid-cols-[1fr_minmax(420px,480px)] lg:gap-12"
-			>
-				<div
-					class="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left"
-				>
-					{@render hero('split')}
-					<Item.Group class="w-full gap-1">
-						<Item.Root variant="muted">
-							<Item.Media variant="icon">
-								<ShieldCheck class="size-5" />
-							</Item.Media>
-							<Item.Content>
-								<Item.Title>Private and offline</Item.Title>
-								<Item.Description>
-									Audio is transcribed on your device and never uploaded.
-								</Item.Description>
-							</Item.Content>
-						</Item.Root>
-						<Item.Root variant="muted">
-							<Item.Media variant="icon">
-								<Cpu class="size-5" />
-							</Item.Media>
-							<Item.Content>
-								<Item.Title>Runs on this device</Item.Title>
-								<Item.Description>
-									No servers, no API keys, no monthly bill.
-								</Item.Description>
-							</Item.Content>
-						</Item.Root>
-						<Item.Root variant="muted">
-							<Item.Media variant="icon">
-								<Heart class="size-5" />
-							</Item.Media>
-							<Item.Content>
-								<Item.Title>Free and open source</Item.Title>
-								<Item.Description>
-									Yours to keep, audit, and extend.
-								</Item.Description>
-							</Item.Content>
-						</Item.Root>
-					</Item.Group>
-				</div>
+		<div class="flex w-full max-w-2xl flex-col items-center gap-8">
+			{@render hero()}
 
-				<div class="w-full space-y-3">
-					<div class="space-y-1">
-						<h2 class="text-base font-semibold">Set up transcription</h2>
-						<p class="text-sm text-muted-foreground">
-							{transcriptionReadiness.primaryIssue ??
-								'Choose how Whispering turns your speech into text.'}
-						</p>
-					</div>
-					<TranscriptionRuntimeConfig
-						id="home-transcription-service"
-						label="Service"
-						showAdvanced={false}
-					/>
+			<div class="w-full space-y-3">
+				<DictationCapabilityNotice />
+				<div class="space-y-1">
+					<h2 class="text-base font-semibold">Set up transcription</h2>
+					<p class="text-sm text-muted-foreground">
+						{transcriptionReadiness.primaryIssue ??
+							'Choose how Whispering turns your speech into text.'}
+					</p>
 				</div>
+				<TranscriptionRuntimeConfig
+					id="home-transcription-service"
+					label="Service"
+					showAdvanced={false}
+				/>
+			</div>
+
+			<!--
+				The trust strip is a reassurance footer below the setup action: the same
+				three guarantees, laid out as a 3-up grid so they read as a band rather
+				than a tall stack. They restate the privacy/cost/freedom promises right
+				where the user is deciding whether to download a model.
+			-->
+			<div class="grid w-full gap-4 sm:grid-cols-3">
+				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+					<Item.Media variant="icon">
+						<ShieldCheck class="size-5" />
+					</Item.Media>
+					<Item.Content>
+						<Item.Title>Private and offline</Item.Title>
+						<Item.Description>
+							Audio is transcribed on your device and never uploaded.
+						</Item.Description>
+					</Item.Content>
+				</Item.Root>
+				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+					<Item.Media variant="icon">
+						<Cpu class="size-5" />
+					</Item.Media>
+					<Item.Content>
+						<Item.Title>Runs on this device</Item.Title>
+						<Item.Description>
+							No servers, no API keys, no monthly bill.
+						</Item.Description>
+					</Item.Content>
+				</Item.Root>
+				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+					<Item.Media variant="icon">
+						<Heart class="size-5" />
+					</Item.Media>
+					<Item.Content>
+						<Item.Title>Free and open source</Item.Title>
+						<Item.Description>
+							Yours to keep, audit, and extend.
+						</Item.Description>
+					</Item.Content>
+				</Item.Root>
 			</div>
 		</div>
 	{:else}
 		<div class="flex w-full max-w-lg flex-col items-center gap-4">
-			{@render hero('center')}
+			{@render hero()}
 
 			<DictationCapabilityNotice />
 			<ToggleGroup.Root
