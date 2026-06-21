@@ -14,6 +14,7 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
+	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Kbd from '@epicenter/ui/kbd';
 	import { createMutation } from '@tanstack/svelte-query';
 	import type { Component } from 'svelte';
@@ -21,13 +22,15 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fly, scale } from 'svelte/transition';
 	import Check from '@lucide/svelte/icons/check';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Loader from '@lucide/svelte/icons/loader-circle';
 	import Mic from '@lucide/svelte/icons/mic';
 	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
-	import { TranscriptionSetup } from '$lib/components/settings';
+	import { TranscriptionRuntimeConfig } from '$lib/components/settings';
+	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
 	import {
 		startManualRecording,
 		stopManualRecording,
@@ -36,6 +39,7 @@
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
+	import { settings } from '$lib/state/settings.svelte';
 	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import studioMicrophone from '$lib/assets/studio-microphone.png';
 	import { tauri } from '#platform/tauri';
@@ -90,13 +94,16 @@
 	}));
 	const isRecording = $derived(manualRecorder.state === 'RECORDING');
 	const isStopping = $derived(stopMutation.isPending);
-	let practiceTranscript = $state('');
-	$effect(() => {
-		if (stopMutation.isSuccess && !isRecording) {
-			const t = recordings.sorted[0]?.transcript?.trim();
-			if (t) practiceTranscript = t;
-		}
-	});
+	// The practice transcript is just the latest recording's text, surfaced once
+	// the wizard's own stop has resolved. Derived, not an effect-latch: stop awaits
+	// the whole pipeline, so by the time `isSuccess` flips the row is already saved,
+	// and computing it synchronously avoids a one-frame flash of the Record button
+	// between paint and a post-effect assignment.
+	const practiceTranscript = $derived(
+		stopMutation.isSuccess && !isRecording
+			? (recordings.sorted[0]?.transcript?.trim() ?? '')
+			: '',
+	);
 	function toggleRecord() {
 		if (isRecording) stopMutation.mutate();
 		else startMutation.mutate();
@@ -236,7 +243,35 @@
 										'Choose what turns your speech into text. You can change it later.'}
 								</p>
 							</div>
-							<TranscriptionSetup id="first-run-transcription" />
+							<!--
+								Lead with the recommended setup for the selected service (the
+								model download on desktop, the API-key field on web) and tuck the
+								full service picker behind a disclosure. A first-run user wants the
+								default; the picker is a wall of unfamiliar provider names that
+								reads as "this is a developer tool".
+							-->
+							<TranscriptionRuntimeConfig
+								id="first-run-transcription"
+								hideServiceSelect
+								showAdvanced={false}
+							/>
+							<Collapsible.Root>
+								<Collapsible.Trigger
+									class="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground [&[data-state=open]>svg]:rotate-180"
+								>
+									Use a different service
+									<ChevronDown class="size-4 transition-transform" />
+								</Collapsible.Trigger>
+								<Collapsible.Content class="pt-4">
+									<TranscriptionServiceSelect
+										id="first-run-transcription-picker"
+										label="Service"
+										bind:selected={() => settings.get('transcription.service'),
+											(selected) =>
+												settings.set('transcription.service', selected)}
+									/>
+								</Collapsible.Content>
+							</Collapsible.Root>
 						</div>
 					{:else if current?.key === 'try'}
 						<Card.Root class="border-border/70 shadow-sm dark:shadow-none dark:ring-1 dark:ring-white/5">

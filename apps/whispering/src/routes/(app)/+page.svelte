@@ -9,7 +9,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { createQuery } from '@tanstack/svelte-query';
 	import type { UnlistenFn } from '@tauri-apps/api/event';
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 	import { tryAsync } from 'wellcrafted/result';
 	import { commandCallbacks } from '$lib/commands';
@@ -55,17 +55,16 @@
 	import VadRecordingAction from './_components/VadRecordingAction.svelte';
 
 	const latestRecording = $derived(recordings.sorted[0]);
-	const transcriptionReadiness = $derived(getTranscriptionReadiness());
 	// First-run setup is "active" from mount whenever transcription isn't ready;
 	// the only in-mount transition is the user finishing it (onComplete sets it
-	// false). The initial value is read synchronously from readiness, so there is
+	// false). The initial value is computed once here, synchronously, so there is
 	// no first-paint flash and no $effect latch, and no persisted "seen
 	// onboarding" flag (which would drift from readiness). It never needs to flip
 	// back to true within a mount because nothing on the recorder screen can make
 	// you un-ready; a regression (model deleted in settings) re-activates it for
 	// free, because SvelteKit remounts this page on navigation back to home. So
 	// first run and a later regression show the same flow.
-	let setupActive = $state(untrack(() => !transcriptionReadiness.isReady));
+	let setupActive = $state(!getTranscriptionReadiness().isReady);
 	// The selected transformation's pipeline glyph morphs into that
 	// transformation's row on the /transformations list, so name it with the same
 	// id the row carries. Only the home pipeline opts in; the config topbar leaves

@@ -14,4 +14,3 @@ export { default as TranscriptionSelector } from './selectors/TranscriptionSelec
 export { default as TransformationSelector } from './selectors/TransformationSelector.svelte';
 export { default as VadDeviceSelector } from './selectors/VadDeviceSelector.svelte';
 export { default as TranscriptionRuntimeConfig } from './TranscriptionRuntimeConfig.svelte';
-export { default as TranscriptionSetup } from './TranscriptionSetup.svelte';
