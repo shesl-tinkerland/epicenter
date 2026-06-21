@@ -245,7 +245,7 @@ const recording = {
 	// Pause system media playback while your voice is being captured, resume it
 	// after. Off by default (opt-in): the resume cannot keep its promise on macOS,
 	// where MediaRemote's Play is single-target so it can wake whatever app the OS
-	// last marked now-playing, not the app we actually paused (see ADR-0041). A
+	// last marked now-playing, not the app we actually paused (see ADR-0045). A
 	// convenience that can occasionally start unrelated media should be chosen, not
 	// sprung. Discoverable via the settings toggle's description and the home-row
 	// quick toggle, both of which explain it at the moment you turn it on. A

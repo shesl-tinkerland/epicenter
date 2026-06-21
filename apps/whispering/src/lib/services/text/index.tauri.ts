@@ -22,8 +22,8 @@ export const TextServiceLive = {
 			catch: (error) => TextError.ClipboardWrite({ cause: error }),
 		}),
 
-	writeToCursor: async (text) => {
-		const { data, error } = await commands.writeText(text);
+	writeToCursor: async (text, keepOnClipboard) => {
+		const { data, error } = await commands.writeText(text, keepOnClipboard);
 		if (error !== null) return TextError.WriteToCursor({ cause: error });
 		return Ok(data);
 	},

@@ -3,41 +3,39 @@
 	import * as Item from '@epicenter/ui/item';
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-	import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
+	import { outputWritesToCursor } from '$lib/operations/delivery';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
-	import { recordings } from '$lib/state/recordings.svelte';
 
-	// One declarative view over the dictation capability Rust owns, in three
-	// registers that differ in kind, not just wording:
-	//   - broken: a stale grant left the global tap dead. A real FAULT, so an amber
-	//     glyph, a `role="alert"`, and a primary action.
-	//   - untrusted (first grant): never granted. An optional UPGRADE, not a wall.
-	//     Dictation already works through the shortcut and clipboard, so the glyph
-	//     is calm and the action is a quiet outline button.
+	// A home banner that fires ONLY when something the user configured is broken,
+	// never as a feature pitch. The dictation capability Rust owns already encodes
+	// "is anything wrong": the global tap is held (`untrusted`/`broken`, the states
+	// `needsAccessibility` covers) only when some configured intent wants the macOS
+	// Accessibility grant (a hold-to-talk binding, paste at cursor, or a live
+	// capture); with nothing to grant for, the capability settles to
+	// `inactive`/`active` and this banner stays silent. Three registers, each a
+	// real problem with a fix:
+	//   - broken: a stale grant left the global tap dead. A previously-working
+	//     shortcut stopped firing, so it is a FAULT: amber glyph, `role="alert"`,
+	//     and a primary action.
+	//   - untrusted + paste at cursor configured: the paste the user asked for is
+	//     silently falling back to the clipboard. A soft fault: amber glyph and a
+	//     primary action, but no `role="alert"` (a steady recoverable state, not a
+	//     change to announce). The untrusted hold-to-talk gap (no cursor paste) is
+	//     surfaced at the shortcut recorder and the dimmed keycap, not here, so the
+	//     home banner stays about the non-obvious paste downgrade.
 	//   - unsupported (Wayland): a platform FACT, nothing to grant. An info glyph
 	//     pointing at the mic that still works; no action.
-	// All three share one slim outlined `Item` (icon · message · trailing action)
-	// at the same size, so backgrounds and padding stay uniform and only the glyph
-	// and the action carry the register. None is dismissable: each
-	// clears itself when the capability flips, and a quiet banner never needs
-	// hiding. The detailed steps live in the guide dialog the action opens. The
-	// branch order is load-bearing: `broken` is caught before the plain untrusted
-	// case (`needsAccessibility` covers both).
-	//
-	// The optional pitch waits for the first transcript. It is a pitch, not a
-	// problem, and "hold a key to talk" only means something once you have pressed
-	// once and watched a transcript land. Holding it back keeps a brand-new home
-	// clean and lets the pitch arrive when it is finally relevant. Derived from the
-	// recordings that already exist, so it costs no dismissal flag. Breakage and
-	// the Wayland limit are never gated: those are immediate.
-	const hasDictatedOnce = $derived(
-		recordings.sorted.some((r) => r.transcript.trim()),
-	);
-	const isFirstGrant = $derived(
+	// All share one slim outlined `Item` (icon · message · trailing action) at the
+	// same size, so backgrounds and padding stay uniform and only the glyph and the
+	// action carry the register. None is dismissable: each clears itself when the
+	// capability or the cursor toggle flips, and a quiet banner never needs hiding.
+	// The detailed steps live in the guide dialog the action opens. The branch order
+	// is load-bearing: `broken` is caught before the plain untrusted paste case.
+	const cursorPasteNotFiring = $derived(
 		dictationCapability.needsAccessibility &&
 			!dictationCapability.isStale &&
-			hasDictatedOnce,
+			outputWritesToCursor(),
 	);
 </script>
 
@@ -59,23 +57,20 @@
 			</Button>
 		</Item.Actions>
 	</Item.Root>
-{:else if isFirstGrant}
+{:else if cursorPasteNotFiring}
 	<Item.Root variant="outline" size="sm" class="w-full">
 		<Item.Media>
-			<WandSparklesIcon class="size-4" aria-hidden="true" />
+			<TriangleAlertIcon class="text-warning size-4" aria-hidden="true" />
 		</Item.Media>
 		<Item.Content>
-			<Item.Title>Hold a key to talk, paste hands-free</Item.Title>
+			<Item.Title>Paste at cursor needs macOS Accessibility</Item.Title>
 			<Item.Description>
-				Your shortcut already copies transcripts to your clipboard.
+				You've turned on paste at cursor, but it isn't granted yet. Until you
+				grant it, transcripts go to your clipboard.
 			</Item.Description>
 		</Item.Content>
 		<Item.Actions>
-			<Button
-				size="sm"
-				variant="outline"
-				onclick={() => accessibilityGuide.open()}
-			>
+			<Button size="sm" onclick={() => accessibilityGuide.open()}>
 				Show me how
 			</Button>
 		</Item.Actions>

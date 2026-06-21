@@ -1,4 +1,4 @@
-# 0041. Playback pause ships opt-in because macOS resume can start unrelated media
+# 0045. Playback pause ships opt-in because macOS resume can start unrelated media
 
 - **Status:** Accepted
 - **Date:** 2026-06-20

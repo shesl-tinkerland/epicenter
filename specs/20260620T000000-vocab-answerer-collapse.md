@@ -2,49 +2,61 @@
 
 Status: Draft. Date: 2026-06-20.
 
-The build plan for the answerer redesign settled in this design pass. The durable
-decisions live in ADRs; this spec is the dependency-ordered wave plan plus a
-self-contained handoff prompt per wave. Delete this spec when the waves land
-(the ADRs are the lasting record).
+> **Repointed 2026-06-20 by [ADR-0043](../docs/adr/0043-an-agent-answers-where-its-capability-lives.md).**
+> A use-case pass killed the hosted-worker premise: an agent answers where its
+> capability lives. Vocab is capability-free, so the **client answers** (a
+> client-side chat over the metered SSE stream); there is **no hosted managed
+> worker**. **Wave 3 is dropped**, **Wave 4 is rewritten** to the client-side
+> shape, and the agentic tool loop moves to its real consumer, Local Books
+> (`20260620T180000-local-books-agent-over-sql.md`). The sections below are
+> updated to match; Waves 1 and 2 already merged unchanged.
+
+The durable decisions live in ADRs; this spec is the dependency-ordered wave plan.
+Delete this spec when the waves land (the ADRs are the lasting record).
 
 ## Decisions (the lasting record is the ADRs)
 
-- **ADR-0041** — every answerer is a worker; the **browser never answers**;
-  blindness is per-agent. The managed answerer is **trusted-internal** Epicenter
-  infra (house-key Gemini, bills the room `ownerId` in-process, reads/writes the
-  doc via the anchor's RPC, woken by the existing dispatch doorbell). Cloud-proxied
-  BYOK is **deferred** (needs the secret vault).
+- **ADR-0043** (supersedes ADR-0041) — an agent answers where its capability
+  lives. A capability-free agent (Vocab) answers **in the client**; a local-data
+  agent (Local Books) answers on the **daemon** where the data is. Epicenter runs
+  **no per-user answering worker**: it is the blind box (relay + anchor) plus a
+  metered inference stream. The conversation substrate (table row to child doc to
+  parts) and the shared answer core stay; only the answer's origin differs.
+- **ADR-0044** — tool approval is a per-conversation policy (`auto` / `ask` /
+  `deny`), shipped as read-only / ask / auto, with a classifier deferred. Drives
+  ADR-0042's doc-mediated approval. Vocab has no tools and does not use it.
 - **ADR-0042** — the agent loop is the worker's, over the doc-as-message-array;
-  the engine stays a pure token source; durable doc-mediated approval. **Build
-  deferred** to a real tool consumer (not Vocab).
-- **ADR-0033** amended; **ADR-0025** amended (the ephemeral browser writer
-  dissolves); **ADR-0024** note (tension resolved toward the hosted-worker
-  quadrant). **ADR-0030** already settles model = agent (no model switcher) and
-  the managed/published vs user-authored catalog.
+  durable doc-mediated approval. Un-deferred by **Local Books**, not Vocab.
+- **ADR-0033 / ADR-0025 / ADR-0036 / ADR-0030** unchanged: the metered stream,
+  the conversation child doc, the parts body, and the immutable agent bundle.
 
 ## End state for Vocab
 
 - One app: a single Chinese vocab assistant. One model (`VOCAB_MODEL`), one
   system prompt, `tools: []`.
-- Two **durable** agents in the catalog, distinguished by trust location:
-  - **Managed** (Epicenter-hosted worker, house-key Gemini, billed to the room owner).
-  - **Home daemon** (`vocab-home`, the user's own box).
-- The browser writes user turns and renders the synced doc. It constructs no
-  engine and runs no answer loop.
-- Close the browser mid-answer → the worker keeps writing; resync catches up.
+- Two agents in the catalog, distinguished by where the answer is produced:
+  - **Client** (the capability-free default): the browser runs the shared answer
+    core fed by the metered `/api/ai/chat` SSE stream, sinking parts into the
+    conversation child doc. No hosted worker.
+  - **Home daemon** (`vocab-home`, the user's own box): same loop, different host.
+- The browser writes user turns, renders the synced doc, **and answers the client
+  agent** (a capability-free agent answers in the client, ADR-0043).
+- Close the browser mid-answer on the **client** agent → the answer stops; for a
+  one-shot vocab lookup this is a non-goal (re-ask costs nothing). The daemon agent
+  keeps writing because its worker is its own always-on box.
 
 ## Wave plan (each is one standalone, reviewable PR, in order)
 
 | # | Wave | Depends on | Net |
 |---|---|---|---|
-| 1 | Rename zhongwen → vocab (incl. pre-release data ids) | — | mechanical, no behavior change |
-| 2 | Daemon ships live (`vocab-home`) | 1 | proves worker-answers-over-sync on the user's box |
-| 3 | Hosted managed worker (on-demand DO) | 1 | the managed answerer; the big build |
-| 4 | Browser → renderer-only (the collapse) | 2, 3 | deletion PR; supersedes #2127 |
-| 5 | F: agentic loop + doc approval (DEFERRED) | 4 + a tool consumer | not this milestone; ADR-0042 holds the design |
+| 1 | Rename zhongwen → vocab (incl. pre-release data ids) | — | **merged**; mechanical, no behavior change |
+| 2 | Daemon ships live (`vocab-home`) | 1 | **merged**; proves worker-answers-over-sync on the user's box |
+| 3 | ~~Hosted managed worker (on-demand DO)~~ | — | **DROPPED by ADR-0043** (phantom cell; not built) |
+| 4 | Vocab client answers via metered SSE; drop the owner fork | 1, 2 | client-side chat over `/api/ai/chat`; the collapse |
+| 5 | Agentic loop + doc approval | a tool consumer | **moved to Local Books**, not Vocab; ADR-0042 / 0044 hold the design |
 
-Rename is first so nothing rebases over it. Wave 4 is safe only once both
-answerers (daemon + hosted) exist, so it follows 2 and 3.
+Rename was first so nothing rebased over it. Wave 4 no longer waits on a hosted
+worker (there is none): the client is the capability-free agent's answerer.
 
 ## PR / branch disposition
 
@@ -147,124 +159,88 @@ the existence-is-the-claim guard prevents any double-answer with a watching tab
 
 ---
 
-## Wave 3 — Hosted managed worker (trusted-internal, house-key)
+## Wave 3 — Hosted managed worker — DROPPED by ADR-0043
 
-**Goal.** The Epicenter-hosted answerer for the **managed** agent, as the daemon's
-answer loop hosted by us. It is **trusted-internal**: woken by the existing dispatch
-doorbell when a turn is written, it reads/writes the conversation doc via the
-anchor's internal RPC (co-located, no remote y-protocols handshake), runs the same
-`attachChatWorker` loop, streams parts into the doc, and bills the room's `ownerId`
-directly via the in-process Autumn primitive. **House-key Gemini only** — no
-user-impersonation credential, no HTTP loopback to `/api/ai/chat`, and no
-server-side key storage (cloud-proxied BYOK is deferred until the secret vault
-exists). Host shape: a doorbell-triggered worker suffices for text-only answers
-(no approval pause); the hibernating-DO upgrade arrives with F.
-
-**Reuse (do not reinvent).** `packages/server/src/room/` already holds the live
-`Y.Doc` and exposes `getDoc`/`sync` RPC + the `dispatch_request`/`dispatch_inbound`
-doorbell; `createRoomCore` is runtime-agnostic. The answer loop is the daemon's
-`attachChatWorker` (wave 2), reused verbatim. If a hibernating DO is chosen for the
-host, the room DO's hibernation patterns (`durable-object.ts`: `acceptWebSocket`,
-`getWebSockets`, alarms) and `keepAlive`/`keepAliveWhile` (Cloudflare `Agent` class)
-are the reference.
-
-**Scope / files.** The hosted-worker host (Worker or DO + wrangler binding), the
-house-key engine (the provider adapter from `@epicenter/ai-adapters`, built
-worker-side), the doorbell wake endpoint, anchor-RPC read/write of the conversation
-doc (`getDoc`/`sync`), and in-process Autumn billing keyed to the room's `ownerId`
-(`apps/api/worker/index.ts` + `apps/api/worker/billing`, hosted-only). Keep the
-worker a separate spoke — never put answer logic in the room/anchor DO (ADR-0035).
-
-**Acceptance.** A conversation bound to the managed agent is answered server-side
-with no browser open and no daemon; the answer is billed to the room's `ownerId`
-via Autumn; a missed doorbell still gets answered (alarm backstop / next sync);
-the anchor never runs answer logic (stays blind).
-
-**Handoff prompt.** (PAIR with Braden on the host shape before building — this
-touches billing + the trust boundary.)
-> Build the Epicenter-hosted managed worker for Vocab per ADR-0041 (worktree
-> `/Users/braden/Code/.worktrees/epicenter-row-childdocs`, after waves 1–2). It is
-> **trusted-internal infrastructure**, NOT an external client: do not mint a
-> user-impersonation credential, do not loop back to `/api/ai/chat`, do not store
-> user keys. It is woken by the existing dispatch doorbell
-> (`dispatch_request`/`dispatch_inbound` in `packages/server/src/room/core.ts`)
-> when a managed-agent turn is written; it reads/writes the conversation child doc
-> via the anchor's internal RPC (`getDoc`/`sync` — co-located, no remote
-> y-protocols handshake); it runs the daemon's existing `attachChatWorker` loop
-> (wave 2) verbatim with a **house-key Gemini** engine (provider adapter from
-> `@epicenter/ai-adapters`); and it bills the room's `ownerId` directly via the
-> in-process Autumn primitive (`apps/api/worker/billing`, hosted-only). Host shape:
-> a doorbell-triggered worker suffices (text-only answers have no approval pause);
-> the hibernating-DO upgrade (`acceptWebSocket`/`getWebSockets`/alarms +
-> `keepAlive`) arrives with F. Keep this a SEPARATE app-aware spoke; never add
-> answer logic to the room/anchor DO (ADR-0035). Cloud-proxied BYOK is DEFERRED
-> (needs the secret vault). Ground Cloudflare + Yjs behavior against
-> `cloudflare/cloudflare-docs` and `yjs/yjs` via DeepWiki before relying on memory.
-> This is wave 3 of `specs/20260620T000000-vocab-answerer-collapse.md`.
+This wave is not built. A use-case pass showed the Epicenter-hosted answerer
+serves a phantom cell: Vocab is capability-free, so the client is the correct and
+cheapest answerer (no durability to win), and the only other real app (Local Books)
+needs a worker that **must** run where its data lives, which a hosted worker cannot
+do without uploading the data. There is no hosted managed worker, no on-demand DO,
+no queue, no wake route, and no internal-RPC child-doc connector. The economic
+floor is the blind box (relay + anchor) plus the metered inference stream; nothing
+per-user thinks-while-idle for free. See ADR-0043.
 
 ---
 
-## Wave 4 — Browser becomes renderer-only (the collapse)
+## Wave 4 — Vocab client answers via metered SSE (the collapse)
 
-**Goal.** The deletion PR. The browser stops answering. Now that the managed
-(wave 3) and daemon (wave 2) workers both answer, delete the browser answerer and
-the owner fork.
+**Goal.** Vocab's capability-free agent answers **in the client** (ADR-0043): the
+browser runs the shared answer core fed by the metered `/api/ai/chat` SSE stream
+and sinks parts into the conversation child doc. This is the collapse, but the cut
+is the **owner routing fork and the hosted-worker scaffolding**, not client
+answering. The conversation substrate (table row to child doc to parts, ADR-0036)
+stays; `vocab-home` keeps answering on the user's box.
 
-**Scope / deletions.**
-- `apps/vocab/.../ConversationView.svelte`: remove the `browserEngines`,
-  `resolveEngine`, the `answer`/`answersHere`/owner branch, and the `{ answer }`
-  passed to `bindConversation`. The view opens the doc and renders; it writes user
-  turns via `convo.send`.
-- Remove the `owner: 'ephemeral' | 'durable'` field from `AgentConfig` and the
-  catalog; both agents are durable, keyed by trust location. The `this-device`
-  ephemeral agent dissolves into the **Managed** agent (Epicenter-hosted).
-- Delete `attachChatBrowserAnswerer` usage; if no consumer remains, delete it from
-  `packages/workspace/src/ai/` (and its export + test).
-- Remove the browser-side `Engine`/`resolveEngine`/`epicenterMeteredEngine`
-  surface from the app (engines are worker-only now).
-- Reshape the catalog/picker: Managed + Home daemon, both durable.
-- Close PR #2127 as superseded.
+**Scope / changes.**
+- `ConversationView.svelte`: keep the client answer path, but drop the
+  `owner: 'ephemeral' | 'durable'` routing fork and any "does the hosted worker
+  answer this?" branch. The two agents are **client** (capability-free, browser
+  answers) and **vocab-home** (daemon answers); the picker reflects that.
+- Use TanStack AI on the client (`@tanstack/ai-svelte` `createChat` +
+  `fetchServerSentEvents`) against `API_ROUTES.ai.chat.url(baseURL)` with
+  `createAiChatFetch(auth.fetch)`; body `{ model: VOCAB_MODEL, systemPrompts:
+  [VOCAB_SYSTEM_PROMPT], tools: [] }`. Sink the streamed parts into the
+  conversation child doc via the shared answer core (ADR-0036). `chat.stop()` on
+  unmount; render every `MessagePart` with an unknown-fallback.
+- Remove the `owner` field from `AgentConfig` and the catalog; agents are
+  distinguished by where the answer is produced (client vs daemon), not an owner
+  enum. Rename the `this-device` agent to the **client** agent.
+- Delete any hosted-worker scaffolding that landed (there is none if Wave 3 was
+  never built); keep `epicenterMeteredEngine` only if the daemon's metered arm
+  still uses it (ADR-0038), otherwise fold it into the client SSE path.
+- Close PR #2127 (its owner fork is removed here).
 
-**Acceptance.** The browser never opens an answerer; every answer comes from a
-worker; closing the browser never stops an answer; one answering path remains; no
-dead `owner`/`Engine`/browser-answerer code; tests green. Run
-post-implementation-review + collapse-pass on the deletion.
+**Acceptance.** The client answers the capability-free agent over metered SSE,
+writing parts into the synced doc; `vocab-home` answers its conversations on the
+user's box; no `owner` routing fork remains; one client answer path + one daemon
+answer path; tests green. Run post-implementation-review + collapse-pass.
 
 **Handoff prompt.**
-> Make the Vocab browser renderer-only per ADR-0041 (worktree
-> `/Users/braden/Code/.worktrees/epicenter-row-childdocs`, after waves 1–3). Delete
-> the browser answerer: in `ConversationView.svelte` remove `browserEngines`,
-> `resolveEngine`, the `answer`/`answersHere`/owner branch, and the `{ answer }`
-> arg to `bindConversation` (the view just opens + renders the doc and writes user
-> turns via `convo.send`). Remove the `owner: 'ephemeral' | 'durable'` field from
-> `AgentConfig` and the catalog — both agents are now durable, distinguished by
-> trust location; the `this-device` ephemeral agent dissolves into the Managed
-> (Epicenter-hosted) agent. Delete `attachChatBrowserAnswerer` and the browser-side
-> `Engine`/`resolveEngine`/`epicenterMeteredEngine` surface if no consumer remains
-> (check exports + tests). Reshape the picker to Managed + Home daemon. Verify
-> closing the browser mid-answer no longer stops the answer. Run
-> post-implementation-review and collapse-pass on the deletion. Close PR #2127 as
-> superseded by this wave. This is wave 4 of
+> Make Vocab's client agent answer in the browser over the metered SSE stream per
+> ADR-0043 (worktree `/Users/braden/Code/.worktrees/epicenter-row-childdocs`, after
+> waves 1–2; Wave 3 is dropped). Use `@tanstack/ai-svelte` `createChat` +
+> `fetchServerSentEvents` against `/api/ai/chat` with `createAiChatFetch(auth.fetch)`
+> and `{ model: VOCAB_MODEL, systemPrompts: [VOCAB_SYSTEM_PROMPT], tools: [] }`,
+> sinking parts into the conversation child doc via the shared answer core
+> (ADR-0036). Remove the `owner: 'ephemeral' | 'durable'` routing fork from
+> `AgentConfig` and the catalog; rename `this-device` to the **client** agent; the
+> two agents are client (browser answers) and `vocab-home` (daemon answers).
+> Keep `epicenterMeteredEngine` only if the daemon still needs it (ADR-0038).
+> `chat.stop()` on unmount; render every `MessagePart` with an unknown-fallback.
+> Close PR #2127. Run post-implementation-review + collapse-pass. Ground TanStack
+> AI behavior against `TanStack/ai` via DeepWiki. This is wave 4 of
 > `specs/20260620T000000-vocab-answerer-collapse.md`.
 
 ---
 
-## Wave 5 — F: agentic loop + doc-mediated approval (DEFERRED)
+## Wave 5 — Agentic loop + doc-mediated approval — moved to Local Books
 
-Not this milestone. The design is ADR-0042: the worker owns the loop over the
-doc-as-message-array; the engine stays a pure token source; approval is a durable
-single-writer doc region (the `cancelRequestedAt` pattern). Build only when a real
-tool consumer exists (opensidian / tab-manager, which have actions) — never Vocab,
-which has no tools and rides the unified path with `tools: []` for free. The
-loop-engine choice (hand-roll over the existing TanStack adapters vs Vercel
-`streamText` vs roll-your-own) is left open in ADR-0042 and decided at build time.
+Not Vocab's milestone, and no longer a vague "deferred F." The design is ADR-0042
+(the worker owns the loop over the doc-as-message-array; approval is a durable
+single-writer doc region, the `cancelRequestedAt` pattern) plus ADR-0044 (approval
+is a per-conversation policy: read-only / ask / auto, classifier deferred). Its
+real consumer is **Local Books** (`20260620T180000-local-books-agent-over-sql.md`),
+which has tools that bind a worker to the machine holding the data. Vocab has no
+tools and never drives this loop. The loop-engine choice (hand-roll over the
+TanStack adapters vs Vercel `streamText` vs roll-your-own) is decided at build time
+in the Local Books spec.
 
 ## Open items carried forward
 
-- Loop engine for F (ADR-0042 open question). Lean: hand-roll over
-  `@epicenter/ai-adapters`'s existing TanStack adapters.
+- Loop engine for the agentic loop (ADR-0042 open question), decided in the Local
+  Books spec. Lean: hand-roll over `@epicenter/ai-adapters`'s TanStack adapters.
 - Presence (#2128) as the dead-mailbox warning, fast-follow after wave 2.
-- Browser-local BYOK (key never leaves the device) — additive future option, does
-  not disturb ADR-0041.
+- Browser-local BYOK (key never leaves the device): additive future option, does
+  not disturb ADR-0043.
 - `specs/zhongwen-conversation-deletion-refusal.md` hygiene (convert to ADR or
   delete) — separate pass.

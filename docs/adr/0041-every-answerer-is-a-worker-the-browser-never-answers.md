@@ -1,7 +1,8 @@
 # 0041. Every answerer is a worker; the browser never answers
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-06-20
+- **Superseded by:** [ADR-0043](0043-an-agent-answers-where-its-capability-lives.md) (an agent answers where its capability lives; the hosted managed worker is not built and the browser does answer the capability-free agent)
 - **Refines:** [ADR-0033](0033-a-conversation-has-one-transport-and-two-triggers.md) (keeps the doc-as-transport doctrine; revises which in-process peer answers a managed conversation), [ADR-0024](0024-an-always-on-worker-runs-app-semantics-beside-the-app-blind-anchor.md) (resolves the latent contradiction toward the hosted-worker quadrant), [ADR-0025](0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-worker.md) (the ephemeral browser writer dissolves)
 - **Relates:** [ADR-0030](0030-agents-are-immutable-capability-bundles.md) (trust location), [ADR-0035](0035-durable-storage-is-one-per-person-coordination-box.md) (workers are peer spokes, the anchor stays blind), [ADR-0021](0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md), [ADR-0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) (the engine the worker resolves)
 - **Refined (2026-06-20, same day):** the hosted worker is **trusted-internal infrastructure**, not an external client. It bills the room's `ownerId` directly via the in-process Autumn primitive (no user-impersonation credential, no HTTP loopback to `/api/ai/chat`) and reads/writes the conversation doc via the anchor's internal RPC (no remote y-protocols handshake). The first cut is **house-key only**; **cloud-proxied BYOK is deferred** until the server-side secret vault exists, so no user keys are stored server-side. The host shape (a doorbell-triggered worker vs a hibernating DO) follows F: text-only answers have no approval pause, so the simpler worker suffices until F's tool pauses arrive.

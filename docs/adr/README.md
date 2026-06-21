@@ -84,8 +84,8 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0014](0014-view-transitions-morph-a-re-expressed-glyph-not-its-container.md) | View transitions morph a re-expressed glyph, not its container | Accepted |
 | [0015](0015-the-brand-mark-has-one-canonical-source-every-other-form-is-generated.md) | The brand mark has one canonical source; every other form is generated | Proposed |
 | [0016](0016-prewarm-the-cold-model-load-and-refuse-the-rest-of-the-latency-menu.md) | Prewarm the cold model load and refuse the rest of the latency menu | Accepted |
-| [0017](0017-pause-system-media-playback-while-recording.md) | Pause system media playback while recording through one cross-platform controller | Accepted (VAD timing revised by 0027; default reaffirmed by 0041) |
-| [0018](0018-macos-resume-is-gated-on-a-coreaudio-output-read.md) | macOS resume is gated on a CoreAudio output read, not a MediaRemote read shim | Accepted (no-op consequence corrected by 0041) |
+| [0017](0017-pause-system-media-playback-while-recording.md) | Pause system media playback while recording through one cross-platform controller | Accepted (VAD timing revised by 0027; default reaffirmed by 0045) |
+| [0018](0018-macos-resume-is-gated-on-a-coreaudio-output-read.md) | macOS resume is gated on a CoreAudio output read, not a MediaRemote read shim | Accepted (no-op consequence corrected by 0045) |
 | [0019](0019-global-shortcuts-have-a-permission-free-floor-and-accessibility-is-an-opt-in-tier.md) | Global shortcuts have a permission-free floor; Accessibility is an opt-in tier | Accepted |
 | [0020](0020-macos-drives-its-keyboard-tap-with-an-owned-cgeventtap.md) | macOS drives its keyboard tap with an owned CGEventTap, not the rdev fork | Accepted |
 | [0021](0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md) | Actions are the only surface that crosses a process boundary | Accepted |
@@ -108,6 +108,10 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) | A daemon answers through the first inference backend it can satisfy: byok, else opted-in metered, else host without answering | Accepted |
 | [0039](0039-dictation-feedback-is-a-projection-of-one-lifecycle-state.md) | Dictation feedback is a projection of one lifecycle state, not an event log | Accepted |
 | [0040](0040-a-cursor-write-that-cannot-paste-falls-back-to-the-clipboard-decided-from-the-grant.md) | A cursor write that cannot paste falls back to the clipboard, decided from the grant | Accepted |
-| [0041](0041-playback-pause-is-opt-in-because-resume-can-start-unrelated-media.md) | Playback pause ships opt-in because macOS resume can start unrelated media | Accepted |
+| [0041](0041-every-answerer-is-a-worker-the-browser-never-answers.md) | Every answerer is a worker; the browser never answers | Superseded by 0043 |
+| [0042](0042-the-agent-loop-is-the-workers-over-the-doc-as-the-message-array.md) | The agent loop is the worker's, over the doc as the message array | Accepted (design; build deferred) |
+| [0043](0043-an-agent-answers-where-its-capability-lives.md) | An agent answers where its capability lives (supersedes 0041 every-answerer) | Accepted |
+| [0044](0044-tool-approval-is-a-per-conversation-policy.md) | Tool approval is a per-conversation policy, resolved per call (auto / ask / deny) | Accepted (design) |
+| [0045](0045-playback-pause-is-opt-in-because-resume-can-start-unrelated-media.md) | Playback pause ships opt-in because macOS resume can start unrelated media | Accepted |
 
 When you add an ADR, add its row here.

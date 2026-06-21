@@ -28,10 +28,14 @@ export const TextServiceLive = {
 		return Ok(undefined);
 	},
 
-	writeToCursor: async (text): Promise<Result<WriteTextOutcome, TextError>> => {
+	writeToCursor: async (
+		text,
+		_keepOnClipboard,
+	): Promise<Result<WriteTextOutcome, TextError>> => {
 		// Browsers cannot programmatically paste for security reasons, so the best we
 		// can do is leave the text on the clipboard for the user to paste manually.
-		// That is the `leftOnClipboard` reach, not a failure.
+		// That is the `leftOnClipboard` reach, not a failure. `keepOnClipboard` is
+		// moot here: the text is always left on the clipboard either way.
 		const { error } = await tryAsync({
 			try: () => navigator.clipboard.writeText(text),
 			catch: (error) => TextError.WriteToCursor({ cause: error }),
