@@ -225,12 +225,14 @@
 
 			<!--
 				The trust strip is a reassurance footer below the setup action: the same
-				three guarantees, laid out as a 3-up grid so they read as a band rather
-				than a tall stack. They restate the privacy/cost/freedom promises right
+				three guarantees as a single column of full-width rows, compact enough to
+				sit under the setup CTA without competing with it. Each is a plain Item
+				row (icon · title · description), so they read as a tidy list rather than
+				a band of cards. They restate the privacy/cost/freedom promises right
 				where the user is deciding whether to download a model.
 			-->
-			<div class="grid w-full gap-4 sm:grid-cols-3">
-				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+			<div class="flex w-full flex-col gap-3">
+				<Item.Root variant="muted">
 					<Item.Media variant="icon">
 						<ShieldCheck class="size-5" />
 					</Item.Media>
@@ -241,7 +243,7 @@
 						</Item.Description>
 					</Item.Content>
 				</Item.Root>
-				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+				<Item.Root variant="muted">
 					<Item.Media variant="icon">
 						<Cpu class="size-5" />
 					</Item.Media>
@@ -252,7 +254,7 @@
 						</Item.Description>
 					</Item.Content>
 				</Item.Root>
-				<Item.Root variant="muted" class="gap-2 sm:flex-col sm:items-start">
+				<Item.Root variant="muted">
 					<Item.Media variant="icon">
 						<Heart class="size-5" />
 					</Item.Media>
