@@ -366,7 +366,7 @@ describe('Room presence: agent designation', () => {
 			JSON.stringify({
 				type: 'presence_publish',
 				actions: {},
-				agentId: 'zhongwen-home',
+				agentId: 'vocab-home',
 			}),
 		);
 		// A node connecting after the publish sees the daemon's designation in its
@@ -375,7 +375,7 @@ describe('Room presence: agent designation', () => {
 		const daemon = presenceFrames(observer)[0]!.peers.find(
 			(p) => p.nodeId === 'daemon',
 		);
-		expect(daemon!.agentId).toBe('zhongwen-home');
+		expect(daemon!.agentId).toBe('vocab-home');
 	});
 
 	test('a peer that never publishes an agentId omits it', async () => {

@@ -104,6 +104,18 @@ core-graphics = "0.22"
 # compatible) so the build is reproducible and an accidental `cargo update`
 # cannot drift it to a moving branch tip.
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "a3122e894383aa068ec5365a42994e3ac94ba1b6" }
+# Native NSPasteboard save/restore for the clipboard borrow in `write_text`
+# (`src/clipboard.rs`). The cross-platform `tauri-plugin-clipboard-manager` is
+# text-only, so a non-text clipboard (image, file) is silently lost when
+# `write_text` borrows the clipboard for a cursor paste. These objc2 bindings
+# read and re-add every NSPasteboardItem with full type/data fidelity, and mark
+# the transient transcript item with the `org.nspasteboard.ConcealedType`
+# convention so clipboard-history managers can skip it. This is the app's first
+# direct Objective-C binding; the rest of the macOS interop uses C-API crates
+# (core-graphics, accessibility-sys) and tauri-nspanel.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard", "NSPasteboardItem"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSArray"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 transcribe-rs = { version = "=0.3.8", features = ["whisper-cpp", "whisper-vulkan", "onnx"] }

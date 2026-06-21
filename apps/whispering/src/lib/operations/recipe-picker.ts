@@ -10,7 +10,7 @@ import { recipePicker } from '$lib/state/recipe-picker.svelte';
  * visible. The user picks a recipe and the picker runs it on the selection.
  *
  * Desktop only (registered through the Tauri command seam). A future floating
- * picker window will drop the window-focus step. See ADR 0041.
+ * picker window will drop the window-focus step. See ADR 0046.
  */
 export async function openRecipePicker() {
 	const { data: selection, error } = await captureSelection();

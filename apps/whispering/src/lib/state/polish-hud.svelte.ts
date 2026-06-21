@@ -1,7 +1,7 @@
 /**
  * Owns the `AbortController` for the in-flight Polish pass, so the pill's "ship
  * raw" control can cancel it without threading the controller through component
- * props or the lifecycle. See ADR 0041.
+ * props or the lifecycle. See ADR 0046.
  *
  * The pill's *display* during Polish is a projection of the dictation lifecycle
  * (the `polishing` outcome, see `dictation-lifecycle`), the same as every other

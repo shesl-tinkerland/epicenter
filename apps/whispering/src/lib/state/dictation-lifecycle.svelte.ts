@@ -105,7 +105,7 @@ function createDictationLifecycle() {
 
 		/**
 		 * The transcript landed and the always-on Polish pass is now running over it
-		 * (ADR 0041). Held until `markDelivered`, with a `ship-raw` control on the
+		 * (ADR 0046). Held until `markDelivered`, with a `ship-raw` control on the
 		 * pill to skip it. Only entered when a Polish pass actually runs (a configured
 		 * key, Polish on); speed mode goes straight from transcribing to delivered.
 		 */

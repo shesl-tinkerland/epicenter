@@ -111,19 +111,12 @@ async function deliverResult({
 	const clipboardRequested = settings.get(`output.${settingsScope}.clipboard`);
 	const cursorRequested = settings.get(`output.${settingsScope}.cursor`);
 
-	// The clipboard is the configured destination when requested, and doubles as
-	// the transport and fallback for a cursor write. This call also pre-stages the
-	// clipboard's intended final state: `write_text` borrows and restores the
-	// clipboard around its paste (see its docstring in src-tauri), so whatever we
-	// leave here is what survives — the transcript when clipboard output is on, or
-	// the user's untouched clipboard when it is off. Best-effort: a clipboard write
-	// effectively never fails, and the transcript is in history regardless, so its
-	// error does not change the reach.
-	if (clipboardRequested) await services.text.copyToClipboard(text);
-
-	// No cursor write requested: the transcript reached its configured sink (the
-	// clipboard, or history when nothing else is configured). The clean case.
+	// No cursor write requested: the clipboard is the only configured sink, so
+	// copy the transcript there (or it reaches history when nothing is configured).
+	// Best-effort: a clipboard write effectively never fails, and the transcript is
+	// in history regardless, so its error does not change the reach.
 	if (!cursorRequested) {
+		if (clipboardRequested) await services.text.copyToClipboard(text);
 		return {
 			outcome: { reach: 'output' },
 			notice: {
@@ -134,11 +127,16 @@ async function deliverResult({
 		};
 	}
 
-	// Cursor write requested. `write_text` decides from the Accessibility grant
-	// whether it can paste and reports where the transcript landed: `pasted` at the
-	// cursor (clean), or `leftOnClipboard` when it could not paste.
+	// Cursor write requested. The clipboard is `write_text`'s paste transport;
+	// `keepOnClipboard` tells it what the clipboard should hold afterward, so it
+	// owns the staging that delivery used to pre-copy: when clipboard output is on
+	// it leaves the transcript there; when off it borrows and restores the user's
+	// clipboard (full-fidelity on macOS — see write_text's docstring in src-tauri).
+	// `write_text` decides from the Accessibility grant whether it can paste and
+	// reports where the transcript landed: `pasted` at the cursor (clean), or
+	// `leftOnClipboard` when it could not paste.
 	const { data: writeOutcome, error: writeError } =
-		await services.text.writeToCursor(text);
+		await services.text.writeToCursor(text, clipboardRequested);
 
 	if (writeError) {
 		// The write failed outright (rare). Ensure the transcript is at least on the

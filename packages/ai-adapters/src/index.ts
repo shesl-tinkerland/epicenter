@@ -22,7 +22,7 @@ import { createOpenaiChat } from '@tanstack/ai-openai';
  * The body is only the provider switch: no key policy, no `Result`. The caller
  * owns where the key comes from (BYOK vs house) and what an absent key means;
  * see `resolveAdapter` in `@epicenter/server` and `resolveChatStream` in the
- * zhongwen daemon.
+ * vocab daemon.
  */
 export function createAdapterForModel(
 	model: ServableModel,
@@ -61,7 +61,7 @@ type ChatStream = (
  * aborted, else once on the first abort). The metered backend
  * (`createEpicenterProviderChatStream`) and the daemon's placeholder are its
  * siblings; this is the adapter arm, named once so every SDK-driven host (the
- * zhongwen daemon today) shares one builder instead of re-bridging the signal.
+ * vocab daemon today) shares one builder instead of re-bridging the signal.
  */
 export function chatStreamFromAdapter(
 	adapter: AnyTextAdapter,
@@ -81,7 +81,7 @@ export function chatStreamFromAdapter(
 /**
  * The deployment env var that holds each provider's house key, in one place.
  * Both house-key consumers (`resolveAdapter` in `@epicenter/server` and the
- * zhongwen daemon's `resolveChatStream`) read this rather than re-deriving the
+ * vocab daemon's `resolveChatStream`) read this rather than re-deriving the
  * name, so the provider -> env-var fact is single-homed. `satisfies Record<…>`
  * keeps it exhaustive: a new provider that lacks an entry is a compile error.
  *

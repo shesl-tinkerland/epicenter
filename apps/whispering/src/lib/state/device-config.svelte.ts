@@ -168,13 +168,6 @@ const DEVICE_DEFINITIONS = {
 		globalBinding,
 		DEFAULT_GLOBAL_BINDINGS.runRecipeOnClipboard,
 	),
-
-	// ── One-time UI notices (device-local: a per-install nudge, not synced) ─
-	// Set true the first time `recording.pausePlayback` actually pauses
-	// something, so the explanatory toast (operations/media.ts) shows once per
-	// device and never again. Device-local because it tracks "has this install
-	// shown the toast," not a user preference that should roam.
-	'notices.pausePlaybackExplained': defineEntry(type('boolean'), false),
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────

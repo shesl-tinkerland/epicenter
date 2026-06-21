@@ -133,7 +133,7 @@ export async function processRecordingPipeline({
 	// version would land two copies (a clipboard the user might paste mid-polish,
 	// or two cursor pastes), the exact race the deliver-after-polish rule exists to
 	// dodge. Polish is the only thing on the automatic path; there is no
-	// auto-running Recipe. See ADR 0041.
+	// auto-running Recipe. See ADR 0046.
 	//
 	// The "Polishing…" HUD and its ship-raw control live on the dictation pill, so
 	// the lifecycle's polishing phase and the abort signal are dictation-only: file

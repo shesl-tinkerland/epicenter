@@ -1,6 +1,6 @@
 /**
  * The inference backend as a single `ChatStream` (S5). With `GEMINI_API_KEY`
- * set, this is real Gemini, built exactly as `apps/zhongwen/mount.ts` builds it
+ * set, this is real Gemini, built exactly as `apps/vocab/mount.ts` builds it
  * (`createGeminiChat` + `chat({ adapter, messages, abortController })`). With no
  * key it falls back to a slow echo so S1-S4 run with zero setup.
  *

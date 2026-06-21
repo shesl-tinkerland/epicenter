@@ -38,9 +38,20 @@ shapes, see `docs/adr/`.
   through `ws.tables.X.docs.field.open(rowId)`. The workspace owns guid derivation.
 - **Worker**: running behavior that observes workspace state and writes results
   back. Workers may be local (every node runs them) or agent-bound (one
-  configured agent answers).
-- **Agent**: the durable address a row or conversation binds to. An agent names
-  who should answer; the worker is the runtime that answers as it.
+  configured agent answers). A conversation answer is written by the peer the
+  bound agent designates (ADR-0043): the client tab itself for a capability-free
+  agent, the agent's daemon for a local-data agent.
+- **Agent**: the durable address a row or conversation binds to (an immutable
+  id). An agent names who should answer; the peer that answers as it is the
+  client tab or a daemon, set by the agent's **trust location** (ADR-0030/0043).
+- **Trust location**: where an agent answers, and therefore where its data goes
+  (ADR-0043). **Client** = the open browser tab answers in-process over
+  Epicenter's metered inference stream (a capability-free agent; Epicenter meters
+  tokens but runs no answering worker). **Home daemon** = the user's own always-on
+  box answers (nothing leaves the house). Blindness is per-agent, not global.
+- **Answerer**: an in-process peer that observes a conversation child doc and
+  writes the reply into it. The client tab (capability-free agent) or a daemon
+  (local-data agent); never the cloud relay/anchor, which stays blind (ADR-0043).
 - **Materializer**: a local, addressless worker that projects workspace data into
   another store (markdown, sqlite).
 - **`attach*` vs `create*`**: `attach*` are side-effectful primitives that register

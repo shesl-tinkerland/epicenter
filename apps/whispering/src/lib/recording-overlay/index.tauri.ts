@@ -15,8 +15,9 @@ import {
 const log = createLogger('whispering/recording-overlay');
 
 const WINDOW_LABEL = 'recording-overlay';
-// Fixed size in logical pixels. Matches the pill drawn by the overlay route.
-const OVERLAY_WIDTH = 184;
+// Fixed size in logical pixels. The width is the pill's max width (the cap in
+// RecordingPill); the transparent window centers the narrower states inside it.
+const OVERLAY_WIDTH = 224;
 const OVERLAY_HEIGHT = 40;
 // Distance from the bottom edge of the monitor, in logical pixels.
 const OVERLAY_BOTTOM_MARGIN = 72;

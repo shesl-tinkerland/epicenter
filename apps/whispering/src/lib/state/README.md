@@ -52,7 +52,7 @@ recordings.delete(id);
 
 ### `recipes.svelte.ts`
 
-Recipes backed by a Yjs workspace table. A Recipe is a single self-contained row: a name and one instruction (text in, text out). No replacements, no prompt split, no per-Recipe model. Built-in recipes ship in code (`builtin-recipes.ts`); the table holds only user customs. See ADR 0041.
+Recipes backed by a Yjs workspace table. A Recipe is a single self-contained row: a name and one instruction (text in, text out). No replacements, no prompt split, no per-Recipe model. Built-in recipes ship in code (`builtin-recipes.ts`); the table holds only user customs. See ADR 0046.
 
 ```typescript
 import { recipes } from '$lib/state/recipes.svelte';

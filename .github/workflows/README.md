@@ -54,8 +54,8 @@ spctl -a -vvv -t execute /Volumes/Whispering/Whispering.app                  # a
 
 | File | Trigger | What it does |
 |---|---|---|
-| `ci.format.yml` | Push, pull requests | Runs `bun run lint:check` and `bun run typecheck`. |
-| `ci.autofix.yml` | Push, pull requests | Runs `bun run format` and commits fixes back via autofix-ci. |
+| `ci.format.yml` | Push to `main`, pull requests | Runs `bun run lint:check` and `bun run typecheck`. Cancels older runs for the same branch or PR. |
+| `ci.autofix.yml` | Push to `main`, pull requests | Runs `bun run format` and commits fixes back via autofix-ci. Cancels older runs for the same branch or PR. |
 
 ### Automation
 

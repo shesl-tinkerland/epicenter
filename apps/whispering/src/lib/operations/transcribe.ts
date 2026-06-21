@@ -295,7 +295,7 @@ export function prewarmLocalModel(): void {
  * the user's known terms nudges the transcriber toward them before any Polish
  * pass runs (Polish gets the same terms separately, via `buildSystemPrompt`). The
  * default Parakeet ignores `initial_prompt`, so this is harmless there. An empty
- * dictionary returns the prompt unchanged. See ADR 0041.
+ * dictionary returns the prompt unchanged. See ADR 0046.
  */
 function withDictionaryTerms(prompt: string, dictionary: string[]): string {
 	if (dictionary.length === 0) return prompt;

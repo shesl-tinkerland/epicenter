@@ -52,16 +52,22 @@ export type TextService = {
 	 * the clipboard when it cannot paste.
 	 *
 	 * On desktop this decides from the Accessibility grant *before* attempting the
-	 * synthetic paste (an untrusted ⌘V silently no-ops): when it can paste, it uses
-	 * the clipboard sandwich (save → write → ⌘V → restore) to preserve the user's
-	 * clipboard; when it cannot, it leaves the transcript on the clipboard. On web
-	 * it can only ever copy, so it always reports `leftOnClipboard`.
+	 * synthetic paste (an untrusted ⌘V silently no-ops). The clipboard is the
+	 * paste transport, and `keepOnClipboard` states what the clipboard should hold
+	 * afterward: when `true` (clipboard output is on) the transcript is written and
+	 * left there; when `false` the call borrows the clipboard (snapshot → write →
+	 * ⌘V → restore) so the user's clipboard is preserved, full-fidelity on macOS.
+	 * When it cannot paste, it leaves the transcript on the clipboard regardless.
+	 * On web it can only ever copy, so it always reports `leftOnClipboard`.
 	 *
 	 * @returns where the text landed — `pasted` at the cursor, or `leftOnClipboard`.
 	 * @param text The text to write at the cursor position.
+	 * @param keepOnClipboard Whether to leave the transcript on the clipboard after
+	 *   pasting (clipboard output on) instead of restoring the user's clipboard.
 	 */
 	writeToCursor: (
 		text: string,
+		keepOnClipboard: boolean,
 	) => MaybePromise<Result<WriteTextOutcome, TextError>>;
 
 	/**

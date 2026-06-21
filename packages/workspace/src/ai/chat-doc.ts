@@ -18,7 +18,7 @@
  *
  * The body is an ordered parts array (ADR-0036), not a single text run. Each
  * part is a typed `Y.Map` keyed by `type`; a text part streams tokens into its
- * own `Y.Text`. A text-only answer (zhongwen) is one text part, behaviorally
+ * own `Y.Text`. A text-only answer (vocab) is one text part, behaviorally
  * identical to the old single `content`; a tool-using answer (Local Books)
  * interleaves `tool-call` and `tool-result` parts. Phase 1 writes only text
  * parts; the union is defined in full so the reader and prompt walk are already

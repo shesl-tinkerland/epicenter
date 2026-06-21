@@ -16,7 +16,7 @@ import { polishHud } from '$lib/state/polish-hud.svelte';
  * Stop and cancel act only on a live capture. VAD has no cancel (its pill shows
  * no cancel button), so a stray cancel during a VAD session is a no-op. `ship-raw`
  * is the exception: the Polish pass runs after capture is idle, so it cancels the
- * in-flight completion through `polishHud` rather than a recorder (ADR 0041).
+ * in-flight completion through `polishHud` rather than a recorder (ADR 0046).
  * There is no retry gesture: a failed dictation is retried from its recordings row.
  */
 export function dispatchPillAction(action: RecordingOverlayAction): void {

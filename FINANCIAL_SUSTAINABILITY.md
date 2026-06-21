@@ -18,6 +18,6 @@ We have other options if that doesn't work, of course. We could pursue a traditi
 
 MIT: `packages/workspace`, `packages/ui`, and `packages/filesystem`. The embeddable developer toolkit.
 
-AGPL-3.0-or-later: every app (`apps/api`, `apps/self-host`, `apps/whispering`, `apps/honeycrisp`, `apps/opensidian`, `apps/fuji`, `apps/zhongwen`, `apps/tab-manager`, `apps/skills`, `apps/reddit`, `apps/landing`, `apps/posthog-reverse-proxy`), the sync protocol (`packages/sync`), the CLI (`packages/cli`, which depends on AGPL internals), and our internal packages (`packages/auth`, `packages/svelte-utils`, `packages/skills`, `packages/constants`).
+AGPL-3.0-or-later: every app (`apps/api`, `apps/self-host`, `apps/whispering`, `apps/honeycrisp`, `apps/opensidian`, `apps/fuji`, `apps/vocab`, `apps/tab-manager`, `apps/skills`, `apps/reddit`, `apps/landing`, `apps/posthog-reverse-proxy`), the sync protocol (`packages/sync`), the CLI (`packages/cli`, which depends on AGPL internals), and our internal packages (`packages/auth`, `packages/svelte-utils`, `packages/skills`, `packages/constants`).
 
 Each package has its own LICENSE file. See the root [LICENSE](LICENSE) for the full breakdown.

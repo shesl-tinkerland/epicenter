@@ -1,7 +1,5 @@
 import { tauri } from '#platform/tauri';
-import { goto } from '$app/navigation';
-import { log, report } from '$lib/report';
-import { deviceConfig } from '$lib/state/device-config.svelte';
+import { log } from '$lib/report';
 import { settings } from '$lib/state/settings.svelte';
 
 // The one best-effort side effect for recording: pause whatever the system is
@@ -49,34 +47,14 @@ async function resumeSessions(sessions: string[]): Promise<void> {
 	}
 }
 
-// The feature is on by default, so the first time it actually pauses something
-// we explain it once (per device): on-by-default should be discoverable and
-// consensual, not a silent surprise. Fires only when a real session was paused,
-// never on a no-op pause.
-function explainFirstPauseOnce(): void {
-	if (deviceConfig.get('notices.pausePlaybackExplained')) return;
-	deviceConfig.set('notices.pausePlaybackExplained', true);
-	report.info({
-		title: 'Paused your playback while recording',
-		description:
-			'Whispering pauses media while it captures your voice, then resumes it. You can turn this off anytime.',
-		action: {
-			label: 'Recording settings',
-			onClick: () => goto('/settings/recording'),
-		},
-	});
-}
-
 export const recordingMedia = {
 	/** Pause active playback if enabled. Fire-and-forget: recording never waits. */
 	pause(): void {
 		if (!shouldPausePlayback()) return;
 		// Already paused? Keep that set; otherwise pause what's playing now.
-		chain = chain.then(async (paused) => {
-			const next = paused.length > 0 ? paused : await pausePlayingSessions();
-			if (next.length > 0) explainFirstPauseOnce();
-			return next;
-		});
+		chain = chain.then(async (paused) =>
+			paused.length > 0 ? paused : await pausePlayingSessions(),
+		);
 	},
 
 	/**

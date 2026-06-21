@@ -2,7 +2,7 @@
  * Reactive Recipe state backed by the Yjs workspace table.
  *
  * A Recipe is a single self-contained row: a name and one instruction (text in,
- * text out). No replacements, no prompt split, no per-Recipe model. See ADR 0041.
+ * text out). No replacements, no prompt split, no per-Recipe model. See ADR 0046.
  *
  * @example
  * ```typescript
