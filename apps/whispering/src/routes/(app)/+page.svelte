@@ -2,18 +2,14 @@
 	import { Button } from '@epicenter/ui/button';
 	import { confirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import { FileDropZone } from '@epicenter/ui/file-drop-zone';
-	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
 	import { Link } from '@epicenter/ui/link';
 	import * as SectionHeader from '@epicenter/ui/section-header';
 	import * as ToggleGroup from '@epicenter/ui/toggle-group';
-	import Cpu from '@lucide/svelte/icons/cpu';
-	import Heart from '@lucide/svelte/icons/heart';
-	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { createQuery } from '@tanstack/svelte-query';
 	import type { UnlistenFn } from '@tauri-apps/api/event';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
 	import { tryAsync } from 'wellcrafted/result';
 	import { commandCallbacks } from '$lib/commands';
@@ -21,7 +17,6 @@
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import {
 		TranscriptionSelector,
-		TranscriptionSetup,
 		TransformationSelector,
 	} from '$lib/components/settings';
 	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
@@ -55,11 +50,22 @@
 	import { tauri } from '#platform/tauri';
 	import CaptureBehaviorPopover from './_components/CaptureBehaviorPopover.svelte';
 	import CapturePipeline from './_components/CapturePipeline.svelte';
+	import FirstRunSetup from './_components/FirstRunSetup.svelte';
 	import ManualRecordingAction from './_components/ManualRecordingAction.svelte';
 	import VadRecordingAction from './_components/VadRecordingAction.svelte';
 
 	const latestRecording = $derived(recordings.sorted[0]);
 	const transcriptionReadiness = $derived(getTranscriptionReadiness());
+	// First-run setup is "active" from mount whenever transcription isn't ready;
+	// the only in-mount transition is the user finishing it (onComplete sets it
+	// false). The initial value is read synchronously from readiness, so there is
+	// no first-paint flash and no $effect latch, and no persisted "seen
+	// onboarding" flag (which would drift from readiness). It never needs to flip
+	// back to true within a mount because nothing on the recorder screen can make
+	// you un-ready; a regression (model deleted in settings) re-activates it for
+	// free, because SvelteKit remounts this page on navigation back to home. So
+	// first run and a later regression show the same flow.
+	let setupActive = $state(untrack(() => !transcriptionReadiness.isReady));
 	// The selected transformation's pipeline glyph morphs into that
 	// transformation's row on the /transformations list, so name it with the same
 	// id the row carries. Only the home pipeline opts in; the config topbar leaves
@@ -203,67 +209,14 @@
 <div
 	class="flex flex-1 flex-col items-center justify-center w-full px-4 py-12 sm:py-16"
 >
-	{#if !transcriptionReadiness.isReady}
-		<div class="flex w-full max-w-2xl flex-col items-center gap-8">
-			{@render hero()}
-
-			<div class="w-full space-y-4">
-				<DictationCapabilityNotice />
-				<div class="space-y-1">
-					<h2 class="text-base font-semibold">Set up transcription</h2>
-					<p class="text-sm text-muted-foreground">
-						{transcriptionReadiness.primaryIssue ??
-							'One quick step, then you can start dictating.'}
-					</p>
-				</div>
-
-				<TranscriptionSetup id="home-transcription-service" />
-			</div>
-
-			<!--
-				The trust strip is a reassurance footer below the setup action: the same
-				three guarantees as a single column of full-width rows, compact enough to
-				sit under the setup CTA without competing with it. Each is a plain Item
-				row (icon · title · description), so they read as a tidy list rather than
-				a band of cards. They restate the privacy/cost/freedom promises right
-				where the user is deciding whether to download a model.
-			-->
-			<div class="flex w-full flex-col gap-3">
-				<Item.Root variant="muted">
-					<Item.Media variant="icon">
-						<ShieldCheck class="size-5" />
-					</Item.Media>
-					<Item.Content>
-						<Item.Title>Private and offline</Item.Title>
-						<Item.Description>
-							Audio is transcribed on your device and never uploaded.
-						</Item.Description>
-					</Item.Content>
-				</Item.Root>
-				<Item.Root variant="muted">
-					<Item.Media variant="icon">
-						<Cpu class="size-5" />
-					</Item.Media>
-					<Item.Content>
-						<Item.Title>Runs on this device</Item.Title>
-						<Item.Description>
-							No servers, no API keys, no monthly bill.
-						</Item.Description>
-					</Item.Content>
-				</Item.Root>
-				<Item.Root variant="muted">
-					<Item.Media variant="icon">
-						<Heart class="size-5" />
-					</Item.Media>
-					<Item.Content>
-						<Item.Title>Free and open source</Item.Title>
-						<Item.Description>
-							Yours to keep, audit, and extend.
-						</Item.Description>
-					</Item.Content>
-				</Item.Root>
-			</div>
-		</div>
+	{#if setupActive}
+		<!--
+			The universal first-run setup flow. Active from mount whenever
+			transcription isn't ready, first launch or a later regression alike; it
+			holds through its post-engine steps after readiness flips true, then
+			`onComplete` releases to the recorder.
+		-->
+		<FirstRunSetup onComplete={() => (setupActive = false)} />
 	{:else}
 		<div class="flex w-full max-w-lg flex-col items-center gap-4">
 			{@render hero()}
