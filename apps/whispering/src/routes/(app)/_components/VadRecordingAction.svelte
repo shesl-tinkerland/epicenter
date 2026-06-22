@@ -1,4 +1,5 @@
 <script lang="ts">
+	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import CapturePipeline from './CapturePipeline.svelte';
 	import { createVadRecordingController } from './vad-recording-controller.svelte';
@@ -12,6 +13,10 @@
 	iconViewTransitionName={viewTransition.recordingMode('vad')}
 >
 	{#snippet footer()}
-		<CapturePipeline surface="vad" />
+		<CapturePipeline>
+			<VadDeviceSelector
+				iconViewTransitionName={viewTransition.pipeline.device}
+			/>
+		</CapturePipeline>
 	{/snippet}
 </RecordingActionCard>

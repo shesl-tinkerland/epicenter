@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import CapturePipeline from './CapturePipeline.svelte';
 	import { createManualRecordingController } from './manual-recording-controller.svelte';
@@ -12,6 +13,10 @@
 	iconViewTransitionName={viewTransition.recordingMode('manual')}
 >
 	{#snippet footer()}
-		<CapturePipeline surface="manual" />
+		<CapturePipeline>
+			<ManualDeviceSelector
+				iconViewTransitionName={viewTransition.pipeline.device}
+			/>
+		</CapturePipeline>
 	{/snippet}
 </RecordingActionCard>
