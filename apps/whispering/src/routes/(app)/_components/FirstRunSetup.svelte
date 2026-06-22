@@ -438,14 +438,14 @@
 										<div class="flex justify-center">
 											{#if currentLocation === 'local'}
 												<div
-													class="size-3 translate-y-[5px] rotate-45 rounded-[2px] border-l border-t border-primary/40 bg-primary/[0.06]"
+													class="h-0 w-0 translate-y-px border-x-[7px] border-b-[7px] border-x-transparent border-b-primary/40"
 												></div>
 											{/if}
 										</div>
 										<div class="flex justify-center">
 											{#if currentLocation === 'cloud'}
 												<div
-													class="size-3 translate-y-[5px] rotate-45 rounded-[2px] border-l border-t border-primary/40 bg-primary/[0.06]"
+													class="h-0 w-0 translate-y-px border-x-[7px] border-b-[7px] border-x-transparent border-b-primary/40"
 												></div>
 											{/if}
 										</div>
