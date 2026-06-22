@@ -38,9 +38,12 @@
 
 	let {
 		showAdvanced = true,
+		bare = false,
 	}: {
 		/** When false, hide the advanced fields (unload policy, language, prompt). */
 		showAdvanced?: boolean;
+		/** Drop the local model selector's card chrome (attached/in-card hosts). */
+		bare?: boolean;
 	} = $props();
 
 	// The settings page wants the full surface; the first-run wizard wants the
@@ -303,6 +306,7 @@
 		<div class="space-y-4">
 			<LocalModelSelector
 				{compact}
+				{bare}
 				models={WHISPER_MODELS}
 				title="Whisper Model"
 				description="Download a pre-built model or add your own to the models folder. Models run locally for private, offline transcription."
@@ -329,6 +333,7 @@
 		<div class="space-y-4">
 			<LocalModelSelector
 				{compact}
+				{bare}
 				models={PARAKEET_MODELS}
 				title="Parakeet Model"
 				description="Parakeet is the recommended fast local model. It runs on this device, downloads once, and automatically detects supported spoken languages."
@@ -362,6 +367,7 @@
 		<div class="space-y-4">
 			<LocalModelSelector
 				{compact}
+				{bare}
 				models={MOONSHINE_MODELS}
 				title="Moonshine Model"
 				description="Moonshine is an efficient ONNX model by UsefulSensors. English-only with fast inference and small model sizes (~30 MB)."

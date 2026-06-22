@@ -16,7 +16,6 @@
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
-	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
 	import { onDestroy, type Component } from 'svelte';
@@ -25,7 +24,6 @@
 	import { fade, fly, scale } from 'svelte/transition';
 	import { createQuery } from '@tanstack/svelte-query';
 	import Check from '@lucide/svelte/icons/check';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Heart from '@lucide/svelte/icons/heart';
@@ -99,7 +97,7 @@
 		{
 			value: 'cloud',
 			label: 'Cloud',
-			description: 'Fastest setup. Needs an API key.',
+			description: 'Works on any device. Needs an API key.',
 			Icon: Cloud,
 			recommended: false,
 		},
@@ -381,10 +379,12 @@
 							<!--
 								Lead with the one decision that matters at first run: where
 								transcription runs (on device vs cloud). The chosen location's
-								recommended setup renders right below; the full provider list, a
-								wall of unfamiliar names that reads as "developer tool", stays
-								behind "Use a different service". Desktop only: web has no local
-								engine, so it goes straight to the cloud setup.
+								setup renders in a panel tied to the selected card by a caret, so
+								it reads as belonging to that choice without an accordion's moving
+								layout. Picking Cloud surfaces the provider choice inline (it
+								decides which API key you fetch); other local engines and
+								self-hosted live in Settings. The web build has no local engine,
+								so it skips the chooser and configures a cloud service directly.
 							-->
 							{#if tauri}
 								<div
@@ -425,25 +425,58 @@
 										</button>
 									{/each}
 								</div>
+
+								<!--
+									Attachment cue: a caret under the selected card points down into
+									the setup panel, tying the config to the chosen option. It tracks
+									the selection left or right. The cards stay put, so the panel's
+									own height changes (download progress, cloud fields) never jostle
+									the choice itself.
+								-->
+								<div>
+									<div class="grid grid-cols-2 gap-3" aria-hidden="true">
+										<div class="flex justify-center">
+											{#if currentLocation === 'local'}
+												<div
+													class="size-3 translate-y-[5px] rotate-45 rounded-[2px] border-l border-t border-primary/40 bg-primary/[0.06]"
+												></div>
+											{/if}
+										</div>
+										<div class="flex justify-center">
+											{#if currentLocation === 'cloud'}
+												<div
+													class="size-3 translate-y-[5px] rotate-45 rounded-[2px] border-l border-t border-primary/40 bg-primary/[0.06]"
+												></div>
+											{/if}
+										</div>
+									</div>
+									<div
+										class="space-y-3 rounded-xl border border-primary/40 bg-primary/[0.06] p-4"
+									>
+										{#if currentLocation === 'cloud'}
+											<TranscriptionServiceSelect
+												id="first-run-cloud-provider"
+												label="Cloud provider"
+												locations={['cloud']}
+												bind:selected={() => settings.get('transcription.service'),
+													(selected) =>
+														settings.set('transcription.service', selected)}
+											/>
+										{/if}
+										<TranscriptionRuntimeConfig showAdvanced={false} bare />
+									</div>
+								</div>
+							{:else}
+								<!-- Web has no local engine: pick a cloud service and configure it. -->
+								<TranscriptionServiceSelect
+									id="first-run-transcription-picker"
+									label="Service"
+									bind:selected={() => settings.get('transcription.service'),
+										(selected) =>
+											settings.set('transcription.service', selected)}
+								/>
+								<TranscriptionRuntimeConfig showAdvanced={false} />
 							{/if}
-							<TranscriptionRuntimeConfig showAdvanced={false} />
-							<Collapsible.Root>
-								<Collapsible.Trigger
-									class="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground [&[data-state=open]>svg]:rotate-180"
-								>
-									Use a different service
-									<ChevronDown class="size-4 transition-transform" />
-								</Collapsible.Trigger>
-								<Collapsible.Content class="pt-4">
-									<TranscriptionServiceSelect
-										id="first-run-transcription-picker"
-										label="Service"
-										bind:selected={() => settings.get('transcription.service'),
-											(selected) =>
-												settings.set('transcription.service', selected)}
-									/>
-								</Collapsible.Content>
-							</Collapsible.Root>
 						</div>
 					{:else if current?.key === 'try'}
 						<div class="flex w-full flex-col items-center gap-5 text-center">

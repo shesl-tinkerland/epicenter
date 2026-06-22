@@ -20,6 +20,7 @@
 		hideLabel = false,
 		description,
 		recommendedServiceId = tauri ? 'parakeet' : 'OpenAI',
+		locations,
 	}: {
 		id?: string;
 		label?: string;
@@ -29,22 +30,31 @@
 		hideLabel?: boolean;
 		description?: string | Snippet;
 		recommendedServiceId?: TranscriptionServiceId | null;
+		/** When set, only offer services in these locations (e.g. cloud-only). */
+		locations?: readonly TranscriptionProviderEntry['location'][];
 	} = $props();
 
+	const allows = (location: TranscriptionProviderEntry['location']) =>
+		!locations || locations.includes(location);
+
 	const localServices = $derived(
-		tauri
+		tauri && allows('local')
 			? TRANSCRIPTION_PROVIDERS.filter((service) => service.location === 'local')
 			: [],
 	);
 
 	const cloudServices = $derived(
-		TRANSCRIPTION_PROVIDERS.filter((service) => service.location === 'cloud'),
+		allows('cloud')
+			? TRANSCRIPTION_PROVIDERS.filter((service) => service.location === 'cloud')
+			: [],
 	);
 
 	const selfHostedServices = $derived(
-		TRANSCRIPTION_PROVIDERS.filter(
-			(service) => service.location === 'self-hosted',
-		),
+		allows('self-hosted')
+			? TRANSCRIPTION_PROVIDERS.filter(
+					(service) => service.location === 'self-hosted',
+				)
+			: [],
 	);
 
 	const selectedService = $derived(
