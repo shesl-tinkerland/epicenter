@@ -1,4 +1,4 @@
-# 0046. Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library
+# 0052. Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library
 
 - **Status:** Accepted
 - **Date:** 2026-06-16 (evolved twice the same day; see Evolution). Accepted
