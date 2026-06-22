@@ -5,25 +5,30 @@
 	helpful thing. No persisted "have they seen it" flag; home holds the flow
 	open with ephemeral state and releases on completion.
 
-	Value-first order: engine -> first dictation (the aha; the mic prompt happens
-	in-context here) -> dictate-anywhere upsell (macOS only; reuses the existing
-	Accessibility guide and reads the live capability) -> done. Steps are derived
-	from live state: the Accessibility step is absent where it has no meaning
-	(web, Linux Wayland) and adapts its content to the capability.
+	Value-first order: welcome (true first run only) -> engine -> first dictation
+	(the aha; the mic prompt happens in-context here) -> dictate-anywhere upsell
+	(macOS only; reuses the existing Accessibility guide and reads the live
+	capability) -> done. The welcome is gated on a zero-recording first run; the
+	Accessibility step is absent where it has no meaning (web, Linux Wayland) and
+	adapts its content to the capability.
 -->
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
 	import * as Collapsible from '@epicenter/ui/collapsible';
+	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
 	import { createMutation } from '@tanstack/svelte-query';
 	import type { Component } from 'svelte';
 	import { cubicOut } from 'svelte/easing';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { fly, scale } from 'svelte/transition';
+	import { fade, fly, scale } from 'svelte/transition';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Cpu from '@lucide/svelte/icons/cpu';
+	import Heart from '@lucide/svelte/icons/heart';
 	import Loader from '@lucide/svelte/icons/loader-circle';
+	import Lock from '@lucide/svelte/icons/lock';
 	import Mic from '@lucide/svelte/icons/mic';
 	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
@@ -45,6 +50,33 @@
 	import { tauri } from '#platform/tauri';
 
 	let { onComplete }: { onComplete: () => void } = $props();
+
+	// True first run opens with a welcome + the three guarantees; a returning user
+	// who hit a regression already has recordings and skips straight to setup.
+	// Snapshot the count once at mount (a $state read, not a $derived) so the
+	// welcome can't flash away as the Yjs table hydrates. Derived from recordings,
+	// not a persisted "seen onboarding" flag, so it stays flag-free.
+	let showWelcome = $state(recordings.sorted.length === 0);
+	const TRUST_POINTS = [
+		{
+			Icon: Lock,
+			title: 'Private by default',
+			description:
+				'Local models keep your audio on this device. You decide if anything ever leaves.',
+		},
+		{
+			Icon: Cpu,
+			title: 'Runs on your device',
+			description:
+				'Local transcription works fully offline, with no account required.',
+		},
+		{
+			Icon: Heart,
+			title: 'Free and open source',
+			description:
+				'No subscription and no lock-in. Inspect it or self-host anything.',
+		},
+	] as const;
 
 	const transcriptionReadiness = $derived(getTranscriptionReadiness());
 	const engineReady = $derived(transcriptionReadiness.isReady);
@@ -81,6 +113,12 @@
 		reduceMotion.current
 			? { duration: 0 }
 			: { start: 0.96, duration: 220, easing: cubicOut },
+	);
+	// The wizard fades in as the welcome leaves, so "Get started" reads as a soft
+	// hand-off rather than a hard cut. No out-transition on the welcome itself, so
+	// the two screens never stack and shift the centered layout.
+	const fadeIn = $derived(
+		reduceMotion.current ? { duration: 0 } : { duration: 200, easing: cubicOut },
 	);
 
 	// First dictation drives the real recorder. Start and stop are separate
@@ -136,6 +174,7 @@
 
 	let bodyEl = $state<HTMLDivElement | null>(null);
 	$effect(() => {
+		showWelcome;
 		stepIndex;
 		done;
 		bodyEl?.focus();
@@ -161,7 +200,56 @@
 <div
 	class="flex flex-1 flex-col items-center justify-center w-full px-4 py-12 sm:py-16"
 >
-	<div class="flex w-full max-w-lg flex-col items-center gap-8">
+	{#if showWelcome}
+		<!--
+			Welcome step, true first run only (no recordings yet). A brand moment plus
+			the three guarantees before any setup. "Get started" drops into the
+			numbered flow; it is a pre-step, so it carries no progress header of its own.
+		-->
+		<div
+			class="flex w-full max-w-md flex-col items-center gap-8"
+			in:fly={flyIn}
+		>
+			<div class="flex flex-col items-center gap-4 text-center">
+				<img src={studioMicrophone} alt="" class="size-16" />
+				<div class="space-y-2">
+					<h2 class="text-2xl font-semibold tracking-tight text-balance">
+						Welcome to Whispering
+					</h2>
+					<p class="text-sm leading-relaxed text-pretty text-muted-foreground">
+						Press your shortcut, speak, and your words turn into text.
+					</p>
+				</div>
+			</div>
+
+			<div class="flex w-full flex-col gap-3">
+				{#each TRUST_POINTS as point}
+					{@const Icon = point.Icon}
+					<Item.Root variant="muted">
+						<Item.Media variant="icon">
+							<Icon class="size-5" />
+						</Item.Media>
+						<Item.Content>
+							<Item.Title>{point.title}</Item.Title>
+							<Item.Description>{point.description}</Item.Description>
+						</Item.Content>
+					</Item.Root>
+				{/each}
+			</div>
+
+			<Button
+				size="lg"
+				class="w-full sm:w-auto"
+				onclick={() => (showWelcome = false)}
+			>
+				Get started
+			</Button>
+		</div>
+	{:else}
+	<div
+		class="flex w-full max-w-lg flex-col items-center gap-8"
+		in:fade={fadeIn}
+	>
 		<!-- Progress header -->
 		<div class="flex w-full items-center">
 			{#each steps as step, i}
@@ -393,6 +481,7 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 </div>
 
 <style>
