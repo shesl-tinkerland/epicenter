@@ -27,7 +27,7 @@ import type { OwnerId } from '@epicenter/identity';
  *   .get(API_ROUTES.session.pattern, handler);
  *
  * // Deployment middleware
- * app.use(API_ROUTES.ai.chat.prefixPattern, requireBearerUser, requireOwnership);
+ * app.use(API_ROUTES.ai.completions.prefixPattern, requireBearerUser, requireOwnership);
  *
  * // Client fetch
  * const res = await fetch(API_ROUTES.session.url(baseURL));
@@ -66,10 +66,17 @@ export const API_ROUTES = {
 		},
 	},
 	ai: {
-		chat: {
-			pattern: '/api/ai/chat',
-			prefixPattern: '/api/ai/*',
-			url: (baseURL: string) => `${stripTrailing(baseURL)}/api/ai/chat`,
+		/**
+		 * The OpenAI-compatible inference gateway (ADR-0050). Lives at the root
+		 * `/v1` (the de-facto OpenAI path) so any OpenAI-compatible client points
+		 * at `<origin>/v1` and works unchanged. `baseUrl` is what the client engine
+		 * is configured with; it appends `/chat/completions`.
+		 */
+		completions: {
+			pattern: '/v1/chat/completions',
+			prefixPattern: '/v1/*',
+			url: (baseURL: string) => `${stripTrailing(baseURL)}/v1/chat/completions`,
+			baseUrl: (baseURL: string) => `${stripTrailing(baseURL)}/v1`,
 		},
 	},
 } as const;

@@ -16,6 +16,8 @@
 import { fromTable } from '@epicenter/svelte';
 import type { TabManagerBrowser } from '$lib/tab-manager/extension';
 
+export type ToolTrustState = ReturnType<typeof createToolTrustState>;
+
 export function createToolTrustState(tabManager: TabManagerBrowser) {
 	const trustMap = fromTable(tabManager.tables.toolTrust);
 

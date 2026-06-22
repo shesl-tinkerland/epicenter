@@ -17,7 +17,7 @@ do not live in the app package at all; they live per-project under
 
 Two shipped shapes; pick by whether the app gates UI on signed-in identity.
 
-**Shape A**: auth-gated SvelteKit web apps (honeycrisp, zhongwen, fuji). The app
+**Shape A**: auth-gated SvelteKit web apps (honeycrisp, vocab, fuji). The app
 is not a running thing until identity exists, so a `session` singleton owns the
 workspace lifecycle and UI lives under `(signed-in)` routes.
 
@@ -32,7 +32,7 @@ the package root; the two apps with a `src-tauri/` directory (fuji, whispering)
 nest the same files under `src/lib/workspace/` and add a `src/lib/platform/`
 seam.
 
-**Flat root** (honeycrisp, opensidian, zhongwen):
+**Flat root** (honeycrisp, opensidian, vocab):
 
 ```txt
 apps/<app>/
@@ -64,7 +64,7 @@ Package exports follow the file's actual owner. Every app exports the iso
 factory as `.` and the mount factory as `./mount`:
 
 ```jsonc
-// honeycrisp / zhongwen (flat root)
+// honeycrisp / vocab (flat root)
 "exports": {
   ".": "./honeycrisp.ts",
   "./mount": "./mount.ts"
@@ -290,7 +290,7 @@ lifecycle command is `epicenter daemon up`, not `epicenter serve`.
 - Reintroducing `resolve.extensions` suffixes or tsconfig `moduleSuffixes` for
   platform selection.
 - Dropping `...defaultClientConditions` from the Tauri `conditions` array.
-- Adding a `./browser` package export to honeycrisp/zhongwen/fuji for symmetry
+- Adding a `./browser` package export to honeycrisp/vocab/fuji for symmetry
   with opensidian. Keep the asymmetry; only opensidian has a consumer for it.
 - Placing `daemon.ts` or `script.ts` inside the app package. They live under a
   project's `workspaces/<app>/` and are registered via `epicenter.config.ts`.

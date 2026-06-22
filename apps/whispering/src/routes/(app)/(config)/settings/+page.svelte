@@ -1,13 +1,10 @@
 <script lang="ts">
 	import * as Field from '@epicenter/ui/field';
-	import { Switch } from '@epicenter/ui/switch';
-	import { createMutation, createQuery } from '@tanstack/svelte-query';
 	import OutputDeliveryControls from '$lib/components/OutputDeliveryControls.svelte';
 	import { SettingSelect, SettingSwitch } from '$lib/components/settings';
-	import { report } from '$lib/report';
-	import { autostartKeys } from '$lib/tauri/autostart-keys';
 	import { tauri } from '#platform/tauri';
 	import { settings } from '$lib/state/settings.svelte';
+	import AutostartSwitch from './AutostartSwitch.svelte';
 
 	const retentionItems = [
 		{ value: 'keep-forever', label: 'Keep All Recordings' },
@@ -39,34 +36,6 @@
 		{ value: 100, label: '100 Recordings' },
 	];
 
-	// Autostart is Tauri-only; on web `tauri` is null and the query stays
-	// disabled (default value `false`).
-	const autostartQuery = createQuery(() =>
-		tauri
-			? tauri.autostart.isEnabled.options
-			: {
-					queryKey: autostartKeys.isEnabled,
-					queryFn: async () => false,
-					enabled: false,
-					initialData: false,
-				},
-	);
-	const enableAutostartMutation = createMutation(() =>
-		tauri
-			? tauri.autostart.enable.options
-			: {
-					mutationKey: autostartKeys.enable,
-					mutationFn: async () => undefined,
-				},
-	);
-	const disableAutostartMutation = createMutation(() =>
-		tauri
-			? tauri.autostart.disable.options
-			: {
-					mutationKey: autostartKeys.disable,
-					mutationFn: async () => undefined,
-				},
-	);
 </script>
 
 <svelte:head> <title>Settings - Whispering</title> </svelte:head>
@@ -120,32 +89,7 @@
 		{/if}
 
 		{#if tauri}
-			<Field.Field orientation="horizontal">
-				<Field.Content>
-					<Field.Label for="autostart">Launch on Startup</Field.Label>
-					<Field.Description>
-						Automatically open Whispering when you log in
-					</Field.Description>
-				</Field.Content>
-				<Switch
-					id="autostart"
-					checked={autostartQuery.data ?? false}
-					onCheckedChange={(checked) => {
-						if (checked) {
-							enableAutostartMutation.mutate(undefined, {
-								onError: (error) => report.error({ cause: error }),
-							});
-						} else {
-							disableAutostartMutation.mutate(undefined, {
-								onError: (error) => report.error({ cause: error }),
-							});
-						}
-					}}
-					disabled={autostartQuery.isPending ||
-						enableAutostartMutation.isPending ||
-						disableAutostartMutation.isPending}
-				/>
-			</Field.Field>
+			<AutostartSwitch autostart={tauri.autostart} />
 		{/if}
 	</Field.Group>
 </Field.Set>

@@ -68,9 +68,8 @@ mock.module('./service.js', () => ({
 	}),
 }));
 
-const { chargeAiCreditsWithAutumn, syncAssetStorageWithAutumn } = await import(
-	'./policies.js'
-);
+const { chargeOpenAiCreditsWithAutumn, syncAssetStorageWithAutumn } =
+	await import('./policies.js');
 
 beforeEach(() => {
 	finalizeCalls.length = 0;
@@ -91,33 +90,33 @@ function withContext(app: Hono<Env>) {
 	return app;
 }
 
-// ----- AI chat policy --------------------------------------------------
+// ----- AI inference policy (the OpenAI-compatible gateway) --------------
 
-/** Mount the AI policy around a stub chat handler that returns `downstreamStatus`. */
+/** Mount the inference policy around a stub completions handler returning `downstreamStatus`. */
 function makeAiApp(downstreamStatus: 200 | 500) {
 	const app = withContext(new Hono<Env>());
-	app.use('/ai/chat', chargeAiCreditsWithAutumn);
-	app.post('/ai/chat', (c) => c.body(null, downstreamStatus));
+	app.use('/v1/chat/completions', chargeOpenAiCreditsWithAutumn);
+	app.post('/v1/chat/completions', (c) => c.body(null, downstreamStatus));
 	return app;
 }
 
 function aiRequest(app: Hono<Env>, body: unknown) {
-	return app.request('/ai/chat', {
+	return app.request('/v1/chat/completions', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(body),
 	});
 }
 
-test('a successful chat (200) confirms the reservation', async () => {
-	const res = await aiRequest(makeAiApp(200), { data: { model: 'gpt' } });
+test('a successful completion (200) confirms the reservation', async () => {
+	const res = await aiRequest(makeAiApp(200), { model: 'gpt' });
 
 	expect(res.status).toBe(200);
 	expect(finalizeCalls).toEqual(['confirm']);
 });
 
 test('a pre-stream failure (>= 400) releases the reservation, never charging', async () => {
-	const res = await aiRequest(makeAiApp(500), { data: { model: 'gpt' } });
+	const res = await aiRequest(makeAiApp(500), { model: 'gpt' });
 
 	expect(res.status).toBe(500);
 	expect(finalizeCalls).toEqual(['release']);
@@ -125,7 +124,7 @@ test('a pre-stream failure (>= 400) releases the reservation, never charging', a
 
 test('a BYOK key bypasses billing entirely (no reservation)', async () => {
 	const res = await aiRequest(makeAiApp(200), {
-		data: { model: 'gpt' },
+		model: 'gpt',
 		apiKey: 'sk-user-key',
 	});
 
@@ -133,15 +132,17 @@ test('a BYOK key bypasses billing entirely (no reservation)', async () => {
 	expect(finalizeCalls).toHaveLength(0);
 });
 
-test('an AI guard rejection answers with the envelope and reserves nothing', async () => {
+test('a guard rejection answers in the OpenAI error shape and reserves nothing', async () => {
 	aiReserveOutcome = AiChatError.InsufficientCredits({ balance: 0 });
 
-	const res = await aiRequest(makeAiApp(200), { data: { model: 'gpt' } });
+	const res = await aiRequest(makeAiApp(200), { model: 'gpt' });
 
 	expect(res.status).toBe(402);
-	const body = (await res.json()) as { data: unknown; error: { name: string } };
-	expect(body.data).toBeNull();
-	expect(body.error.name).toBe('InsufficientCredits');
+	const body = (await res.json()) as {
+		error: { code: string; message: string };
+	};
+	expect(body.error.code).toBe('InsufficientCredits');
+	expect(body.error.message).toBeString();
 	expect(finalizeCalls).toHaveLength(0);
 });
 

@@ -17,6 +17,7 @@
 		"zip": "wxt zip",
 		"zip:firefox": "wxt zip -b firefox",
 		"typecheck": "wxt prepare && svelte-check --tsconfig ./tsconfig.json",
+		"test": "bun test",
 		"postinstall": "wxt prepare"
 	},
 	"dependencies": {
@@ -29,10 +30,6 @@
 		"@epicenter/ui": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"@lucide/svelte": "catalog:",
-		"@tanstack/ai": "catalog:",
-		"@tanstack/ai-anthropic": "catalog:",
-		"@tanstack/ai-client": "^0.16.3",
-		"@tanstack/ai-svelte": "^0.13.4",
 		"@wxt-dev/storage": "^1.2.6",
 		"arktype": "catalog:",
 		"better-auth": "catalog:",
@@ -54,6 +51,7 @@
 		"@tailwindcss/vite": "catalog:",
 		"@types/node": "catalog:",
 		"@wxt-dev/module-svelte": "^2.0.3",
+		"fake-indexeddb": "^6.2.5",
 		"svelte": "catalog:",
 		"svelte-check": "catalog:",
 		"tailwindcss": "catalog:",

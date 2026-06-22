@@ -16,7 +16,9 @@
 </script>
 
 {#if !tauri && status}
-	<div class="pill-host">
+	<!-- Bottom-center, matching the desktop overlay's resting position
+	     (OVERLAY_BOTTOM_MARGIN). Above page content, below modals and toasts. -->
+	<div class="fixed bottom-[72px] left-1/2 z-50 -translate-x-1/2">
 		<RecordingPill
 			{status}
 			level={webPillLevel.level}
@@ -25,15 +27,3 @@
 		/>
 	</div>
 {/if}
-
-<style>
-	/* Bottom-center, matching the desktop overlay's resting position
-	   (OVERLAY_BOTTOM_MARGIN). Above page content, below modals and toasts. */
-	.pill-host {
-		position: fixed;
-		bottom: 72px;
-		left: 50%;
-		transform: translateX(-50%);
-		z-index: 50;
-	}
-</style>

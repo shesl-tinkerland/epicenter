@@ -245,8 +245,8 @@ export type NodeMountRuntime = {
  * ```ts
  * import { nodeMountRuntime } from '@epicenter/workspace/node';
  *
- * export function zhongwen(opts: ZhongwenMountOptions = {}) {
- *   return zhongwenWorkspace.mount({
+ * export function vocab(opts: VocabMountOptions = {}) {
+ *   return vocabWorkspace.mount({
  *     baseURL: opts.baseURL,
  *     runtime: nodeMountRuntime(),
  *   });

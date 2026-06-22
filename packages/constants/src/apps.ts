@@ -36,7 +36,7 @@ export const APPS = {
 		aliases: ['https://opensidian.epicenter.so'],
 	},
 	TODOS: { port: 5177, url: 'https://todos.epicenter.so' },
-	ZHONGWEN: { port: 8888, url: 'https://zhongwen.epicenter.so' },
+	VOCAB: { port: 8888, url: 'https://vocab.epicenter.so' },
 } as const;
 
 export type AppId = keyof typeof APPS;

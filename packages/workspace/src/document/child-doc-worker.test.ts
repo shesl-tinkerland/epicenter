@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'bun:test';
 import { field } from '@epicenter/field';
 import * as Y from 'yjs';
-import { appendUserMessage, attachChatTranscript } from '../ai/index.js';
+import { attachKvStore } from './attach-kv-store.js';
 import {
 	attachChildDocWorker,
 	type ConnectedChildDoc,
@@ -16,10 +16,13 @@ import {
 import { defineTable } from './define-table.js';
 import { createWorkspace } from './workspace.js';
 
+/** A sample child-doc layout: any observable handle exercises the loop. */
+const messagesLayout = (ydoc: Y.Doc) => attachKvStore<{ id: string }>(ydoc);
+
 const conversationsDefinition = defineTable({
 	id: field.string(),
 	title: field.string(),
-}).docs({ messages: attachChatTranscript });
+}).docs({ messages: messagesLayout });
 
 /**
  * Build a workspace plus an in-memory body connector. The connector records
@@ -60,7 +63,7 @@ function workerArgs(
 		table: conversations,
 		guidFor: conversations.docs.messages.guid,
 		connectBody,
-		layout: attachChatTranscript,
+		layout: messagesLayout,
 		workerFor: () => ({}),
 		// Designation is the loop's filter; most tests host every row, and the
 		// designation-specific tests below override it. The schema-derived
@@ -119,12 +122,8 @@ describe('attachChildDocWorker', () => {
 		expect(built).toEqual(['c1']);
 
 		const body = bodies.get(conversations.docs.messages.guid('c1'))!;
-		appendUserMessage(body, {
-			id: 'm1',
-			content: 'hi',
-			createdAt: 1,
-			generationId: 'g1',
-		});
+		// A write to the body's store fires the worker's onChange.
+		attachKvStore<{ id: string }>(body).set('m1', { id: 'm1' });
 
 		expect(changed).toEqual(['c1']);
 

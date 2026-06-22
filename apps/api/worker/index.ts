@@ -17,8 +17,8 @@ import { PRODUCTION_API_URL } from '@epicenter/constants/apps';
 import {
 	authApp,
 	createServerApp,
-	mountAiApp,
 	mountAssetsApp,
+	mountInferenceApp,
 	mountRoomsApp,
 	mountSessionApp,
 	personal,
@@ -29,7 +29,7 @@ import {
 } from '@epicenter/server';
 import { describeRoute } from 'hono-openapi';
 import {
-	chargeAiCreditsWithAutumn,
+	chargeOpenAiCreditsWithAutumn,
 	syncAssetStorageWithAutumn,
 } from './billing/policies.js';
 import { mountBillingApi } from './billing/routes.js';
@@ -73,10 +73,10 @@ mountAssetsApp(app, {
 	ownership,
 	policies: [syncAssetStorageWithAutumn],
 });
-mountAiApp(app, {
+mountInferenceApp(app, {
 	auth: requireBearerUser,
 	ownership,
-	policies: [chargeAiCreditsWithAutumn],
+	policies: [chargeOpenAiCreditsWithAutumn],
 });
 
 // Cloud-only billing data plane. Auth is bundled into the mount so the

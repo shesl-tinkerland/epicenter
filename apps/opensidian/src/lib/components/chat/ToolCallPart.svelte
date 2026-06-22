@@ -1,125 +1,71 @@
 <script lang="ts">
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
-	import { Spinner } from '@epicenter/ui/spinner';
 	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
-	import ShieldXIcon from '@lucide/svelte/icons/shield-x';
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
-	import type { ToolCallPart as TanStackToolCallPart } from '@tanstack/ai-client';
+	import type { AgentToolCallPart } from '@epicenter/workspace/agent';
 
 	let {
 		part,
+		awaitingApproval,
 		onApproveToolCall,
 		onDenyToolCall,
 	}: {
-		part: TanStackToolCallPart;
-		onApproveToolCall: (approvalId: string) => void;
-		onDenyToolCall: (approvalId: string) => void;
+		part: AgentToolCallPart;
+		/** This call is paused on the user's decision. */
+		awaitingApproval: boolean;
+		onApproveToolCall: () => void;
+		onDenyToolCall: () => void;
 	} = $props();
 
-	const isApprovalRequested = $derived(part.state === 'approval-requested');
-	const isDenied = $derived(part.approval?.approved === false);
-	// A settled call is one whose output landed; `state` alone cannot say
-	// this because the runtime settles successes at 'complete' but errors at
-	// 'input-complete' (and rows persisted by older builds settle there too).
-	// Denied calls never receive an output, so they settle by approval.
-	const isRunning = $derived(
-		part.output == null && !isApprovalRequested && !isDenied,
-	);
-	const isFailed = $derived(
-		typeof part.output === 'object' &&
-			part.output !== null &&
-			'error' in part.output,
-	);
-
 	const displayName = $derived(
-		part.name
+		part.toolName
 			.split('_')
 			.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 			.join(' '),
 	);
 
-	const badgeVariant = $derived.by(() => {
-		if (isApprovalRequested || isDenied) return 'secondary' as const;
-		if (isFailed) return 'status.failed' as const;
-		if (isRunning) return 'status.running' as const;
-		return 'status.completed' as const;
-	});
+	const argumentsText = $derived(JSON.stringify(part.input, null, 2));
 </script>
-
-{#snippet codeBlock(text: string)}
-	<pre
-		class="mt-0.5 whitespace-pre-wrap break-all font-mono text-[11px]"
-	>{text}</pre>
-{/snippet}
 
 <div class="flex flex-col gap-1 py-1">
 	<div class="flex items-center gap-1.5">
-		{#if isApprovalRequested}
+		{#if awaitingApproval}
 			<ShieldAlertIcon class="size-3 text-amber-500" />
-		{:else if isDenied}
-			<ShieldXIcon class="size-3 text-muted-foreground" />
-		{:else if isRunning}
-			<Spinner class="size-3 text-blue-500" />
 		{:else}
 			<WrenchIcon class="size-3 text-muted-foreground" />
 		{/if}
-		<Badge variant={badgeVariant}>
-			{displayName}{isRunning ? '…': ''}
+		<Badge variant={awaitingApproval ? 'secondary' : 'status.running'}>
+			{displayName}
 		</Badge>
 	</div>
 
-	{#if isDenied}
-		<div class="pl-[1.125rem] text-xs text-muted-foreground">Denied</div>
-	{:else if isApprovalRequested}
+	{#if awaitingApproval}
 		<div class="flex items-center gap-1.5 pl-[1.125rem]">
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={() => {
-					const approvalId = part.approval?.id;
-					if (approvalId) onApproveToolCall(approvalId);
-				}}
-			>
+			<Button variant="outline" size="sm" onclick={onApproveToolCall}>
 				Allow
 			</Button>
 			<Button
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
-				onclick={() => {
-					const approvalId = part.approval?.id;
-					if (approvalId) onDenyToolCall(approvalId);
-				}}
+				onclick={onDenyToolCall}
 			>
 				Deny
 			</Button>
 		</div>
 	{/if}
 
-	<details class="pl-[1.125rem]">
-		<summary
-			class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
-		>
-			Details
-		</summary>
-		<div class="mt-1 rounded-md bg-muted/50 p-2 text-xs">
-			{#if part.arguments}
-				<div class="mb-1">
-					<span class="font-medium text-muted-foreground">Arguments:</span>
-					{@render codeBlock(part.arguments)}
-				</div>
-			{/if}
-			{#if part.output != null}
-				<div>
-					<span class="font-medium text-muted-foreground">Result:</span>
-					{@render codeBlock(
-						typeof part.output === 'string'
-							? part.output
-							: JSON.stringify(part.output, null, 2),
-					)}
-				</div>
-			{/if}
-		</div>
-	</details>
+	{#if argumentsText !== '{}'}
+		<details class="pl-[1.125rem]">
+			<summary
+				class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
+			>
+				Arguments
+			</summary>
+			<pre
+				class="mt-1 whitespace-pre-wrap break-all rounded-md bg-muted/50 p-2 font-mono text-[11px]"
+			>{argumentsText}</pre>
+		</details>
+	{/if}
 </div>

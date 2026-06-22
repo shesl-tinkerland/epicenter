@@ -1,6 +1,7 @@
 # 0036. An answer body is a native parts array; its text streams into Y.Text
 
-- **Status:** Accepted
+- **Status:** Superseded
+- **Superseded by:** [ADR-0047](0047-the-agent-loop-runs-in-the-client-and-tools-are-dispatched-actions.md) (the live turn streams in client state and finished messages persist as records; no answer body streams into Y.Text). The parts-array body shape carries forward as the persisted-record shape.
 - **Date:** 2026-06-18
 - **Resolves:** [ADR-0031](0031-collaboration-is-addressed-single-writer-regions-in-a-child-doc.md)'s open decision on how a streaming answer body is stored
 - **Relates:** [ADR-0021](0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md) (actions are the tools), [ADR-0030](0030-agents-are-immutable-capability-bundles.md) (agents)

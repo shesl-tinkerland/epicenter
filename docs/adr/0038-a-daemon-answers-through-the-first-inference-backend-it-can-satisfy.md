@@ -1,6 +1,7 @@
 # 0038. A daemon answers through the first inference backend it can satisfy
 
-- **Status:** Accepted
+- **Status:** Superseded
+- **Superseded by:** [ADR-0049](0049-inference-is-its-own-box-the-daemon-never-infers.md) (inference is its own box; the daemon never infers, so it no longer resolves a `ChatStream` or answers through any backend). The dead daemon BYOK arm (`chatStreamFromAdapter`) is removed.
 - **Date:** 2026-06-20
 
 ## Context

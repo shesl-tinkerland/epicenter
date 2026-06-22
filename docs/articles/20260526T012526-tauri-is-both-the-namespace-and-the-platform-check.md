@@ -136,6 +136,40 @@ This works two ways, depending on whether you're crossing a component boundary o
 
 The global shortcuts page binds `{@const t = tauri}` inside the `{#if tauri}` block, then passes that non-null value into the table. The table only forwards it into the global recorder after another local narrow. No re-check inside the recorder, no `tauri?.`, no assertion.
 
+The Launch-on-Startup toggle is the same move under more pressure, and it shows why the boundary matters. Autostart is consumed reactively: a TanStack query and two mutations read their `.options` from `tauri.autostart.*`. Those hooks run unconditionally at the top of the component script, and `createQuery`/`createMutation` cannot take a `null` options object, so the settings page could not just narrow once. Each hook grew a `tauri ? real : stub` ternary with a no-op fallback that existed only for the web build:
+
+```svelte
+<!-- settings/+page.svelte (before) -->
+const autostartQuery = createQuery(() =>
+  tauri
+    ? tauri.autostart.isEnabled.options
+    : { queryKey: autostartKeys.isEnabled, queryFn: async () => false, enabled: false },
+);
+// two more fallback mutations like this, then an inline {#if tauri} switch
+```
+
+Narrowing at the gate and passing the namespace into a colocated child erases all of it:
+
+```svelte
+<!-- settings/+page.svelte (after) -->
+{#if tauri}
+  <AutostartSwitch autostart={tauri.autostart} />
+{/if}
+```
+
+```svelte
+<!-- AutostartSwitch.svelte -->
+<script lang="ts">
+  import type { Tauri } from '#platform/tauri';
+  let { autostart }: { autostart: Tauri['autostart'] } = $props();
+
+  const isEnabledQuery = createQuery(() => autostart.isEnabled.options);
+  // enable/disable mutations, all built on a non-null `autostart`
+</script>
+```
+
+The child takes `autostart: Tauri['autostart']`, so the query and mutations build against a non-null value with no ternary left. The three fallback hooks go away, and so does a whole file: `autostart-keys.ts` existed only so the web fallback could name the query keys without importing the Tauri-only module, and once the fallback is gone the keys move next to their one consumer. Reactive consumption is what made the ceremony loud, which is why this capability earned a component instead of a re-check at the call site (PR #2143).
+
 ### Function-level: positional parameter
 
 The same idea works for plain functions. If a helper is only meaningful when Tauri is present, take `tauri: Tauri` as an argument instead of re-narrowing inside.

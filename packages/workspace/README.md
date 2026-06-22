@@ -1316,7 +1316,6 @@ browser-safe entry point.
 | `@epicenter/workspace/node` | Bun/Node `attach*` and `open*` (`attachYjsLog`, `attachYjsLogReader`, `openSqliteReader`, `openWorkspaceSqlite`), daemon clients (`connectDaemonActions`, `findEpicenterRoot`), workspace paths | Yes |
 | `@epicenter/workspace/document/materializer/markdown` | `attachMarkdownExport`, `attachGitAutosave`, `MarkdownShape` | Yes |
 | `@epicenter/workspace/document/materializer/sqlite` | `attachBunSqliteMaterializer`, `generateDdl`, types | Yes |
-| `@epicenter/workspace/ai` | `actionsToAiTools` (TanStack AI bindings) | Yes |
 
 ## Architecture & Lifecycle
 
@@ -1628,7 +1627,7 @@ The core package does not export an MCP server or own every adapter. What it doe
 - `Object.entries(actions)` to iterate the flat registry
 - `isAction` type guard; narrow on `action.type === 'query' | 'mutation'` for the variant
 - `toActionMeta(action)` to project an action to its wire-safe shape
-- `@epicenter/workspace/ai`: `actionsToAiTools(...)` for TanStack AI tool bindings
+- `@epicenter/workspace`: `actionsToAiTools(...)` for TanStack AI tool bindings
 
 That is enough to expose workspace actions over HTTP, CLI, TanStack AI, or MCP without coupling the core package to one transport.
 

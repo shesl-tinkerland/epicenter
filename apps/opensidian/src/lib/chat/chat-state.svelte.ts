@@ -1,42 +1,46 @@
 /**
- * Reactive AI chat state, rendered from the conversation doc.
+ * Reactive AI chat state: the one client agent loop (ADR-0047) per conversation.
  *
- * Since the render-from-doc migration (ADR-0033, Phase C), a conversation is a
- * synced transcript child doc, not a `createChat` in-memory state plus a
- * `chatMessages` table. Each handle binds its conversation's transcript
- * (`bindConversation` over `tables.conversations.docs.messages.open`), which owns
- * the render projection and an in-process answerer whose inference rides the
- * metered Epicenter provider (the house key over `/api/ai/chat`). A send is one
- * local doc write (the optimistic echo); the answerer claims that turn and
- * streams the reply into the same doc, so every device renders one stream.
+ * A conversation's turns live in its `messages` child doc, a last-write-wins
+ * store of finished {@link AgentMessage} records. Each handle binds that store to
+ * `createConversation`: the loop streams the live turn into component state,
+ * dispatches tool calls, and writes each finished message into the doc the moment
+ * the turn ends. The live turn never enters the CRDT, and the loop dies with the
+ * tab; re-asking the reasoning is free.
+ *
+ * Inference rides the OpenAI-compatible gateway (ADR-0050; the house key over
+ * `/v1/chat/completions`), reading the conversation's model and skill prompts per
+ * turn. The base URL is the swap point: it defaults to the Epicenter gateway but
+ * is the only thing a self-hosted or local backend (Ollama, vLLM) would change.
+ * Tools are opensidian's own file and bash actions: opensidian has no daemon, so
+ * they are the client's in-process actions, surfaced through
+ * `createDispatchToolCatalog` (a local action resolves through `invokeAction`
+ * with no relay). A mutation is approval-gated by a synchronous pause: the loop
+ * waits on an in-client decision, recorded per handle in `pendingApproval`.
  *
  * The conversation list is the `conversations` table (title, model, recency);
- * the turns live in each conversation's doc. There is no second conversation
- * store and no `onFinish` persistence: the doc is the single owner.
- *
- * Tools are not wired in this path. Opensidian's chat had file/bash tools behind
- * a per-call approval UX, but the text-only browser answerer does not run the
- * tool loop (that is Phase B: the agentic loop in the answer core plus
- * doc-mediated approval). `approveToolCall` / `denyToolCall` stay on the handle
- * as inert no-ops so the components keep their shape; no tool-call parts are
- * produced, so they never fire.
+ * the turns live in each conversation's doc.
  *
  * Components read this through `opensidian.state.chat`.
  */
 
 import type { AuthClient } from '@epicenter/auth';
-import {
-	createAiChatFetch,
-	createEpicenterProviderChatStream,
-} from '@epicenter/client';
+import { createOpenAiAgentEngine } from '@epicenter/client';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import { APP_URLS } from '@epicenter/constants/vite';
 import { InstantString } from '@epicenter/field';
-import { bindConversation, fromTable } from '@epicenter/svelte';
+import { bindAgentConversation, fromTable } from '@epicenter/svelte';
+import {
+	type AgentToolCall,
+	createConversation,
+	createDispatchToolCatalog,
+	defaultApprovalDecision,
+} from '@epicenter/workspace/agent';
 import {
 	asConversationId,
 	type Conversation,
 	type ConversationId,
+	generateChatMessageId,
 	generateConversationId,
 } from 'opensidian';
 import type { OpensidianBrowser } from 'opensidian/browser';
@@ -47,7 +51,6 @@ import {
 	buildVaultSkillsPrompt,
 	OPENSIDIAN_SYSTEM_PROMPT,
 } from '$lib/chat/system-prompt';
-import { chatDocMessageToUiMessage } from '$lib/chat/ui-message';
 import { searchParams } from '$lib/search-params.svelte';
 import type { SkillState } from '$lib/state/skill-state.svelte';
 
@@ -60,8 +63,9 @@ export function createAiChatState({
 	workspace: OpensidianBrowser;
 	skills: SkillState;
 }) {
-	const aiChatUrl = API_ROUTES.ai.chat.url(APP_URLS.API);
-	const aiFetch = createAiChatFetch(auth.fetch);
+	// The inference server's base URL (the swap point, ADR-0049): default the
+	// Epicenter gateway; the engine appends `/chat/completions`.
+	const inferenceBaseUrl = API_ROUTES.ai.completions.baseUrl(APP_URLS.API);
 
 	const conversationsMap = fromTable(workspace.tables.conversations);
 	const conversations = $derived(
@@ -70,12 +74,14 @@ export function createAiChatState({
 		),
 	);
 
-	// One shared liveness clock for every handle, so an interrupted answer (no
-	// finish written) decays past the grace window without a timer per handle.
-	let now = $state(Date.now());
-	const ticker = setInterval(() => {
-		now = Date.now();
-	}, 1000);
+	// One tool catalog for every conversation: the union of opensidian's own
+	// in-process actions (file and bash tools) and any peer's advertised actions.
+	// A local action resolves through `invokeAction` without the relay; the
+	// presence channel already excludes this node, so the file tools come only
+	// from `localActions`.
+	const toolCatalog = createDispatchToolCatalog(workspace.collaboration, {
+		localActions: workspace.actions,
+	});
 
 	/** The layered system prompts an answer is generated under, read per turn. */
 	function buildSystemPrompts(): string[] {
@@ -132,35 +138,60 @@ export function createAiChatState({
 	function createConversationHandle(conversationId: ConversationId) {
 		const metadata = $derived(conversationsMap.get(conversationId));
 
-		// The transcript child doc is the single source of truth. Bind it once (the
-		// handle is keyed by conversationId): the binding owns the in-process
-		// answerer, the render projection, and send/stop/retry. Opensidian has no
-		// daemon binding, so the browser always answers; inference rides the
-		// Epicenter provider, reading the conversation's model and skill prompts per
-		// turn. The shared clock keeps one ticker across every open conversation.
-		const convo = bindConversation(
-			workspace.tables.conversations.docs.messages.open(conversationId),
-			{
-				answer: createEpicenterProviderChatStream({
-					fetch: aiFetch,
-					url: aiChatUrl,
+		// The tool call the loop is waiting on a decision for, or null. A mutation
+		// pauses the loop here (the present human is the gate, ADR-0047); a query
+		// runs unattended and never lands here.
+		let pendingApproval = $state<{
+			call: AgentToolCall;
+			resolve: (approved: boolean) => void;
+		} | null>(null);
+
+		function settleApproval(approved: boolean) {
+			const decision = pendingApproval;
+			if (!decision) return;
+			pendingApproval = null;
+			decision.resolve(approved);
+		}
+
+		// Bind the conversation's child doc to the loop. Inference reads this
+		// conversation's model and the live skill prompts per turn, so a
+		// mid-conversation model switch takes effect on the next answer.
+		const convo = bindAgentConversation(
+			createConversation({
+				store:
+					workspace.tables.conversations.docs.messages.open(conversationId),
+				engine: createOpenAiAgentEngine({
+					fetch: auth.fetch,
+					baseURL: inferenceBaseUrl,
 					data: () => ({
 						model: metadata?.model ?? DEFAULT_MODEL,
 						systemPrompts: buildSystemPrompts(),
 					}),
 				}),
-				now: () => now,
-			},
+				tools: toolCatalog,
+				approval: {
+					decide: defaultApprovalDecision,
+					request: (call) =>
+						new Promise<boolean>((resolve) => {
+							pendingApproval = { call, resolve };
+						}),
+				},
+				generateId: generateChatMessageId,
+			}),
 		);
 
-		// The binding's render-state owns liveness/status; the only thing left here
-		// is converting the visible doc messages to UIMessage for the components.
-		const messages = $derived(
-			convo.render.visibleMessages.map(chatDocMessageToUiMessage),
-		);
+		// Map the loop's two-flag liveness onto the status the message list reads.
+		const status = $derived.by(() => {
+			if (convo.error) return 'error' as const;
+			if (convo.isThinking) return 'submitted' as const;
+			if (convo.isGenerating) return 'streaming' as const;
+			return 'ready' as const;
+		});
 
 		return {
 			[Symbol.dispose]() {
+				// Unblock a pending approval so the awaiting loop unwinds, then abort.
+				settleApproval(false);
 				convo[Symbol.dispose]();
 			},
 
@@ -180,37 +211,38 @@ export function createAiChatState({
 			},
 
 			get messages() {
-				return messages;
+				return convo.messages;
 			},
 
 			get isLoading() {
-				return convo.render.isGenerating;
+				return convo.isGenerating;
 			},
 
 			get status() {
-				return convo.render.status;
+				return status;
 			},
 
 			get error() {
-				return convo.render.failure
-					? { message: convo.render.failure.message }
-					: null;
+				return convo.error;
 			},
 
 			get isCreditsExhausted() {
-				return convo.render.failure?.code === 'InsufficientCredits';
+				return convo.error?.code === 'InsufficientCredits';
 			},
 
 			get isUnauthorized() {
-				return convo.render.failure?.code === 'Unauthorized';
+				return convo.error?.code === 'Unauthorized';
+			},
+
+			/** The tool call awaiting the user's decision, or null. */
+			get pendingApprovalCallId() {
+				return pendingApproval?.call.toolCallId ?? null;
 			},
 
 			sendMessage(content: string) {
 				const text = content.trim();
-				if (!text || convo.render.isGenerating) return;
+				if (!text || convo.isGenerating) return;
 
-				// One durable transcript write: `convo.send` mints the user turn and
-				// the answerer reads it off the doc and claims.
 				convo.send(text);
 
 				const currentTitle = metadata?.title ?? 'New Chat';
@@ -224,13 +256,19 @@ export function createAiChatState({
 			},
 
 			stop() {
+				// A turn parked on an approval is awaiting `request`, which only the
+				// user settles; unblock it (as a denial) before aborting, the same
+				// order dispose uses, so Stop is never inert mid-approval.
+				settleApproval(false);
 				convo.stop();
 			},
 
-			// Tool approval is Phase B (the answer core does not run the tool loop
-			// yet), so these are inert: no tool-call parts are produced to approve.
-			approveToolCall(_approvalId: string) {},
-			denyToolCall(_approvalId: string) {},
+			approveToolCall() {
+				settleApproval(true);
+			},
+			denyToolCall() {
+				settleApproval(false);
+			},
 		};
 	}
 
@@ -307,7 +345,6 @@ export function createAiChatState({
 
 	return {
 		[Symbol.dispose]() {
-			clearInterval(ticker);
 			_unobserveConversations();
 			conversationsMap[Symbol.dispose]();
 			for (const conversationId of [...handles.keys()]) {

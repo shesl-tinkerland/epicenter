@@ -58,7 +58,7 @@ who forks and distributes a modified binary shares the changes back.
     - apps/honeycrisp            (@epicenter/honeycrisp) notes app
     - apps/opensidian            (opensidian)            notes + terminal
     - apps/fuji                  (@epicenter/fuji)       personal CMS
-    - apps/zhongwen              (@epicenter/zhongwen)   mandarin chat
+    - apps/vocab                 (@epicenter/vocab)      mandarin chat
     - apps/tab-manager           (@epicenter/tab-manager) browser extension
     - apps/skills                (skills)                agent skill editor
     - apps/reddit                (@epicenter/reddit)     reddit importer

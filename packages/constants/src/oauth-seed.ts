@@ -8,7 +8,7 @@ import {
 	EPICENTER_OAUTH_SCOPES,
 	EPICENTER_OPENSIDIAN_OAUTH_CLIENT_ID,
 	EPICENTER_TAB_MANAGER_OAUTH_CLIENT_ID,
-	EPICENTER_ZHONGWEN_OAUTH_CLIENT_ID,
+	EPICENTER_VOCAB_OAUTH_CLIENT_ID,
 } from './oauth-clients.js';
 import { OAUTH_ROUTES } from './oauth-routes.js';
 
@@ -51,7 +51,7 @@ const AUTH_CALLBACK_PATH = '/auth/callback';
  * Every redirect URI for an app that owns its origin: each origin the app
  * answers on ({@link appOrigins}, i.e. dev plus prod) joined to
  * {@link AUTH_CALLBACK_PATH}. Used by Fuji, Honeycrisp, Opensidian, and
- * Zhongwen.
+ * Vocab.
  */
 function appCallbacks(app: {
 	port: number;
@@ -105,10 +105,10 @@ export function buildTrustedOAuthClients(apiBaseURL: string) {
 			redirectUris: ['chrome-extension://mkbnicfhpacdofmoocppnjjmdfmkkgda/'],
 		},
 		{
-			clientId: EPICENTER_ZHONGWEN_OAUTH_CLIENT_ID,
-			name: 'Zhongwen',
+			clientId: EPICENTER_VOCAB_OAUTH_CLIENT_ID,
+			name: 'Vocab',
 			type: 'user-agent-based',
-			redirectUris: appCallbacks(APPS.ZHONGWEN),
+			redirectUris: appCallbacks(APPS.VOCAB),
 		},
 		{
 			clientId: EPICENTER_CLI_OAUTH_CLIENT_ID,

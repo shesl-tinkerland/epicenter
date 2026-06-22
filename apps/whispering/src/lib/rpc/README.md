@@ -112,7 +112,7 @@ Rules:
 - Define keys with `defineKeys` and export the key map beside the adapter that owns it.
 - Static key entries do not need `as const`; `defineKeys` preserves literal tuple types for them.
 - Key factories need `as const` when the literal positions matter, like `['audio', 'playbackUrl', id] as const`.
-- Keep keys in the owning module unless another layer must share the same fallback key, like web settings importing `autostartKeys` when Tauri is unavailable.
+- Keep keys in the owning module. Only lift them into a standalone file when a separate layer genuinely must reference the same key without importing the owning adapter (for example, a web fallback that cannot pull in a Tauri-only module).
 - Keep adapter-specific errors local unless another module needs to name that exact error union.
 - Inline small single-use input objects. Name an input type only when it is reused, exported, large enough to obscure the function, or carries domain meaning. Put named input types immediately before the adapter namespace that uses them.
 - If you export the exact return shape of a `create*` factory, derive it with `ReturnType<typeof createThing>` instead of duplicating the object shape.

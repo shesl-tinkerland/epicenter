@@ -49,6 +49,11 @@ pub mod keyboard;
 #[cfg(target_os = "macos")]
 pub mod overlay;
 
+// Native NSPasteboard save/restore for the `write_text` clipboard borrow.
+// macOS only: every other platform keeps the text-only plugin save/restore.
+#[cfg(target_os = "macos")]
+pub mod clipboard;
+
 /// Specta-known commands: every app command except the one that returns a
 /// raw `tauri::ipc::Response` (which is not `specta::Type`). The builder
 /// owns BOTH the runtime handler for these commands (see `run`) and the
@@ -336,8 +341,10 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Where `write_text` left the transcript.
 ///
-/// - `Pasted`: a synthetic paste landed it at the cursor and the clipboard was
-///   restored to whatever the caller had staged there (see `write_text`).
+/// - `Pasted`: a synthetic paste landed it at the cursor. When the caller asked
+///   to keep the transcript on the clipboard the transcript stays there;
+///   otherwise the clipboard is restored to whatever the user had (see
+///   `write_text`).
 /// - `LeftOnClipboard`: delivery could not paste (no Accessibility grant, or the
 ///   paste itself failed), so the transcript was left on the clipboard as the
 ///   fallback — always one ⌘V away.
@@ -376,19 +383,31 @@ const PRE_RESTORE_SETTLE: std::time::Duration = std::time::Duration::from_millis
 /// drops — lets the paste return `Ok` while nothing lands, so observing the
 /// result is unreliable.
 ///
-/// The clipboard is the paste transport: we save what's there, write the
-/// transcript, paste, then restore what we saved — so `write_text` leaves the
-/// clipboard exactly as it found it. The *intended* final clipboard state is the
-/// caller's to stage, not ours: `deliverResult` in delivery.ts copies the
-/// transcript to the clipboard first when clipboard output is on, so our restore
-/// returns it to the transcript; when clipboard output is off, the restore returns
-/// the user's untouched clipboard. When we cannot paste (or the paste fails), the
-/// transcript is left on the clipboard as the fallback. The transcript is
-/// independently saved to history either way, so this is a reduced reach, never
-/// data loss.
+/// The clipboard is the paste transport, and `keep_on_clipboard` is the caller's
+/// statement of what the clipboard should hold *afterward*:
+///
+/// - `keep_on_clipboard == true` (clipboard output is on): the transcript is the
+///   intended final clipboard state, so we write it, paste, and leave it. No
+///   snapshot, no restore.
+/// - `keep_on_clipboard == false` (clipboard output is off): we borrow the
+///   clipboard. Snapshot what the user had, write the transcript (concealed on
+///   macOS so clipboard-history managers skip it), paste, then restore the
+///   snapshot — so `write_text` leaves the clipboard exactly as it found it. On
+///   macOS the snapshot is full-fidelity native `NSPasteboard` save/restore (see
+///   `clipboard.rs`), which fixes the silent loss of a non-text clipboard
+///   (image, file); every other platform keeps the text-only plugin save/restore.
+///
+/// When we cannot paste, or the paste fails, the transcript is left on the
+/// clipboard as the fallback (this wins over restoring the snapshot). The
+/// transcript is independently saved to history either way, so a fallback is a
+/// reduced reach, never data loss.
 #[tauri::command]
 #[specta::specta]
-async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutcome, String> {
+async fn write_text(
+    app: tauri::AppHandle,
+    text: String,
+    keep_on_clipboard: bool,
+) -> Result<WriteTextOutcome, String> {
     // Can a synthetic ⌘V actually land right now? On macOS, gate on the
     // supervisor's capability, not a bare `AXIsProcessTrusted`. The supervisor
     // folds the tap's liveness into the value, so `Active` alone is paste-capable.
@@ -407,6 +426,8 @@ async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutc
     #[cfg(not(target_os = "macos"))]
     let can_paste = true;
 
+    // Last-resort fallback: cannot paste at all, so leave the transcript on the
+    // clipboard regardless of `keep_on_clipboard` — it is the only reach left.
     if !can_paste {
         app.clipboard()
             .write_text(&text)
@@ -414,10 +435,39 @@ async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutc
         return Ok(WriteTextOutcome::LeftOnClipboard);
     }
 
-    // Clipboard sandwich: borrow the clipboard to carry the paste, restore it only
-    // once the paste has provably landed.
-    let original_clipboard = app.clipboard().read_text().ok();
+    // Clipboard output is on: the transcript is the intended final clipboard
+    // state, so write it plainly (not concealed — the user wants it kept) and
+    // skip the snapshot/restore entirely.
+    if keep_on_clipboard {
+        app.clipboard()
+            .write_text(&text)
+            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
 
+        // Let the event tap settle before posting the keystroke (PRE_PASTE_SETTLE).
+        tokio::time::sleep(PRE_PASTE_SETTLE).await;
+
+        if simulate_paste().is_err() {
+            // The transcript is already on the clipboard; that is the fallback.
+            return Ok(WriteTextOutcome::LeftOnClipboard);
+        }
+        // Leave the transcript on the clipboard: no restore, no PRE_RESTORE_SETTLE.
+        return Ok(WriteTextOutcome::Pasted);
+    }
+
+    // Clipboard output is off: borrow the clipboard. Snapshot what the user had,
+    // carry the paste, then put their clipboard back once the paste has landed.
+    #[cfg(target_os = "macos")]
+    let snapshot = clipboard::snapshot();
+    #[cfg(not(target_os = "macos"))]
+    let snapshot = app.clipboard().read_text().ok();
+
+    // Write the transcript. On macOS mark it concealed so clipboard-history
+    // managers skip the transient borrow; elsewhere the plugin is text-only.
+    #[cfg(target_os = "macos")]
+    if !clipboard::write_concealed(&text) {
+        return Err("Failed to write to clipboard".to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
     app.clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
@@ -425,32 +475,10 @@ async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutc
     // Let the event tap settle before posting the keystroke (see PRE_PASTE_SETTLE).
     tokio::time::sleep(PRE_PASTE_SETTLE).await;
 
-    // Simulate paste using virtual key codes (layout-independent). Issue every
-    // press/release even on a mid-sequence error so a failure can never leave the
-    // modifier stuck down.
-    let paste_result = (|| -> Result<(), String> {
-        let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-        #[cfg(target_os = "macos")]
-        let (modifier, v_key) = (Key::Meta, Key::Other(9)); // Virtual key code for V on macOS
-        #[cfg(target_os = "windows")]
-        let (modifier, v_key) = (Key::Control, Key::Other(0x56)); // VK_V on Windows
-        #[cfg(target_os = "linux")]
-        let (modifier, v_key) = (Key::Control, Key::Unicode('v')); // Fallback for Linux
-
-        let press_modifier = enigo.key(modifier, Direction::Press);
-        let press_v = enigo.key(v_key, Direction::Press);
-        let release_v = enigo.key(v_key, Direction::Release);
-        let release_modifier = enigo.key(modifier, Direction::Release);
-        press_modifier
-            .and(press_v)
-            .and(release_v)
-            .and(release_modifier)
-            .map_err(|e| format!("Failed to simulate paste: {}", e))
-    })();
-
-    if paste_result.is_err() {
+    if simulate_paste().is_err() {
         // Trusted but the paste still failed (rare). The transcript is already on
-        // the clipboard from above; keep it there rather than restoring it away.
+        // the clipboard; keep it there as the fallback rather than restoring the
+        // snapshot over it.
         return Ok(WriteTextOutcome::LeftOnClipboard);
     }
 
@@ -459,13 +487,39 @@ async fn write_text(app: tauri::AppHandle, text: String) -> Result<WriteTextOutc
     tokio::time::sleep(PRE_RESTORE_SETTLE).await;
 
     // Restore the user's original clipboard now that the paste has landed.
-    if let Some(content) = original_clipboard {
+    #[cfg(target_os = "macos")]
+    clipboard::restore(&snapshot);
+    #[cfg(not(target_os = "macos"))]
+    if let Some(content) = snapshot {
         app.clipboard()
             .write_text(&content)
             .map_err(|e| format!("Failed to restore clipboard: {}", e))?;
     }
 
     Ok(WriteTextOutcome::Pasted)
+}
+
+/// Posts a synthetic paste (⌘V on macOS, Ctrl+V elsewhere) using layout-
+/// independent virtual key codes. Issues every press/release even on a
+/// mid-sequence error so a failure can never leave the modifier stuck down.
+fn simulate_paste() -> Result<(), String> {
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let (modifier, v_key) = (Key::Meta, Key::Other(9)); // Virtual key code for V on macOS
+    #[cfg(target_os = "windows")]
+    let (modifier, v_key) = (Key::Control, Key::Other(0x56)); // VK_V on Windows
+    #[cfg(target_os = "linux")]
+    let (modifier, v_key) = (Key::Control, Key::Unicode('v')); // Fallback for Linux
+
+    let press_modifier = enigo.key(modifier, Direction::Press);
+    let press_v = enigo.key(v_key, Direction::Press);
+    let release_v = enigo.key(v_key, Direction::Release);
+    let release_modifier = enigo.key(modifier, Direction::Release);
+    press_modifier
+        .and(press_v)
+        .and(release_v)
+        .and(release_modifier)
+        .map_err(|e| format!("Failed to simulate paste: {}", e))
 }
 
 /// Simulates pressing the Enter/Return key

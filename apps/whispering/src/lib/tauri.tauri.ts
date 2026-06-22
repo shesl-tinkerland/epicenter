@@ -56,11 +56,11 @@ import { openPath as revealPath } from '@tauri-apps/plugin-opener';
 import { exit } from '@tauri-apps/plugin-process';
 import mime from 'mime';
 import { defineErrors, extractErrorMessage } from 'wellcrafted/error';
+import { defineKeys } from 'wellcrafted/query';
 import { Ok, tryAsync } from 'wellcrafted/result';
 import { goto } from '$app/navigation';
 import type { WhisperingRecordingState } from '$lib/constants/audio';
 import { defineMutation, defineQuery, queryClient } from '$lib/rpc/client';
-import { autostartKeys } from '$lib/tauri/autostart-keys';
 import type {
 	CommandBinding,
 	DictationCapability,
@@ -290,6 +290,12 @@ const AutostartError = defineErrors({
 // One canonical call shape per leaf; no `tauri.X.Y` vs `tauri.rpc.X.Y`
 // duplication.
 
+const autostartKeys = defineKeys({
+	isEnabled: ['autostart', 'isEnabled'],
+	enable: ['autostart', 'enable'],
+	disable: ['autostart', 'disable'],
+});
+
 const autostart = {
 	isEnabled: defineQuery({
 		queryKey: autostartKeys.isEnabled,
@@ -298,7 +304,10 @@ const autostart = {
 				try: () => isAutostartEnabled(),
 				catch: (error) => AutostartError.CheckFailed({ cause: error }),
 			}),
-		initialData: false,
+		// The OS login-item state can change outside the app (System Settings,
+		// another tool, the platform dropping the entry), so re-read on focus
+		// instead of trusting a stale cached value.
+		refetchOnWindowFocus: true,
 	}),
 	enable: defineMutation({
 		mutationKey: autostartKeys.enable,

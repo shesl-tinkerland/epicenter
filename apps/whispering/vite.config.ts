@@ -14,18 +14,19 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 const host = process.env.TAURI_DEV_HOST;
 const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 
-// VAD runtime assets (Silero model, audio worklet, ONNX Runtime WASM glue) are
-// fetched at runtime from `/vad/*`, not imported through the bundler. Rather
-// than commit frozen copies, derive them from the installed packages on every
-// build so the served files always match the lockfile-pinned versions. Both
-// packages ship their entry inside `dist/` alongside these assets, so resolving
-// the entry and taking its directory yields the asset dir; resolving the entry
-// (rather than a `package.json` subpath, which onnxruntime-web blocks via
-// `exports`) is also hoist-agnostic (root vs app node_modules).
-const require = createRequire(import.meta.url);
-const distOf = (pkg: string) => dirname(require.resolve(pkg));
-const vadDist = distOf('@ricky0123/vad-web');
-const ortDist = distOf('onnxruntime-web');
+// VAD fetches these files from `/vad/*` at runtime (they are not bundled), so
+// copy them out of the installed packages at build time to keep the served
+// assets aligned with the lockfile. onnxruntime-web is a transitive dependency
+// of @ricky0123/vad-web, not declared by this app, so it is unreachable from
+// here under an isolated (pnpm-style) node_modules. Resolve it relative to
+// vad-web's own entry instead, which works under both hoisted and isolated
+// installs. Resolve each package's entry, not a package.json subpath, which
+// onnxruntime-web blocks via `exports`.
+const requireFromConfig = createRequire(import.meta.url);
+const vadEntry = requireFromConfig.resolve('@ricky0123/vad-web');
+const vadDist = dirname(vadEntry);
+const requireFromVad = createRequire(vadEntry);
+const ortDist = dirname(requireFromVad.resolve('onnxruntime-web'));
 // vite-plugin-static-copy treats src as a glob, so Windows backslashes must
 // become forward slashes before tinyglobby tries to match these files.
 const vadAssetSources = [

@@ -58,7 +58,10 @@
 	}
 </script>
 
-<div class="overlay-center">
+<!-- The pill hugs its content, so center it within the fixed overlay window (the
+     web host centers its own copy). A fixed full-window flex box centers the chip
+     regardless of how the layout nests the route. -->
+<div class="fixed inset-0 flex items-center justify-center">
 	<RecordingPill
 		{status}
 		{level}
@@ -69,12 +72,15 @@
 </div>
 
 <style>
-	/* These `:global` document rules belong to the overlay webview, not the pill:
-	   they are only ever loaded in the dedicated overlay Tauri window, which has
-	   its own document. The main app window never navigates here, so its document
-	   background is untouched. (The isolation comes from the separate webview
-	   document, not from Svelte's component scoping.) The shared `RecordingPill`
-	   keeps no document-level styles so it can also mount inside the app on web. */
+	/* The document-level resets below stay as `:global` CSS: a component cannot
+	   apply utilities to `html`/`body` or to the dev-injected inspector host, so
+	   these have no Tailwind equivalent. They belong to the overlay webview, not the
+	   pill: they are only ever loaded in the dedicated overlay Tauri window, which
+	   has its own document. The main app window never navigates here, so its
+	   document background is untouched. (The isolation comes from the separate
+	   webview document, not from Svelte's component scoping.) The shared
+	   `RecordingPill` keeps no document-level styles so it can also mount inside the
+	   app on web. */
 	:global(html),
 	:global(body) {
 		background: transparent !important;
@@ -84,17 +90,6 @@
 		   which makes the browser paint a dark canvas behind the pill in this
 		   transparent webview. Reset it so only the pill is visible. */
 		color-scheme: normal !important;
-	}
-
-	/* The pill hugs its content, so center it within the fixed overlay window (the
-	   web host centers its own copy). A fixed full-window flex box centers the chip
-	   regardless of how the layout nests the route. */
-	.overlay-center {
-		position: fixed;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
 	}
 
 	/* The Svelte inspector toggle (svelte.config.js `showToggleButton: always`)

@@ -21,7 +21,7 @@ use tauri_nspanel::{tauri_panel, CollectionBehavior, PanelBuilder, PanelLevel, S
 // Must stay in sync with the JS window manager's `WINDOW_LABEL` and the pill's
 // size in `src/lib/recording-overlay/`.
 const WINDOW_LABEL: &str = "recording-overlay";
-const OVERLAY_WIDTH: f64 = 184.0;
+const OVERLAY_WIDTH: f64 = 224.0;
 const OVERLAY_HEIGHT: f64 = 40.0;
 
 tauri_panel! {

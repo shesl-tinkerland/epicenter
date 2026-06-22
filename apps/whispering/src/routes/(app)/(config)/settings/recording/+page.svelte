@@ -53,7 +53,7 @@
 		<SettingSwitch
 			key="recording.pausePlayback"
 			label="Pause playback while recording"
-			description="Whispering pauses media playing on your computer (music, video, browser tabs) while your voice is being captured, and resumes it after. In voice activated mode it pauses only while you actually speak, so music keeps playing between phrases. Works with most apps in your system media controls; a few can't be paused this way."
+			description="Whispering pauses media playing on your computer (music, video, browser tabs) while your voice is being captured, then tries to resume it after. In voice activated mode it pauses only while you actually speak, so music keeps playing between phrases. Works with most apps in your system media controls. A few can't be paused, and on macOS the resume can occasionally wake a different app that was already paused."
 		/>
 
 		{#if settings.get('recording.trigger') === 'manual'}

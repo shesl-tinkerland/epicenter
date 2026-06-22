@@ -14,7 +14,6 @@
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/constants": "workspace:*",
 		"@epicenter/identity": "workspace:*",
-		"@tanstack/ai": "catalog:",
 		"wellcrafted": "catalog:"
 	},
 	"devDependencies": {

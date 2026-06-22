@@ -19,7 +19,7 @@ You are continuing the "always-on workers over synced docs" buildout. Do ONE sli
    - V1 starts only after every V0 box is ticked.
    - V2.R is research only and independent: advance it instead whenever the build track is blocked on my review (a Decisions-Needed entry, or a slice awaiting my sign-off).
 3. Do EXACTLY ONE slice. Follow that slice's description plus the invariants in the vision spec and ADRs. Stage specific files only (never `git add -A` or `git add .`). If you are on `main`, branch first.
-4. Commit with a message naming the slice, e.g. `feat(zhongwen): V0.2 child-doc observe loop`.
+4. Commit with a message naming the slice, e.g. `feat(vocab): V0.2 child-doc observe loop`.
 5. Update the tracker: tick the box, write the commit hash into its `commit:` field, append one line to the Log.
 6. STOP. Report: what you did, the commit, what is next, and any decision you need from me.
 

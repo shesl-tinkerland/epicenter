@@ -16,6 +16,21 @@ shapes, see `docs/adr/`.
   plaintext.
 - **Trusted relay**: the server reads workspace plaintext. Zero-knowledge was
   evaluated and rejected; the encryption layer was removed (see `docs/adr/`).
+- **Node roles**: four distinct roles, separable even when one machine plays
+  several (ADR-0049): *client* runs the agent loop and binds the others;
+  *inference server* turns a prompt into tokens; *daemon* holds data and runs
+  dispatched tools but never infers; *relay/anchor* is content-blind coordination
+  and never infers.
+- **Inference server**: the only node role that infers (ADR-0049). One stateless
+  turn per request: given a prompt plus a tool catalog it streams tokens, returns
+  the model's tool calls, and stops, leaving the client loop to execute them
+  (ADR-0047). It sees the prompt and tools as accepted egress to the model
+  (ADR-0033), so it is *not* content-blind, unlike the relay, but it owns no loop,
+  tool, or transcript. The wire is OpenAI-compatible (ADR-0050), so the box is
+  swappable by base URL: Epicenter's metered gateway (house key, billed), a
+  self-hosted gateway (your key or a local model), or any third-party
+  OpenAI-compatible endpoint. A BYOK key is handed to an inference server, never
+  to a daemon.
 - **Deployable vs library**: one library, `packages/server`, consumed by two
   deployables: `apps/api` (hosted personal cloud) and `apps/self-host` (the
   community shared-wiki reference, not Epicenter-operated).
@@ -38,9 +53,29 @@ shapes, see `docs/adr/`.
   through `ws.tables.X.docs.field.open(rowId)`. The workspace owns guid derivation.
 - **Worker**: running behavior that observes workspace state and writes results
   back. Workers may be local (every node runs them) or agent-bound (one
-  configured agent answers).
-- **Agent**: the durable address a row or conversation binds to. An agent names
-  who should answer; the worker is the runtime that answers as it.
+  configured agent answers). A conversation is answered by the client agent loop
+  in the open tab, for every agent (ADR-0047); the daemon contributes data and
+  side effects as dispatched actions (tools), never by running the loop.
+- **Agent**: the durable address a row or conversation binds to (an immutable
+  id). An agent names who should answer; the peer that answers as it is the
+  client tab or a daemon, set by the agent's **trust location** (ADR-0030/0043).
+- **Trust location**: where an agent's data and tools live, and therefore where
+  its side effects run (ADR-0030, ADR-0047). The reasoning loop always runs in
+  the client, which drives an inference server (ADR-0049); what varies is the
+  agent's capability. A **capability-free** agent (Vocab) has no tools. A
+  **local-data** agent (Local Books) keeps its data and action handlers on the
+  user's own always-on daemon, which the client loop reaches by dispatching
+  actions; data leaves the daemon only as a tool result. The relay is
+  content-blind; the inference server is a stateless turn that sees the prompt as
+  accepted egress (not content-blind). Trust is per-agent, not global.
+- **Conversation loop**: the client-side loop that answers every conversation,
+  streams the live turn into a snapshot the UI renders, and persists finished
+  messages as records (ADR-0047). It replaces the older doc-observing *answerer*
+  (a daemon that wrote the reply into the doc), which ADR-0047 removed. Two
+  implementations exist, chosen by transcript reach (ADR-0048): a transcript that
+  syncs across a person's peers uses the workspace loop (`createConversation`,
+  finished messages in a Yjs child doc); a deliberately device-local transcript
+  uses TanStack `createChat` (tab-manager, IndexedDB).
 - **Materializer**: a local, addressless worker that projects workspace data into
   another store (markdown, sqlite).
 - **`attach*` vs `create*`**: `attach*` are side-effectful primitives that register

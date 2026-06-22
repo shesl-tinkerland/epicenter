@@ -24,7 +24,7 @@ const BLOCKS = {
 	fuji: ['workspace', 'daemon-route'],
 	honeycrisp: ['workspace', 'daemon-route'],
 	opensidian: ['workspace', 'daemon-route'],
-	zhongwen: ['workspace', 'daemon-route'],
+	vocab: ['workspace', 'daemon-route'],
 } as const;
 
 export default defineConfig({

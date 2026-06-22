@@ -16,22 +16,26 @@
 >
 > **Regenerate (deterministic per ref set, lossless):** `bun scripts/generate-spec-history.ts`. The totals track the refs this clone can see; `--all` is deliberate so the timeline recovers specs that only lived on unmerged or deleted branches.
 
-**1278 specs ever** (571 still in tree, 707 removed).
+**1282 specs ever** (571 still in tree, 711 removed).
 
 
 ## 2026
 
 | Date | Spec | State | Path |
 |------|------|-------|------|
+| 2026-06-20 | local-books-agent-over-sql | in tree | specs/20260620T180000-local-books-agent-over-sql.md |
+| 2026-06-20 | vocab-answerer-collapse | removed | specs/20260620T000000-vocab-answerer-collapse.md |
+| 2026-06-20 | daemon-inference-backend-priority-chain | removed | specs/20260620T050257-daemon-inference-backend-priority-chain.md |
 | 2026-06-19 | collapse-inference-onto-tanstack-adapters | removed | specs/20260619T210000-collapse-inference-onto-tanstack-adapters.md |
 | 2026-06-19 | matter-json-marks-a-table | removed | apps/matter/specs/20260619T100000-matter-json-marks-a-table.md |
+| 2026-06-18 | shortcut-reach-model | removed | apps/whispering/specs/20260618T145018-shortcut-reach-model.md |
 | 2026-06-18 | chat-transcript-parts-body | in tree | specs/20260618T100631-chat-transcript-parts-body.md |
 | 2026-06-18 | cloud-kickoff-to-queue-generation | removed | specs/20260618T160358-cloud-kickoff-to-queue-generation.md |
 | 2026-06-18 | dictation-feedback-projection | removed | apps/whispering/specs/20260618T120000-dictation-feedback-projection.md |
 | 2026-06-18 | playback-pause-speaking-window | removed | apps/whispering/specs/20260618T113342-playback-pause-speaking-window.md |
 | 2026-06-18 | one-conversation-core-loop-and-doc-sink | in tree | specs/20260618T113407-one-conversation-core-loop-and-doc-sink.md |
 | 2026-06-18 | keyboard-tap-foundation-research | removed | apps/whispering/specs/20260618T000000-keyboard-tap-foundation-research.md |
-| 2026-06-17 | zhongwen-daemon-and-v0-exit | in tree | specs/20260617T224538-zhongwen-daemon-and-v0-exit.md |
+| 2026-06-17 | zhongwen-daemon-and-v0-exit | removed | specs/20260617T224538-zhongwen-daemon-and-v0-exit.md |
 | 2026-06-17 | desktop-audio-pipeline-greenfield | removed | apps/whispering/specs/20260617T170000-desktop-audio-pipeline-greenfield.md |
 | 2026-06-17 | table-vault-classification | removed | apps/matter/specs/20260617T152631-table-vault-classification.md |
 | 2026-06-17 | brand-asset-pipeline | in tree | specs/20260617T100000-brand-asset-pipeline.md |

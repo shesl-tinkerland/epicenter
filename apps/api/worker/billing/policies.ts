@@ -12,7 +12,8 @@
  * rather than silently swallowed by the queue's `Promise.allSettled`, with no
  * separate settlement wrapper needed.
  *
- *   chargeAiCreditsWithAutumn      Around `/api/ai/chat`. Reserves credits
+ *   chargeOpenAiCreditsWithAutumn  Around `/v1/chat/completions` (the
+ *                                  OpenAI-compatible gateway). Reserves credits
  *                                  (a lock) before the call, then confirms on
  *                                  success or releases on a pre-stream failure.
  *                                  BYOK callers bypass billing entirely.
@@ -46,11 +47,6 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { BillingError } from './errors.js';
 import { createBillingService } from './service.js';
 
-type AiChatBody = {
-	data?: { model?: string };
-	apiKey?: string;
-};
-
 function billingFor(c: Context<Env>) {
 	return createBillingService(c.env, {
 		userId: c.var.user.id,
@@ -58,42 +54,54 @@ function billingFor(c: Context<Env>) {
 	});
 }
 
-export const chargeAiCreditsWithAutumn = createMiddleware<Env>(
+/**
+ * Around `/v1/chat/completions` (the OpenAI-compatible gateway, the only metered
+ * inference path). A fixed-per-model reservation: reserve a credit lock before
+ * the call, confirm on success or release on a pre-stream failure (>= 400). Once
+ * the SSE stream starts the status is already 200, so a mid-stream provider
+ * failure commits by design (those provider tokens were consumed and are
+ * non-refundable); a failed finalize is logged at the adapter and self-heals via
+ * the lock TTL. The model is read from the OpenAI body shape (top-level `model`)
+ * and a guard failure answers in the OpenAI error shape
+ * (`{ error: { message, code } }`) so the client engine keeps its branchable
+ * `error.code`. A BYOK caller (an `apiKey` in the body) bypasses metering.
+ */
+export const chargeOpenAiCreditsWithAutumn = createMiddleware<Env>(
 	async (c, next) => {
-		const body = (await c.req.json().catch(() => ({}))) as AiChatBody;
+		const body = (await c.req.json().catch(() => ({}))) as {
+			model?: string;
+			apiKey?: string;
+		};
 
-		// BYOK: caller-provided key bypasses billing. The library handler reads
-		// the same body and prefers the caller key, so no credits are consumed.
 		if (body.apiKey) {
 			return next();
 		}
 
 		const billing = billingFor(c);
-
 		const { data: reservation, error: guardError } =
-			await billing.reserveAiChat({
-				model: body.data?.model ?? '',
-			});
+			await billing.reserveAiChat({ model: body.model ?? '' });
 		if (guardError) {
-			return c.json(
-				{ data: null, error: guardError },
-				aiGuardStatus(guardError),
-			);
+			return c.json(toOpenAiError(guardError), aiGuardStatus(guardError));
 		}
 
 		await next();
 
-		// Commit the reserved credits on success; release them on a pre-stream
-		// failure (>= 400) where no work was done. Once the SSE stream starts the
-		// status is already 200, so a mid-stream provider failure commits by
-		// design: those provider tokens were consumed and are non-refundable. A
-		// failed finalize is logged at the adapter and self-heals via the lock
-		// TTL, so the policy just keeps the op on the after-response queue.
 		c.var.afterResponse.push(
 			c.res.status >= 400 ? reservation.release() : reservation.confirm(),
 		);
 	},
 );
+
+/**
+ * Render a guard failure as the OpenAI error envelope. The variant `name`
+ * (`InsufficientCredits`, `ModelRequiresPaidPlan`, ...) becomes `error.code`, so
+ * the client reducer can branch on a stable code rather than a message string.
+ */
+function toOpenAiError(error: AiChatError | BillingError): {
+	error: { message: string; code: string };
+} {
+	return { error: { message: error.message, code: error.name } };
+}
 
 export const syncAssetStorageWithAutumn = createMiddleware<Env>(
 	async (c, next) => {

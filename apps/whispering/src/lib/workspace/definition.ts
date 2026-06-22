@@ -243,13 +243,15 @@ const recording = {
 		() => 'manual' as const,
 	),
 	// Pause system media playback while your voice is being captured, resume it
-	// after. On by default: hearing music while you talk disrupts dictation, and
-	// pausing media during voice capture is the least-astonishing behavior (it is
-	// what a phone call does to your music). Discoverable without a nudge via the
-	// settings toggle's description and the home-row quick toggle. A roaming
-	// preference, not a per-device capability, so it follows you across machines
-	// like the sound toggles.
-	'recording.pausePlayback': defineKv(field.boolean(), () => true),
+	// after. Off by default (opt-in): the resume cannot keep its promise on macOS,
+	// where MediaRemote's Play is single-target so it can wake whatever app the OS
+	// last marked now-playing, not the app we actually paused (see ADR-0045). A
+	// convenience that can occasionally start unrelated media should be chosen, not
+	// sprung. Discoverable via the settings toggle's description and the home-row
+	// quick toggle, both of which explain it at the moment you turn it on. A
+	// roaming preference, not a per-device capability, so it follows you across
+	// machines like the sound toggles.
+	'recording.pausePlayback': defineKv(field.boolean(), () => false),
 } as const;
 
 /**

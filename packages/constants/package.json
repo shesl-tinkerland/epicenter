@@ -28,8 +28,6 @@
 	"devDependencies": {
 		"@better-auth/oauth-provider": "catalog:",
 		"@types/bun": "catalog:",
-		"@tanstack/ai-gemini": "catalog:",
-		"@tanstack/ai-openai": "catalog:",
 		"@types/node": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"

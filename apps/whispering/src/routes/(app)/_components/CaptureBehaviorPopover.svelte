@@ -23,10 +23,10 @@
 	const pausePlaybackDescription = $derived.by(() => {
 		switch (captureSurface.current) {
 			case 'vad':
-				return 'Pause music or video while you are speaking, then resume shortly after you stop.';
+				return 'Pause music or video while you are speaking, then try to resume shortly after you stop.';
 			case 'manual':
 			case 'import':
-				return 'Pause music or video while you are recording, then resume when you stop.';
+				return 'Pause music or video while you are recording, then try to resume when you stop.';
 		}
 	});
 </script>
