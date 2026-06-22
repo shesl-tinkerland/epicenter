@@ -1,7 +1,7 @@
 /**
  * `@epicenter/client`: typed HTTP client for the Epicenter server.
  *
- * Wraps `assets`, `session`, and `ai` surfaces. Composes on
+ * Wraps `assets` and `session` surfaces. Composes on
  * `AuthFetch` from `@epicenter/auth`, which handles OAuth bearer attach,
  * refresh, and 401 propagation. This package does not own auth state;
  * it consumes the authed fetch handle.
@@ -14,11 +14,19 @@ import type { ApiSessionResponse, AuthFetch } from '@epicenter/auth';
 import { API_ROUTES } from '@epicenter/constants/api-routes';
 import type { OwnerId } from '@epicenter/identity';
 
-export { createAiChatFetch } from './ai-chat-fetch.js';
+export type {
+	AgentEngine,
+	AgentEngineRequest,
+	AgentEngineToolDefinition,
+	EngineChunk,
+	EngineFetch,
+	ModelMessage,
+	ModelToolCall,
+} from './agent-engine.js';
 export {
-	createEpicenterProviderChatStream,
-	type EpicenterProviderData,
-} from './epicenter-provider.js';
+	createOpenAiAgentEngine,
+	type OpenAiProviderData,
+} from './openai-provider.js';
 
 export type EpicenterClientOptions = {
 	/** Base URL of the Epicenter server (no trailing slash required). */
@@ -59,27 +67,6 @@ export type AssetRow = {
 export type SetVisibilityResponse = {
 	id: string;
 	visibility: AssetVisibility;
-};
-
-// ---------------------------------------------------------------------------
-// AI chat types (matches packages/server/src/routes/ai.ts request body)
-// ---------------------------------------------------------------------------
-
-export type AiChatBody = {
-	messages: ReadonlyArray<unknown>;
-	data: {
-		/** Servable model id; the server derives the provider from the catalog. */
-		model: string;
-		systemPrompts?: ReadonlyArray<string>;
-		temperature?: number;
-		maxTokens?: number;
-		topP?: number;
-		metadata?: Record<string, unknown>;
-		conversationId?: string;
-		tools?: ReadonlyArray<object>;
-	};
-	/** BYOK override for the deployment's house key. */
-	apiKey?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -208,28 +195,6 @@ export function createEpicenterClient(opts: EpicenterClientOptions) {
 		},
 	};
 
-	const ai = {
-		/**
-		 * POST `/api/ai/chat` with the given body. Returns the raw SSE
-		 * `Response`; callers parse with their preferred SSE reader
-		 * (e.g., TanStack AI's `readServerSentEvents`).
-		 *
-		 * The auth fetch handles bearer attach; the deployment layers any
-		 * plan/credit gating in front of the library handler.
-		 */
-		async chat(body: AiChatBody): Promise<Response> {
-			const res = await opts.fetch(API_ROUTES.ai.chat.url(base), {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(body),
-			});
-			if (!res.ok) {
-				throw new Error(`epicenter.ai.chat: ${res.status}`);
-			}
-			return res;
-		},
-	};
-
 	return {
 		/**
 		 * Resolve and cache the session. Call once at app boot if any code
@@ -241,7 +206,6 @@ export function createEpicenterClient(opts: EpicenterClientOptions) {
 		},
 		assets,
 		session,
-		ai,
 	};
 }
 

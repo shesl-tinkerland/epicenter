@@ -7,8 +7,7 @@
 	"exports": {
 		".": "./vocab.ts",
 		"./browser": "./vocab.browser.ts",
-		"./engine": "./epicenter-engine.ts",
-		"./mount": "./mount.ts"
+		"./engine": "./epicenter-engine.ts"
 	},
 	"scripts": {
 		"dev": "bun run dev:local",
@@ -21,7 +20,6 @@
 		"deploy": "wrangler deploy"
 	},
 	"dependencies": {
-		"@epicenter/ai-adapters": "workspace:*",
 		"@epicenter/app-shell": "workspace:*",
 		"@epicenter/auth": "workspace:*",
 		"@epicenter/client": "workspace:*",
@@ -31,7 +29,6 @@
 		"@epicenter/ui": "workspace:*",
 		"@epicenter/workspace": "workspace:*",
 		"@lucide/svelte": "catalog:",
-		"@tanstack/ai": "catalog:",
 		"arktype": "catalog:",
 		"dompurify": "^3.4.10",
 		"marked": "^17.0.5",

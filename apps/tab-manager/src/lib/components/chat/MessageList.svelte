@@ -4,32 +4,36 @@
 	import * as Empty from '@epicenter/ui/empty';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import type { UIMessage } from '@tanstack/ai-svelte';
+	import type { AgentMessage } from '@epicenter/workspace/agent';
 	import MessageParts from './MessageParts.svelte';
 
 	let {
 		messages,
 		status,
 		onReload,
+		pendingApprovalCallId,
 		onApproveToolCall,
 		onDenyToolCall,
+		onAlwaysAllowToolCall,
 	}: {
-		messages: UIMessage[];
+		messages: AgentMessage[];
 		status: 'ready' | 'submitted' | 'streaming' | 'error';
 		onReload: () => void;
-		onApproveToolCall: (approvalId: string) => void;
-		onDenyToolCall: (approvalId: string) => void;
+		/** The tool call awaiting a decision, or null. */
+		pendingApprovalCallId: string | null;
+		onApproveToolCall: () => void;
+		onDenyToolCall: () => void;
+		onAlwaysAllowToolCall: () => void;
 	} = $props();
 
 	/**
 	 * Show loading dots when waiting for assistant content: 'submitted'
 	 * before the first token, or 'streaming' before any assistant message
 	 * appears. The tool-result-to-continuation handoff needs no case here:
-	 * the client starts the continuation in the same microtask chain that
+	 * the loop starts the continuation in the same microtask chain that
 	 * settles the tool, so 'ready' with a trailing tool-result never paints
-	 * mid-flow. It does occur durably (conversation hydrated from a build
-	 * that closed mid-flow, or a run that stopped after a tool), and then
-	 * the honest UI is the Regenerate affordance, not typing dots.
+	 * mid-flow. It does occur durably (a run that stopped after a tool), and
+	 * then the honest UI is the Regenerate affordance, not typing dots.
 	 */
 	const showLoadingDots = $derived(
 		status === 'submitted' ||
@@ -57,8 +61,10 @@
 				<Chat.BubbleMessage>
 					<MessageParts
 						parts={message.parts}
+						{pendingApprovalCallId}
 						{onApproveToolCall}
 						{onDenyToolCall}
+						{onAlwaysAllowToolCall}
 					/>
 				</Chat.BubbleMessage>
 			</Chat.Bubble>

@@ -103,16 +103,22 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0033](0033-a-conversation-has-one-transport-and-two-triggers.md) | A conversation is a synced doc answered only by in-process peers; the cloud is a metered inference stream | Accepted |
 | [0034](0034-the-cloud-doc-generation-queue-is-withdrawn.md) | The cloud doc-generation queue is withdrawn | Superseded by 0033 |
 | [0035](0035-durable-storage-is-one-per-person-coordination-box.md) | Durable storage is one per-person coordination box: an app-blind anchor and store | Accepted |
-| [0036](0036-answer-bodies-are-native-parts-arrays-streamed-into-y-text.md) | An answer body is a native parts array; its text streams into Y.Text | Accepted |
-| [0037](0037-adapter-construction-is-a-shared-leaf-package-keyed-on-the-model-catalog.md) | Adapter construction is a shared leaf package keyed on the model catalog | Accepted |
-| [0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) | A daemon answers through the first inference backend it can satisfy: byok, else opted-in metered, else host without answering | Accepted |
+| [0036](0036-answer-bodies-are-native-parts-arrays-streamed-into-y-text.md) | An answer body is a native parts array; its text streams into Y.Text | Superseded by 0047 |
+| [0037](0037-adapter-construction-is-a-shared-leaf-package-keyed-on-the-model-catalog.md) | Adapter construction is a shared leaf package keyed on the model catalog | Superseded by 0050 |
+| [0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) | A daemon answers through the first inference backend it can satisfy: byok, else opted-in metered, else host without answering | Superseded by 0049 |
 | [0039](0039-dictation-feedback-is-a-projection-of-one-lifecycle-state.md) | Dictation feedback is a projection of one lifecycle state, not an event log | Accepted |
 | [0040](0040-a-cursor-write-that-cannot-paste-falls-back-to-the-clipboard-decided-from-the-grant.md) | A cursor write that cannot paste falls back to the clipboard, decided from the grant | Accepted |
 | [0041](0041-every-answerer-is-a-worker-the-browser-never-answers.md) | Every answerer is a worker; the browser never answers | Superseded by 0043 |
-| [0042](0042-the-agent-loop-is-the-workers-over-the-doc-as-the-message-array.md) | The agent loop is the worker's, over the doc as the message array | Accepted (design; build deferred) |
-| [0043](0043-an-agent-answers-where-its-capability-lives.md) | An agent answers where its capability lives (supersedes 0041 every-answerer) | Accepted |
-| [0044](0044-tool-approval-is-a-per-conversation-policy.md) | Tool approval is a per-conversation policy, resolved per call (auto / ask / deny) | Accepted (design) |
+| [0042](0042-the-agent-loop-is-the-workers-over-the-doc-as-the-message-array.md) | The agent loop is the worker's, over the doc as the message array | Superseded by 0047 |
+| [0043](0043-an-agent-answers-where-its-capability-lives.md) | An agent answers where its capability lives (supersedes 0041 every-answerer) | Superseded by 0047 |
+| [0044](0044-tool-approval-is-a-per-conversation-policy.md) | Tool approval is a per-conversation policy, resolved per call (auto / ask / deny) | Accepted (design; approval mechanism revised by 0047) |
 | [0045](0045-playback-pause-is-opt-in-because-resume-can-start-unrelated-media.md) | Playback pause ships opt-in because macOS resume can start unrelated media | Accepted |
-| [0046](0046-replace-transformations-with-a-dictionary-polish-and-a-portable-recipe-library.md) | Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library | Accepted |
+| [0046](0046-a-capability-free-agent-persists-finished-messages-not-live-doc-streams.md) | A capability-free agent persists finished messages, not live doc streams (scopes 0036) | Superseded by 0047 |
+| [0047](0047-the-agent-loop-runs-in-the-client-and-tools-are-dispatched-actions.md) | The agent loop runs in the client; tools are dispatched actions, and the daemon provides data, not inference | Accepted (design; core deleted as consumers migrate) |
+| [0048](0048-a-conversations-loop-is-chosen-by-whether-its-transcript-syncs.md) | A conversation's loop is chosen by whether its transcript syncs across peers | Accepted |
+| [0049](0049-inference-is-its-own-box-the-daemon-never-infers.md) | Inference is its own box; the daemon never infers; the client loop talks to a swappable inference server | Accepted |
+| [0050](0050-the-inference-contract-is-openai-compatible.md) | The inference contract is OpenAI-compatible Chat Completions; Epicenter's backend is one swappable gateway | Accepted |
+| [0051](0051-one-agent-loop-its-store-seam-chooses-persistence.md) | There is one agent loop; its store seam chooses persistence, so tab-manager needs no second loop | Accepted |
+| [0052](0052-replace-transformations-with-a-dictionary-polish-and-a-portable-recipe-library.md) | Replace Transformations with a Dictionary, an always-on Polish, and a portable Recipe library | Accepted |
 
 When you add an ADR, add its row here.

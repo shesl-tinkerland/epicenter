@@ -7,6 +7,9 @@
 
 	const tabManager = requireTabManager();
 	const trustedTools = $derived(tabManager.state.toolTrust.trustedToolNames);
+	const actionTitles = $derived(
+		tabManager.actions as Record<string, { title?: string }>,
+	);
 </script>
 
 {#if trustedTools.length > 0}
@@ -24,7 +27,7 @@
 					{#each trustedTools as name (name)}
 						<div class="flex items-center justify-between gap-2">
 							<span class="text-sm">
-								{tabManager.sessionAiTools.definitions.find(d => d.name === name)?.title ??
+								{actionTitles[name]?.title ??
 									name
 										.replace(/_/g, ' ')
 										.replace(/^\w/, (c) => c.toUpperCase())}

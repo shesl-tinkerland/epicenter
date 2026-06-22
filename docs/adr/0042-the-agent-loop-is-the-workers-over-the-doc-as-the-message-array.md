@@ -1,7 +1,9 @@
 # 0042. The agent loop is the worker's, over the doc as the message array
 
-- **Status:** Accepted (design; build deferred until a tool consumer exists)
+- **Status:** Superseded
+- **Superseded by:** [ADR-0047](0047-the-agent-loop-runs-in-the-client-and-tools-are-dispatched-actions.md) (the loop runs in the client, not the worker; the daemon provides data via dispatched actions and runs durable work as async jobs, never inference)
 - **Date:** 2026-06-20
+<!-- doc-path-check: ignore-next-line -->
 - **Note (2026-06-20), per [ADR-0043](0043-an-agent-answers-where-its-capability-lives.md):** the worker that owns this loop is the **daemon** (an agent answers where its capability lives); ADR-0041's hosted worker is not built, so the "hibernating hosted worker" framing below is the daemon, on-demand while you use the agent. The first real consumer is **Local Books** (`specs/20260620T180000-local-books-agent-over-sql.md`), not opensidian / tab-manager as written below: it has local-data tools that bind the worker to the machine holding the data. The design (worker-owned loop over the doc-as-message-array, durable doc-mediated approval) is unchanged.
 - **Relates:** [ADR-0043](0043-an-agent-answers-where-its-capability-lives.md) (the worker that owns the loop is the daemon), [ADR-0041](0041-every-answerer-is-a-worker-the-browser-never-answers.md) (superseded; original "worker owns the loop" framing), [ADR-0033](0033-a-conversation-has-one-transport-and-two-triggers.md) (the engine stays a pure token source), [ADR-0025](0025-agent-conversations-are-durable-child-docs-driven-by-an-observing-worker.md) (approval is a durable doc record), [ADR-0021](0021-actions-are-the-only-surface-that-crosses-a-process-boundary.md) (tools are published actions), [ADR-0031](0031-collaboration-is-addressed-single-writer-regions-in-a-child-doc.md) (the single-writer region the approval is written into), [ADR-0036](0036-answer-bodies-are-native-parts-arrays-streamed-into-y-text.md) (the parts body the loop writes)
 

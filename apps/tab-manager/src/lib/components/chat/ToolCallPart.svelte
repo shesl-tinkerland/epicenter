@@ -1,77 +1,41 @@
 <script lang="ts">
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
-	import { Spinner } from '@epicenter/ui/spinner';
 	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
-	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
-	import ShieldXIcon from '@lucide/svelte/icons/shield-x';
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
-	import type { ToolCallPart as TanStackToolCallPart } from '@tanstack/ai-client';
+	import type { AgentToolCallPart } from '@epicenter/workspace/agent';
 	import { requireTabManager } from '$lib/session.svelte';
 	import CollapsibleSection from '../CollapsibleSection.svelte';
 
 	const tabManager = requireTabManager();
 	let {
 		part,
+		awaitingApproval,
 		onApproveToolCall,
 		onDenyToolCall,
+		onAlwaysAllowToolCall,
 	}: {
-		part: TanStackToolCallPart;
-		onApproveToolCall: (approvalId: string) => void;
-		onDenyToolCall: (approvalId: string) => void;
+		part: AgentToolCallPart;
+		/** This call is paused on the user's decision. */
+		awaitingApproval: boolean;
+		onApproveToolCall: () => void;
+		onDenyToolCall: () => void;
+		onAlwaysAllowToolCall: () => void;
 	} = $props();
 
-	const isApprovalRequested = $derived(part.state === 'approval-requested');
-	const isDenied = $derived(part.approval?.approved === false);
-	// A settled call is one whose output landed; `state` alone cannot say
-	// this because the runtime settles successes at 'complete' but errors at
-	// 'input-complete' (and rows persisted by older builds settle there too).
-	// Denied calls never receive an output, so they settle by approval.
-	const isRunning = $derived(
-		part.output == null && !isApprovalRequested && !isDenied,
-	);
-	const isFailed = $derived(
-		typeof part.output === 'object' &&
-			part.output !== null &&
-			'error' in part.output,
+	/** The action's declared title, else the tool name title-cased. */
+	const actionTitles = $derived(
+		tabManager.actions as Record<string, { title?: string }>,
 	);
 	const displayName = $derived(
-		tabManager.sessionAiTools.definitions.find((d) => d.name === part.name)
-			?.title ??
-			part.name.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
+		actionTitles[part.toolName]?.title ??
+			part.toolName
+				.split('_')
+				.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+				.join(' '),
 	);
-	const isAutoApproved = $derived(
-		isApprovalRequested &&
-			tabManager.state.toolTrust.shouldAutoApprove(part.name),
-	);
-	const badgeVariant = $derived.by(() => {
-		if (isApprovalRequested || isDenied) return 'secondary';
-		if (isFailed) return 'status.failed';
-		if (isRunning) return 'status.running';
-		return 'status.completed';
-	});
 
-	$effect(() => {
-		if (isAutoApproved && part.approval?.id) {
-			onApproveToolCall(part.approval.id);
-		}
-	});
-
-	function handleAllow() {
-		if (!part.approval?.id) return;
-		onApproveToolCall(part.approval.id);
-	}
-
-	function handleAlwaysAllow() {
-		if (!part.approval?.id) return;
-		tabManager.state.toolTrust.allow(part.name);
-		onApproveToolCall(part.approval.id);
-	}
-
-	function handleDeny() {
-		if (!part.approval?.id) return;
-		onDenyToolCall(part.approval.id);
-	}
+	const argumentsText = $derived(JSON.stringify(part.input, null, 2));
 </script>
 
 {#snippet codeBlock(text: string)}
@@ -82,59 +46,38 @@
 
 <div class="flex flex-col gap-1 py-1">
 	<div class="flex items-center gap-1.5">
-		{#if isAutoApproved}
-			<ShieldCheckIcon class="size-3 text-green-500" />
-		{:else if isApprovalRequested}
+		{#if awaitingApproval}
 			<ShieldAlertIcon class="size-3 text-amber-500" />
-		{:else if isDenied}
-			<ShieldXIcon class="size-3 text-muted-foreground" />
-		{:else if isRunning}
-			<Spinner class="size-3 text-blue-500" />
 		{:else}
 			<WrenchIcon class="size-3 text-muted-foreground" />
 		{/if}
-		<Badge variant={badgeVariant}>
-			{displayName}{isRunning ? '…': ''}
+		<Badge variant={awaitingApproval ? 'secondary' : 'status.running'}>
+			{displayName}
 		</Badge>
 	</div>
 
-	{#if isAutoApproved}
-		<div class="pl-[1.125rem] text-xs text-muted-foreground">Auto-approved</div>
-	{:else if isDenied}
-		<div class="pl-[1.125rem] text-xs text-muted-foreground">Denied</div>
-	{:else if isApprovalRequested}
+	{#if awaitingApproval}
 		<div class="flex items-center gap-1.5 pl-[1.125rem]">
-			<Button variant="outline" size="sm" onclick={handleAllow}> Allow </Button>
-			<Button variant="outline" size="sm" onclick={handleAlwaysAllow}>
+			<Button variant="outline" size="sm" onclick={onApproveToolCall}>
+				Allow
+			</Button>
+			<Button variant="outline" size="sm" onclick={onAlwaysAllowToolCall}>
 				Always Allow
 			</Button>
 			<Button
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
-				onclick={handleDeny}
+				onclick={onDenyToolCall}
 			>
 				Deny
 			</Button>
 		</div>
 	{/if}
 
-	<CollapsibleSection label="Details" contentClass="bg-muted/50">
-		{#if part.arguments}
-			<div class="mb-1">
-				<span class="font-medium text-muted-foreground">Arguments:</span>
-				{@render codeBlock(part.arguments)}
-			</div>
-		{/if}
-		{#if part.output != null}
-			<div>
-				<span class="font-medium text-muted-foreground">Result:</span>
-				{@render codeBlock(
-					typeof part.output === 'string'
-						? part.output
-						: JSON.stringify(part.output, null, 2),
-				)}
-			</div>
-		{/if}
-	</CollapsibleSection>
+	{#if argumentsText !== '{}'}
+		<CollapsibleSection label="Arguments" contentClass="bg-muted/50">
+			{@render codeBlock(argumentsText)}
+		</CollapsibleSection>
+	{/if}
 </div>

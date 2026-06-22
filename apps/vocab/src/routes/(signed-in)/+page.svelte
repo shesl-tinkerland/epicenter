@@ -2,10 +2,8 @@
 	import { fromKv, fromTable } from '@epicenter/svelte';
 	import { InstantString } from '@epicenter/workspace';
 	import {
-		type AgentId,
 		type Conversation,
 		type ConversationId,
-		DEFAULT_AGENT_ID,
 		generateConversationId,
 	} from '@epicenter/vocab';
 	import { Button } from '@epicenter/ui/button';
@@ -38,13 +36,11 @@
 	let activeConversationId = $state<ConversationId | undefined>();
 
 	/**
-	 * Write only the cheap list row, bound to `agent` for life (ADR-0025). The
-	 * transcript child doc is opened lazily by `ConversationView`, keyed by the row
-	 * id. The model is an app constant (`VOCAB_MODEL`), so it is not stored per
-	 * conversation. This is the one place a conversation's `agent` is written;
-	 * switching agents later is a fork, never a rewrite here.
+	 * Write only the cheap list row. The transcript child doc is opened lazily by
+	 * `ConversationView`, keyed by the row id. The model is an app constant
+	 * (`VOCAB_MODEL`), so it is not stored per conversation.
 	 */
-	function createConversationRow(agent: AgentId): ConversationId {
+	function createConversationRow(): ConversationId {
 		const id = generateConversationId();
 		const timestamp = InstantString.now();
 		vocab.tables.conversations.set({
@@ -52,7 +48,6 @@
 			title: 'New Chat',
 			createdAt: timestamp,
 			updatedAt: timestamp,
-			agent,
 		});
 		return id;
 	}
@@ -66,11 +61,11 @@
 		const first = readSortedConversations().find(
 			(conversation) => conversation.id !== skip,
 		);
-		return first?.id ?? createConversationRow(DEFAULT_AGENT_ID);
+		return first?.id ?? createConversationRow();
 	}
 
-	function createConversation(agent: AgentId = DEFAULT_AGENT_ID): ConversationId {
-		const id = createConversationRow(agent);
+	function createConversation(): ConversationId {
+		const id = createConversationRow();
 		activeConversationId = id;
 		return id;
 	}

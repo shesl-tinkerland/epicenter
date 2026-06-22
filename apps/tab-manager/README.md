@@ -18,7 +18,7 @@ Part of the [Epicenter](https://github.com/EpicenterHQ/epicenter) monorepo. MIT 
 │  state       │  bookmarks, chat, tool trust)     │
 │  (ephemeral) │  @epicenter/workspace + sync      │
 ├──────────────┴───────────────────────────────────┤
-│  @epicenter/workspace/ai (AI tool bridge)        │
+│  @epicenter/workspace actionsToAiTools (bridge)  │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +65,7 @@ Relay presence carries `nodeId`; Tab Manager maps that framework node to its app
 
 ## AI chat
 
-The `AiDrawer` component is a sign-in-gated chat drawer that supports multiple conversations. Chat streams via SSE from the configured remote server. Workspace actions are converted to AI tools via `@epicenter/workspace/ai`'s `actionsToAiTools`, so the AI can read and write workspace data directly.
+The `AiDrawer` component is a sign-in-gated chat drawer that supports multiple conversations. Chat streams via SSE from the configured remote server. Workspace actions are converted to AI tools via `@epicenter/workspace`'s `actionsToAiTools`, so the AI can read and write workspace data directly.
 
 Destructive tool calls require inline approval before they execute. Each tool can also be set to "always allow," and that preference is stored in the `toolTrust` table, so it syncs across all your devices like any other workspace data.
 
@@ -119,7 +119,7 @@ Auth uses Google OAuth via `browser.identity`. The workspace mounts once a signe
 - [virtua](https://github.com/inokawa/virtua): virtualized tab list
 - [Tailwind CSS](https://tailwindcss.com): styling
 - `@epicenter/workspace`: CRDT-backed tables, sync, persistence
-- `@epicenter/workspace/ai` - workspace-to-LLM tool bridge
+- `@epicenter/workspace` `actionsToAiTools` - workspace-to-LLM tool bridge
 - `@epicenter/svelte`: auth integration
 - `@epicenter/ui`: shadcn-svelte component library
 

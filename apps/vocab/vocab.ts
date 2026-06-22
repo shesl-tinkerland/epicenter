@@ -1,26 +1,22 @@
 /**
- * Vocab workspace contract: id, branded types, tables, kv, actions, and
- * the workspace factory. Isomorphic: no IndexedDB, WebSockets, Svelte state,
- * browser APIs, or daemon process lifecycle.
+ * Vocab workspace contract: id, branded types, tables, kv, and the workspace
+ * factory. Isomorphic: no IndexedDB, WebSockets, Svelte state, or browser APIs.
  *
  * Distribution: this file is the `@epicenter/vocab` package root file
- * (the target of the package's `"."` export). Browser and daemon entrypoints
- * import the schema from here and compose runtime-specific attachments
- * around it. The table and KV shapes here are the wire contract for sync;
- * forking a column shape breaks sync compatibility with peers running the
- * canonical schema.
+ * (the target of the package's `"."` export). The browser entrypoint imports the
+ * schema from here and composes runtime-specific attachments around it. The table
+ * and KV shapes here are the wire contract for sync; forking a column shape
+ * breaks sync compatibility with peers running the canonical schema.
  *
  * Composition lives elsewhere:
  *  - `apps/vocab/vocab.browser.ts`
  *      → `openVocabBrowser({ signedIn, nodeId })`
- *  - `apps/vocab/mount.ts` → `vocab()` mount factory
  */
 
 import type { ServableModel } from '@epicenter/constants/ai-providers';
 import { field } from '@epicenter/field';
 import {
-	type AgentId,
-	asAgentId,
+	attachKvStore,
 	defineKv,
 	defineTable,
 	defineWorkspace,
@@ -28,7 +24,7 @@ import {
 	type Id,
 	type InferTableRow,
 } from '@epicenter/workspace';
-import { attachChatConversation } from '@epicenter/workspace/ai';
+import type { AgentMessage } from '@epicenter/workspace/agent';
 import { Type } from 'typebox';
 import type { Brand } from 'wellcrafted/brand';
 
@@ -40,86 +36,22 @@ export type ConversationId = Id & Brand<'ConversationId'>;
 export const generateConversationId = (): ConversationId =>
 	generateId<ConversationId>();
 
+export type MessageId = Id & Brand<'MessageId'>;
+export const generateMessageId = (): MessageId => generateId<MessageId>();
+
 /**
  * Vocab runs a single Chinese-tuned model. It is an app constant, not a
- * per-conversation choice, so it is never stored on the conversation row. Both
- * answer paths read it: the browser passes it to the Epicenter provider it answers
- * cloud conversations with (the metered `/api/ai/chat` stream), and the always-on
- * daemon worker builds its Gemini adapter from it directly.
+ * per-conversation choice, so it is never stored on the conversation row. The
+ * client reads it when it answers a conversation over the metered `/api/ai/chat`
+ * stream.
  */
 export const VOCAB_MODEL = 'gemini-3.5-flash' satisfies ServableModel;
 
 /**
- * The client agent's stable address (ADR-0025): the capability-free agent the
- * open browser tab answers in the client (ADR-0043), running the shared answer
- * core (ADR-0036) over the metered `/api/ai/chat` SSE stream (ADR-0033). The
- * answer stops when you close the tab; for a one-shot vocab lookup that is a
- * non-goal (re-asking costs nothing). A new conversation binds to this agent by
- * default. The binding is immutable: to talk to a different agent you fork the
- * conversation, so a conversation's history only ever reaches its one bound
- * agent. The `vocab-home` daemon answers instead when a conversation is bound to
- * its agent id, because that agent's capability (an always-on box) lives there.
- */
-export const CLIENT_AGENT_ID: AgentId = asAgentId('client');
-
-// Re-export the agent address type so app UI binds against one import surface
-// (`@epicenter/vocab`) for the agent catalog and the ids it hands the picker.
-export type { AgentId };
-
-/**
- * One agent Vocab can bind a conversation to: its durable {@link AgentId} and a
- * display `label` for the picker.
- *
- * An agent answers where its capability lives (ADR-0043), and the agent's `id`
- * is what names that place: {@link CLIENT_AGENT_ID} is the capability-free agent
- * the open tab answers in the client, and `vocab-home` is the always-on daemon
- * the user co-deploys. There is no separate `owner` enum, because with these two
- * agents the identity already says where the answer is produced; the one peer
- * that answers a given turn is decided by the bound `id`, never a second field.
- *
- * The model and toolset are not per-agent here: Vocab runs one model
- * ({@link VOCAB_MODEL}) with no tools, read as app constants by whichever peer
- * answers. The two entries are the same capability-free agent in two places, so
- * the catalog carries only what differs (id, label); the engine each answerer
- * uses (a local key, the user's metered account) is an orthogonal sub-choice it
- * resolves for itself (ADR-0038).
- */
-export type AgentConfig = {
-	readonly id: AgentId;
-	readonly label: string;
-};
-
-/**
- * The agents a Vocab conversation can be bound to (ADR-0025). Config, not
- * presence: the picker lists every entry here whether or not its runtime is live,
- * because the conversation doc is a durable mailbox: a turn bound to an offline
- * daemon waits in the doc until that daemon wakes and answers. Presence only ever
- * decorates this list with a live/offline hint; it never gates what can be bound.
- *
- * The client agent is always available (the open tab answers it in the client
- * against the hosted inference stream, no daemon required). The home daemon is the
- * always-on worker a user co-deploys; binding a
- * conversation to it is what a later "co-deploy a live daemon" slice brings online.
- */
-export const VOCAB_AGENTS = [
-	{ id: CLIENT_AGENT_ID, label: 'This device' },
-	{ id: asAgentId('vocab-home'), label: 'Home daemon' },
-] as const satisfies readonly AgentConfig[];
-
-/**
- * The agent a new conversation binds to when the user does not pick one: the
- * always-available client agent, so the fast "New Conversation" path answers
- * with no daemon required.
- */
-export const DEFAULT_AGENT_ID: AgentId = CLIENT_AGENT_ID;
-
-/**
  * The bilingual system prompt every Vocab answer is generated under. An app
- * constant like {@link VOCAB_MODEL}, shared by both answer paths so they
- * produce the same voice: the browser passes it to the Epicenter provider, and the
- * always-on daemon worker passes it to its provider. It lives here, in the
- * isomorphic contract, rather than in a route folder so the node daemon can read
- * it without importing browser code.
+ * constant like {@link VOCAB_MODEL}: the client passes it to the Epicenter
+ * provider when it answers. It lives in this dep-free contract so the prompt is
+ * single-homed, read by whichever module builds the stream.
  */
 export const VOCAB_SYSTEM_PROMPT = `You are a bilingual Chinese-English language assistant. Your responses mix English and Mandarin Chinese naturally.
 
@@ -137,6 +69,22 @@ Example response style:
 "The phrase 你好 is the most common greeting. For something more casual with friends, you can say 嘿 or 哈喽. In a formal setting, try 您好. The 您 shows extra respect."`;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Message Model
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A complete chat message: the unit Vocab persists. Each finished message is
+ * written once, whole, as one JSON blob in the conversation's LWW store keyed by
+ * {@link MessageId} (ADR-0046/0047), the moment a turn finishes.
+ *
+ * It is the shared {@link AgentMessage} so Vocab rides the one client agent loop
+ * (`@epicenter/workspace/agent`). Vocab is capability-free, so every message is
+ * a single text part, but the parts-array shape is the same one a tool agent
+ * fills with tool-call and tool-result parts.
+ */
+export type VocabMessage = AgentMessage;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Table Definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -145,17 +93,7 @@ const conversationsTable = defineTable({
 	title: field.string(),
 	createdAt: field.instant(),
 	updatedAt: field.instant(),
-	/**
-	 * The agent this conversation is bound to (ADR-0025), set once at creation and
-	 * never reassigned. {@link CLIENT_AGENT_ID} routes to the client tab answering
-	 * in-process (the Epicenter provider); a daemon's agent id routes to that
-	 * always-on worker over sync, and the client stays out. One immutable
-	 * field is who was addressed and who answered, for every turn: the history
-	 * cannot disagree with itself, and the conversation's content only ever reaches
-	 * this one agent. Switching agents is a fork, not a write here.
-	 */
-	agent: field.string<AgentId>(),
-}).docs({ messages: attachChatConversation });
+}).docs({ messages: (ydoc) => attachKvStore<VocabMessage>(ydoc) });
 export type Conversation = InferTableRow<typeof conversationsTable>;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,9 +104,10 @@ export type Conversation = InferTableRow<typeof conversationsTable>;
  * The isomorphic Vocab workspace definition.
  *
  * Conversation transcripts are not rows: each `conversations.messages` handle
- * opens a synced child doc derived from the conversation id, streamed into by
- * whichever peer answers the bound agent (the client tab or the `vocab-home`
- * daemon, ADR-0036/0043).
+ * opens a synced child doc derived from the conversation id, holding one
+ * {@link VocabMessage} per key (ADR-0046). The open client tab answers
+ * in-process (ADR-0043): it streams the live turn in component state and writes
+ * each finished message into this store.
  */
 export const vocabWorkspace = defineWorkspace({
 	id: 'epicenter-vocab',

@@ -1,0 +1,41 @@
+{
+	"name": "@epicenter/local-books",
+	"description": "Headless CLI that mirrors QuickBooks Online into a local SQLite database via full pull + incremental CDC.",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"keywords": [
+		"local-first",
+		"quickbooks",
+		"sqlite",
+		"cdc",
+		"accounting",
+		"cli"
+	],
+	"bin": {
+		"local-books": "./src/bin.ts"
+	},
+	"scripts": {
+		"local-books": "bun run src/bin.ts",
+		"auth:remote": "infisical run --env=prod --path=/apps/local-books -- bun run src/bin.ts auth --env production",
+		"sync:remote": "infisical run --env=prod --path=/apps/local-books -- bun run src/bin.ts sync --env production",
+		"status:remote": "infisical run --env=prod --path=/apps/local-books -- bun run src/bin.ts status --env production",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
+		"build:binary": "bun build --compile --outfile dist/local-books src/bin.ts"
+	},
+	"dependencies": {
+		"@epicenter/field": "workspace:*",
+		"@epicenter/workspace": "workspace:*",
+		"ms": "catalog:",
+		"oauth4webapi": "catalog:",
+		"typebox": "catalog:",
+		"wellcrafted": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"@types/ms": "catalog:",
+		"typescript": "catalog:"
+	},
+	"license": "AGPL-3.0-or-later"
+}

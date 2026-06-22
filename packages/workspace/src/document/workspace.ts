@@ -397,7 +397,7 @@ export type MountComposition<TActions extends ActionRegistry> = {
  *
  * Only fields whose layout exposes `observe` can be registered: the loop watches
  * each body through it, so a layout without one (e.g. `attachPlainText`) collapses
- * to `never` and the field cannot carry a worker. `attachChatTranscript` does.
+ * to `never` and the field cannot carry a worker. `attachKvStore` does.
  */
 export type MountWorkers<TTables extends TableDefinitions> = {
 	[T in keyof TTables]?: TTables[T] extends TableDefinition<
@@ -426,15 +426,14 @@ export type MountWorkers<TTables extends TableDefinitions> = {
  *  - `session` is the mount's signed-in capability kit ({@link MountSession}: the
  *    `AuthedFetch`, the owner id, the sockets). Always present, because workers
  *    are only ever wired under a `defineSessionMount` open. A factory uses it to
- *    answer on the cloud (e.g. `createAiChatFetch(session.fetch)` for the metered
- *    inference backend).
+ *    answer on the cloud (e.g. `createOpenAiAgentEngine({ fetch: session.fetch })`
+ *    for the metered inference backend).
  *  - `baseURL` is the resolved sync base URL the daemon authenticates against, so
  *    a factory's cloud calls target the same deployment its sync does.
  *
- * The generic loop ({@link attachChildDocWorker}) never sees these: its test and
- * the `doc-as-wire-chat` example drive it with no session, so the mount
- * environment is injected here, at the daemon coordinator, not threaded through
- * the transport-agnostic loop.
+ * The generic loop ({@link attachChildDocWorker}) never sees these: its test
+ * drives it with no session, so the mount environment is injected here, at the
+ * daemon coordinator, not threaded through the transport-agnostic loop.
  */
 export type MountWorkerContext<
 	TRowId extends string,
@@ -865,7 +864,7 @@ export function defineWorkspace<
  *    cascades from `ydoc.destroy()` when the cache evicts the entry.
  *  - **shape**: the CRDT layout and its writer policy, owned by the declared
  *    `attach*(ydoc)` function (`attachPlainText`, `attachRichText`,
- *    `attachChatTranscript`).
+ *    `attachKvStore`).
  *
  * The guid is only the room address: the cache keys by `rowId`, and the address
  * is derived through the field's existing {@link RowDocGuid} so derivation stays

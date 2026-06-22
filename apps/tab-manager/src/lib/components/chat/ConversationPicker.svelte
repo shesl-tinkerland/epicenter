@@ -20,7 +20,7 @@
 		onCreate,
 	}: {
 		conversations: ConversationHandle[];
-		activeId: ConversationId;
+		activeId: ConversationId | null;
 		onSwitch: (id: ConversationId) => void;
 		onCreate: () => void;
 	} = $props();

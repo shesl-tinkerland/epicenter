@@ -23,10 +23,13 @@
 			messages={tabManager.state.aiChat.active?.messages ?? []}
 			status={tabManager.state.aiChat.active?.status ?? 'ready'}
 			onReload={() => tabManager.state.aiChat.active?.reload()}
-			onApproveToolCall={(id) =>
-				tabManager.state.aiChat.active?.approveToolCall(id)}
-			onDenyToolCall={(id) =>
-				tabManager.state.aiChat.active?.denyToolCall(id)}
+			pendingApprovalCallId={tabManager.state.aiChat.active
+				?.pendingApprovalCallId ?? null}
+			onApproveToolCall={() =>
+				tabManager.state.aiChat.active?.approveToolCall()}
+			onDenyToolCall={() => tabManager.state.aiChat.active?.denyToolCall()}
+			onAlwaysAllowToolCall={() =>
+				tabManager.state.aiChat.active?.alwaysAllowToolCall()}
 		/>
 	</div>
 

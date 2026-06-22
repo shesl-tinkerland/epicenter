@@ -6,26 +6,24 @@
  * it serves, enforced at compile time. There is no separate durable provider
  * registry: a provider retired from the catalog drops out of the vocabulary, and
  * `providerLabel` degrades its historical id to raw text at the render edge
- * rather than throwing. A model id is always a member of the matching provider
- * SDK's model union, so a typo or a model the SDK cannot route is a compile
- * error here rather than a runtime 400.
+ * rather than throwing. The model id is a free string: the OpenAI-compatible
+ * gateway (ADR-0050) owns routing, so a model the backend cannot serve is a
+ * runtime gateway error, not a compile error here. This catalog is the single
+ * source of which ids we sell and what each costs.
  */
-import type { GeminiTextModels } from '@tanstack/ai-gemini';
-import type { OPENAI_CHAT_MODELS } from '@tanstack/ai-openai';
-
-type OpenAiModel = (typeof OPENAI_CHAT_MODELS)[number];
-type GeminiModel = (typeof GeminiTextModels)[number];
 
 /**
  * One sellable model. `label` is the product role shown in the picker (Fast,
- * Best), not a vendor name. Discriminated on `provider` so that switching on it
- * narrows `id` to the matching SDK model union: a consumer routing to an
- * adapter gets the right id type with no cast, and a gemini id can never be
- * paired with `provider: 'openai'`.
+ * Best), not a vendor name. `provider` tags the gateway lane the id routes to;
+ * the catalog literal pins `id`, `provider`, and `credits` together, so a model
+ * is described in exactly one place.
  */
-export type AiModel =
-	| { id: OpenAiModel; provider: 'openai'; label: string; credits: number }
-	| { id: GeminiModel; provider: 'gemini'; label: string; credits: number };
+export type AiModel = {
+	id: string;
+	provider: 'openai' | 'gemini';
+	label: string;
+	credits: number;
+};
 
 /** A provider the live catalog serves. Derived from the model union, so
  *  `AI_MODELS` is the single source of the provider vocabulary. */

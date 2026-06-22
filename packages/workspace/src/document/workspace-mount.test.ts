@@ -11,11 +11,11 @@
 import { describe, expect, test } from 'bun:test';
 import { field } from '@epicenter/field';
 import * as Y from 'yjs';
-import { attachChatTranscript } from '../ai/index.js';
 import type { SessionMountContext } from '../daemon/define-mount.js';
 import type { NodeMountRuntime } from '../daemon/mount-runtime.js';
 import { defineActions, defineQuery } from '../shared/actions.js';
 import type { AgentId } from './agent-id.js';
+import { attachKvStore } from './attach-kv-store.js';
 import type { ConnectedChildDoc } from './child-doc-worker.js';
 import { defineTable } from './define-table.js';
 import { defineWorkspace } from './workspace.js';
@@ -31,7 +31,9 @@ const demoWorkspace = defineWorkspace({
 			// Designation: the worker loop hosts only rows bound to the agent the
 			// daemon answers as (the mount's `agentId`).
 			agent: field.string<AgentId>(),
-		}).docs({ messages: attachChatTranscript }),
+		}).docs({
+			messages: (ydoc: Y.Doc) => attachKvStore<{ id: string }>(ydoc),
+		}),
 	},
 	kv: {},
 	actions: ({ tables }) =>

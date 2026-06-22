@@ -1,6 +1,7 @@
 # 0043. An agent answers where its capability lives
 
-- **Status:** Accepted
+- **Status:** Superseded
+- **Superseded by:** [ADR-0047](0047-the-agent-loop-runs-in-the-client-and-tools-are-dispatched-actions.md) (every agent answers in the client; the daemon is reached by dispatched actions, not by running the loop). What carries forward: Epicenter runs no hosted answering worker, and the blind box plus metered stream is the floor.
 - **Date:** 2026-06-20
 - **Supersedes:** [ADR-0041](0041-every-answerer-is-a-worker-the-browser-never-answers.md)
 - **Relates:** [ADR-0035](0035-durable-storage-is-one-per-person-coordination-box.md) (the blind box a worker syncs through), [ADR-0033](0033-a-conversation-has-one-transport-and-two-triggers.md) (the metered inference stream), [ADR-0042](0042-the-agent-loop-is-the-workers-over-the-doc-as-the-message-array.md) (the worker's agent loop), [ADR-0030](0030-agents-are-immutable-capability-bundles.md) (the capability bundle that names where an agent answers), [ADR-0036](0036-answer-bodies-are-native-parts-arrays-streamed-into-y-text.md) (the parts body every answer writes), [ADR-0038](0038-a-daemon-answers-through-the-first-inference-backend-it-can-satisfy.md) (the backend a worker resolves)
@@ -30,8 +31,10 @@ This overturns the two ADR-0041 claims that depended on the phantom quadrant: "t
 
 ## Consequences
 
+<!-- doc-path-check: ignore-next-line -->
 - **Wave 3 of `specs/20260620T000000-vocab-answerer-collapse.md` is not built.** The hosted Durable Object, the queue, the wake route, the internal-RPC child-doc connector, and the keepAlive / alarm machinery are deleted from the plan.
 - **Vocab is a client-side chat over the metered SSE endpoint** (`@tanstack/ai-svelte` `createChat` + `fetchServerSentEvents`), writing answer parts into the conversation child doc. The browser-answerer deletion ADR-0041 planned is reversed for capability-free agents; what is still deleted is the `owner` routing fork and the hosted-worker apparatus, not client answering.
+<!-- doc-path-check: ignore-next-line -->
 - **Local Books becomes the first real worker consumer and un-defers ADR-0042** (the agent loop): the daemon runs SQL locally and streams tool-call, tool-result, and text parts into the synced conversation. See `specs/20260620T180000-local-books-agent-over-sql.md`.
 - **Close-browser durability for stateless chat is a non-goal.** Durable async work belongs to the daemon, on-demand while you use that agent, with the anchor catching up a sleeping device. Epicenter never pays for a free always-on thinker.
 - **The economic floor is two blind things plus metered tokens:** the box never reads your data, the inference stream is pay-per-call with zero idle, and nothing per-user thinks-while-idle for free.

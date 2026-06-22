@@ -17,6 +17,7 @@
 import { field } from '@epicenter/field';
 import { filesTable } from '@epicenter/filesystem';
 import {
+	attachKvStore,
 	defineActions,
 	defineTable,
 	defineWorkspace,
@@ -26,7 +27,7 @@ import {
 	nullable,
 	type WorkspaceFromDefinition,
 } from '@epicenter/workspace';
-import { attachChatConversation } from '@epicenter/workspace/ai';
+import type { AgentMessage } from '@epicenter/workspace/agent';
 import type { Brand } from 'wellcrafted/brand';
 
 /**
@@ -86,7 +87,10 @@ export const generateChatMessageId = (): ChatMessageId =>
  * Stores the thread title, optional parent/subpage relationship, source
  * message linkage, and the chosen model. The provider is derived from the
  * model by the catalog, so it is not stored. The turns themselves are not rows:
- * each conversation's `messages` handle opens its synced transcript child doc.
+ * each conversation's `messages` handle opens its synced child doc, a
+ * last-write-wins store of finished {@link AgentMessage} records keyed by id
+ * (ADR-0047). The open client runs the agent loop in memory and writes each
+ * finished message here; the live turn never enters the CRDT.
  */
 const conversationsTable = defineTable({
 	id: field.string<ConversationId>(),
@@ -97,7 +101,7 @@ const conversationsTable = defineTable({
 	model: field.string(),
 	createdAt: field.instant(),
 	updatedAt: field.instant(),
-}).docs({ messages: attachChatConversation });
+}).docs({ messages: (ydoc) => attachKvStore<AgentMessage>(ydoc) });
 export type Conversation = InferTableRow<typeof conversationsTable>;
 
 /**

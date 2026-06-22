@@ -42,8 +42,9 @@
 			messages={active?.messages ?? []}
 			status={active?.status ?? 'ready'}
 			onReload={() => active?.reload()}
-			onApproveToolCall={(id) => active?.approveToolCall(id)}
-			onDenyToolCall={(id) => active?.denyToolCall(id)}
+			pendingApprovalCallId={active?.pendingApprovalCallId ?? null}
+			onApproveToolCall={() => active?.approveToolCall()}
+			onDenyToolCall={() => active?.denyToolCall()}
 		/>
 	</div>
 

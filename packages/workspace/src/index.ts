@@ -43,11 +43,12 @@
 // ACTION SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
 
-export type { ActionManifest, ActionRegistry } from './shared/actions';
+export type { Action, ActionManifest, ActionRegistry } from './shared/actions';
 export {
 	defineActions,
 	defineMutation,
 	defineQuery,
+	invokeAction,
 } from './shared/actions';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -105,6 +106,10 @@ export {
 } from './cache/disposable-cache.js';
 export { attachBroadcastChannel } from './document/attach-broadcast-channel.js';
 export { attachIndexedDb } from './document/attach-indexed-db.js';
+export {
+	attachKvStore,
+	type KvStoreHandle,
+} from './document/attach-kv-store.js';
 export { attachLocalStorage } from './document/attach-local-storage.js';
 export { attachPlainText } from './document/attach-plain-text.js';
 export { attachRichText } from './document/attach-rich-text.js';

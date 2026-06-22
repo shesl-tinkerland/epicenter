@@ -9,7 +9,8 @@
 		onRetry,
 		onDismiss,
 	}: {
-		error: Error | undefined;
+		/** The last turn's failure (the loop's `ConversationError`), or null. */
+		error: { message: string } | null | undefined;
 		dismissedError: string | null;
 		onRetry: () => void;
 		onDismiss: () => void;

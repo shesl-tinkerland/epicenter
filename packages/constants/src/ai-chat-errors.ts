@@ -1,12 +1,13 @@
 import { defineErrors, type InferErrors } from 'wellcrafted/error';
 
 /**
- * Structured error variants for the `/ai/chat` endpoint.
+ * Structured error variants for the metered inference path.
  *
- * Defined once in the shared constants package so both server and client
- * reference the same discriminated union. The server calls the factories
- * at runtime (`AiChatError.Unauthorized()`); the client imports only the
- * `AiChatError` type via `InferErrors` for zero-cost type narrowing.
+ * Defined once in the shared constants package so the gateway and its billing
+ * policies reference the same discriminated union. The billing policy calls the
+ * factories at runtime (`AiChatError.InsufficientCredits(...)`) and renders them
+ * into the OpenAI error envelope (`{ error: { message, code } }`), with the
+ * variant `name` as `error.code`.
  *
  * Each variant's `name` field is the discriminant: use `switch (error.name)`
  * for exhaustive handling with full TypeScript narrowing.
@@ -18,7 +19,6 @@ import { defineErrors, type InferErrors } from 'wellcrafted/error';
  *
  * @example
  * ```ts
- * // Server: runtime usage
  * import {
  *   AiChatError,
  *   AiChatErrorStatus,
@@ -27,15 +27,6 @@ import { defineErrors, type InferErrors } from 'wellcrafted/error';
  *   AiChatError.InsufficientCredits({ balance: 42 }),
  *   AiChatErrorStatus.InsufficientCredits,
  * ); // 402
- *
- * // Client: type-only usage
- * import { AiChatHttpError } from '@epicenter/constants/ai-chat-errors';
- * if (err instanceof AiChatHttpError) {
- *   switch (err.detail.name) {
- *     case 'Unauthorized': // show sign-in
- *     case 'InsufficientCredits': // err.detail.balance
- *   }
- * }
  * ```
  */
 export const AiChatError = defineErrors({
@@ -62,31 +53,6 @@ export const AiChatError = defineErrors({
 		message: `${model} requires a paid plan (costs ${credits} credits)`,
 		model,
 		credits,
-	}),
-	/**
-	 * Doc-as-wire kickoff replay: an assistant message with this generationId
-	 * already exists in the conversation doc. The retry is a no-op; nothing
-	 * was written and nothing was charged.
-	 */
-	GenerationAlreadyExists: ({ generationId }: { generationId: string }) => ({
-		message: `Generation ${generationId} already exists`,
-		generationId,
-	}),
-	/**
-	 * Doc-as-wire concurrency guard: the conversation has an assistant message
-	 * with no finish yet that is recent enough to still be live. One active
-	 * generation per conversation; retry after it finishes.
-	 */
-	GenerationInProgress: () => ({
-		message: 'A generation is already in progress for this conversation',
-	}),
-	/**
-	 * Doc-as-wire kickoff arrived before any user message synced into the
-	 * conversation doc. There is nothing to respond to; the client should
-	 * retry once its user message has synced.
-	 */
-	NoUserMessage: () => ({
-		message: 'The conversation has no user message to respond to',
 	}),
 });
 
@@ -126,41 +92,4 @@ export const AiChatErrorStatus = {
 	UnknownModel: 400,
 	InsufficientCredits: 402,
 	ModelRequiresPaidPlan: 403,
-	GenerationAlreadyExists: 409,
-	GenerationInProgress: 409,
-	NoUserMessage: 409,
 } as const satisfies Record<AiChatError['name'], number>;
-
-/**
- * Error subclass that carries structured error data across TanStack AI's
- * throw boundary.
- *
- * Created by `createAiChatFetch` when the server returns a non-2xx response
- * with a wellcrafted `{ data, error }` JSON envelope. The `Error` propagates
- * unchanged through TanStack AI's `ChatClient` pipeline; `instanceof
- * AiChatHttpError` works in `onError` and when reading `chat.error`.
- *
- * The `detail` property carries the full discriminated union with
- * variant-specific fields. The HTTP status is not on `detail` (it lives in
- * the sibling `AiChatErrorStatus` map); use `switch (err.detail.name)` for
- * exhaustive handling.
- *
- * @example
- * ```ts
- * if (err instanceof AiChatHttpError) {
- *   console.log(err.detail.name);   // "InsufficientCredits"
- *   switch (err.detail.name) {
- *     case 'InsufficientCredits':
- *       console.log(err.detail.balance); // narrowed
- *       break;
- *   }
- * }
- * ```
- */
-export class AiChatHttpError extends Error {
-	override readonly name = 'AiChatHttpError';
-
-	constructor(readonly detail: AiChatError) {
-		super(detail.message);
-	}
-}
