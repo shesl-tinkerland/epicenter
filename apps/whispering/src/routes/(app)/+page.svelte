@@ -16,12 +16,6 @@
 	import DictationCapabilityNotice from '$lib/components/DictationCapabilityNotice.svelte';
 	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import {
-		TranscriptionSelector,
-		TransformationSelector,
-	} from '$lib/components/settings';
-	import ManualDeviceSelector from '$lib/components/settings/selectors/ManualDeviceSelector.svelte';
-	import VadDeviceSelector from '$lib/components/settings/selectors/VadDeviceSelector.svelte';
-	import {
 		CAPTURE_SURFACE_META,
 		CAPTURE_SURFACE_OPTIONS,
 		type CaptureSurface,
@@ -43,12 +37,10 @@
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
-	import { settings } from '$lib/state/settings.svelte';
 	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import studioMicrophone from '$lib/assets/studio-microphone.png';
 	import { tauri } from '#platform/tauri';
-	import CaptureBehaviorPopover from './_components/CaptureBehaviorPopover.svelte';
 	import CapturePipeline from './_components/CapturePipeline.svelte';
 	import FirstRunSetup from './_components/FirstRunSetup.svelte';
 	import ManualRecordingAction from './_components/ManualRecordingAction.svelte';
@@ -65,15 +57,6 @@
 	// free, because SvelteKit remounts this page on navigation back to home. So
 	// first run and a later regression show the same flow.
 	let setupActive = $state(!getTranscriptionReadiness().isReady);
-	// The selected transformation's pipeline glyph morphs into that
-	// transformation's row on the /transformations list, so name it with the same
-	// id the row carries. Only the home pipeline opts in; the config topbar leaves
-	// its selector unnamed so it never collides with the rows on /transformations.
-	const transformationViewTransitionName = $derived(
-		viewTransition.transformation(
-			settings.get('transformation.selectedId') ?? null,
-		),
-	);
 	// The recording shortcut that actually fires on this platform, via the
 	// `#platform/shortcuts` label seam: desktop binds push-to-talk (Fn) globally
 	// and ships the toggle unbound, so prefer it; the browser shows the local
@@ -242,33 +225,9 @@
 				{/each}
 			</ToggleGroup.Root>
 
-			<!--
-				The capture pipeline is each recording action's idle footer (the action
-				hides it while live), so it's defined inline per surface. Manual and VAD
-				differ only by their device selector; each owns a distinct one backed by a
-				different recorder config. The shared tail repeats, but that keeps each
-				surface's footer co-located with the branch that already chose it, rather
-				than re-deriving the surface inside a shared snippet.
-			-->
 			{#if captureSurface.current === 'manual'}
 				<div class="flex w-full flex-col items-center gap-3">
-					<ManualRecordingAction>
-						{#snippet pipeline()}
-							<CapturePipeline>
-								<ManualDeviceSelector
-									iconViewTransitionName={viewTransition.pipeline.device}
-								/>
-								<TranscriptionSelector
-									variant="pipeline"
-									iconViewTransitionName={viewTransition.pipeline.transcription}
-								/>
-								<TransformationSelector
-									iconViewTransitionName={transformationViewTransitionName}
-								/>
-								<CaptureBehaviorPopover />
-							</CapturePipeline>
-						{/snippet}
-					</ManualRecordingAction>
+					<ManualRecordingAction />
 					{#if manualRecorder.state === 'RECORDING'}
 						<Button
 							tooltip="Cancel recording and discard audio"
@@ -283,23 +242,7 @@
 				</div>
 			{:else if captureSurface.current === 'vad'}
 				<div class="flex w-full flex-col items-center gap-3">
-					<VadRecordingAction>
-						{#snippet pipeline()}
-							<CapturePipeline>
-								<VadDeviceSelector
-									iconViewTransitionName={viewTransition.pipeline.device}
-								/>
-								<TranscriptionSelector
-									variant="pipeline"
-									iconViewTransitionName={viewTransition.pipeline.transcription}
-								/>
-								<TransformationSelector
-									iconViewTransitionName={transformationViewTransitionName}
-								/>
-								<CaptureBehaviorPopover />
-							</CapturePipeline>
-						{/snippet}
-					</VadRecordingAction>
+					<VadRecordingAction />
 				</div>
 			{:else if captureSurface.current === 'import'}
 				<div class="flex w-full flex-col items-center gap-4">
@@ -323,15 +266,7 @@
 						}}
 						class="h-32 sm:h-36 w-full"
 					/>
-					<CapturePipeline>
-						<TranscriptionSelector
-							variant="pipeline"
-							iconViewTransitionName={viewTransition.pipeline.transcription}
-						/>
-						<TransformationSelector
-							iconViewTransitionName={transformationViewTransitionName}
-						/>
-					</CapturePipeline>
+					<CapturePipeline surface="import" />
 				</div>
 			{/if}
 
