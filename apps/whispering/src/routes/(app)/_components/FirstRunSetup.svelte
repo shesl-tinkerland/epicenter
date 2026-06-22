@@ -18,11 +18,10 @@
 	import * as Card from '@epicenter/ui/card';
 	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
-	import { onDestroy, type Component } from 'svelte';
+	import type { Component } from 'svelte';
 	import { cubicOut } from 'svelte/easing';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fade, fly, scale } from 'svelte/transition';
-	import { createQuery } from '@tanstack/svelte-query';
 	import Check from '@lucide/svelte/icons/check';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import Cpu from '@lucide/svelte/icons/cpu';
@@ -30,12 +29,9 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
-	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { TranscriptionRuntimeConfig } from '$lib/components/settings';
 	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
-	import { rpc } from '$lib/rpc';
-	import { services } from '$lib/services';
 	import { PROVIDERS } from '$lib/services/transcription/providers';
 	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
@@ -46,6 +42,7 @@
 	import { tauri } from '#platform/tauri';
 	import { createManualRecordingController } from './manual-recording-controller.svelte';
 	import RecordingActionCard from './RecordingActionCard.svelte';
+	import RecordingResult from './RecordingResult.svelte';
 
 	let { onComplete }: { onComplete: () => void } = $props();
 
@@ -170,20 +167,6 @@
 	const practiceTranscript = $derived(
 		practiceRecording?.transcript?.trim() ?? '',
 	);
-	// Replay the practice clip with the SAME audio the home screen serves, so the
-	// step previews the real result instead of a mock. The blob store caches the URL
-	// per id, and the wizard never coexists with the home recorder (the `setupActive`
-	// if/else swap), so creating the URL here and revoking it on teardown can't race
-	// home's own copy.
-	const practiceAudioQuery = createQuery(() => ({
-		...rpc.audio.getPlaybackUrl(() => practiceRecording?.id ?? '').options,
-		enabled: !!practiceRecording?.id,
-	}));
-	onDestroy(() => {
-		if (practiceRecording?.id) {
-			services.blobs.audio.revokeUrl(practiceRecording.id);
-		}
-	});
 
 	const requiredSatisfied = $derived(
 		current?.key === 'engine' ? engineReady : true,
@@ -497,36 +480,35 @@
 								screen, so this rehearses the exact control they'll use.
 							-->
 							<RecordingActionCard controller={rec} />
-							{#if practiceRecording && practiceTranscript}
+							{#if practiceRecording}
 								<!--
-									The same transcript preview and audio the home screen shows after
-									a recording, so the practice is a true preview of the real result,
-									not a mock. The pipeline already delivered this to the clipboard.
+									The same result the home screen shows after a recording (the shared
+									RecordingResult: transcript preview + audio), so the practice is a
+									true preview, not a mock. The "it works" framing and the clipboard
+									note depend on a transcript; the audio does not, so a silent or
+									not-yet-transcribed clip still plays back.
 								-->
 								<div
 									class="w-full space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left"
 									in:fly={flyIn}
 								>
-									<div
-										class="flex items-center gap-2 text-sm font-medium text-primary"
-									>
-										<Check class="size-4" /> It works
-									</div>
-									<TranscriptDialog
+									{#if practiceTranscript}
+										<div
+											class="flex items-center gap-2 text-sm font-medium text-primary"
+										>
+											<Check class="size-4" /> It works
+										</div>
+									{/if}
+									<RecordingResult
 										recordingId={practiceRecording.id}
 										transcript={practiceRecording.transcript}
 										rows={2}
 									/>
-									{#if practiceAudioQuery.data}
-										<audio
-											src={practiceAudioQuery.data}
-											controls
-											class="h-8 w-full"
-										></audio>
+									{#if practiceTranscript}
+										<p class="text-xs text-muted-foreground">
+											Copied to your clipboard. Every recording works this way.
+										</p>
 									{/if}
-									<p class="text-xs text-muted-foreground">
-										Copied to your clipboard. Every recording works this way.
-									</p>
 								</div>
 							{/if}
 						</div>
