@@ -250,7 +250,7 @@
 								default; the picker is a wall of unfamiliar provider names that
 								reads as "this is a developer tool".
 							-->
-							<TranscriptionRuntimeConfig hideServiceSelect showAdvanced={false} />
+							<TranscriptionRuntimeConfig showAdvanced={false} />
 							<Collapsible.Root>
 								<Collapsible.Trigger
 									class="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground [&[data-state=open]>svg]:rotate-180"

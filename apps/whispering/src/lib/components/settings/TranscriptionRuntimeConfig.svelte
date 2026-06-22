@@ -1,3 +1,10 @@
+<!--
+	Runtime config for the currently selected transcription service: the
+	per-service setup (cloud model, local model selector, Speaches steps) plus the
+	shared advanced fields. The service PICKER is the caller's concern, so the
+	settings page renders one above this and the first-run wizard tucks one behind
+	a disclosure.
+-->
 <script lang="ts">
 	import * as Alert from '@epicenter/ui/alert';
 	import { Badge } from '@epicenter/ui/badge';
@@ -9,7 +16,6 @@
 	import { Link } from '@epicenter/ui/link';
 	import * as Select from '@epicenter/ui/select';
 	import { Textarea } from '@epicenter/ui/textarea';
-	import type { Snippet } from 'svelte';
 	import CopyablePre from '$lib/components/copyable/CopyablePre.svelte';
 	import { SUPPORTED_LANGUAGES_OPTIONS } from '$lib/constants/languages';
 	import {
@@ -29,27 +35,13 @@
 	import { tauri } from '#platform/tauri';
 	import LocalModelSelector from './LocalModelSelector.svelte';
 	import ProviderConfigFields from './ProviderConfigFields.svelte';
-	import TranscriptionServiceSelect from './TranscriptionServiceSelect.svelte';
 
 	let {
-		id = 'selected-transcription-service',
-		label = 'Transcription Service',
-		description,
 		showAdvanced = true,
-		hideServiceSelect = false,
 		class: className,
 	}: {
-		id?: string;
-		label?: string;
-		description?: string | Snippet;
 		/** When false, hide the advanced fields (unload policy, language, prompt). */
 		showAdvanced?: boolean;
-		/**
-		 * When true, hide the service picker and render only the selected
-		 * service's setup. Lets a host (the first-run screen) lead with the
-		 * recommended setup and tuck the picker behind a disclosure of its own.
-		 */
-		hideServiceSelect?: boolean;
 		class?: string;
 	} = $props();
 
@@ -93,17 +85,6 @@
 </script>
 
 <Field.Group class={className}>
-	{#if !hideServiceSelect}
-		<TranscriptionServiceSelect
-			{id}
-			{label}
-			{description}
-			bind:selected={() => settings.get('transcription.service'),
-				(selected) =>
-					settings.set('transcription.service', selected)}
-		/>
-	{/if}
-
 	{#if isSelectedServiceUnavailable && selectedTranscriptionProvider}
 		<Alert.Root variant="warning">
 			<Alert.Title>Desktop-only service selected</Alert.Title>
