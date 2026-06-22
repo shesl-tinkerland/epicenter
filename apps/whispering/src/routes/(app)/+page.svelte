@@ -41,7 +41,7 @@
 	import { viewTransition } from '$lib/utils/viewTransitions';
 	import studioMicrophone from '$lib/assets/studio-microphone.png';
 	import { tauri } from '#platform/tauri';
-	import CapturePipelineCore from './_components/CapturePipelineCore.svelte';
+	import CapturePipeline from './_components/CapturePipeline.svelte';
 	import FirstRunSetup from './_components/FirstRunSetup.svelte';
 	import ManualRecordingAction from './_components/ManualRecordingAction.svelte';
 	import VadRecordingAction from './_components/VadRecordingAction.svelte';
@@ -266,7 +266,7 @@
 						}}
 						class="h-32 sm:h-36 w-full"
 					/>
-					<CapturePipelineCore />
+					<CapturePipeline />
 				</div>
 			{/if}
 
