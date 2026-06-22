@@ -13,6 +13,7 @@
 	adapts its content to the capability.
 -->
 <script lang="ts">
+	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
 	import * as Collapsible from '@epicenter/ui/collapsible';
@@ -24,6 +25,7 @@
 	import { fade, fly, scale } from 'svelte/transition';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Cloud from '@lucide/svelte/icons/cloud';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Heart from '@lucide/svelte/icons/heart';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -32,6 +34,7 @@
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { TranscriptionRuntimeConfig } from '$lib/components/settings';
 	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
+	import { PROVIDERS } from '$lib/services/transcription/providers';
 	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
@@ -75,6 +78,40 @@
 	const transcriptionReadiness = $derived(getTranscriptionReadiness());
 	const engineReady = $derived(transcriptionReadiness.isReady);
 	const shortcutLabel = $derived(getRecordingShortcutLabel('manual'));
+
+	// The first decision that actually matters at first run: where transcription
+	// runs. On device (local engines) vs Cloud (hosted API). Picking one snaps
+	// `transcription.service` to that location's recommended default; the long
+	// tail (other engines, other providers, self-hosted) stays behind "Use a
+	// different service" below. Desktop only, since web has no local engine.
+	const ENGINE_LOCATIONS = [
+		{
+			value: 'local',
+			label: 'On device',
+			description: 'Private and offline. Free, no account.',
+			Icon: Cpu,
+			recommended: true,
+		},
+		{
+			value: 'cloud',
+			label: 'Cloud',
+			description: 'Fastest setup. Needs an API key.',
+			Icon: Cloud,
+			recommended: false,
+		},
+	] as const;
+	const currentLocation = $derived(
+		PROVIDERS[settings.get('transcription.service')].location,
+	);
+	function chooseLocation(location: 'local' | 'cloud') {
+		// Already in this location? Keep the user's specific pick (a non-Parakeet
+		// engine, a non-default provider) instead of snapping back to the default.
+		if (currentLocation === location) return;
+		settings.set(
+			'transcription.service',
+			location === 'local' ? 'parakeet' : 'OpenAI',
+		);
+	}
 
 	// The Accessibility step exists only where it has meaning: a desktop build
 	// that can tap the keyboard at all (not web, not Linux Wayland). Whether the
@@ -317,16 +354,57 @@
 								</h2>
 								<p class="text-sm text-muted-foreground">
 									{transcriptionReadiness.primaryIssue ??
-										'Choose what turns your speech into text. You can change it later.'}
+										'Choose where transcription runs. You can change it anytime.'}
 								</p>
 							</div>
 							<!--
-								Lead with the recommended setup for the selected service (the
-								model download on desktop, the API-key field on web) and tuck the
-								full service picker behind a disclosure. A first-run user wants the
-								default; the picker is a wall of unfamiliar provider names that
-								reads as "this is a developer tool".
+								Lead with the one decision that matters at first run: where
+								transcription runs (on device vs cloud). The chosen location's
+								recommended setup renders right below; the full provider list, a
+								wall of unfamiliar names that reads as "developer tool", stays
+								behind "Use a different service". Desktop only: web has no local
+								engine, so it goes straight to the cloud setup.
 							-->
+							{#if tauri}
+								<div
+									role="radiogroup"
+									aria-label="Where transcription runs"
+									class="grid grid-cols-2 gap-3"
+								>
+									{#each ENGINE_LOCATIONS as location (location.value)}
+										{@const Icon = location.Icon}
+										{@const selected = currentLocation === location.value}
+										<button
+											type="button"
+											role="radio"
+											aria-checked={selected}
+											onclick={() => chooseLocation(location.value)}
+											class="flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 {selected
+												? 'border-primary bg-primary/5'
+												: 'hover:bg-muted/50'}"
+										>
+											<div class="flex flex-wrap items-center gap-2">
+												<Icon
+													class="size-4 shrink-0 {selected
+														? 'text-primary'
+														: 'text-muted-foreground'}"
+												/>
+												<span class="font-medium whitespace-nowrap">
+													{location.label}
+												</span>
+												{#if location.recommended}
+													<Badge variant="outline" class="text-xs">
+														Recommended
+													</Badge>
+												{/if}
+											</div>
+											<span class="text-sm text-muted-foreground">
+												{location.description}
+											</span>
+										</button>
+									{/each}
+								</div>
+							{/if}
 							<TranscriptionRuntimeConfig showAdvanced={false} />
 							<Collapsible.Root>
 								<Collapsible.Trigger
