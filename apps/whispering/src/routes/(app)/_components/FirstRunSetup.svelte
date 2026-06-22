@@ -19,10 +19,11 @@
 	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
-	import type { Component } from 'svelte';
+	import { onDestroy, type Component } from 'svelte';
 	import { cubicOut } from 'svelte/easing';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { createQuery } from '@tanstack/svelte-query';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Cloud from '@lucide/svelte/icons/cloud';
@@ -31,9 +32,12 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import TranscriptDialog from '$lib/components/copyable/TranscriptDialog.svelte';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { TranscriptionRuntimeConfig } from '$lib/components/settings';
 	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
+	import { rpc } from '$lib/rpc';
+	import { services } from '$lib/services';
 	import { PROVIDERS } from '$lib/services/transcription/providers';
 	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
@@ -156,15 +160,32 @@
 	// RecordingActionCard the home screen uses, so the button and its live states
 	// (start spinner, recording treatment) are honest rather than a bespoke mock.
 	const rec = createManualRecordingController();
-	// The practice transcript is just the latest recording's text, surfaced once
-	// the controller's stop has resolved. Derived, not an effect-latch: stop awaits
-	// the whole pipeline, so by the time `justRecorded` flips the row is already
-	// saved, and computing it synchronously avoids a one-frame flash.
-	const practiceTranscript = $derived(
-		rec.justRecorded && !rec.isRecording
-			? (recordings.sorted[0]?.transcript?.trim() ?? '')
-			: '',
+	// The practice recording is the latest row, surfaced once the controller's stop
+	// has resolved. Derived, not an effect-latch: stop awaits the whole pipeline
+	// (transcribe AND deliver to the clipboard), so by the time `justRecorded` flips
+	// the row is already saved, and computing it synchronously avoids a one-frame
+	// flash. Gated on `justRecorded` so a returning user's older recording can't
+	// masquerade as the practice result before they have spoken.
+	const practiceRecording = $derived(
+		rec.justRecorded && !rec.isRecording ? recordings.sorted[0] : undefined,
 	);
+	const practiceTranscript = $derived(
+		practiceRecording?.transcript?.trim() ?? '',
+	);
+	// Replay the practice clip with the SAME audio the home screen serves, so the
+	// step previews the real result instead of a mock. The blob store caches the URL
+	// per id, and the wizard never coexists with the home recorder (the `setupActive`
+	// if/else swap), so creating the URL here and revoking it on teardown can't race
+	// home's own copy.
+	const practiceAudioQuery = createQuery(() => ({
+		...rpc.audio.getPlaybackUrl(() => practiceRecording?.id ?? '').options,
+		enabled: !!practiceRecording?.id,
+	}));
+	onDestroy(() => {
+		if (practiceRecording?.id) {
+			services.blobs.audio.revokeUrl(practiceRecording.id);
+		}
+	});
 
 	const requiredSatisfied = $derived(
 		current?.key === 'engine' ? engineReady : true,
@@ -443,17 +464,36 @@
 								screen, so this rehearses the exact control they'll use.
 							-->
 							<RecordingActionCard controller={rec} />
-							{#if practiceTranscript}
+							{#if practiceRecording && practiceTranscript}
+								<!--
+									The same transcript preview and audio the home screen shows after
+									a recording, so the practice is a true preview of the real result,
+									not a mock. The pipeline already delivered this to the clipboard.
+								-->
 								<div
-									class="w-full rounded-xl border border-primary/30 bg-primary/5 p-4 text-left"
+									class="w-full space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left"
 									in:fly={flyIn}
 								>
 									<div
-										class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary"
+										class="flex items-center gap-2 text-sm font-medium text-primary"
 									>
 										<Check class="size-4" /> It works
 									</div>
-									<p class="text-sm leading-relaxed">"{practiceTranscript}"</p>
+									<TranscriptDialog
+										recordingId={practiceRecording.id}
+										transcript={practiceRecording.transcript}
+										rows={2}
+									/>
+									{#if practiceAudioQuery.data}
+										<audio
+											src={practiceAudioQuery.data}
+											controls
+											class="h-8 w-full"
+										></audio>
+									{/if}
+									<p class="text-xs text-muted-foreground">
+										Copied to your clipboard. Every recording works this way.
+									</p>
 								</div>
 							{/if}
 						</div>
@@ -504,7 +544,7 @@
 					Back
 				</Button>
 				{#if current?.key === 'try' && !practiceTranscript}
-					<Button variant="ghost" onclick={next}>Skip</Button>
+					<Button variant="ghost" onclick={next}>Skip for now</Button>
 				{:else if current?.key === 'access' && !dictationCapability.isActive}
 					<Button variant="ghost" onclick={next}>Skip for now</Button>
 				{:else}
