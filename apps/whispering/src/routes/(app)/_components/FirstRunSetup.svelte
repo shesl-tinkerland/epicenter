@@ -18,7 +18,6 @@
 	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Item from '@epicenter/ui/item';
 	import * as Kbd from '@epicenter/ui/kbd';
-	import { createMutation } from '@tanstack/svelte-query';
 	import type { Component } from 'svelte';
 	import { cubicOut } from 'svelte/easing';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -27,27 +26,21 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Heart from '@lucide/svelte/icons/heart';
-	import Loader from '@lucide/svelte/icons/loader-circle';
 	import Lock from '@lucide/svelte/icons/lock';
-	import Mic from '@lucide/svelte/icons/mic';
-	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { accessibilityGuide } from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import { TranscriptionRuntimeConfig } from '$lib/components/settings';
 	import TranscriptionServiceSelect from '$lib/components/settings/TranscriptionServiceSelect.svelte';
-	import {
-		startManualRecording,
-		stopManualRecording,
-	} from '$lib/operations/recording';
 	import { getTranscriptionReadiness } from '$lib/settings/transcription-validation';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
-	import { manualRecorder } from '$lib/state/manual-recorder.svelte';
 	import { recordings } from '$lib/state/recordings.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { getRecordingShortcutLabel } from '$lib/utils/recording-shortcut';
 	import studioMicrophone from '$lib/assets/studio-microphone.png';
 	import { tauri } from '#platform/tauri';
+	import { createManualRecordingController } from './manual-recording-controller.svelte';
+	import RecordingActionCard from './RecordingActionCard.svelte';
 
 	let { onComplete }: { onComplete: () => void } = $props();
 
@@ -56,7 +49,8 @@
 	// Snapshot the count once at mount (a $state read, not a $derived) so the
 	// welcome can't flash away as the Yjs table hydrates. Derived from recordings,
 	// not a persisted "seen onboarding" flag, so it stays flag-free.
-	let showWelcome = $state(recordings.sorted.length === 0);
+	const startedWithWelcome = recordings.sorted.length === 0;
+	let showWelcome = $state(startedWithWelcome);
 	const TRUST_POINTS = [
 		{
 			Icon: Lock,
@@ -121,31 +115,19 @@
 		reduceMotion.current ? { duration: 0 } : { duration: 200, easing: cubicOut },
 	);
 
-	// First dictation drives the real recorder. Start and stop are separate
-	// mutations because stop awaits the whole transcription pipeline (mirrors
-	// ManualRecordingAction).
-	const startMutation = createMutation(() => ({
-		mutationFn: startManualRecording,
-	}));
-	const stopMutation = createMutation(() => ({
-		mutationFn: stopManualRecording,
-	}));
-	const isRecording = $derived(manualRecorder.state === 'RECORDING');
-	const isStopping = $derived(stopMutation.isPending);
+	// First dictation rehearses the real recorder: the same controller and the same
+	// RecordingActionCard the home screen uses, so the button and its live states
+	// (start spinner, recording treatment) are honest rather than a bespoke mock.
+	const rec = createManualRecordingController();
 	// The practice transcript is just the latest recording's text, surfaced once
-	// the wizard's own stop has resolved. Derived, not an effect-latch: stop awaits
-	// the whole pipeline, so by the time `isSuccess` flips the row is already saved,
-	// and computing it synchronously avoids a one-frame flash of the Record button
-	// between paint and a post-effect assignment.
+	// the controller's stop has resolved. Derived, not an effect-latch: stop awaits
+	// the whole pipeline, so by the time `justRecorded` flips the row is already
+	// saved, and computing it synchronously avoids a one-frame flash.
 	const practiceTranscript = $derived(
-		stopMutation.isSuccess && !isRecording
+		rec.justRecorded && !rec.isRecording
 			? (recordings.sorted[0]?.transcript?.trim() ?? '')
 			: '',
 	);
-	function toggleRecord() {
-		if (isRecording) stopMutation.mutate();
-		else startMutation.mutate();
-	}
 
 	const requiredSatisfied = $derived(
 		current?.key === 'engine' ? engineReady : true,
@@ -169,7 +151,14 @@
 			done = false;
 			return;
 		}
-		stepIndex = Math.max(0, stepIndex - 1);
+		// At the first numbered step, Back returns to the welcome that opened the
+		// flow rather than dead-ending. A returning user who never saw a welcome has
+		// nothing behind step one, so Back stays disabled for them.
+		if (stepIndex === 0) {
+			if (startedWithWelcome) showWelcome = true;
+			return;
+		}
+		stepIndex -= 1;
 	}
 
 	let bodyEl = $state<HTMLDivElement | null>(null);
@@ -358,75 +347,38 @@
 							</Collapsible.Root>
 						</div>
 					{:else if current?.key === 'try'}
-						<Card.Root class="border-border/70 shadow-sm dark:shadow-none dark:ring-1 dark:ring-white/5">
-							<Card.Content
-								class="flex flex-col items-center gap-5 px-6 py-8 text-center"
-							>
-								<img src={studioMicrophone} alt="" class="size-14" />
-								<div class="space-y-1.5">
-									<h2 class="text-xl font-semibold tracking-tight text-balance">
-										Try your first dictation
-									</h2>
-									<p
-										class="mx-auto max-w-sm text-sm leading-relaxed text-pretty text-muted-foreground"
+						<div class="flex w-full flex-col items-center gap-5 text-center">
+							<img src={studioMicrophone} alt="" class="size-14" />
+							<div class="space-y-1.5">
+								<h2 class="text-xl font-semibold tracking-tight text-balance">
+									Try your first dictation
+								</h2>
+								<p
+									class="mx-auto max-w-sm text-sm leading-relaxed text-pretty text-muted-foreground"
+								>
+									Click record and say anything. Whispering turns it into text.
+								</p>
+							</div>
+							<!--
+								The real recorder button, not a mock: the same card and the same
+								honest states (start spinner, recording treatment) as the home
+								screen, so this rehearses the exact control they'll use.
+							-->
+							<RecordingActionCard controller={rec} />
+							{#if practiceTranscript}
+								<div
+									class="w-full rounded-xl border border-primary/30 bg-primary/5 p-4 text-left"
+									in:fly={flyIn}
+								>
+									<div
+										class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary"
 									>
-										Click record and say anything. Whispering turns it into text.
-									</p>
+										<Check class="size-4" /> It works
+									</div>
+									<p class="text-sm leading-relaxed">"{practiceTranscript}"</p>
 								</div>
-
-								{#if isRecording}
-									<div class="flex flex-col items-center gap-3" in:scale={popIn}>
-										<div
-											class="relative flex size-16 items-center justify-center rounded-full bg-primary/10"
-										>
-											<span
-												class="absolute inset-0 rounded-full bg-primary/15 motion-safe:animate-ping"
-											></span>
-											<Mic class="relative size-6 text-primary" />
-										</div>
-										<div class="flex h-8 items-end gap-1" aria-hidden="true">
-											{#each Array(7) as _, i}
-												<div
-													class="eq-bar w-1.5 rounded-full bg-primary"
-													style="animation-delay: {i * 0.11}s"
-												></div>
-											{/each}
-										</div>
-										<span class="text-sm text-muted-foreground">
-											Listening… click to stop
-										</span>
-									</div>
-								{:else if isStopping}
-									<span
-										class="inline-flex items-center gap-2 text-sm text-muted-foreground"
-									>
-										<Loader class="size-4 animate-spin" /> Transcribing…
-									</span>
-								{:else if practiceTranscript}
-									<div class="flex w-full flex-col items-center gap-3" in:fly={flyIn}>
-										<div
-											class="w-full rounded-xl border border-primary/30 bg-primary/5 p-4 text-left"
-										>
-											<div
-												class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary"
-											>
-												<Check class="size-4" /> It works
-											</div>
-											<p class="text-sm leading-relaxed">"{practiceTranscript}"</p>
-										</div>
-										<Button variant="ghost" size="sm" onclick={toggleRecord}>
-											<RotateCw class="size-4" />
-											Try again
-										</Button>
-									</div>
-								{:else}
-									<Button size="lg" onclick={toggleRecord}>
-										<Mic class="size-4" />
-										Record
-									</Button>
-								{/if}
-							</Card.Content>
-						</Card.Root>
+							{/if}
+						</div>
 					{:else}
 						<Card.Root class="border-border/70 shadow-sm dark:shadow-none dark:ring-1 dark:ring-white/5">
 							<Card.Content
@@ -466,7 +418,11 @@
 		<!-- Controls -->
 		{#if !done}
 			<div class="flex w-full items-center justify-between">
-				<Button variant="ghost" disabled={stepIndex === 0} onclick={back}>
+				<Button
+					variant="ghost"
+					disabled={stepIndex === 0 && !startedWithWelcome}
+					onclick={back}
+				>
 					Back
 				</Button>
 				{#if current?.key === 'try' && !practiceTranscript}
@@ -485,20 +441,6 @@
 </div>
 
 <style>
-	.eq-bar {
-		height: 2rem;
-		transform-origin: bottom;
-		animation: eq 0.9s ease-in-out infinite;
-	}
-	@keyframes eq {
-		0%,
-		100% {
-			transform: scaleY(0.25);
-		}
-		50% {
-			transform: scaleY(1);
-		}
-	}
 	@keyframes success-pop {
 		0% {
 			transform: scale(0.7);
@@ -510,12 +452,6 @@
 		100% {
 			transform: scale(1);
 			opacity: 1;
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.eq-bar {
-			animation: none;
-			transform: scaleY(0.6);
 		}
 	}
 </style>
