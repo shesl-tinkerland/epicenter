@@ -43,6 +43,12 @@
 		showAdvanced?: boolean;
 	} = $props();
 
+	// The settings page wants the full surface; the first-run wizard wants the
+	// minimal one. The two move together: the only caller that hides the advanced
+	// fields is the wizard, and it also wants the local model selector collapsed
+	// to its download hero. One signal, both behaviors.
+	const compact = $derived(!showAdvanced);
+
 	const currentServiceCapabilities = $derived(
 		PROVIDERS[settings.get('transcription.service')].capabilities,
 	);
@@ -296,6 +302,7 @@
 	{:else if settings.get('transcription.service') === 'whispercpp'}
 		<div class="space-y-4">
 			<LocalModelSelector
+				{compact}
 				models={WHISPER_MODELS}
 				title="Whisper Model"
 				description="Download a pre-built model or add your own to the models folder. Models run locally for private, offline transcription."
@@ -321,6 +328,7 @@
 	{:else if settings.get('transcription.service') === 'parakeet'}
 		<div class="space-y-4">
 			<LocalModelSelector
+				{compact}
 				models={PARAKEET_MODELS}
 				title="Parakeet Model"
 				description="Parakeet is the recommended fast local model. It runs on this device, downloads once, and automatically detects supported spoken languages."
@@ -353,6 +361,7 @@
 	{:else if settings.get('transcription.service') === 'moonshine'}
 		<div class="space-y-4">
 			<LocalModelSelector
+				{compact}
 				models={MOONSHINE_MODELS}
 				title="Moonshine Model"
 				description="Moonshine is an efficient ONNX model by UsefulSensors. English-only with fast inference and small model sizes (~30 MB)."
