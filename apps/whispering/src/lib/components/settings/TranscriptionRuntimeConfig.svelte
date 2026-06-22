@@ -38,11 +38,9 @@
 
 	let {
 		showAdvanced = true,
-		class: className,
 	}: {
 		/** When false, hide the advanced fields (unload policy, language, prompt). */
 		showAdvanced?: boolean;
-		class?: string;
 	} = $props();
 
 	const currentServiceCapabilities = $derived(
@@ -84,7 +82,7 @@
 	);
 </script>
 
-<Field.Group class={className}>
+<Field.Group>
 	{#if isSelectedServiceUnavailable && selectedTranscriptionProvider}
 		<Alert.Root variant="warning">
 			<Alert.Title>Desktop-only service selected</Alert.Title>
