@@ -2,14 +2,12 @@
 	import { Badge } from '@epicenter/ui/badge';
 	import { Button } from '@epicenter/ui/button';
 	import * as Card from '@epicenter/ui/card';
-	import * as Collapsible from '@epicenter/ui/collapsible';
 	import * as Empty from '@epicenter/ui/empty';
 	import * as Field from '@epicenter/ui/field';
 	import * as Item from '@epicenter/ui/item';
 	import { Progress } from '@epicenter/ui/progress';
 	import { toast } from '@epicenter/ui/sonner';
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Download from '@lucide/svelte/icons/download';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
 	import HardDriveDownload from '@lucide/svelte/icons/hard-drive-download';
@@ -38,16 +36,15 @@
 	import LocalModelDownloadCard from './LocalModelDownloadCard.svelte';
 
 	/**
-	 * One happy path per engine: an empty-state hero that downloads the
-	 * recommended model, or a summary row showing the active one. The full
-	 * list (catalog download cards, custom folder entries, the folder help
-	 * box) collapses behind "All models". The list is backed by the engine's
-	 * models folder; the bindable value is the active entry's name.
+	 * The engine's model library, in two shapes. `compact` (the first-run
+	 * wizard) is a single hero: download the recommended model, or a one-line
+	 * summary of the active one. Full (the settings page) is a flat list of
+	 * every model, no disclosure: catalog rows you download/activate, any custom
+	 * on-disk entries, and a bring-your-own footer. The list is backed by the
+	 * engine's models folder; the bindable value is the active entry's name.
 	 *
-	 * `compact` drops everything past the hero (the "All models" list, the
-	 * bring-your-own box, the footer, and the summary's "Change" button): the
-	 * first-run wizard wants one action, not the whole library, which stays on
-	 * the settings page where `compact` is false.
+	 * `bare` drops the surrounding card chrome so a host (the first-run panel)
+	 * can present the hero as attached content rather than a card-in-a-card.
 	 */
 	type LocalModelSelectorProps = {
 		/**
@@ -71,6 +68,13 @@
 
 		/** Render the hero only, for the first-run wizard. See the type doc. */
 		compact?: boolean;
+
+		/**
+		 * Drop the surrounding card chrome (border, header title/description) and
+		 * render the body inline, so a host can present the hero as content
+		 * attached to its own surface rather than a card-in-a-card.
+		 */
+		bare?: boolean;
 	};
 
 	let {
@@ -80,6 +84,7 @@
 		value = $bindable(),
 		footer,
 		compact = false,
+		bare = false,
 	}: LocalModelSelectorProps = $props();
 
 	const engine = $derived(models[0].engine);
@@ -117,14 +122,6 @@
 	// progress there too.
 	const recommendedState = $derived(recommendedDownload.state);
 
-	/** Whether the full list behind "All models" is expanded. */
-	let allModelsOpen = $state(false);
-
-	// Plain variable, not $state: refreshEntries runs inside the rescan
-	// effect, and a reactive read here would make the effect track entries
-	// and re-run on its own assignment.
-	let hasDecidedInitialOpen = false;
-
 	async function refreshEntries() {
 		if (!tauri) return;
 		entries = await listModelEntries(engine);
@@ -133,13 +130,6 @@
 		// so `isInstalled` (and the "Downloaded" badge it drives) is settled
 		// before the listing renders, instead of racing the next render.
 		await Promise.all(models.map((model) => localModelDownloads.get(model).refresh()));
-		// A user who already brought their own model gets the list, not a
-		// download pitch: when nothing is active and the first scan finds
-		// custom entries, start with the list open instead of the hero.
-		if (!hasDecidedInitialOpen) {
-			hasDecidedInitialOpen = true;
-			if (!value && customEntries.length > 0) allModelsOpen = true;
-		}
 	}
 
 	async function downloadRecommendedModel() {
@@ -241,12 +231,21 @@
 
 <svelte:window onfocus={refreshEntries} />
 
-<Card.Root>
-	<Card.Header>
-		<Card.Title class="text-lg">{title}</Card.Title>
-		<Card.Description>{description}</Card.Description>
-	</Card.Header>
-	<Card.Content class="space-y-3">
+{#snippet body()}
+	{#if isSelectionMissing}
+		<div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+			<p class="text-sm font-medium text-amber-600 dark:text-amber-400">
+				Selected model is missing
+			</p>
+			<p class="mt-1 text-sm text-muted-foreground">
+				"{value}" is no longer in the models folder. Download it again, or add
+				your own and activate it.
+			</p>
+		</div>
+	{/if}
+
+	{#if compact}
+		<!-- First-run hero: one action, not the whole library. -->
 		{#if value && !isSelectionMissing}
 			<Item.Root variant="outline">
 				<Item.Content>
@@ -265,18 +264,9 @@
 				</Item.Content>
 				<Item.Actions>
 					<Badge class="text-xs">Active</Badge>
-					{#if !compact}
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={() => (allModelsOpen = true)}
-						>
-							Change
-						</Button>
-					{/if}
 				</Item.Actions>
 			</Item.Root>
-		{:else if !value && (compact || customEntries.length === 0)}
+		{:else if !value}
 			<Empty.Root class="py-6">
 				<Empty.Media variant="icon">
 					<HardDriveDownload class="size-5" />
@@ -315,108 +305,95 @@
 				</Empty.Content>
 			</Empty.Root>
 		{/if}
+	{:else}
+		<!-- Settings: the whole library as a flat list, no disclosure. -->
+		{#each models as model (model.id)}
+			<LocalModelDownloadCard
+				{model}
+				bind:value
+				recommended={models.length > 1 && model.id === recommended.id}
+				onDiskChange={refreshEntries}
+			/>
+		{/each}
 
-		{#if isSelectionMissing}
-			<div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-				<p class="text-sm font-medium text-amber-600 dark:text-amber-400">
-					Selected model is missing
-				</p>
-				<p class="mt-1 text-sm text-muted-foreground">
-					"{value}" is no longer in the models folder. Download it again, or add
-					your own and activate it.
-				</p>
-			</div>
-		{/if}
-
-		{#if !compact}
-		<Collapsible.Root bind:open={allModelsOpen}>
-			<Collapsible.Trigger
-				class="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 [&[data-state=open]>svg]:rotate-180"
+		{#each customEntries as entry (entry.name)}
+			{@const isActive = value === entry.name}
+			<div
+				class="flex items-center gap-3 p-3 rounded-lg border {isActive
+					? 'border-primary bg-primary/5'
+					: ''}"
 			>
-				All models ({models.length + customEntries.length})
-				<ChevronDown
-					class="size-4 shrink-0 text-muted-foreground transition-transform"
-				/>
-			</Collapsible.Trigger>
-			<Collapsible.Content class="space-y-3 pt-3">
-				{#each models as model (model.id)}
-					<LocalModelDownloadCard
-						{model}
-						bind:value
-						recommended={models.length > 1 && model.id === recommended.id}
-						onDiskChange={refreshEntries}
-					/>
-				{/each}
-
-				{#each customEntries as entry (entry.name)}
-					{@const isActive = value === entry.name}
-					<div
-						class="flex items-center gap-3 p-3 rounded-lg border {isActive
-							? 'border-primary bg-primary/5'
-							: ''}"
-					>
-						<div class="flex-1">
-							<div class="flex items-center gap-2">
-								<span class="font-medium">{entry.name}</span>
-								{#if isActive}
-									<Badge variant="default" class="text-xs">Active</Badge>
-								{/if}
-							</div>
-							<div class="text-sm text-muted-foreground">
-								{entry.linked ? 'Your model (linked)' : 'Your model'}
-							</div>
-						</div>
-
-						<div class="flex items-center gap-2">
-							{#if isActive}
-								<Button size="sm" variant="default" disabled>
-									<CheckIcon class="size-4 mr-1" />
-									Activated
-								</Button>
-							{:else}
-								<Button
-									size="sm"
-									variant="outline"
-									onclick={() => activate(entry.name)}
-								>
-									Activate
-								</Button>
-							{/if}
-							<Button
-								size="sm"
-								variant="ghost"
-								onclick={() => removeEntry(entry)}
-							>
-								<X class="size-4" />
-							</Button>
-						</div>
+				<div class="flex-1">
+					<div class="flex items-center gap-2">
+						<span class="font-medium">{entry.name}</span>
+						{#if isActive}
+							<Badge variant="default" class="text-xs">Active</Badge>
+						{/if}
 					</div>
-				{/each}
-
-				<div class="rounded-lg border bg-muted/50 p-4 space-y-3">
-					<Field.Description>
-						Have your own model? Link a {modelKind === 'directory'
-							? 'model directory'
-							: 'model file (.bin, .gguf, or .ggml)'} from anywhere on disk and it
-						appears in this list, without copying a second copy. Or drop one into
-						the models folder yourself.
-					</Field.Description>
-					<div class="flex flex-wrap gap-2">
-						<Button variant="outline" size="sm" onclick={linkModel}>
-							<Link class="size-4 mr-2" />
-							Link a model
-						</Button>
-						<Button variant="outline" size="sm" onclick={openModelsFolder}>
-							<FolderOpen class="size-4 mr-2" />
-							Open Models Folder
-						</Button>
+					<div class="text-sm text-muted-foreground">
+						{entry.linked ? 'Your model (linked)' : 'Your model'}
 					</div>
-					{#if footer}
-						{@render footer()}
-					{/if}
 				</div>
-			</Collapsible.Content>
-		</Collapsible.Root>
-		{/if}
-	</Card.Content>
-</Card.Root>
+
+				<div class="flex items-center gap-2">
+					{#if isActive}
+						<Button size="sm" variant="default" disabled>
+							<CheckIcon class="size-4 mr-1" />
+							Activated
+						</Button>
+					{:else}
+						<Button
+							size="sm"
+							variant="outline"
+							onclick={() => activate(entry.name)}
+						>
+							Activate
+						</Button>
+					{/if}
+					<Button size="sm" variant="ghost" onclick={() => removeEntry(entry)}>
+						<X class="size-4" />
+					</Button>
+				</div>
+			</div>
+		{/each}
+
+		<div class="rounded-lg border bg-muted/50 p-4 space-y-3">
+			<Field.Description>
+				Have your own model? Link a {modelKind === 'directory'
+					? 'model directory'
+					: 'model file (.bin, .gguf, or .ggml)'} from anywhere on disk and it
+				appears in this list, without copying a second copy. Or drop one into the
+				models folder yourself.
+			</Field.Description>
+			<div class="flex flex-wrap gap-2">
+				<Button variant="outline" size="sm" onclick={linkModel}>
+					<Link class="size-4 mr-2" />
+					Link a model
+				</Button>
+				<Button variant="outline" size="sm" onclick={openModelsFolder}>
+					<FolderOpen class="size-4 mr-2" />
+					Open Models Folder
+				</Button>
+			</div>
+			{#if footer}
+				{@render footer()}
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
+{#if bare}
+	<div class="space-y-3">
+		{@render body()}
+	</div>
+{:else}
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-lg">{title}</Card.Title>
+			<Card.Description>{description}</Card.Description>
+		</Card.Header>
+		<Card.Content class="space-y-3">
+			{@render body()}
+		</Card.Content>
+	</Card.Root>
+{/if}
