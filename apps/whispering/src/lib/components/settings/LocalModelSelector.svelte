@@ -99,11 +99,6 @@
 		(entries ?? []).filter((entry) => !catalogNames.has(entry.name)),
 	);
 
-	// The active selection vanished from the folder (deleted or renamed).
-	const isSelectionMissing = $derived(
-		!!value && entries !== null && !entries.some((e) => e.name === value),
-	);
-
 	/** The catalog model behind the active entry, when it is a catalog one. */
 	const activeCatalogModel = $derived(
 		models.find((model) => modelEntryName(model) === value) ?? null,
@@ -112,6 +107,28 @@
 	const activeCustomEntry = $derived(
 		customEntries.find((entry) => entry.name === value) ?? null,
 	);
+
+	// Acquire the active catalog model's download handle in its own derived so the
+	// missing-check below can track its `.state` (a derived does not depend on
+	// state it created itself, so acquisition and the state read must be separate).
+	const activeCatalogDownload = $derived(
+		activeCatalogModel ? localModelDownloads.get(activeCatalogModel) : null,
+	);
+
+	// "Missing" means nothing on disk backs the active selection. For a catalog
+	// model, read the global download handle, not the event-driven folder scan:
+	// the handle survives this component and flips the moment a download promotes
+	// its files, so a model downloaded after the user navigated away (e.g. switched
+	// to Cloud mid-download, unmounting this selector) stops reading as missing
+	// without waiting for a window-focus rescan. Custom (bring-your-own) entries
+	// have no handle and fall back to the scan.
+	const isSelectionMissing = $derived.by(() => {
+		if (!value) return false;
+		if (activeCatalogDownload) {
+			return activeCatalogDownload.state.type === 'not-downloaded';
+		}
+		return entries !== null && !entries.some((e) => e.name === value);
+	});
 
 	/** The engine's default download; the hero builds its action around it. */
 	const recommended = $derived(RECOMMENDED_MODELS[engine]);
