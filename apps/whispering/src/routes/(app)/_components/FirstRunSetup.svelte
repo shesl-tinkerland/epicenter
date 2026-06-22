@@ -228,7 +228,7 @@
 
 			<Button
 				size="lg"
-				class="w-full sm:w-auto"
+				class="w-full"
 				onclick={() => (showWelcome = false)}
 			>
 				Get started
