@@ -22,13 +22,11 @@
 	import {
 		deleteModelEntry,
 		linkModelEntry,
-		listModelEntries,
 		type ModelEntry,
 		revealModelsFolder,
 	} from '$lib/services/transcription/local-model-folder';
 	import { PROVIDERS } from '$lib/services/transcription/providers';
-	import { localModelDownloads } from '$lib/state/local-model-downloads.svelte';
-	import { tauri } from '#platform/tauri';
+	import { modelFolder } from '$lib/state/model-folder.svelte';
 	import {
 		announceModelDelete,
 		announceModelDownload,
@@ -90,14 +88,20 @@
 	const engine = $derived(models[0].engine);
 	const modelKind = $derived(PROVIDERS[engine].modelKind);
 
-	/** Folder entry names the catalog cards already represent. */
-	const catalogNames = $derived(new Set(models.map(modelEntryName)));
+	// The one shared folder store for this engine: the single source of disk state
+	// (the scan) and in-flight downloads. Every view (this selector, its hero, each
+	// catalog row) reads it, so a download started anywhere updates them all
+	// reactively; nothing here keeps a private scan that could go stale.
+	const folder = $derived(modelFolder(models));
 
-	let entries = $state<ModelEntry[] | null>(null);
+	// Re-scan on mount and when the engine changes. The store persists across
+	// mounts, so an explicit refresh here catches a folder that changed while it
+	// was unmounted; window focus catches changes made while mounted.
+	$effect(() => {
+		folder.refresh();
+	});
 
-	const customEntries = $derived(
-		(entries ?? []).filter((entry) => !catalogNames.has(entry.name)),
-	);
+	const customEntries = $derived(folder.customEntries());
 
 	/** The catalog model behind the active entry, when it is a catalog one. */
 	const activeCatalogModel = $derived(
@@ -108,59 +112,30 @@
 		customEntries.find((entry) => entry.name === value) ?? null,
 	);
 
-	// Acquire the active catalog model's download handle in its own derived so the
-	// missing-check below can track its `.state` (a derived does not depend on
-	// state it created itself, so acquisition and the state read must be separate).
-	const activeCatalogDownload = $derived(
-		activeCatalogModel ? localModelDownloads.get(activeCatalogModel) : null,
+	// "Missing" means nothing in the folder backs the active selection. One truth:
+	// the store's scan, which is global and reactive, so a model downloaded after
+	// the user navigated away no longer reads as missing and needs no special-case.
+	const isSelectionMissing = $derived(
+		!!value && folder.loaded && !folder.present(value),
 	);
-
-	// "Missing" means nothing on disk backs the active selection. For a catalog
-	// model, read the global download handle, not the event-driven folder scan:
-	// the handle survives this component and flips the moment a download promotes
-	// its files, so a model downloaded after the user navigated away (e.g. switched
-	// to Cloud mid-download, unmounting this selector) stops reading as missing
-	// without waiting for a window-focus rescan. Custom (bring-your-own) entries
-	// have no handle and fall back to the scan.
-	const isSelectionMissing = $derived.by(() => {
-		if (!value) return false;
-		if (activeCatalogDownload) {
-			return activeCatalogDownload.state.type === 'not-downloaded';
-		}
-		return entries !== null && !entries.some((e) => e.name === value);
-	});
 
 	/** The engine's default download; the hero builds its action around it. */
 	const recommended = $derived(RECOMMENDED_MODELS[engine]);
-	const recommendedDownload = $derived(localModelDownloads.get(recommended));
 
-	// Aliased so the template narrows the union per branch. Shared with the
-	// catalog row for the same model, so a download started here shows its
-	// progress there too.
-	const recommendedState = $derived(recommendedDownload.state);
-
-	async function refreshEntries() {
-		if (!tauri) return;
-		entries = await listModelEntries(engine);
-		// The folder is user-editable truth, so the catalog handles re-check
-		// disk on the same signal that rescans the folder. Await the disk-stat
-		// so `isInstalled` (and the "Downloaded" badge it drives) is settled
-		// before the listing renders, instead of racing the next render.
-		await Promise.all(models.map((model) => localModelDownloads.get(model).refresh()));
-	}
+	// Aliased so the template narrows the union per branch. Shared with the catalog
+	// row for the same model, so a download started here shows its progress there.
+	const recommendedState = $derived(folder.stateOf(recommended));
 
 	async function downloadRecommendedModel() {
-		const entryName = announceModelDownload(await recommendedDownload.download());
-		if (!entryName) return;
-		// Rescan before selecting so the new entry is already in the list when
-		// `value` flips, instead of flashing "Selected model is missing" for the
-		// duration of the rescan.
-		await refreshEntries();
-		value = entryName;
+		// The store re-scans itself on completion, so `value` lands on a present
+		// entry instead of flashing "Selected model is missing".
+		const downloaded = announceModelDownload(await folder.download(recommended));
+		if (!downloaded) return;
+		value = downloaded;
 	}
 
 	async function cancelRecommendedDownload() {
-		await recommendedDownload.cancel();
+		await folder.cancel(recommended);
 	}
 
 	/** Point the engine's selection at an on-disk entry by name. */
@@ -168,13 +143,6 @@
 		value = name;
 		toast.success('Model activated');
 	}
-
-	// Rescan on mount and when the engine changes. Selection changes do not
-	// change disk; download/delete handlers refresh after they change the folder.
-	$effect(() => {
-		void engine;
-		refreshEntries();
-	});
 
 	async function openModelsFolder() {
 		const { error } = await revealModelsFolder(engine);
@@ -231,7 +199,7 @@
 		}
 		// Rescan before selecting so the new link is already in the list when
 		// `value` flips (no transient "Selected model is missing" flash).
-		await refreshEntries();
+		await folder.refresh();
 		value = entryName;
 		toast.success('Model linked', {
 			description: `${entryName} now points to your file. Deleting it later removes only the link.`,
@@ -242,11 +210,11 @@
 		if (!announceModelDelete(await deleteModelEntry({ engine, name: entry.name })))
 			return;
 		if (value === entry.name) value = '';
-		await refreshEntries();
+		await folder.refresh();
 	}
 </script>
 
-<svelte:window onfocus={refreshEntries} />
+<svelte:window onfocus={folder.refresh} />
 
 {#snippet body()}
 	{#if isSelectionMissing}
@@ -326,10 +294,10 @@
 		<!-- Settings: the whole library as a flat list, no disclosure. -->
 		{#each models as model (model.id)}
 			<LocalModelDownloadCard
+				{folder}
 				{model}
 				bind:value
 				recommended={models.length > 1 && model.id === recommended.id}
-				onDiskChange={refreshEntries}
 			/>
 		{/each}
 

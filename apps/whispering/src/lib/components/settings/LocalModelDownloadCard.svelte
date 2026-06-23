@@ -11,47 +11,50 @@
 		type LocalModelConfig,
 		modelEntryName,
 	} from '$lib/constants/local-models';
-	import { localModelDownloads } from '$lib/state/local-model-downloads.svelte';
+	import { deleteModelEntry } from '$lib/services/transcription/local-model-folder';
+	import type { ModelFolder } from '$lib/state/model-folder.svelte';
 	import {
 		announceModelDelete,
 		announceModelDownload,
 	} from './local-model-toasts';
 
 	let {
+		folder,
 		model,
 		value = $bindable(),
 		recommended = false,
-		onDiskChange,
 	}: {
+		/** The shared folder store, owned by the selector and passed to every row. */
+		folder: ModelFolder;
 		model: LocalModelConfig;
 		/** Bindable selected folder entry name for this engine. */
 		value: string;
 		/** Show the Recommended badge; the selector decides when it guides a choice. */
 		recommended?: boolean;
-		/** Re-scan the parent selector after this card changes the models folder. */
-		onDiskChange: () => void | Promise<void>;
 	} = $props();
 
-	// Shared per-model handle: the selector hero reads the same one, so a
-	// download started in either place shows its progress in both.
-	const download = $derived(localModelDownloads.get(model));
-
-	// Aliased so the template narrows the union per branch.
-	const modelState = $derived(download.state);
+	// Aliased so the template narrows the union per branch. The state comes from
+	// the shared store, so a download started anywhere shows its progress here.
+	const modelState = $derived(folder.stateOf(model));
 	const entryName = $derived(modelEntryName(model));
 	const isActive = $derived(value === entryName && modelState.type === 'ready');
 
 	async function downloadModel() {
-		const entryName = announceModelDownload(await download.download());
-		if (!entryName) return;
-		value = entryName;
-		await onDiskChange();
+		// The store re-scans itself on completion, so the shared selector reacts.
+		const downloaded = announceModelDownload(await folder.download(model));
+		if (!downloaded) return;
+		value = downloaded;
 	}
 
 	async function deleteModel() {
-		if (!announceModelDelete(await download.delete())) return;
+		if (
+			!announceModelDelete(
+				await deleteModelEntry({ engine: model.engine, name: entryName }),
+			)
+		)
+			return;
 		if (value === entryName) value = '';
-		await onDiskChange();
+		await folder.refresh();
 	}
 
 	async function activateModel() {
@@ -60,7 +63,7 @@
 	}
 
 	async function cancelDownload() {
-		await download.cancel();
+		await folder.cancel(model);
 	}
 </script>
 

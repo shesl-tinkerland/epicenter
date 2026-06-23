@@ -1,7 +1,7 @@
 import { toast } from '@epicenter/ui/sonner';
 import type { Result } from 'wellcrafted/result';
 import type { ModelFolderError } from '$lib/services/transcription/local-model-folder';
-import type { ModelDownloadResult } from '$lib/state/local-model-downloads.svelte';
+import type { ModelDownloadResult } from '$lib/state/model-folder.svelte';
 
 /**
  * Toast the outcome of a catalog download and return the folder entry name to
