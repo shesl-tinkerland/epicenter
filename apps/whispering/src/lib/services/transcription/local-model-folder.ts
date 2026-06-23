@@ -36,13 +36,28 @@ export type { ModelEntry, ModelFolderError } from '$lib/tauri/commands';
 type Engine = LocalModelConfig['engine'];
 
 /**
- * List every selectable entry in the engine's models folder. Rust applies the
- * per-engine shape filter (Whisper model files; directories for the others),
- * resolves links, and sorts. Returns an empty list on any error (never
- * rejects), so the selector always has something to render.
+ * List every selectable entry in the engine's models folder, each judged
+ * `complete` against the catalog in the same pass. Rust applies the per-engine
+ * shape filter (Whisper model files; directories for the others), resolves
+ * links, sorts, and stats completeness; the webview owns the catalog (file names
+ * and expected sizes), so it passes the engine's models in. Returns an empty
+ * list on any error (never rejects), so the selector always has something to
+ * render.
  */
-export async function listModelEntries(engine: Engine): Promise<ModelEntry[]> {
-	const { data } = await commands.listModelEntries(engine);
+export async function listModelEntries(
+	catalog: readonly [LocalModelConfig, ...LocalModelConfig[]],
+): Promise<ModelEntry[]> {
+	const { data } = await commands.listModelEntries(
+		catalog[0].engine,
+		catalog.map((model) => {
+			const { filenames, expected } = modelSizeChecks(model);
+			return {
+				entryName: modelEntryName(model),
+				filenames,
+				expectedSizes: expected,
+			};
+		}),
+	);
 	return data ?? [];
 }
 
@@ -136,26 +151,6 @@ function modelSizeChecks(model: LocalModelConfig): {
  */
 export function createModelStorage(model: LocalModelConfig) {
 	return {
-		/**
-		 * Whether a valid install exists in the folder. JS passes the catalog's
-		 * expected sizes; Rust resolves the entry through any link, stats each file,
-		 * and returns the completeness verdict (the 90% rule lives in Rust next to
-		 * the stat). One path serves downloaded, linked, and hand-dropped installs,
-		 * so a linked-but-broken model reads as not installed. Never rejects; any
-		 * error reads as not installed.
-		 */
-		async isInstalled(): Promise<boolean> {
-			const { filenames, expected } = modelSizeChecks(model);
-			const { data: statuses } = await commands.resolveModelFiles(
-				model.engine,
-				modelEntryName(model),
-				filenames,
-				expected,
-			);
-			if (!statuses || statuses.length !== expected.length) return false;
-			return statuses.every((status) => status.complete);
-		},
-
 		/**
 		 * Download the model to its canonical path. Rust stages, integrity-checks
 		 * each file, and promotes with one rename; a cancel or error cleans up the

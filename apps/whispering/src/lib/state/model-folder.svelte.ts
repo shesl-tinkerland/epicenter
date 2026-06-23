@@ -63,10 +63,10 @@ function createModelFolder(catalog: readonly [LocalModelConfig, ...LocalModelCon
 	const engine = catalog[0].engine;
 
 	// DISK STATE. `entries` is the folder scan, `null` until the first load so the
-	// UI can tell "loading" from "empty". `completeness` is each catalog model's
-	// installed verdict, refreshed in the SAME cycle as the scan.
+	// UI can tell "loading" from "empty". Each entry carries its own `complete`
+	// verdict, judged against the catalog by the one Rust scan, so "ready" is a
+	// pure read of the scan with no second source to drift from.
 	let entries = $state<ModelEntry[] | null>(null);
-	const completeness = new SvelteMap<string, boolean>();
 
 	// IN-FLIGHT TRANSFERS, keyed by model id. Progress re-`set`s the entry
 	// (SvelteMap tracks `set`, not a nested mutation), so the bar repaints. The
@@ -83,20 +83,9 @@ function createModelFolder(catalog: readonly [LocalModelConfig, ...LocalModelCon
 
 	async function refresh() {
 		if (!tauri) return;
-		// Scan the folder and re-check each catalog model's completeness on the one
-		// signal, so the listing and the "ready" verdicts settle together.
-		const [list] = await Promise.all([
-			listModelEntries(engine),
-			Promise.all(
-				catalog.map(async (model) =>
-					completeness.set(
-						modelEntryName(model),
-						await createModelStorage(model).isInstalled(),
-					),
-				),
-			),
-		]);
-		entries = list;
+		// One scan returns each entry already judged complete against the catalog,
+		// so the listing and the "ready" verdicts are the same data.
+		entries = await listModelEntries(catalog);
 	}
 
 	void refresh();
@@ -131,7 +120,8 @@ function createModelFolder(catalog: readonly [LocalModelConfig, ...LocalModelCon
 					cancelling: transfer.cancelling,
 				};
 			const name = modelEntryName(model);
-			return present(name) && completeness.get(name)
+			const entry = (entries ?? []).find((e) => e.name === name);
+			return entry?.complete
 				? { type: 'ready' }
 				: { type: 'not-downloaded' };
 		},
@@ -154,8 +144,9 @@ function createModelFolder(catalog: readonly [LocalModelConfig, ...LocalModelCon
 			const storage = createModelStorage(model);
 			const name = modelEntryName(model);
 
-			if (await storage.isInstalled()) {
-				completeness.set(name, true);
+			// Already installed? A fresh scan is the one truth; skip the transfer.
+			await refresh();
+			if ((entries ?? []).find((entry) => entry.name === name)?.complete) {
 				transfers.delete(model.id);
 				return Ok({ entryName: name, outcome: 'already-installed' });
 			}

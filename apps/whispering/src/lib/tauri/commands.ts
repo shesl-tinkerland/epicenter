@@ -114,7 +114,6 @@ export type {
 	LocalModelState,
 	ModelEntry,
 	ModelFileDownload,
-	ModelFileStatus,
 	ModelFolderError,
 	ModelImportError,
 	ModelStateEvent,

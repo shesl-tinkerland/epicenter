@@ -67,6 +67,11 @@ pub struct ModelEntry {
     /// Whether the entry is a symlink (a "bring your own model" link). Display
     /// only ("Your model (linked)"); it does not change how the entry loads.
     pub linked: bool,
+    /// Whether this is a complete install. A catalog entry (its name matches a
+    /// model in the passed catalog) is checked against that model's expected
+    /// files at the 90% floor; a custom (non-catalog) entry has no expectation
+    /// and reads as complete.
+    pub complete: bool,
 }
 
 /// One file to download for a model. Mirrors the catalog shape: a Whisper model
@@ -82,11 +87,24 @@ pub struct ModelFileDownload {
     pub size_bytes: f64,
 }
 
+/// One catalog model's expectation, passed by the webview (which owns the
+/// catalog) so the scan can judge each entry's completeness in the same pass.
+/// `filenames` empty means the entry is itself the file (Whisper), checked
+/// against `expected_sizes[0]`; otherwise one filename per file inside the entry
+/// directory, each checked against the aligned `expected_sizes`.
+#[derive(Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogModel {
+    /// The model's folder entry name, matched against scanned entry names.
+    pub entry_name: String,
+    pub filenames: Vec<String>,
+    pub expected_sizes: Vec<f64>,
+}
+
 /// One file's presence and completeness in a model entry, resolved through any
 /// symlink. The webview supplies expected catalog sizes and reads back both the
-/// stat'd `size` (for messaging) and the `complete` verdict (for installed /
-/// truncated decisions). The completeness rule itself lives in Rust; see
-/// `is_size_complete`.
+/// stat'd `size` (for messaging) and the `complete` verdict. The completeness
+/// rule itself lives in Rust; see `is_size_complete`.
 #[derive(Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelFileStatus {
@@ -101,11 +119,15 @@ pub struct ModelFileStatus {
 /// List every selectable entry in the engine's models folder: model files
 /// (.bin/.gguf/.ggml) for Whisper, directories for Parakeet and Moonshine, plus
 /// symlinks to either. Hidden entries and in-flight `.partial` staging are
-/// skipped. Returns an empty list when the folder does not exist yet.
+/// skipped. Returns an empty list when the folder does not exist yet. Each
+/// entry's `complete` verdict is judged against the matching catalog model in
+/// one pass (the webview owns the catalog and passes it in); a custom entry,
+/// which matches no catalog model, reads as complete.
 #[tauri::command]
 #[specta::specta]
 pub fn list_model_entries(
     engine: Engine,
+    catalog: Vec<CatalogModel>,
     app_handle: AppHandle,
 ) -> Result<Vec<ModelEntry>, ModelFolderError> {
     let models_dir = engine_models_path(&app_handle, engine)
@@ -134,11 +156,111 @@ pub fn list_model_entries(
             Engine::Parakeet | Engine::Moonshine => file_type.is_dir() || linked,
         };
         if keep {
-            entries.push(ModelEntry { name, linked });
+            // Judge completeness against the matching catalog model, resolving
+            // through any symlink; a custom (non-catalog) entry has no
+            // expectation and reads as complete.
+            let complete = catalog
+                .iter()
+                .find(|model| model.entry_name == name)
+                .map(|model| {
+                    entry_complete(
+                        &models_dir.join(&name),
+                        &model.filenames,
+                        &model.expected_sizes,
+                    )
+                })
+                .unwrap_or(true);
+            entries.push(ModelEntry {
+                name,
+                linked,
+                complete,
+            });
         }
     }
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(entries)
+}
+
+/// Whether an entry is a complete install: every expected file present and at
+/// least the completeness floor of its catalog size, resolved through any
+/// symlink. Empty `filenames` means the entry is itself the file (Whisper),
+/// checked against `expected_sizes[0]`; otherwise one per file inside the
+/// directory. Shares the `is_size_complete` floor with the download integrity
+/// check, so the read verdict and the write verdict can never drift.
+fn entry_complete(entry: &Path, filenames: &[String], expected_sizes: &[f64]) -> bool {
+    let sizes: Vec<Option<f64>> = if filenames.is_empty() {
+        vec![file_size(entry)]
+    } else {
+        filenames
+            .iter()
+            .map(|filename| {
+                if is_contained_entry_name(filename) {
+                    file_size(&entry.join(filename))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+    if sizes.len() != expected_sizes.len() {
+        return false;
+    }
+    sizes
+        .iter()
+        .zip(expected_sizes)
+        .all(|(size, &expected)| matches!(size, Some(actual) if is_size_complete(*actual, expected)))
+}
+
+/// Resolve one entry **through any symlink** and report each expected file's
+/// stat'd size and completeness verdict. The list scan (`list_model_entries`)
+/// folds completeness into one boolean per entry for the selector; this returns
+/// the per-file sizes the transcribe pre-flight needs to message a truncated
+/// download ("got 200MB, expected 488MB"). Both share the `is_size_complete`
+/// floor. An empty `filenames` means the entry is itself the file (Whisper).
+#[tauri::command]
+#[specta::specta]
+pub fn resolve_model_files(
+    engine: Engine,
+    name: String,
+    filenames: Vec<String>,
+    expected_sizes: Vec<f64>,
+    app_handle: AppHandle,
+) -> Result<Vec<ModelFileStatus>, ModelFolderError> {
+    if !is_contained_entry_name(&name) {
+        return Err(ModelFolderError::InvalidEntryName {
+            message: format!("Model entry name must be a single models-folder entry, got: {name}"),
+        });
+    }
+    let entry = engine_models_path(&app_handle, engine)
+        .map_err(|message| ModelFolderError::ReadFailed { message })?
+        .join(&name);
+
+    let sizes: Vec<Option<f64>> = if filenames.is_empty() {
+        vec![file_size(&entry)]
+    } else {
+        filenames
+            .iter()
+            .map(|filename| {
+                if is_contained_entry_name(filename) {
+                    file_size(&entry.join(filename))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    Ok(sizes
+        .into_iter()
+        .enumerate()
+        .map(|(index, size)| {
+            let complete = match (size, expected_sizes.get(index)) {
+                (Some(actual), Some(&expected)) => is_size_complete(actual, expected),
+                _ => false,
+            };
+            ModelFileStatus { size, complete }
+        })
+        .collect())
 }
 
 fn has_whisper_extension(name: &str) -> bool {
@@ -184,66 +306,6 @@ pub fn delete_model_entry(
     outcome.map_err(|e| ModelFolderError::DeleteFailed {
         message: format!("Could not delete \"{name}\": {e}"),
     })
-}
-
-/// Resolve an entry **through any symlink** and report each expected file's size
-/// and completeness verdict. The webview passes the expected catalog sizes (it
-/// owns the catalog); the 90% completeness rule lives here next to the stat, so
-/// "what counts as a complete file on disk" has one owner shared with the
-/// download integrity check (`is_size_complete`). An empty `filenames` means the
-/// entry is itself the file (Whisper) and returns one element checked against
-/// `expected_sizes[0]`; otherwise one element per filename (directory engines),
-/// each checked against the aligned `expected_sizes`. A dead link reports
-/// `size: None, complete: false`, so a linked-but-broken model reads as not
-/// installed.
-#[tauri::command]
-#[specta::specta]
-pub fn resolve_model_files(
-    engine: Engine,
-    name: String,
-    filenames: Vec<String>,
-    expected_sizes: Vec<f64>,
-    app_handle: AppHandle,
-) -> Result<Vec<ModelFileStatus>, ModelFolderError> {
-    if !is_contained_entry_name(&name) {
-        return Err(ModelFolderError::InvalidEntryName {
-            message: format!("Model entry name must be a single models-folder entry, got: {name}"),
-        });
-    }
-    let entry = engine_models_path(&app_handle, engine)
-        .map_err(|message| ModelFolderError::ReadFailed { message })?
-        .join(&name);
-
-    // Empty `filenames` => the entry itself is the file (Whisper); otherwise one
-    // file per name inside the entry directory.
-    let sizes: Vec<Option<f64>> = if filenames.is_empty() {
-        vec![file_size(&entry)]
-    } else {
-        filenames
-            .iter()
-            .map(|filename| {
-                if is_contained_entry_name(filename) {
-                    file_size(&entry.join(filename))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    };
-
-    // Pair each stat with its aligned expected size; a missing file (or a missing
-    // expectation) is never complete.
-    Ok(sizes
-        .into_iter()
-        .enumerate()
-        .map(|(index, size)| {
-            let complete = match (size, expected_sizes.get(index)) {
-                (Some(actual), Some(&expected)) => is_size_complete(actual, expected),
-                _ => false,
-            };
-            ModelFileStatus { size, complete }
-        })
-        .collect())
 }
 
 /// Clear whatever currently occupies a path before promoting onto it. Reads the
@@ -441,7 +503,8 @@ async fn run_staged_download(
 const COMPLETENESS_FLOOR: f64 = 0.9;
 
 /// The single completeness rule, shared by the download integrity check
-/// (`ensure_complete`) and the read-path verdict (`resolve_model_files`), so the
+/// (`ensure_complete`) and the read-path verdicts (`entry_complete`,
+/// `resolve_model_files`), so the
 /// threshold has one owner instead of a copy on each side of the IPC boundary.
 fn is_size_complete(received: f64, expected: f64) -> bool {
     received >= expected * COMPLETENESS_FLOOR
@@ -529,8 +592,9 @@ mod tests {
 
     #[test]
     fn is_size_complete_is_the_single_floor_shared_by_both_paths() {
-        // The same rule `ensure_complete` (download) and `resolve_model_files`
-        // (read) both call, so the threshold can never drift between them.
+        // The same rule `ensure_complete` (download) and the read-path verdicts
+        // (`entry_complete`, `resolve_model_files`) all call, so the threshold can
+        // never drift between them.
         assert!(is_size_complete(900.0, 1000.0));
         assert!(!is_size_complete(899.0, 1000.0));
         assert!(is_size_complete(1200.0, 1000.0));

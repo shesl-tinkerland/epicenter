@@ -222,11 +222,14 @@ export const commands = {
 	 *  List every selectable entry in the engine's models folder: model files
 	 *  (.bin/.gguf/.ggml) for Whisper, directories for Parakeet and Moonshine, plus
 	 *  symlinks to either. Hidden entries and in-flight `.partial` staging are
-	 *  skipped. Returns an empty list when the folder does not exist yet.
+	 *  skipped. Returns an empty list when the folder does not exist yet. Each
+	 *  entry's `complete` verdict is judged against the matching catalog model in
+	 *  one pass (the webview owns the catalog and passes it in); a custom entry,
+	 *  which matches no catalog model, reads as complete.
 	 */
-	listModelEntries: (engine: Engine) =>
+	listModelEntries: (engine: Engine, catalog: CatalogModel[]) =>
 		typedError<ModelEntry[], ModelFolderError>(
-			__TAURI_INVOKE('list_model_entries', { engine }),
+			__TAURI_INVOKE('list_model_entries', { engine, catalog }),
 		),
 	/**
 	 *  Remove one entry from the engine's models folder. A symlinked entry removes
@@ -239,16 +242,12 @@ export const commands = {
 			__TAURI_INVOKE('delete_model_entry', { engine, name }),
 		),
 	/**
-	 *  Resolve an entry **through any symlink** and report each expected file's size
-	 *  and completeness verdict. The webview passes the expected catalog sizes (it
-	 *  owns the catalog); the 90% completeness rule lives here next to the stat, so
-	 *  "what counts as a complete file on disk" has one owner shared with the
-	 *  download integrity check (`is_size_complete`). An empty `filenames` means the
-	 *  entry is itself the file (Whisper) and returns one element checked against
-	 *  `expected_sizes[0]`; otherwise one element per filename (directory engines),
-	 *  each checked against the aligned `expected_sizes`. A dead link reports
-	 *  `size: None, complete: false`, so a linked-but-broken model reads as not
-	 *  installed.
+	 *  Resolve one entry **through any symlink** and report each expected file's
+	 *  stat'd size and completeness verdict. The list scan (`list_model_entries`)
+	 *  folds completeness into one boolean per entry for the selector; this returns
+	 *  the per-file sizes the transcribe pre-flight needs to message a truncated
+	 *  download ("got 200MB, expected 488MB"). Both share the `is_size_complete`
+	 *  floor. An empty `filenames` means the entry is itself the file (Whisper).
 	 */
 	resolveModelFiles: (
 		engine: Engine,
@@ -372,6 +371,20 @@ export const events = {
 };
 
 /* Types */
+/**
+ *  One catalog model's expectation, passed by the webview (which owns the
+ *  catalog) so the scan can judge each entry's completeness in the same pass.
+ *  `filenames` empty means the entry is itself the file (Whisper), checked
+ *  against `expected_sizes[0]`; otherwise one filename per file inside the entry
+ *  directory, each checked against the aligned `expected_sizes`.
+ */
+export type CatalogModel = {
+	/**  The model's folder entry name, matched against scanned entry names. */
+	entryName: string;
+	filenames: string[];
+	expectedSizes: (number | null)[];
+};
+
 /**
  *  One command's binding, as sent from the FE registrar. `command_id` is the
  *  id the trigger event is emitted under; the FE filters by that command's `on`
@@ -610,6 +623,13 @@ export type ModelEntry = {
 	 *  only ("Your model (linked)"); it does not change how the entry loads.
 	 */
 	linked: boolean;
+	/**
+	 *  Whether this is a complete install. A catalog entry (its name matches a
+	 *  model in the passed catalog) is checked against that model's expected
+	 *  files at the 90% floor; a custom (non-catalog) entry has no expectation
+	 *  and reads as complete.
+	 */
+	complete: boolean;
 };
 
 /**
@@ -630,9 +650,8 @@ export type ModelFileDownload = {
 /**
  *  One file's presence and completeness in a model entry, resolved through any
  *  symlink. The webview supplies expected catalog sizes and reads back both the
- *  stat'd `size` (for messaging) and the `complete` verdict (for installed /
- *  truncated decisions). The completeness rule itself lives in Rust; see
- *  `is_size_complete`.
+ *  stat'd `size` (for messaging) and the `complete` verdict. The completeness
+ *  rule itself lives in Rust; see `is_size_complete`.
  */
 export type ModelFileStatus = {
 	/**
