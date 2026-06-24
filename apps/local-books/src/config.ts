@@ -45,6 +45,13 @@ export type AppConfig = {
 	 * as Intuit production requires: the tunnel forwards to this local port.
 	 */
 	callbackPort: number | null;
+	/**
+	 * Serve the agent a read-only surface: the daemon advertises the read tools
+	 * (`books_sql_query`, `books_report`) but withholds the QuickBooks write tool
+	 * (`recategorize_expense`). A safety posture for letting an agent analyze the
+	 * books without granting it the power to mutate QuickBooks. `LOCAL_BOOKS_READ_ONLY`.
+	 */
+	readOnly: boolean;
 };
 
 export type CliConfigOverrides = {
@@ -77,6 +84,7 @@ const ConfigFileSchema = Type.Object({
 	fullBackstopDays: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
 	pageSize: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
 	callbackPort: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+	readOnly: Type.Optional(Type.Boolean()),
 });
 type ConfigFile = Static<typeof ConfigFileSchema>;
 
@@ -96,6 +104,13 @@ function readConfigFile(dataDir: string): ConfigFile {
 function env(name: string): string | undefined {
 	const value = process.env[name];
 	return value && value.length > 0 ? value : undefined;
+}
+
+/** A boolean env flag: present and not `0`/`false` is true; absent is undefined. */
+function envFlag(name: string): boolean | undefined {
+	const value = env(name);
+	if (value === undefined) return undefined;
+	return value !== '0' && value.toLowerCase() !== 'false';
 }
 
 function resolveEntities(file: ConfigFile): string[] {
@@ -151,5 +166,6 @@ export function loadConfig(overrides: CliConfigOverrides = {}): AppConfig {
 		callbackPort: callbackPortEnv
 			? Number(callbackPortEnv)
 			: (file.callbackPort ?? null),
+		readOnly: envFlag('LOCAL_BOOKS_READ_ONLY') ?? file.readOnly ?? false,
 	};
 }

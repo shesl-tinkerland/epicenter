@@ -23,6 +23,7 @@ export function makeConfig(over: Partial<AppConfig> = {}): AppConfig {
 		keyringFile: null,
 		realmOverride: null,
 		callbackPort: null,
+		readOnly: false,
 		...over,
 	};
 }

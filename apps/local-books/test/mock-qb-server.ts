@@ -20,7 +20,13 @@ export type MockQbServer = {
 	apiBase: string;
 	tokenUrl: string;
 	realmId: string;
-	hits: { query: number; cdc: number; token: number; update: number };
+	hits: {
+		query: number;
+		cdc: number;
+		token: number;
+		update: number;
+		report: number;
+	};
 	/** Insert or update a live object; stamps a fresh LastUpdatedTime. */
 	put(entity: string, obj: Record<string, unknown>): void;
 	/** Read a stored object back (post-write assertions). */
@@ -66,7 +72,7 @@ export function startMockQbServer(
 	const tick = () => now();
 
 	const entities = new Map<string, Map<string, StoredObject>>();
-	const hits = { query: 0, cdc: 0, token: 0, update: 0 };
+	const hits = { query: 0, cdc: 0, token: 0, update: 0, report: 0 };
 	const rejectedTokens = new Set<string>();
 	let pending429 = 0;
 
@@ -232,6 +238,31 @@ export function startMockQbServer(
 				return Response.json({
 					CDCResponse: [{ QueryResponse: blocks }],
 					time: nowIso(now()),
+				});
+			}
+
+			// Reports API (live computed statement), e.g. GET /v3/company/<realm>/reports/ProfitAndLoss.
+			const reportMatch = new RegExp(
+				`^/v3/company/${realmId}/reports/([A-Za-z]+)$`,
+			).exec(url.pathname);
+			if (request.method === 'GET' && reportMatch) {
+				const throttled = throttleProblem();
+				if (throttled) return throttled;
+				const denied = authProblem(request);
+				if (denied) return denied;
+
+				hits.report += 1;
+				const name = reportMatch[1];
+				// A minimal but shaped report: echoes the period so a test can prove
+				// the params were passed through.
+				return Response.json({
+					Header: {
+						ReportName: name,
+						StartPeriod: url.searchParams.get('start_date'),
+						EndPeriod: url.searchParams.get('end_date'),
+						ReportBasis: url.searchParams.get('accounting_method') ?? 'Accrual',
+					},
+					Rows: { Row: [] },
 				});
 			}
 

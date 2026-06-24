@@ -69,6 +69,17 @@ export type QbClient = {
 		entity: string,
 		body: Record<string, unknown>,
 	): Promise<Result<QbObject, QbClientError>>;
+	/**
+	 * Run a computed report live (the Reports API, `GET /reports/<name>`). These
+	 * are the GAAP-structured statements QuickBooks owns the computation of (P&L,
+	 * balance sheet, ...); there is no CDC for them, so they are read live rather
+	 * than mirrored. `params` are passed through as the query string (`start_date`,
+	 * `end_date`, `accounting_method`, ...). Returns the report JSON verbatim.
+	 */
+	report(
+		name: string,
+		params: Record<string, string>,
+	): Promise<Result<Record<string, unknown>, QbClientError>>;
 };
 
 export type QbClientDeps = {
@@ -257,6 +268,17 @@ export function createQbClient(deps: QbClientDeps): QbClient {
 				});
 			}
 			return Ok(updated as QbObject);
+		},
+
+		async report(name, params) {
+			const { data, error } = await request(`reports/${name}`, params);
+			if (error) return { data: null, error };
+			if (data === null || typeof data !== 'object') {
+				return QbApiError.InvalidResponse({
+					detail: `report ${name} response was not a JSON object`,
+				});
+			}
+			return Ok(data as Record<string, unknown>);
 		},
 	};
 

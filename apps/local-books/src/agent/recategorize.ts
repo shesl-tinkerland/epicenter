@@ -27,8 +27,8 @@ import type { OpenQbClient } from './qb-access.ts';
 const LINE_DETAIL = 'AccountBasedExpenseLineDetail';
 
 export const RecategorizeError = defineErrors({
-	WriteBackUnavailable: ({ detail }: { detail: string }) => ({
-		message: `Recategorize is unavailable: ${detail}`,
+	NotAuthenticated: ({ detail }: { detail: string }) => ({
+		message: `Recategorize could not reach QuickBooks: ${detail}`,
 		detail,
 	}),
 	NotInMirror: ({ entity, id }: { entity: string; id: string }) => ({
@@ -89,7 +89,7 @@ export function createRecategorizeAction({
 	dbPath,
 	now,
 }: {
-	openQb: OpenQbClient | undefined;
+	openQb: OpenQbClient;
 	dbPath: string;
 	now: () => number;
 }) {
@@ -103,11 +103,6 @@ export function createRecategorizeAction({
 			"json_extract(raw, '$.Line')).",
 		input: RecategorizeInput,
 		handler: async (input) => {
-			if (!openQb) {
-				return RecategorizeError.WriteBackUnavailable({
-					detail: 'this daemon was started without a QuickBooks client',
-				});
-			}
 			const def = entityDef(input.entity);
 			const db = openBooksDb(dbPath);
 			try {
@@ -170,7 +165,7 @@ export function createRecategorizeAction({
 
 				const { data: qb, error: openError } = await openQb();
 				if (openError !== null) {
-					return RecategorizeError.WriteBackUnavailable({ detail: openError });
+					return RecategorizeError.NotAuthenticated({ detail: openError });
 				}
 
 				// Sparse update: send the full (modified) Line array with Id + the

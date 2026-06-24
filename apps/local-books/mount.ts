@@ -50,6 +50,7 @@ export function localBooksMount({
 			actions: createBooksAgentActions({
 				dbPath: dbPath(dataDir, realmId),
 				openQb,
+				readOnly: config.readOnly,
 			}),
 		}),
 	});
