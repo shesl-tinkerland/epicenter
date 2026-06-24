@@ -40,7 +40,8 @@ Mode is chosen from stored state: `--full` / no cursor / cursor older than the C
 `books.ts` + `mount.ts` wrap the mirror as an Epicenter **data daemon**: it holds the SQLite and serves it as dispatched actions, but never runs inference. A client agent loop (`@epicenter/workspace/agent`) opens the same synced room and dispatches the tools; the financial data leaves the machine only as a tool result.
 
 - `src/agent/books-query.ts` — `books_sql_query`, a read-only SQL query (`query`, auto-approved). Enforced read-only by a `new Database(path, { readonly: true })` connection, not a string check; results are row-capped.
-- `src/agent/books-actions.ts` — `createBooksAgentActions({ dbPath })`, the served registry. The write tools (`mark_reviewed`, `add_note`) need an overlay table (parked in the spec) and land here next, gated by the synchronous approval pause.
+- `src/agent/recategorize.ts` — `recategorize_expense`, the one QuickBooks write-back (`mutation`, so the loop pauses for approval). Write-THROUGH, never write-to-mirror: it reads the `SyncToken` from the mirror, sparse-updates the expense line `AccountRef` on a Purchase/Bill via `qb.update(...)`, then folds QuickBooks' authoritative response back into the mirror; the next CDC sync reconfirms it. A stale `SyncToken` is a 409, never a clobber. The QB client never holds credentials in this layer; `src/agent/qb-access.ts` (`makeQbAccess`) lazily opens a write-capable client from the realm's keyring.
+- `src/agent/books-actions.ts` — `createBooksAgentActions({ dbPath, openQb? })`, the served registry. Omit `openQb` for a read-only daemon; `recategorize_expense` then returns a clear "unavailable" error and the query still works. Local annotation tools (`mark_reviewed`, `add_note`) over an overlay table remain parked in the spec.
 
 The CLI binary (`bin.ts` -> `cli.ts`) does not import this layer, so `bun build --compile` of the CLI stays lean.
 

@@ -227,6 +227,23 @@ export function openBooksDb(path: string) {
 			tx();
 		},
 
+		/**
+		 * Fold just-mutated objects back into the mirror without advancing the CDC
+		 * cursor. The write-back path (recategorize) uses this so a read sees the
+		 * new state immediately after a QuickBooks update; the next CDC sync
+		 * reconfirms it through the normal cursor-advancing path.
+		 */
+		upsertObjects(def: EntityDef, rows: MirrorRow[], syncedAt: string): void {
+			ensureEntityTable(def);
+			const upsert = upsertStmtFor(def);
+			const tx = db.transaction(() => {
+				for (const row of rows) {
+					upsert.run(row.id, row.raw, row.updatedAt, syncedAt);
+				}
+			});
+			tx();
+		},
+
 		readSyncState,
 
 		getMeta(key: string): string | null {

@@ -20,9 +20,11 @@ export type MockQbServer = {
 	apiBase: string;
 	tokenUrl: string;
 	realmId: string;
-	hits: { query: number; cdc: number; token: number };
+	hits: { query: number; cdc: number; token: number; update: number };
 	/** Insert or update a live object; stamps a fresh LastUpdatedTime. */
 	put(entity: string, obj: Record<string, unknown>): void;
+	/** Read a stored object back (post-write assertions). */
+	get(entity: string, id: string): Record<string, unknown> | null;
 	/** Soft-delete: future CDC calls report it with status "Deleted". */
 	remove(entity: string, id: string): void;
 	/** Count of live (non-deleted) objects, what a full pull would return. */
@@ -64,7 +66,7 @@ export function startMockQbServer(
 	const tick = () => now();
 
 	const entities = new Map<string, Map<string, StoredObject>>();
-	const hits = { query: 0, cdc: 0, token: 0 };
+	const hits = { query: 0, cdc: 0, token: 0, update: 0 };
 	const rejectedTokens = new Set<string>();
 	let pending429 = 0;
 
@@ -81,7 +83,9 @@ export function startMockQbServer(
 		const ms = tick();
 		const id = String(obj.Id);
 		store(entity).set(id, {
-			obj: metaUpdated({ ...obj, Id: id }, ms),
+			// Every QB object carries a SyncToken (optimistic-concurrency version);
+			// default it to "0" so fixtures need not spell it out.
+			obj: metaUpdated({ SyncToken: '0', ...obj, Id: id }, ms),
 			updatedAt: ms,
 			deleted: false,
 			deletedAt: 0,
@@ -231,6 +235,60 @@ export function startMockQbServer(
 				});
 			}
 
+			// Entity update (sparse-update POST), e.g. POST /v3/company/<realm>/purchase.
+			const writeMatch = new RegExp(`^/v3/company/${realmId}/([a-z]+)$`).exec(
+				url.pathname,
+			);
+			const entityLc = writeMatch?.[1];
+			if (
+				request.method === 'POST' &&
+				entityLc &&
+				entityLc !== 'query' &&
+				entityLc !== 'cdc'
+			) {
+				const throttled = throttleProblem();
+				if (throttled) return throttled;
+				const denied = authProblem(request);
+				if (denied) return denied;
+
+				hits.update += 1;
+				const entity = entityLc.charAt(0).toUpperCase() + entityLc.slice(1);
+				const body = (await request.json()) as Record<string, unknown>;
+				const id = String(body.Id);
+				const stored = store(entity).get(id);
+				if (!stored || stored.deleted) {
+					return Response.json(
+						{ Fault: { Error: [{ Message: 'Object Not Found' }] } },
+						{ status: 400 },
+					);
+				}
+				// Optimistic concurrency: a stale SyncToken is rejected, never applied.
+				const currentToken = String(stored.obj.SyncToken ?? '0');
+				if (body.SyncToken != null && String(body.SyncToken) !== currentToken) {
+					return Response.json(
+						{
+							Fault: {
+								type: 'ValidationFault',
+								Error: [{ Message: 'Stale Object Error', code: '5010' }],
+							},
+						},
+						{ status: 409 },
+					);
+				}
+				const ms = tick();
+				const fields = { ...body };
+				delete fields.sparse;
+				delete fields.SyncToken;
+				const nextToken = String(Number(currentToken) + 1);
+				const merged = metaUpdated(
+					{ ...stored.obj, ...fields, SyncToken: nextToken },
+					ms,
+				);
+				stored.obj = merged;
+				stored.updatedAt = ms;
+				return Response.json({ [entity]: merged, time: nowIso(ms) });
+			}
+
 			return new Response('Not found', { status: 404 });
 		},
 	});
@@ -242,6 +300,7 @@ export function startMockQbServer(
 		realmId,
 		hits,
 		put,
+		get: (entity, id) => store(entity).get(id)?.obj ?? null,
 		remove,
 		liveCount: (entity) =>
 			[...store(entity).values()].filter((s) => !s.deleted).length,
@@ -270,6 +329,35 @@ export function makeInvoice(
 				Amount: 100 + Number(id),
 				DetailType: 'SalesItemLineDetail',
 				SalesItemLineDetail: { ItemRef: { value: '1', name: 'Services' } },
+			},
+		],
+		...overrides,
+	};
+}
+
+/**
+ * Minimal but realistic QuickBooks Purchase (an expense): one account-based
+ * expense line whose `AccountRef` is the category recategorize_expense moves.
+ */
+export function makePurchase(
+	id: string,
+	overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+	return {
+		Id: id,
+		SyncToken: '0',
+		TxnDate: '2026-01-15',
+		TotalAmt: 340,
+		PaymentType: 'CreditCard',
+		AccountRef: { value: '35', name: 'Mercury Checking' },
+		Line: [
+			{
+				Id: '1',
+				Amount: 340,
+				DetailType: 'AccountBasedExpenseLineDetail',
+				AccountBasedExpenseLineDetail: {
+					AccountRef: { value: '60', name: 'Uncategorized Expense' },
+				},
 			},
 		],
 		...overrides,

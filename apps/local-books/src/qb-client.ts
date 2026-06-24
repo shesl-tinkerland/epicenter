@@ -59,6 +59,16 @@ export type QbClient = {
 		entities: string[],
 		changedSince: string,
 	): Promise<Result<CdcResult, QbClientError>>;
+	/**
+	 * Sparse-update one entity (the QuickBooks update POST). `body` carries the
+	 * `Id`, the current `SyncToken`, `sparse: true`, and the changed fields;
+	 * QuickBooks returns the updated object with a bumped `SyncToken`. A stale
+	 * `SyncToken` surfaces as an `Http` error (409), never a silent re-apply.
+	 */
+	update(
+		entity: string,
+		body: Record<string, unknown>,
+	): Promise<Result<QbObject, QbClientError>>;
 };
 
 export type QbClientDeps = {
@@ -93,6 +103,7 @@ export function createQbClient(deps: QbClientDeps): QbClient {
 	async function request(
 		path: string,
 		params: Record<string, string>,
+		write?: { method: 'POST'; body: unknown },
 	): Promise<Result<unknown, QbClientError>> {
 		const url = new URL(`${config.apiBase}/v3/company/${realmId}/${path}`);
 		for (const [key, value] of Object.entries(params))
@@ -109,10 +120,13 @@ export function createQbClient(deps: QbClientDeps): QbClient {
 			let response: Response;
 			try {
 				response = await fetch(url.toString(), {
+					method: write?.method ?? 'GET',
 					headers: {
 						Authorization: `Bearer ${token.data}`,
 						Accept: 'application/json',
+						...(write ? { 'Content-Type': 'application/json' } : {}),
 					},
+					body: write ? JSON.stringify(write.body) : undefined,
 				});
 			} catch (cause) {
 				if (attempt < MAX_RETRIES) {
@@ -225,6 +239,24 @@ export function createQbClient(deps: QbClientDeps): QbClient {
 				}
 			}
 			return Ok({ changes });
+		},
+
+		async update(entity, body) {
+			// The update endpoint is the entity name lowercased; the response wraps
+			// the saved object under its capitalized name (e.g. `{ Purchase: {...} }`).
+			const { data, error } = await request(
+				entity.toLowerCase(),
+				{},
+				{ method: 'POST', body },
+			);
+			if (error) return { data: null, error };
+			const updated = (data as Record<string, unknown>)[entity];
+			if (!updated || typeof updated !== 'object') {
+				return QbApiError.InvalidResponse({
+					detail: `update response missing the ${entity} object`,
+				});
+			}
+			return Ok(updated as QbObject);
 		},
 	};
 
