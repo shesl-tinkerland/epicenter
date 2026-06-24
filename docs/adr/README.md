@@ -126,5 +126,6 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0056](0056-local-inference-is-a-delegated-engine-behind-the-openai-compatible-seam.md) | Local inference is a delegated engine behind the OpenAI-compatible seam; the runtime is a swappable default | Accepted |
 | [0057](0057-assistant-markdown-renders-as-a-shared-component-tree-not-a-sanitized-html-string.md) | Assistant markdown renders as a shared component tree, not a sanitized HTML string | Accepted |
 | [0058](0058-push-to-talk-owns-the-recording-it-starts-keyed-by-its-id-not-a-lifecycle-layer.md) | Push-to-talk owns the recording it starts, keyed by the recording's id, not a general lifecycle layer | Accepted |
+| [0061](0061-local-books-reads-facts-from-the-mirror-reports-live-and-writes-through-one-approved-verb.md) | Local Books serves row-level facts from the mirror, computed reports live, and writes back through one approved verb | Accepted |
 
 When you add an ADR, add its row here.

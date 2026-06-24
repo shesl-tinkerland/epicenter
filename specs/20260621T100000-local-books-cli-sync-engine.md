@@ -3,6 +3,7 @@
 - Status: Draft
 - Date: 2026-06-21
 - Supersedes the data-layer intent of `specs/20260620T180000-local-books-agent-over-sql.md` (the agent-over-SQL daemon, the conversation doc, and the tool-approval seam are dropped; see Context). That spec should be retired once this one is in progress.
+- The agent read/write surface over this mirror (the `books_sql_query`, `books_report`, and `recategorize_expense` tools, and the read-only capability lattice) is settled in [ADR-0061](../docs/adr/0061-local-books-reads-facts-from-the-mirror-reports-live-and-writes-through-one-approved-verb.md). This spec covers only the sync engine beneath it.
 
 ## Context
 
