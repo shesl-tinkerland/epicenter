@@ -15,7 +15,7 @@ import { createTokenManager, loadToken } from '../token-manager.ts';
 /** Opens a QB client for the realm, or a user-facing reason it cannot. */
 export type OpenQbClient = () => Promise<Result<QbClient, string>>;
 
-export function makeQbAccess({
+export function createQbAccess({
 	config,
 	realmId,
 	keyring,

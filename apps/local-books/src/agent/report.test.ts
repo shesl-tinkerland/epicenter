@@ -19,7 +19,7 @@ import { startMockQbServer } from '../../test/mock-qb-server.ts';
 import { createFileKeyring } from '../keyring.ts';
 import type { TokenSet } from '../tokens.ts';
 import { createBooksAgentActions } from './books-actions.ts';
-import { makeQbAccess } from './qb-access.ts';
+import { createQbAccess } from './qb-access.ts';
 
 const LOCAL_ONLY: DispatchSurface = {
 	peers: { list: () => [] },
@@ -51,7 +51,7 @@ async function setup() {
 	};
 	await keyring.set(mock.realmId, JSON.stringify(token));
 
-	const openQb = makeQbAccess({ config, realmId: mock.realmId, keyring, now });
+	const openQb = createQbAccess({ config, realmId: mock.realmId, keyring, now });
 	const catalog = createDispatchToolCatalog(LOCAL_ONLY, {
 		localActions: createBooksAgentActions({
 			dbPath: join(dir, mock.realmId, 'books.db'),

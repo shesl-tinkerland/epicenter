@@ -13,8 +13,11 @@ import type { AppConfig } from './config.ts';
  * bubbles to the top-level CLI handler rather than threading a Result through
  * every caller.
  */
+/** Which token store is in use; surfaced to the user as a status label. */
+export type KeyringBackend = 'macos-keychain' | 'secret-tool' | 'file' | 'memory';
+
 export type Keyring = {
-	readonly backend: string;
+	readonly backend: KeyringBackend;
 	get(account: string): Promise<string | null>;
 	set(account: string, secret: string): Promise<void>;
 	delete(account: string): Promise<void>;

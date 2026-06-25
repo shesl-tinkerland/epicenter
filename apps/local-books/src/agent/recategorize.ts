@@ -106,28 +106,15 @@ export function createRecategorizeAction({
 			const def = entityDef(input.entity);
 			const db = openBooksDb(dbPath);
 			try {
-				const tableExists = db.raw
-					.query(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`)
-					.get(def.table);
-				if (!tableExists) {
-					return RecategorizeError.NotInMirror({
-						entity: input.entity,
-						id: input.id,
-					});
-				}
-				const row = db.raw
-					.query<{ raw: string }, [string]>(
-						`SELECT raw FROM ${def.table} WHERE id = ? AND deleted = 0`,
-					)
-					.get(input.id);
-				if (!row) {
+				const raw = db.readLiveRaw(def, input.id);
+				if (raw === null) {
 					return RecategorizeError.NotInMirror({
 						entity: input.entity,
 						id: input.id,
 					});
 				}
 
-				const obj = JSON.parse(row.raw) as Record<string, unknown>;
+				const obj = JSON.parse(raw) as Record<string, unknown>;
 				const lines: ExpenseLine[] = Array.isArray(obj.Line)
 					? (obj.Line as ExpenseLine[])
 					: [];

@@ -13,7 +13,7 @@
 import { nodeMountRuntime } from '@epicenter/workspace/node';
 import { localBooksWorkspace } from './books.ts';
 import { createBooksAgentActions } from './src/agent/books-actions.ts';
-import { makeQbAccess } from './src/agent/qb-access.ts';
+import { createQbAccess } from './src/agent/qb-access.ts';
 import { loadConfig } from './src/config.ts';
 import { createKeyring } from './src/keyring.ts';
 import { dbPath } from './src/paths.ts';
@@ -37,7 +37,7 @@ export function localBooksMount({
 	// the mirror path. Token loading stays lazy (inside the opener), so `compose`
 	// itself does no async work.
 	const config = loadConfig({ dataDir });
-	const openQb = makeQbAccess({
+	const openQb = createQbAccess({
 		config,
 		realmId,
 		keyring: createKeyring(config),

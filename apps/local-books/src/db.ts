@@ -246,6 +246,28 @@ export function openBooksDb(path: string) {
 
 		readSyncState,
 
+		/**
+		 * The raw QB JSON of one live (non-deleted) row, or null if the table does
+		 * not exist yet or the row is absent/deleted. The write-back path reads the
+		 * current blob (and its `SyncToken`) through this typed method rather than
+		 * reaching through the `raw` escape hatch.
+		 */
+		readLiveRaw(def: EntityDef, id: string): string | null {
+			const table = assertIdent(def.table);
+			const exists = db
+				.query<{ n: number }, [string]>(
+					`SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name = ?`,
+				)
+				.get(def.table);
+			if (!exists || exists.n === 0) return null;
+			const row = db
+				.query<{ raw: string }, [string]>(
+					`SELECT raw FROM ${table} WHERE id = ? AND deleted = 0`,
+				)
+				.get(id);
+			return row?.raw ?? null;
+		},
+
 		getMeta(key: string): string | null {
 			return getMetaStmt.get(key)?.value ?? null;
 		},
