@@ -43,8 +43,8 @@ import {
 	mountRoomsApp,
 	mountSessionApp,
 	personal,
-	requireBearerUser,
 	type ResolveUser,
+	requireBearerUser,
 	ServerBindings,
 } from '@epicenter/server/bun';
 import { type } from 'arktype';

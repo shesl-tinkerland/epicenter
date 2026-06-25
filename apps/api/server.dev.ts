@@ -15,8 +15,8 @@
  * revocable token and this entry plus `dev-auth.ts` are deleted.
  */
 
-import { startBunApiServer } from './server.js';
 import { resolveDevUser } from './dev-auth.js';
+import { startBunApiServer } from './server.js';
 
 console.warn(
 	'apps/api (Bun) DEV AUTH: Bearer dev:<userId> resolves a synthetic user on localhost. Never run this in production.',

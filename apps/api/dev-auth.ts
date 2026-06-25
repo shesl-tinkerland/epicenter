@@ -20,7 +20,7 @@
  * of its own.
  */
 
-import { asUserId, AuthUser } from '@epicenter/auth';
+import { AuthUser, asUserId } from '@epicenter/auth';
 import { OAuthError } from '@epicenter/constants/oauth-errors';
 import type { ResolveUser } from '@epicenter/server/bun';
 import { Ok } from 'wellcrafted/result';

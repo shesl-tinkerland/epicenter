@@ -52,11 +52,6 @@ export {
 // Re-export the Cloudflare Durable Object class so each deployment's
 // wrangler.jsonc can resolve `class_name: "Room"` against this entrypoint.
 export { Room } from './room/backends/cloudflare/durable-object.js';
-// The Cloudflare runtime adapter: the per-runtime triple (db over Hyperdrive,
-// `waitUntil`, the Durable Object room registry) as one `RuntimeAdapter` both
-// Cloudflare deployables pass to `createServerApp`'s `runtime`. A Bun host
-// builds its own adapter inline (see `@epicenter/server/bun`).
-export { cloudflare } from './runtime/cloudflare.js';
 // Reusable surfaces. Each `mount*` bundles auth + ownership + the route
 // mount, accepting only the deployment-controlled knobs (ownership rule,
 // optional policies). The bare `authApp` is mounted directly because it
@@ -66,6 +61,11 @@ export { mountBlobsApp } from './routes/blobs.js';
 export { mountInferenceApp } from './routes/inference.js';
 export { mountRoomsApp } from './routes/rooms.js';
 export { mountSessionApp } from './routes/session.js';
+// The Cloudflare runtime adapter: the per-runtime triple (db over Hyperdrive,
+// `waitUntil`, the Durable Object room registry) as one `RuntimeAdapter` both
+// Cloudflare deployables pass to `createServerApp`'s `runtime`. A Bun host
+// builds its own adapter inline (see `@epicenter/server/bun`).
+export { cloudflare } from './runtime/cloudflare.js';
 // Parent app. Wires per-request lifecycle (pg, after-response queue,
 // auth context, CORS, CSRF, rooms registry). Mount every surface on this
 // app via the `mount*` primitives. It takes two axes: a `RuntimeAdapter` (how

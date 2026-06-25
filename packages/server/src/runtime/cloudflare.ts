@@ -30,7 +30,9 @@ import type { ServerBindings } from '../server-bindings.js';
  */
 export function cloudflare(bindings: {
 	/** Read this deployment's Hyperdrive binding off its env (`env.HYPERDRIVE`). */
-	hyperdrive: (env: ServerBindings) => Parameters<typeof connectHyperdriveDb>[0];
+	hyperdrive: (
+		env: ServerBindings,
+	) => Parameters<typeof connectHyperdriveDb>[0];
 	/** Read this deployment's Durable Object room namespace off its env (`env.ROOM`). */
 	room: (env: ServerBindings) => Parameters<typeof createDurableObjectRooms>[0];
 }): RuntimeAdapter {

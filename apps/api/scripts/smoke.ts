@@ -147,7 +147,11 @@ async function main() {
 			uploadUrl?: string;
 			requiredHeaders?: Record<string, string>;
 		};
-		record('PASS', 'blob ticket', `${ticketRes.status} status=${ticket.status}`);
+		record(
+			'PASS',
+			'blob ticket',
+			`${ticketRes.status} status=${ticket.status}`,
+		);
 
 		if (ticket.status === 'upload' && ticket.uploadUrl) {
 			const putRes = await fetch(ticket.uploadUrl, {
@@ -195,7 +199,11 @@ async function main() {
 		});
 		if (usageRes.ok) {
 			const { totalBytes } = (await usageRes.json()) as { totalBytes: number };
-			record('PASS', 'blob usage', `${usageRes.status} totalBytes=${totalBytes}`);
+			record(
+				'PASS',
+				'blob usage',
+				`${usageRes.status} totalBytes=${totalBytes}`,
+			);
 		} else {
 			record('FAIL', 'blob usage', `${usageRes.status}`);
 		}
