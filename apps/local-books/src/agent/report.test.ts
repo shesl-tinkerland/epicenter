@@ -51,7 +51,12 @@ async function setup() {
 	};
 	await keyring.set(mock.realmId, JSON.stringify(token));
 
-	const openQb = createQbAccess({ config, realmId: mock.realmId, keyring, now });
+	const openQb = createQbAccess({
+		config,
+		realmId: mock.realmId,
+		keyring,
+		now,
+	});
 	const catalog = createDispatchToolCatalog(LOCAL_ONLY, {
 		localActions: createBooksAgentActions({
 			dbPath: join(dir, mock.realmId, 'books.db'),

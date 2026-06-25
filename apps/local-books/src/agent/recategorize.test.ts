@@ -86,7 +86,12 @@ async function setup(
 	);
 	db.close();
 
-	const openQb = createQbAccess({ config, realmId: mock.realmId, keyring, now });
+	const openQb = createQbAccess({
+		config,
+		realmId: mock.realmId,
+		keyring,
+		now,
+	});
 	const catalog = createDispatchToolCatalog(LOCAL_ONLY, {
 		localActions: createBooksAgentActions({ dbPath: path, openQb, now }),
 	});

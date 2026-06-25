@@ -14,7 +14,11 @@ import type { AppConfig } from './config.ts';
  * every caller.
  */
 /** Which token store is in use; surfaced to the user as a status label. */
-export type KeyringBackend = 'macos-keychain' | 'secret-tool' | 'file' | 'memory';
+export type KeyringBackend =
+	| 'macos-keychain'
+	| 'secret-tool'
+	| 'file'
+	| 'memory';
 
 export type Keyring = {
 	readonly backend: KeyringBackend;
