@@ -14,6 +14,10 @@
  * applicable). See `apps/api/worker/index.ts` for the cloud composition.
  */
 
+// Self-host single-user bearer credential source: the `ResolveUser` a
+// token-authenticated star injects so a request's `Authorization: Bearer
+// <token>` resolves to the box's single owner (ADR-0070, ADR-0071).
+export { createInstanceTokenResolver } from './auth/instance-token-resolver.js';
 // Database concern. `createDb(client)` wraps a connected pg client/pool in
 // drizzle with the internal schema (the portable core). The Cloudflare
 // per-request `pg.Client` over Hyperdrive is now internal to the `cloudflare()`
@@ -79,7 +83,6 @@ export {
 	type Identity,
 	type RuntimeAdapter,
 } from './server-app.js';
-
 // Binding contract: the portable env the library reads from `c.env`, as both
 // the arktype schema (value) and its inferred type (same name). Each deployment
 // proves its own Env against it (extends in apps/self-host, satisfies in
