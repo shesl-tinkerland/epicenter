@@ -28,7 +28,13 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -39,6 +45,13 @@ import { join } from 'node:path';
  * minted, written 0600, and flagged `minted: true` so the caller can print it
  * once. `path` is always returned so the entry can tell the operator where the
  * credential lives.
+ *
+ * The mint creates `<dataDir>` if it does not exist yet: the entry mints the
+ * token BEFORE `startBunServer` (which builds the rooms dir) runs, so on a true
+ * first boot the directory is still absent. Writing the token must not depend on
+ * the rooms path having been created first, or first boot crashes with ENOENT.
+ * `mkdirSync(..., { recursive: true })` is idempotent with `startBunServer`'s own
+ * call, so both ensuring the one shared dir is safe.
  */
 export function loadOrMintInstanceToken(options: {
 	dataDir: string;
@@ -50,6 +63,7 @@ export function loadOrMintInstanceToken(options: {
 		return { token: readFileSync(path, 'utf8').trim(), minted: false, path };
 	}
 	const token = randomBytes(32).toString('base64url');
+	mkdirSync(options.dataDir, { recursive: true });
 	writeFileSync(path, token, { mode: 0o600 });
 	chmodSync(path, 0o600); // belt-and-suspenders if umask widened the create mode
 	return { token, minted: true, path };

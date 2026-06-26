@@ -42,6 +42,17 @@ test('mints a token on first boot and writes it to <dataDir>/instance-token', ()
 	expect(readFileSync(result.path, 'utf8')).toBe(result.token);
 });
 
+test('mints into a data dir that does not exist yet (true first boot)', () => {
+	// The entry mints BEFORE startBunServer creates the rooms dir, so on a fresh
+	// box the directory is still absent. A non-recursive write would crash with
+	// ENOENT here; the mint must create <dataDir> itself.
+	const dataDir = join(freshDataDir(), 'nested', 'not-created-yet');
+	const result = loadOrMintInstanceToken({ dataDir });
+
+	expect(result.minted).toBe(true);
+	expect(readFileSync(result.path, 'utf8')).toBe(result.token);
+});
+
 test('reuses the same token on the next boot instead of re-minting', () => {
 	const dataDir = freshDataDir();
 	const first = loadOrMintInstanceToken({ dataDir });
