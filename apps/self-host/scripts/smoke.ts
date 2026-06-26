@@ -10,9 +10,13 @@
  *     is touched
  *
  * Auth is the one thing the scenario cannot get over plain HTTP, so it relies on
- * the server running with the dev resolver injected AND a matching allowlist:
+ * the server running with the dev resolver injected AND a matching allowlist.
+ * The entry selects shared-wiki mode when an OAuth provider is configured, so
+ * set dummy Google creds to request that mode; the dev resolver bypasses the
+ * real handshake, so the creds are never used for an actual sign-in:
  *
- *   ALLOWED_MEMBER_EMAILS=tester@dev.invalid bun run dev:bun:devauth
+ *   GOOGLE_CLIENT_ID=dev GOOGLE_CLIENT_SECRET=dev \
+ *     ALLOWED_MEMBER_EMAILS=tester@dev.invalid bun run dev:bun:devauth
  *
  * The dev resolver maps `Authorization: Bearer dev:<id>` to `<id>@dev.invalid`,
  * so `dev:tester` is admitted and `dev:intruder` is not. Point this at the
