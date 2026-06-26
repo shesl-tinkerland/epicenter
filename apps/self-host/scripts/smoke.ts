@@ -11,11 +11,12 @@
  *
  * Auth is the one thing the scenario cannot get over plain HTTP, so it relies on
  * the server running with the dev resolver injected AND a matching allowlist.
- * The entry selects shared-wiki mode when an OAuth provider is configured, so
- * set dummy Google creds to request that mode; the dev resolver bypasses the
- * real handshake, so the creds are never used for an actual sign-in:
+ * Shared-wiki mode is an explicit launch choice (EPICENTER_MODE=shared) and
+ * requires at least one configured OAuth provider, so set dummy Google creds to
+ * satisfy that boot check; the dev resolver bypasses the real handshake, so the
+ * creds are never used for an actual sign-in:
  *
- *   GOOGLE_CLIENT_ID=dev GOOGLE_CLIENT_SECRET=dev \
+ *   EPICENTER_MODE=shared GOOGLE_CLIENT_ID=dev GOOGLE_CLIENT_SECRET=dev \
  *     ALLOWED_MEMBER_EMAILS=tester@dev.invalid bun run dev:bun:devauth
  *
  * The dev resolver maps `Authorization: Bearer dev:<id>` to `<id>@dev.invalid`,

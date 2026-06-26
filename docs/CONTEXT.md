@@ -57,9 +57,12 @@ shapes, see `docs/adr/`.
   source, the OAuth-free half of the star's credential seam (ADR-0072). The box
   mints a single-user bearer at first boot, persists it `0600`, and prints it
   once; the operator pastes it into the client's instance setting
-  (`{ baseURL, token }`, ADR-0071). A box recomputes solo (bearer + `personal()`)
-  vs shared (OAuth + `shared`) from whether any OAuth provider is configured, with
-  no mode flag.
+  (`{ baseURL, token }`, ADR-0071). A box runs solo (bearer + `personal()`) or
+  shared (OAuth + `shared`) by an explicit `EPICENTER_MODE` launch choice, not by
+  sniffing which secrets are set; the configured OAuth providers must agree with
+  the declared mode, checked loudly at boot (ADR-0072). Because mode is the data
+  partition, an explicit choice keeps a credential change from silently
+  re-partitioning a running box.
 
 ## Workspace API
 

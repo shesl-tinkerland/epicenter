@@ -13,7 +13,8 @@
  *   2. `<dataDir>/instance-token`  -> reuse the token minted on a prior boot, so
  *      a restart never invalidates the operator's pasted credential.
  *   3. neither                     -> mint `randomBytes(32).base64url`, write it
- *      0600, and report `minted` so the entry can print it once.
+ *      0600, and report `minted` so the entry can name the file once (it prints
+ *      the path for the operator to `cat`, never the secret itself).
  *
  * Bun-only: minting needs `node:crypto` and the file needs disk, neither of
  * which the Worker entry has. The constant-time compare against this token lives

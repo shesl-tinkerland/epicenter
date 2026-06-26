@@ -16,17 +16,21 @@
  * way the Durable Object edge does, which is exactly right for one homelab or
  * one community's wiki and the price of owning your own data on your own machine.
  *
- * The box recomputes its shape from one input, with no stored mode discriminator
- * (ADR-0071): the set of configured OAuth providers. That set is the SAME one
- * `createAuth` registers (configuredSocialProviders), so the gate can never
- * disagree with what actually accepts a sign-in.
+ * The box's shape is an explicit launch choice (`EPICENTER_MODE`), never sniffed
+ * from which secrets happen to be set (ADR-0072). The partition IS durable data,
+ * so deriving it from mutable OAuth credentials would let adding or rotating a
+ * secret silently re-partition a running box; an explicit mode makes that a
+ * deliberate re-provision instead. The configured OAuth providers must AGREE with
+ * the declared mode, and that agreement is checked loudly at boot.
  *
- *   - any provider configured -> shared wiki (Config D): `shared({ admit })`,
+ *   - `EPICENTER_MODE=shared` -> shared wiki (Config D): `shared({ admit })`,
  *     every authenticated user shares the SHARED_OWNER_ID partition, gated by the
- *     `ALLOWED_MEMBER_EMAILS` allowlist, and the real OAuth resolver authenticates.
- *   - none configured         -> solo box (Config A): `personal()`, the single
- *     owner authenticates with a first-boot bearer the box mints and prints once
- *     (ADR-0072), so a homelab needs no Google app to reach its own data.
+ *     `ALLOWED_MEMBER_EMAILS` allowlist, and the configured OAuth providers
+ *     authenticate. Requires at least one provider.
+ *   - unset / `EPICENTER_MODE=solo` -> solo box (Config A): `personal()`, the
+ *     single owner authenticates with a first-boot bearer the box mints and saves
+ *     0600 (named, never echoed to the logs; ADR-0072), so a homelab needs no
+ *     OAuth app to reach its own data.
  *
  * Surface mirrors the Worker self-host: session + rooms + inference, zero
  * billing, no dashboard SPA. Blobs are intentionally not mounted; add
@@ -37,8 +41,9 @@
  * SAME server with a dev `resolveUser` injected (the smoke's credential) without
  * duplicating it. Production runs only when this file IS the entrypoint
  * (`import.meta.main`), so `server.dev.ts` importing the builder does not start a
- * second listener. Production passes no `resolveUser` and keeps the recomputed
- * resolver; this file never imports the dev bypass.
+ * second listener. Production passes no `resolveUser` and keeps the mode's own
+ * resolver (OAuth for a wiki, the bearer for a solo box); this file never imports
+ * the dev bypass.
  */
 
 import { AuthUser, asUserId } from '@epicenter/auth';
@@ -46,6 +51,7 @@ import {
 	BunHostBindings,
 	configuredSocialProviders,
 	createInstanceTokenResolver,
+	incompleteSocialProviders,
 	personal,
 	resolveDataDir,
 	type ResolveUser,
@@ -66,26 +72,32 @@ const INSTANCE_OWNER_ID = asUserId('self-host');
 /**
  * Boot the apps/self-host Bun server, optionally with an injected user resolver.
  *
- * Production (`server.ts` as the entrypoint) passes nothing, so the entry
- * recomputes the resolver from the configured providers (OAuth for a wiki, the
- * first-boot bearer for a solo box). `server.dev.ts` passes a dev
- * `Bearer dev:<userId>` resolver so the smoke needs no interactive login.
- * Everything else (env validation, pool, rooms, mounts, `Bun.serve`) is identical
- * across the two, so they cannot drift.
+ * Production (`server.ts` as the entrypoint) passes nothing, so the box runs the
+ * mode `EPICENTER_MODE` declares: OAuth for a wiki, the first-boot bearer for a
+ * solo box. `server.dev.ts` passes a dev `Bearer dev:<userId>` resolver so the
+ * smoke needs no interactive login. Everything else (env validation, pool, rooms,
+ * mounts, `Bun.serve`) is identical across the two, so they cannot drift.
  */
 export function startSelfHostServer(
 	opts: { resolveUser?: ResolveUser } = {},
 ): void {
 	// Validate this host's environment once, at boot (ADR-0066): the library's
 	// portable secrets (`BunHostBindings` extends `ServerBindings`), this host's
-	// own config, the shared-wiki membership allowlist, and the optional
-	// `INSTANCE_TOKEN` override for the solo bearer. A misconfiguration gets ONE
+	// own config, the declared `EPICENTER_MODE`, the shared-wiki membership
+	// allowlist, and the optional `INSTANCE_TOKEN` override for the solo bearer.
+	// A misconfiguration gets ONE
 	// descriptive error naming every missing or malformed var instead of a
 	// downstream surprise. The validated result IS the typed env handed to the
 	// Hono app: no `as`-cast over `process.env`, no lie. Unlike the Cloudflare
 	// edge (whose bindings are deploy-gated and `wrangler types`-typed),
 	// `process.env` is unchecked, so boot is the place to validate it.
 	const env = BunHostBindings.merge({
+		// The deployment's declared shape, an explicit launch choice (ADR-0072):
+		// `shared` is a wiki (OAuth + allowlist), unset or `solo` is the
+		// single-owner homelab box. Never derived from which secrets are set, so a
+		// credential change cannot silently re-partition a running box; an invalid
+		// value fails boot via the validator below.
+		'EPICENTER_MODE?': "'solo' | 'shared'",
 		// Comma-separated emails admitted to the shared wiki. Optional so boot never
 		// fails on it; an unset allowlist admits nobody (fail closed, below).
 		'ALLOWED_MEMBER_EMAILS?': 'string',
@@ -107,10 +119,42 @@ export function startSelfHostServer(
 		'tauri://localhost',
 	];
 
-	// The selector: the set of configured OAuth providers, recomputed from inputs.
-	const oauthProviders = Object.keys(configuredSocialProviders(env));
+	// The declared mode. Unset is the zero-config solo homelab; `shared` is a wiki.
+	const mode = env.EPICENTER_MODE ?? 'solo';
 
-	if (oauthProviders.length > 0) {
+	// Fail loud when the configured credentials contradict the declared mode,
+	// instead of silently resolving it (the old provider-sniffing selector would
+	// boot the "wrong" mode on a typo, and because mode IS the data partition,
+	// that silently re-partitioned the box). Each check names the fix.
+	const fail = (reason: string): never => {
+		console.error(`Invalid configuration for the self-host server:\n  ${reason}`);
+		process.exit(1);
+	};
+	const halfConfigured = incompleteSocialProviders(env);
+	if (halfConfigured.length > 0) {
+		fail(
+			`${halfConfigured.join(', ')} ${halfConfigured.length > 1 ? 'each have' : 'has'} only one of client id / secret set; set both or neither.`,
+		);
+	}
+	const oauthProviders = Object.keys(configuredSocialProviders(env));
+	const hasAllowlist = Boolean(env.ALLOWED_MEMBER_EMAILS?.trim());
+	if (mode === 'shared' && oauthProviders.length === 0) {
+		fail(
+			'EPICENTER_MODE=shared is a wiki but no OAuth provider is configured; set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (or GITHUB_*).',
+		);
+	}
+	if (mode === 'solo' && oauthProviders.length > 0) {
+		fail(
+			`Solo mode runs no OAuth, but ${oauthProviders.join(', ')} ${oauthProviders.length > 1 ? 'are' : 'is'} configured; set EPICENTER_MODE=shared to run a wiki, or remove the OAuth credentials.`,
+		);
+	}
+	if (mode === 'solo' && hasAllowlist) {
+		fail(
+			'Solo mode has no members to admit, but ALLOWED_MEMBER_EMAILS is set; set EPICENTER_MODE=shared, or remove the allowlist.',
+		);
+	}
+
+	if (mode === 'shared') {
 		// Shared wiki (Config D). Parse the allowlist once at boot and close over the
 		// set, so admit is a plain membership test with no per-request env read. An
 		// unset or empty var yields an empty set: the deployment admits nobody until
@@ -136,12 +180,12 @@ export function startSelfHostServer(
 		});
 		console.log(
 			`apps/self-host (Bun) listening on ${origin} (rooms in ${dataDir})\n` +
-				`OAuth providers ${oauthProviders.join(', ')} -> shared-wiki mode, ${allowedMembers.size} member(s) admitted`,
+				`shared-wiki mode (EPICENTER_MODE=shared): OAuth providers ${oauthProviders.join(', ')}, ${allowedMembers.size} member(s) admitted`,
 		);
 		return;
 	}
 
-	// Solo box (Config A). No OAuth provider is configured, so the single owner
+	// Solo box (Config A). EPICENTER_MODE is unset or `solo`, so the single owner
 	// authenticates with a first-boot bearer. A dev entry may inject its own
 	// resolver (the smoke's dev bearer); only then do we skip minting, so a dev run
 	// never writes a token file. Otherwise mint/persist the token (an
@@ -175,24 +219,22 @@ export function startSelfHostServer(
 		resolveUser,
 	});
 
-	// Boot banner. Print the minted token ONCE; on later boots name the file
-	// instead, so the secret is not re-leaked into the logs on every restart. A
-	// re-mint (the operator forgot to persist DATA_DIR) is visible because the
-	// "minted" banner prints again.
+	// Boot banner. NEVER echo the token to the logs (journald / docker logs are a
+	// worse at-rest location than the 0600 file, and are retained and shipped);
+	// name the file in both the freshly-minted and reused cases, and let the
+	// operator `cat` it once. A re-mint (the operator forgot to persist DATA_DIR)
+	// is still visible because the "minted" banner differs from the "loaded" one.
 	const banner = `apps/self-host (Bun) listening on ${origin} (rooms in ${dataDir})`;
 	if (!instance) {
-		console.log(
-			`${banner}\nNo OAuth providers configured -> solo mode (dev resolver injected)`,
-		);
+		console.log(`${banner}\nsolo mode (dev resolver injected)`);
 	} else if (instance.minted) {
 		console.log(
-			`${banner}\nNo OAuth providers configured -> solo mode.\n` +
-				`Instance token (paste into the client instance setting):\n  ${instance.token}\n` +
-				`Saved 0600 to ${instance.path}`,
+			`${banner}\nsolo mode. Minted a new instance token, saved 0600 to ${instance.path}.\n` +
+				`Read it once and paste it into the client instance setting:\n  cat ${instance.path}`,
 		);
 	} else {
 		console.log(
-			`${banner}\nNo OAuth providers configured -> solo mode. Instance token loaded from ${instance.path} (view: cat ${instance.path})`,
+			`${banner}\nsolo mode. Instance token loaded from ${instance.path} (view: cat ${instance.path})`,
 		);
 	}
 }
