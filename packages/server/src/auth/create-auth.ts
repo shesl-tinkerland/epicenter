@@ -7,6 +7,10 @@ import * as schema from '../db/schema/index.js';
 import { BASE_AUTH_CONFIG } from './base-config.js';
 import { createCookieAdvancedConfig } from './cookie-config.js';
 import { authPlugins } from './plugins.js';
+import {
+	configuredSocialProviders,
+	type OAuthProviderEnv,
+} from './social-providers.js';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -16,13 +20,14 @@ type Db = NodePgDatabase<typeof schema>;
  * expose identically (`c.env` on Workers, `process.env` on a Node host). Auth
  * construction thus names no Cloudflare binding type at all. A deployment's
  * `Cloudflare.Env` satisfies this structurally.
+ *
+ * Every OAuth provider is optional and register-when-present (ADR-0071): a
+ * deployment configures the ones it has an app for, or none at all (the solo
+ * self-host box, which authenticates with a first-boot bearer instead). The
+ * configured set is computed by {@link configuredSocialProviders}.
  */
-type AuthEnv = {
+type AuthEnv = OAuthProviderEnv & {
 	BETTER_AUTH_SECRET: string;
-	GOOGLE_CLIENT_ID: string;
-	GOOGLE_CLIENT_SECRET: string;
-	GITHUB_CLIENT_ID?: string;
-	GITHUB_CLIENT_SECRET?: string;
 };
 
 /**
@@ -80,28 +85,14 @@ export function createAuth({
 		// Google callback navigation. The cookie binds the callback to the
 		// initiating browser (the DB record alone does not), so keeping the check
 		// on restores that login-CSRF / session-fixation defense.
-		socialProviders: {
-			google: {
-				clientId: env.GOOGLE_CLIENT_ID,
-				clientSecret: env.GOOGLE_CLIENT_SECRET,
-			},
-			// GitHub is registered only when a deployment has configured its
-			// credentials, so the shared-wiki reference deployment (and any self-host)
-			// stays Google-only by default instead of offering a button that
-			// 500s. better-auth requests the `read:user` + `user:email` scopes by
-			// default, so it reads the primary email and GitHub's verification
-			// flag. GitHub is deliberately NOT a trusted linking provider (see
-			// BASE_AUTH_CONFIG): an unverified GitHub email must not link into an
-			// existing account.
-			...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
-				? {
-						github: {
-							clientId: env.GITHUB_CLIENT_ID,
-							clientSecret: env.GITHUB_CLIENT_SECRET,
-						},
-					}
-				: {}),
-		},
+		// Each provider is registered only when its credentials are configured
+		// (configuredSocialProviders): the hosted star runs Google, the shared wiki
+		// runs whichever providers its operator set, and a solo self-host box runs
+		// none and authenticates with a first-boot bearer instead (ADR-0072). A
+		// provider with no app configured is simply absent, never a button that
+		// 500s. better-auth requests `read:user` + `user:email` for GitHub by
+		// default, so it reads the primary email and GitHub's verification flag.
+		socialProviders: configuredSocialProviders(env),
 		session: {
 			expiresIn: 60 * 60 * 24 * 7,
 			updateAge: 60 * 60 * 24,

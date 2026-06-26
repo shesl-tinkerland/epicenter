@@ -18,6 +18,12 @@
 // token-authenticated star injects so a request's `Authorization: Bearer
 // <token>` resolves to the box's single owner (ADR-0070, ADR-0071).
 export { createInstanceTokenResolver } from './auth/instance-token-resolver.js';
+// The OAuth providers a deployment has configured, the SSOT for what auth
+// registers and how the self-host entry recomputes solo-vs-shared (ADR-0072).
+export {
+	configuredSocialProviders,
+	type OAuthProviderEnv,
+} from './auth/social-providers.js';
 // Database concern. `createDb(client)` wraps a connected pg client/pool in
 // drizzle with the internal schema (the portable core). The Cloudflare
 // per-request `pg.Client` over Hyperdrive is now internal to the `cloudflare()`

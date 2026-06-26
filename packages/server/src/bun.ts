@@ -18,6 +18,14 @@
  * on a Bun host, which supplies its own room and db concerns.
  */
 
+// Self-host single-user bearer credential source: the `ResolveUser` a solo box
+// injects so `Authorization: Bearer <token>` resolves to its single owner, and
+// the provider helper its entry reads to recompute solo-vs-shared (ADR-0072).
+export { createInstanceTokenResolver } from './auth/instance-token-resolver.js';
+export {
+	configuredSocialProviders,
+	type OAuthProviderEnv,
+} from './auth/social-providers.js';
 export { createDb, type Db } from './db/create-db.js';
 export {
 	requireBearerUser,

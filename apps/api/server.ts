@@ -61,7 +61,14 @@ export function startBunApiServer(
 	// `process.env`, no lie (ADR-0066). Unlike the Cloudflare edge (whose bindings
 	// are deploy-gated and `wrangler types`-typed), `process.env` is unchecked, so
 	// boot is the place to validate it.
-	const env = BunHostBindings(process.env);
+	// The portable contract leaves the OAuth providers optional (a solo self-host
+	// box configures none; ADR-0071). The hosted star is never provider-less, so
+	// re-require Google here: forgetting the deploy secret should fail boot loud,
+	// not silently drop Google sign-in.
+	const env = BunHostBindings.merge({
+		GOOGLE_CLIENT_ID: 'string',
+		GOOGLE_CLIENT_SECRET: 'string',
+	})(process.env);
 	if (env instanceof type.errors) {
 		console.error(`Invalid environment for the Bun server:\n${env.summary}`);
 		process.exit(1);

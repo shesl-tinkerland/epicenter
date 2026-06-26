@@ -33,11 +33,14 @@ import { type } from 'arktype';
 
 export const ServerBindings = type({
 	BETTER_AUTH_SECRET: 'string',
-	GOOGLE_CLIENT_ID: 'string',
-	GOOGLE_CLIENT_SECRET: 'string',
-	// GitHub is optional: a deployment that has not registered a GitHub OAuth
-	// app simply does not offer GitHub sign-in. The provider and its sign-in
-	// button are both gated on these being present (create-auth.ts, /sign-in).
+	// Every OAuth provider is optional and register-when-present (ADR-0071): a
+	// deployment that has not registered an app for a provider simply does not
+	// offer that sign-in (create-auth.ts via configuredSocialProviders, /sign-in).
+	// Configuring none at all is the solo self-host box, which authenticates with
+	// a first-boot bearer instead (ADR-0072). The hosted star always offers Google
+	// and re-requires these in its own boot validation (apps/api/server.ts).
+	'GOOGLE_CLIENT_ID?': 'string',
+	'GOOGLE_CLIENT_SECRET?': 'string',
 	'GITHUB_CLIENT_ID?': 'string',
 	'GITHUB_CLIENT_SECRET?': 'string',
 	// Content-addressed blob store (routes/blobs.ts): a portable S3 client over
