@@ -53,6 +53,13 @@ shapes, see `docs/adr/`.
   community shared-wiki reference, not Epicenter-operated).
 - **`personal()` / `shared({ admit })`**: the `packages/server` seam that splits
   the two deployables. Billing is hosted-only and lives in `apps/api/worker/billing/`.
+- **First-boot bearer / instance token**: a solo self-host star's credential
+  source, the OAuth-free half of the star's credential seam (ADR-0072). The box
+  mints a single-user bearer at first boot, persists it `0600`, and prints it
+  once; the operator pastes it into the client's instance setting
+  (`{ baseURL, token }`, ADR-0071). A box recomputes solo (bearer + `personal()`)
+  vs shared (OAuth + `shared`) from whether any OAuth provider is configured, with
+  no mode flag.
 
 ## Workspace API
 

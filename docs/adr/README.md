@@ -138,5 +138,7 @@ Each option and the one reason it lost. Terse. This is not the spec.
 | [0068](0068-privacy-is-a-deployment-not-a-product-feature.md) | Privacy is a deployment, not a product feature; the hosted app carries zero privacy-configuration surface | Accepted |
 | [0069](0069-epicenter-is-one-runnable-star-plus-services-called-by-url-and-token.md) | Epicenter is one runnable program (the star) plus a la carte services addressed by base URL and token | Accepted |
 | [0070](0070-self-host-adds-no-new-ownership-or-auth-mode.md) | Self-host adds no new ownership or auth mode: single-user is a preset, and only the credential source varies | Accepted |
+| [0071](0071-oauth-is-hosted-only-a-custom-instance-requires-a-token.md) | OAuth is hosted-only; a custom instance requires a token | Accepted |
+| [0072](0072-the-self-host-star-mints-and-persists-its-own-first-boot-bearer.md) | The self-host star mints and persists its own first-boot bearer, and recomputes solo-vs-shared from the configured OAuth providers | Accepted |
 
 When you add an ADR, add its row here.
