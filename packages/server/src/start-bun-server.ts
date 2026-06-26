@@ -53,6 +53,19 @@ export const BunHostBindings = ServerBindings.merge({
 });
 export type BunHostBindings = typeof BunHostBindings.infer;
 
+/**
+ * Resolve the single data dir a Bun host persists under. The room `bun:sqlite`
+ * files AND the self-host instance token both live here, so they share fate: a
+ * persisted `DATA_DIR` keeps both, an ephemeral one loses both, never one
+ * without the other. One default, one resolver, called by both `startBunServer`
+ * (rooms) and the self-host entry (the token mint), so the two can never
+ * diverge onto separate directories (the prior `'.'`-vs-`'./.data/rooms'` split
+ * silently stranded the token in the cwd while the rooms persisted elsewhere).
+ */
+export function resolveDataDir(env: { DATA_DIR?: string }): string {
+	return resolve(env.DATA_DIR ?? './.data/rooms');
+}
+
 export type StartBunServerOptions = {
 	/**
 	 * The validated env. Assignable to {@link BunHostBindings}: a deployment may
@@ -108,8 +121,9 @@ export function startBunServer({
 	// on the chosen port; an operator overrides it with their domain.
 	const origin = env.API_PUBLIC_ORIGIN ?? `http://localhost:${port}`;
 
-	// One room directory of `bun:sqlite` files for this host.
-	const dataDir = resolve(env.DATA_DIR ?? './.data/rooms');
+	// One room directory of `bun:sqlite` files for this host (the self-host
+	// entry mints its instance token into this same resolved dir).
+	const dataDir = resolveDataDir(env);
 	mkdirSync(dataDir, { recursive: true });
 	const bunRooms = createBunRooms({ dir: dataDir });
 

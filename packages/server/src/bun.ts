@@ -63,6 +63,7 @@ export { ServerBindings } from './server-bindings.js';
 // the `bun()` adapter, the shared mounts, and `Bun.serve`).
 export {
 	BunHostBindings,
+	resolveDataDir,
 	type StartBunServerOptions,
 	startBunServer,
 } from './start-bun-server.js';

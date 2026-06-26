@@ -47,6 +47,7 @@ import {
 	configuredSocialProviders,
 	createInstanceTokenResolver,
 	personal,
+	resolveDataDir,
 	type ResolveUser,
 	shared,
 	startBunServer,
@@ -150,7 +151,10 @@ export function startSelfHostServer(
 	let instance: ReturnType<typeof loadOrMintInstanceToken> | undefined;
 	if (!resolveUser) {
 		instance = loadOrMintInstanceToken({
-			dataDir: env.DATA_DIR ?? '.',
+			// Same resolver startBunServer uses for the rooms dir, so the token and
+			// the rooms always share one directory and one fate (no cwd-vs-DATA_DIR
+			// split that strands the token when only the rooms volume is persisted).
+			dataDir: resolveDataDir(env),
 			envToken: env.INSTANCE_TOKEN,
 		});
 		resolveUser = createInstanceTokenResolver({
