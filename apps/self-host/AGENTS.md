@@ -1,8 +1,8 @@
 # apps/self-host
 
-Reference Cloudflare Worker for self-hosting Epicenter as a shared wiki. Composes `@epicenter/server` with `shared({ admit })`.
+Reference self-host deployable (community-supported, not Epicenter-operated). Two runtimes off one `@epicenter/server` composition: a Cloudflare Worker shared wiki (`worker/index.ts`, `shared({ admit })`) and an off-Cloudflare Bun entry (`server.ts`) that runs solo (`personal()` + a first-boot bearer) or shared, picked by an explicit `EPICENTER_MODE` (default `solo`) whose value the configured OAuth providers must agree with at boot (ADR-0072).
 
-Not operated by Epicenter; framed as a community-supported starting point. Keep the worker entry small (~30 lines) so it stays readable as a reference.
+Operator-facing docs for both runtimes live in `README.md`. Keep the worker entry small (~30 lines) so it stays readable as a reference.
 
 ## Hard constraints
 

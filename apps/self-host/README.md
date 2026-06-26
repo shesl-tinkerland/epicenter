@@ -6,6 +6,8 @@ Reference Cloudflare Worker for self-hosting Epicenter as a shared wiki. **Not o
 
 `apps/self-host` is a ~30-line composition of `@epicenter/server` with the `shared({ admit })` ownership rule. Every user your `admit` predicate accepts shares one workspace partition (`SHARED_OWNER_ID = "shared"`). The shipped default admits a fixed email list, but `admit` is a plain callback you own: see [Admission](#admission-who-gets-in).
 
+It ships as two runtimes off the same library: this Cloudflare Worker (shared wiki only), and an off-Cloudflare Bun entry (`server.ts`) that runs a solo single-owner box or the shared wiki, picked by `EPICENTER_MODE`. If you want a homelab box with no Google OAuth app, jump to [Running off Cloudflare](#running-off-cloudflare-the-bun-box).
+
 ## What this isn't
 
 This is not Epicenter Cloud. There are:
@@ -47,6 +49,49 @@ binding contract (`ServerBindings`) and declares only deployment-owned
 vars, so there is no typegen step. If you add bindings of your own, declare
 them there (or regenerate with `bun run typegen` and re-add the `extends`
 clause).
+
+## Running off Cloudflare: the Bun box
+
+The same `@epicenter/server` runs as a single Bun process against your own Postgres (`bun server.ts`, or a `bun build --compile` binary), no Cloudflare account required. This is the homelab "own your data on your own machine" path. One launch choice picks its shape.
+
+`EPICENTER_MODE` (`solo` | `shared`, default `solo`) is an explicit declaration, never derived from which secrets you set. The mode IS the data partition, so picking it from mutable credentials would let a secret change silently re-partition a populated box. Instead the configured OAuth providers must agree with the declared mode, checked loudly at boot: a half-configured provider pair, `shared` with no provider, or `solo` carrying OAuth creds or an allowlist each fail boot with a message naming the fix.
+
+### Solo (the default): one owner, no OAuth app
+
+A box for a single owner. It needs only a database and an auth secret:
+
+```bash
+DATABASE_URL=postgres://user:pass@host:5432/epicenter \
+BETTER_AUTH_SECRET="$(openssl rand -base64 32)" \
+DATA_DIR=/var/lib/epicenter \
+bun server.ts
+```
+
+On first boot it mints a single-user bearer, writes it `0600` to `<DATA_DIR>/instance-token`, and names the file (it never echoes the secret to the logs, which are a worse at-rest location than the `0600` file):
+
+```txt
+solo mode. Minted a new instance token, saved 0600 to /var/lib/epicenter/instance-token.
+Read it once and paste it into the client instance setting:
+  cat /var/lib/epicenter/instance-token
+```
+
+`cat` it once, paste it into the client's instance setting (`{ baseURL, token }`), and every request authenticates as the box's single owner under `personal()`. Later boots reuse the file. Persist `DATA_DIR`: it holds both the token and the room data, so an ephemeral one re-mints on every boot and invalidates the pasted credential. To inject your own secret instead (12-factor / container secrets), set `INSTANCE_TOKEN` and the box never writes a file.
+
+There is no break-glass here in the other direction either: a shared wiki has no admin bearer over OAuth, so an operator locked out by a bad `ALLOWED_MEMBER_EMAILS` recovers by fixing the allowlist and redeploying, not by a backdoor token.
+
+### Shared: a wiki off Cloudflare
+
+The Bun box can also run the shared wiki, the same OAuth + allowlist as the Worker:
+
+```bash
+EPICENTER_MODE=shared \
+GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
+ALLOWED_MEMBER_EMAILS=ada@example.com,grace@example.com \
+DATABASE_URL=... BETTER_AUTH_SECRET=... \
+bun server.ts
+```
+
+`ALLOWED_MEMBER_EMAILS` is the shipped `admit` (see [Admission](#admission-who-gets-in)); an empty allowlist admits nobody (fail closed). At least one OAuth provider is required. Solo-only knobs (`INSTANCE_TOKEN`, a leftover `<DATA_DIR>/instance-token`) are unused here and warn at boot.
 
 ## Composition
 
