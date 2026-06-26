@@ -59,6 +59,8 @@ import {
 	startBunServer,
 } from '@epicenter/server/bun';
 import { type } from 'arktype';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadOrMintInstanceToken } from './instance-token.js';
 
 /**
@@ -155,6 +157,23 @@ export function startSelfHostServer(
 	}
 
 	if (mode === 'shared') {
+		// The solo-only knobs are inert in shared mode (auth is OAuth + the
+		// allowlist, never the bearer), but a silent ignore would hide a
+		// mis-templated deploy. They break nothing here, so warn rather than fail:
+		// surface them and name the fix, matching the loud-on-incoherent-config
+		// posture of the boot guard above.
+		if (env.INSTANCE_TOKEN) {
+			console.warn(
+				'EPICENTER_MODE=shared ignores INSTANCE_TOKEN (the solo bearer); shared auth is OAuth + the allowlist. Remove INSTANCE_TOKEN, or set EPICENTER_MODE=solo to use it.',
+			);
+		}
+		const strayTokenPath = join(resolveDataDir(env), 'instance-token');
+		if (existsSync(strayTokenPath)) {
+			console.warn(
+				`EPICENTER_MODE=shared but a solo instance-token file is present at ${strayTokenPath}; it is unused here, and any solo data under owners/self-host is orphaned in shared mode (no migration tool). Delete it once you have moved off solo.`,
+			);
+		}
+
 		// Shared wiki (Config D). Parse the allowlist once at boot and close over the
 		// set, so admit is a plain membership test with no per-request env read. An
 		// unset or empty var yields an empty set: the deployment admits nobody until
