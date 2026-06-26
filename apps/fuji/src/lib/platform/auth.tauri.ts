@@ -17,12 +17,12 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Ok, type Result } from 'wellcrafted/result';
-import { readInstance } from '$lib/instance';
+import { instanceSetting } from '$lib/instance';
 import type { PlatformAuth } from './types';
 
 const OAUTH_CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
 
-const instance = readInstance();
+const instance = instanceSetting.readInstance();
 
 // A configured instance token means a self-hosted star: authenticate with the
 // static bearer (ADR-0070) instead of OAuth. Otherwise the deep-link OAuth flow

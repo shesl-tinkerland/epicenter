@@ -1,9 +1,9 @@
 <script lang="ts">
+	import { InstanceSettingsModal } from '@epicenter/app-shell/instance-setting';
 	import { WorkspaceGate } from '@epicenter/app-shell/workspace-gate';
 	import { Button } from '@epicenter/ui/button';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import InstanceSettingsModal from '$lib/components/InstanceSettingsModal.svelte';
-	import { isDefaultInstance, readInstance } from '$lib/instance';
+	import { instanceSetting } from '$lib/instance';
 	import { requireOpensidian, session } from '$lib/session';
 	import { auth } from '$platform/auth';
 
@@ -13,7 +13,7 @@
 	let signInError = $state<string | null>(null);
 	let instanceModalOpen = $state(false);
 
-	const instance = readInstance();
+	const instance = instanceSetting.readInstance();
 	const usingToken = instance.token !== undefined;
 	const instanceHost = new URL(instance.baseURL).host;
 
@@ -68,11 +68,15 @@
 			class="text-muted-foreground"
 			onclick={() => (instanceModalOpen = true)}
 		>
-			{isDefaultInstance(instance)
+			{instanceSetting.isDefaultInstance(instance)
 				? 'Connect to a self-hosted instance'
 				: 'Change instance'}
 		</Button>
 	</div>
 {/if}
 
-<InstanceSettingsModal bind:open={instanceModalOpen} />
+<InstanceSettingsModal
+	bind:open={instanceModalOpen}
+	setting={instanceSetting}
+	appName="Opensidian"
+/>

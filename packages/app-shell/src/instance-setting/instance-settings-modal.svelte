@@ -4,19 +4,24 @@
 	import { Input } from '@epicenter/ui/input';
 	import { Label } from '@epicenter/ui/label';
 	import * as Modal from '@epicenter/ui/modal';
-	import {
-		clearInstance,
-		isDefaultInstance,
-		readInstance,
-		writeInstance,
-	} from '$lib/instance';
+	import type { InstanceSetting } from './instance-setting.js';
 
-	let { open = $bindable(false) }: { open?: boolean } = $props();
+	let {
+		open = $bindable(false),
+		setting,
+		appName,
+	}: {
+		open?: boolean;
+		/** The app's bound instance setting (its storage key + hosted default). */
+		setting: InstanceSetting;
+		/** The app's display name, woven into the description copy. */
+		appName: string;
+	} = $props();
 
 	// Read once when the component mounts; saving reloads the app, so there is no
 	// live value to track.
-	const instance = readInstance();
-	const hasOverride = !isDefaultInstance(instance);
+	const instance = setting.readInstance();
+	const hasOverride = !setting.isDefaultInstance(instance);
 
 	let urlInput = $state(hasOverride ? instance.baseURL : '');
 	let tokenInput = $state(instance.token ?? '');
@@ -31,12 +36,12 @@
 			urlError = error.message;
 			return;
 		}
-		writeInstance({ baseURL, token: tokenInput.trim() || undefined });
+		setting.writeInstance({ baseURL, token: tokenInput.trim() || undefined });
 		location.reload();
 	}
 
 	function useHosted() {
-		clearInstance();
+		setting.clearInstance();
 		location.reload();
 	}
 </script>
@@ -46,8 +51,8 @@
 		<Modal.Header>
 			<Modal.Title>Connect to a self-hosted instance</Modal.Title>
 			<Modal.Description>
-				Point Opensidian at your own Epicenter star. Your data and token go only
-				to this origin; the hosted cloud is never an endpoint.
+				Point {appName} at your own Epicenter star. Your data and token go only to
+				this origin; the hosted cloud is never an endpoint.
 			</Modal.Description>
 		</Modal.Header>
 		<div class="flex flex-col gap-4">

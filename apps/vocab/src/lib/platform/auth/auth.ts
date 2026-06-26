@@ -5,9 +5,9 @@ import {
 	createInstanceTokenAuth,
 	createOAuthAppAuth,
 } from '@epicenter/svelte/auth';
-import { readInstance } from '$lib/instance';
+import { instanceSetting } from '$lib/instance';
 
-const instance = readInstance();
+const instance = instanceSetting.readInstance();
 
 // A configured instance token means a self-hosted star: authenticate with the
 // static bearer (ADR-0070) instead of OAuth. Otherwise the OAuth flow runs
