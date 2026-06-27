@@ -12,7 +12,7 @@ import { transcribeAndPersist } from '$lib/operations/transcribe';
 import { runTransformation } from '$lib/operations/transform';
 import { report } from '$lib/report';
 import { services } from '$lib/services';
-import type { RecorderStopResult } from '$lib/services/recorder/types';
+import type { RecorderStopResult } from '@epicenter/recorder';
 import { dictationLifecycle } from '$lib/state/dictation-lifecycle.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 import { settings } from '$lib/state/settings.svelte';

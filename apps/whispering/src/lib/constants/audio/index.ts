@@ -8,10 +8,7 @@ export {
 	CAPTURE_SURFACE_OPTIONS,
 	type CaptureSurface,
 } from './capture-surfaces';
-export {
-	TIMESLICE_MS,
-	WHISPER_RECOMMENDED_MEDIA_TRACK_CONSTRAINTS,
-} from './media-constraints';
+export { WHISPER_RECOMMENDED_MEDIA_TRACK_CONSTRAINTS } from './media-constraints';
 export {
 	MANUAL_RECORDING_BUTTON,
 	VAD_RECORDING_BUTTON,

@@ -13,7 +13,7 @@ import {
 	enumerateDevices,
 	getRecordingStream,
 } from '@epicenter/recorder';
-import { asDeviceIdentifier } from '$lib/services/recorder/types';
+import { asDeviceIdentifier } from '@epicenter/recorder';
 import { deviceConfig } from '$lib/state/device-config.svelte';
 
 const VadRecorderError = defineErrors({

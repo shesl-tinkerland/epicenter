@@ -1,5 +1,5 @@
+import { RecorderError } from '@epicenter/recorder';
 import type { IpcRecorderError } from '$lib/tauri/commands';
-import { RecorderError } from './types';
 
 /**
  * Map a structured Rust recorder error (the `{ name, message }` IPC enum) to a
@@ -27,37 +27,4 @@ export function recorderErrorFromIpc(error: IpcRecorderError) {
 			// (InitFailed at init, StartFailed at start, StopFailed at stop).
 			return null;
 	}
-}
-
-/**
- * Map a browser recording-stream cause (a getUserMedia `DOMException` or a
- * `DeviceStreamError` from the navigator device-stream service) to a
- * cross-cutting service `RecorderError`, or `null` to let the call site apply
- * its own verb.
- *
- * This is the web counterpart to {@link recorderErrorFromIpc}: same intent
- * (surface permission/no-device the same way everywhere), different wire
- * source. Browser causes carry a `name` tag rather than a Rust enum.
- */
-export function categorizeBrowserStreamError(cause: unknown) {
-	if (!(cause && typeof cause === 'object' && 'name' in cause)) return null;
-	const name = (cause as { name: unknown }).name;
-
-	// getUserMedia DOMException codes.
-	if (name === 'NotAllowedError' || name === 'SecurityError') {
-		return RecorderError.MicrophonePermissionDenied({ cause });
-	}
-	if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-		return RecorderError.NoInputDevice({ cause });
-	}
-	// device-stream's own tags (re-categorized so the toast layer can branch on
-	// RecorderError variants without importing DeviceStreamError).
-	if (name === 'PermissionDenied') {
-		return RecorderError.MicrophonePermissionDenied({ cause });
-	}
-	if (name === 'NoDevicesFound') {
-		return RecorderError.NoInputDevice({ cause });
-	}
-
-	return null;
 }

@@ -8,18 +8,14 @@ import type {
 	Device,
 	DeviceAcquisitionOutcome,
 	DeviceIdentifier,
-} from '@epicenter/recorder';
-import type { WhisperingRecordingState } from '$lib/constants/audio';
+} from './devices';
 
-// The device-identity types and their cast helper now live in
-// `@epicenter/recorder`. Re-export them here so the many in-app consumers of
-// `$lib/services/recorder/types` keep their import path during the extraction.
-export {
-	asDeviceIdentifier,
-	type Device,
-	type DeviceAcquisitionOutcome,
-	type DeviceIdentifier,
-} from '@epicenter/recorder';
+/**
+ * Recorder lifecycle state. A plain union: the states are never validated at
+ * runtime, only used as compile-time types. Emitted by
+ * {@link RecordingSession.subscribe}.
+ */
+export type RecordingState = 'IDLE' | 'RECORDING';
 
 export const RecorderError = defineErrors({
 	EnumerateDevices: ({ cause }: { cause: unknown }) => ({
@@ -85,54 +81,61 @@ type BaseRecordingParams = {
 export type RecordingCallbacks = {
 	/**
 	 * Sink for live mic loudness (raw RMS, ~0 silent to ~0.3 loud speech),
-	 * called continuously while recording so the pill can draw a meter.
+	 * called continuously while recording so the caller can draw a meter.
 	 *
-	 * The navigator recorder taps its MediaStream to drive this. The CPAL
-	 * recorder reaches the same meter another way (Rust emits the level straight
-	 * to the overlay window), so its `startRecording` simply does not accept
+	 * The browser recorder taps its MediaStream to drive this. A native recorder
+	 * may reach the same meter another way (e.g. emitting the level straight to
+	 * an overlay window), so its `startRecording` simply does not accept
 	 * callbacks.
 	 */
 	onLevel: (level: number) => void;
 };
 
 /**
- * CPAL (native Rust) recording parameters
+ * Native (e.g. Rust/CPAL) recording parameters.
  */
 export type CpalRecordingParams = BaseRecordingParams & {
 	sampleRate: string;
 };
 
 /**
- * Navigator (MediaRecorder) recording parameters
+ * Browser (MediaRecorder) recording parameters.
  */
 export type NavigatorRecordingParams = BaseRecordingParams & {
 	bitrateKbps: string;
 };
 
-// Imported from the tauri-specta boundary so `RecorderStopResult` is
-// structurally identical to what `commands.stopRecording` returns. The Rust
-// `RecordingArtifact` struct is the single source of truth; consumers that need
-// the type import it from `$lib/tauri/commands` directly.
-import type { RecordingArtifact } from '$lib/tauri/commands';
+/**
+ * A durable recording artifact produced by a native recorder that writes the
+ * encoded audio to disk: the handle is the canonical reference for
+ * transcribe/upload/delete and JS never touches the bytes itself.
+ *
+ * This is the plain, portable shape of the artifact. A native implementation
+ * (such as Whispering's tauri-specta CPAL recorder) produces a struct that is
+ * structurally identical to this type, so its result satisfies
+ * {@link RecorderStopResult} without the package depending on any app bindings.
+ */
+export type RecordingArtifact = {
+	id: string;
+	durationMs: number;
+	byteLength: number;
+	mimeType: string;
+};
 
 /**
  * Output of `RecordingSession.stop()`. One of two physical shapes:
  *
- * - `kind: 'artifact'`: cpal produced a durable WAV on disk; the handle
- *   is the canonical reference for transcribe/upload/delete. JS does not
+ * - `kind: 'artifact'`: a native recorder produced a durable file on disk; the
+ *   handle is the canonical reference for transcribe/upload/delete. JS does not
  *   touch the bytes itself.
- * - `kind: 'blob'`: navigator (browser MediaRecorder) returned encoded
- *   container bytes (webm/opus, mp4/AAC) the JS side holds in memory.
- *   The pipeline persists it through the recordings blob store so the
- *   id-addressed Rust commands work on it too. There is intentionally
- *   no `Float32Array` arm: raw PCM never exists as a general front-end
- *   value.
+ * - `kind: 'blob'`: the browser MediaRecorder returned encoded container bytes
+ *   (webm/opus, mp4/AAC) the JS side holds in memory. There is intentionally
+ *   no `Float32Array` arm: raw PCM never exists as a general front-end value.
  *
- * `durationMs` lives on whichever arm naturally carries it (the cpal
- * artifact stat, the navigator wall-clock measurement). VAD and file
- * uploads have no notion of duration at the recorder boundary; they
- * synthesize a `kind: 'blob'` result from outside the recorder and pass
- * `null` for duration at the pipeline boundary.
+ * `durationMs` lives on whichever arm naturally carries it (the native artifact
+ * stat, the browser wall-clock measurement). Callers that synthesize a
+ * `kind: 'blob'` result from outside the recorder (VAD, file uploads) have no
+ * notion of duration at the recorder boundary and pass `null`.
  */
 export type RecorderStopResult =
 	| { kind: 'artifact'; artifact: RecordingArtifact }
@@ -159,11 +162,11 @@ export type RecordingSession = {
 	stop(): Promise<Result<RecorderStopResult, RecorderError>>;
 	/**
 	 * Cancel the in-flight recording and discard it. Success carries no payload
-	 * (a live session can only resolve to "cancelled"); the manual-recorder
-	 * wrapper is where the `cancelled` vs `no-recording` distinction is made.
+	 * (a live session can only resolve to "cancelled"); the caller's wrapper is
+	 * where the `cancelled` vs `no-recording` distinction is made.
 	 */
 	cancel(): Promise<Result<void, RecorderError>>;
-	subscribe(handler: (state: WhisperingRecordingState) => void): () => void;
+	subscribe(handler: (state: RecordingState) => void): () => void;
 };
 
 /**
@@ -175,8 +178,8 @@ export type RecorderService<RecordingParams extends BaseRecordingParams> = {
 	/**
 	 * Recover a RecordingSession that may have survived a JS reload.
 	 *
-	 * CPAL sessions can outlive a JS reload because Rust keeps the stream;
-	 * navigator sessions cannot survive a reload and return null.
+	 * Native sessions can outlive a JS reload because the host process keeps the
+	 * stream; browser sessions cannot survive a reload and return null.
 	 *
 	 * Returns the live RecordingSession owned by this implementation, or null if none.
 	 */
@@ -195,8 +198,8 @@ export type RecorderService<RecordingParams extends BaseRecordingParams> = {
 	 * and uses its `stop`/`cancel`/`subscribe` for the rest of the session.
 	 *
 	 * `params` is settings-derived config; `callbacks` are the caller's live
-	 * sinks. An implementation that satisfies the meter another way (CPAL via the
-	 * overlay) may take only `params` and ignore the callbacks.
+	 * sinks. An implementation that satisfies the meter another way (e.g. a
+	 * native overlay) may take only `params` and ignore the callbacks.
 	 */
 	startRecording(
 		params: RecordingParams,

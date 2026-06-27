@@ -3,8 +3,8 @@
 	import * as Select from '@epicenter/ui/select';
 	import { createQuery } from '@tanstack/svelte-query';
 	import { report } from '$lib/report';
-	import type { DeviceIdentifier } from '$lib/services/recorder/types';
-	import { asDeviceIdentifier } from '$lib/services/recorder/types';
+	import type { DeviceIdentifier } from '@epicenter/recorder';
+	import { asDeviceIdentifier } from '@epicenter/recorder';
 	import { vadRecorder } from '$lib/state/vad-recorder.svelte';
 
 	let {

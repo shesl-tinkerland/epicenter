@@ -212,10 +212,10 @@ Each wave is one independently-green commit (`bun typecheck` clean repo-wide). W
 
 ### Phase 2: Recorder interface + browser impl
 
-- [ ] **2.1** Move `recorder/types.ts` (keep the `artifact | blob` union) into the package as the shared contract.
-- [ ] **2.2** Move `recorder/index.browser.ts` into the package as `createBrowserRecorder`.
-- [ ] **2.3** Repoint Whispering's `#platform/recorder` `default` at the package; leave `tauri` on the local native impl.
-- [ ] **2.4** `bun typecheck`; smoke both browser and Tauri recording.
+- [x] **2.1** Move `recorder/types.ts` (keep the `artifact | blob` union) into the package as `recorder.ts`. The `RecordingArtifact` shape is now a plain portable type; the native tauri-specta struct satisfies it structurally. `RecordingState` (was `WhisperingRecordingState`) and the browser stream-error categorizer move too.
+- [x] **2.2** Move `recorder/index.browser.ts` into the package as `createBrowserRecorder` (`browser-recorder.ts`), folding in `TIMESLICE_MS`.
+- [x] **2.3** Whispering's `#platform/recorder` `default` keeps pointing at a tiny in-app `index.browser.ts` adapter that instantiates `createBrowserRecorder()` as `ManualRecorderLive` (the name the Tauri branch also exports); `tauri` stays on the local native impl.
+- [x] **2.4** `bun typecheck` green repo-wide (both Whispering web + Tauri tsconfigs); smoke both browser and Tauri recording.
 
 ### Phase 3: VAD + decouplings + assets
 

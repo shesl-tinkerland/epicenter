@@ -9,7 +9,7 @@ import { processRecordingPipeline } from '$lib/operations/pipeline';
 import { sound } from '$lib/operations/sound';
 import { prewarmLocalModel } from '$lib/operations/transcribe';
 import { log, report } from '$lib/report';
-import type { DeviceAcquisitionOutcome } from '$lib/services/recorder/types';
+import type { DeviceAcquisitionOutcome } from '@epicenter/recorder';
 import { captureSurface } from '$lib/state/capture-surface.svelte';
 import { deviceConfig } from '$lib/state/device-config.svelte';
 import { dictationLifecycle } from '$lib/state/dictation-lifecycle.svelte';

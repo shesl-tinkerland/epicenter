@@ -10,7 +10,7 @@ import type {
 	RecorderError,
 	RecordingCallbacks,
 	RecordingSession,
-} from '$lib/services/recorder/types';
+} from '@epicenter/recorder';
 
 const ManualRecorderError = defineErrors({
 	EnumerateDevicesFailed: ({ cause }: { cause: unknown }) => ({
