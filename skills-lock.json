@@ -17,11 +17,6 @@
 			"skillPath": "skills/productivity/caveman/SKILL.md",
 			"computedHash": "934433479903febc585bf6deb5f0cebc63137e3f86b7babe0aab1ecb94d6d7a4"
 		},
-		"create-auth-skill": {
-			"source": "better-auth/skills",
-			"sourceType": "github",
-			"computedHash": "31c027d02dbf1faa37f58191f574b9443143042fb2b684fe32df53ab0270487c"
-		},
 		"diagnose": {
 			"source": "mattpocock/skills",
 			"sourceType": "github",
