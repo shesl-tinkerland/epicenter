@@ -673,7 +673,6 @@
         "mime": "catalog:",
         "typebox": "catalog:",
         "wellcrafted": "catalog:",
-        "yaml": "^2.8.0",
         "yargs": "catalog:",
         "yjs": "catalog:",
       },

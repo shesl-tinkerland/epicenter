@@ -28,7 +28,7 @@ export type RoomDoName = `owners/${string}/rooms/${string}`;
  * R2 object key template for a content-addressed blob, single form. The id
  * segment is a sha256 hex digest, so the key IS the content address: R2 is
  * the index, with no separate database row. See
- * `specs/20260623T220000-content-addressed-blob-store.md`.
+ * ADR-0088 (the blob store is a presigned-S3 kernel and the bucket is its only index).
  */
 export type BlobR2Key = `owners/${string}/blobs/${string}`;
 

@@ -38,8 +38,7 @@ const stripTrailing = (s: string) => s.replace(/\/+$/, '');
 
 /**
  * 64-character lowercase-hex sha256. A blob's id IS its content address, so
- * the route param is constrained to a well-formed digest; this also keeps the
- * `:sha256` pattern disjoint from the literal `/usage` subpath.
+ * the route param is constrained to a well-formed digest.
  */
 export const SHA256_HEX_REGEX = '[a-f0-9]{64}';
 
@@ -52,18 +51,13 @@ export const API_ROUTES = {
 	 * Content-addressed blob store. POST mints an upload ticket (presigned R2
 	 * PUT); GET on the collection lists; GET/DELETE by `:sha256` read/remove a
 	 * blob. R2 is the only index — there is no database row. See
-	 * `specs/20260623T220000-content-addressed-blob-store.md`.
+	 * `docs/adr/0088-the-blob-store-is-a-presigned-s3-kernel-and-the-bucket-is-its-only-index.md`.
 	 */
 	blobs: {
 		list: {
 			pattern: '/api/owners/:ownerId/blobs',
 			url: (baseURL: string, ownerId: OwnerId) =>
 				`${stripTrailing(baseURL)}/api/owners/${encodeURIComponent(ownerId)}/blobs`,
-		},
-		usage: {
-			pattern: '/api/owners/:ownerId/blobs/usage',
-			url: (baseURL: string, ownerId: OwnerId) =>
-				`${stripTrailing(baseURL)}/api/owners/${encodeURIComponent(ownerId)}/blobs/usage`,
 		},
 		byHash: {
 			pattern: `/api/owners/:ownerId/blobs/:sha256{${SHA256_HEX_REGEX}}`,

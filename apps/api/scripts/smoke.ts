@@ -3,8 +3,8 @@
  *
  * Point it at a base URL and it runs ONE end-to-end scenario against the live
  * HTTP server: read the session, open a room, and exercise the full
- * content-addressed blob lifecycle (ticket -> presigned PUT -> read back ->
- * usage). Every step prints a single PASS/FAIL/SKIP line, so the same
+ * content-addressed blob lifecycle (ticket -> presigned PUT -> read back).
+ * Every step prints a single PASS/FAIL/SKIP line, so the same
  * invocation against the Bun process (:8788) and the wrangler process (:8787)
  * produces a diffable transcript of runtime parity.
  *
@@ -193,21 +193,6 @@ async function main() {
 			);
 		} else {
 			record('FAIL', 'blob read back', `expected 302, got ${readRes.status}`);
-		}
-
-		// Usage.
-		const usageRes = await fetch(API_ROUTES.blobs.usage.url(BASE_URL, owner), {
-			headers: authHeaders,
-		});
-		if (usageRes.ok) {
-			const { totalBytes } = (await usageRes.json()) as { totalBytes: number };
-			record(
-				'PASS',
-				'blob usage',
-				`${usageRes.status} totalBytes=${totalBytes}`,
-			);
-		} else {
-			record('FAIL', 'blob usage', `${usageRes.status}`);
 		}
 
 		// Cleanup the uploaded object (idempotent).

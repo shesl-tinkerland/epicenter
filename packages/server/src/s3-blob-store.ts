@@ -14,7 +14,7 @@
  * (exists for dedup, list for the index, delete) are signed and made
  * server-side here. Grounded against the aws4fetch source and Cloudflare R2
  * docs; see
- * `specs/20260623T220000-content-addressed-blob-store.md`.
+ * ADR-0088 (the blob store is a presigned-S3 kernel and the bucket is its only index).
  *
  * ── The two sha256 headers, which are easy to conflate ──────────────────────
  *

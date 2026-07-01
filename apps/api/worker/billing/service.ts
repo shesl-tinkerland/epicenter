@@ -23,7 +23,7 @@
  * Storage is unmetered in v1: `getOverview` still reports the plan's storage
  * allowance, but nothing writes usage to Autumn yet. The content-addressed blob
  * store will drive `storage_bytes` from an R2 LIST-sum when storage is billed
- * (spec 20260623T220000, decision 10); the old asset-table sync is retired.
+ * (deleted spec 20260623T220000 decision 10, recoverable via git history; kernel is ADR-0088); the old asset-table sync is retired.
  */
 
 import type { UserId } from '@epicenter/auth';

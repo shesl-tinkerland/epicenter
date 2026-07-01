@@ -15,6 +15,6 @@ export const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
  * straight to R2, so the ~100 MB Worker request-body cap does not apply. The
  * ceiling here is R2's single-PUT limit (~5 GiB); larger
  * objects need multipart (deferred) or the receipt's `external` location.
- * See `specs/20260623T220000-content-addressed-blob-store.md`.
+ * See ADR-0088 (the blob store is a presigned-S3 kernel and the bucket is its only index).
  */
 export const MAX_BLOB_BYTES = 5 * 1024 * 1024 * 1024;

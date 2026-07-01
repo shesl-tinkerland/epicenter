@@ -150,7 +150,7 @@ card), the catalog still carries `storage.includedBytes` per plan, and
 `FEATURE_IDS.storageBytes` still names the Autumn feature. In v1 nothing writes
 usage, so `usedBytes` reads as the unwritten balance (effectively 0).
 
-When storage is billed (blob spec `20260623T220000`, decision 10), the meter
+When storage is billed (deleted blob spec `20260623T220000` decision 10, recoverable via git history; kernel is ADR-0088), the meter
 will be a **stock sync, not event deltas**: the content-addressed store is its
 own index, so an occasional `ListObjectsV2` SUM over `owners/<owner>/blobs/`
 drives one absolute `autumn.balances.update({ usage })`. That is self-correcting

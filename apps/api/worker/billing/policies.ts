@@ -36,7 +36,7 @@
  * The content-addressed blob store is unmetered in v1 (no storage policy here):
  * Autumn `check()` denies by default with no plan attached, so deferred quota
  * means not calling it. A `syncBlobStorageWithAutumn` policy slots in when blob
- * storage is billed (spec 20260623T220000, decision 10).
+ * storage is billed (deleted spec 20260623T220000 decision 10, recoverable via git history; kernel is ADR-0088).
  *
  * The library remains billing-agnostic; everything here is cloud-only.
  */

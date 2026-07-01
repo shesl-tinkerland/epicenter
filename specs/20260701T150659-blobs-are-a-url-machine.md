@@ -171,11 +171,11 @@ output(
 
 ### Phase 1: delete (after the bearer-302 fix PR merges)
 
-- [ ] **1.1** Delete `pull`, `blobs-manifest.ts`, `blobs-manifest.test.ts`.
-- [ ] **1.2** Collapse `add` to hash-upload-print; drop `-C`, `--dir`, and all disk writes.
-- [ ] **1.3** Move the download re-hash check from `pull` into `get`.
-- [ ] **1.4** Delete the `usage` route, `client.blobs.usage()`, and the `API_ROUTES.blobs.usage` entry (check `apps/api/scripts/smoke.ts` for a caller first).
-- [ ] **1.5** Rewrite the CLI module header to the one-product sentence.
+- [x] **1.1** Delete `pull`, `blobs-manifest.ts`, `blobs-manifest.test.ts`.
+- [x] **1.2** Collapse `add` to hash-upload-print; drop `-C`, `--dir`, and all disk writes.
+- [x] **1.3** Move the download re-hash check from `pull` into `get`.
+- [x] **1.4** Delete the `usage` route, `client.blobs.usage()`, and the `API_ROUTES.blobs.usage` entry (check `apps/api/scripts/smoke.ts` for a caller first).
+- [x] **1.5** Rewrite the CLI module header to the one-product sentence.
 
 ### Phase 2: agent ergonomics
 

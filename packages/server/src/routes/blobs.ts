@@ -4,14 +4,13 @@
  * Uniform owner-partitioned URL shape:
  *   POST   /api/owners/:ownerId/blobs              authed — request an upload ticket
  *   GET    /api/owners/:ownerId/blobs              authed — list the owner's blobs
- *   GET    /api/owners/:ownerId/blobs/usage        authed — total stored bytes
  *   GET    /api/owners/:ownerId/blobs/:sha256      authed — read (302 → presigned GET)
  *   DELETE /api/owners/:ownerId/blobs/:sha256      authed — delete
  *
  * There is NO database row, NO queue, and NO event notification. The blob's
  * key IS its sha256 content address, so the store itself answers "does it
- * exist" (exists), "what do I have" (list), and "how much" (sum of list sizes).
- * Rich metadata (source URL, references) lives in the vault receipt, not here.
+ * exist" (exists) and "what do I have" (list). Rich metadata (source URL,
+ * references) lives in the documents that cite the blob, not here.
  *
  * The store is a PORTABLE S3 client (`s3-blob-store.ts`): plain S3-over-HTTPS
  * via aws4fetch, no Cloudflare Workers R2 binding, so the identical route runs
@@ -25,7 +24,7 @@
  *
  * v1 is all-private: every route is auth + ownership gated (R2 public access is
  * bucket-level, so a public tier is a separate bucket, deferred). See
- * `specs/20260623T220000-content-addressed-blob-store.md`.
+ * `docs/adr/0088-the-blob-store-is-a-presigned-s3-kernel-and-the-bucket-is-its-only-index.md`.
  */
 
 import { API_ROUTES, SHA256_HEX_REGEX } from '@epicenter/constants/api-routes';
@@ -202,19 +201,6 @@ const blobsApp = new Hono<BlobEnv>()
 			return c.json(blobs);
 		},
 	)
-	// GET usage — total stored bytes (sum of the LIST).
-	.get(
-		API_ROUTES.blobs.usage.pattern,
-		describeRoute({
-			description: "Get the current owner's total stored bytes.",
-			tags: ['blobs'],
-		}),
-		async (c) => {
-			const blobs = await listOwnerBlobs(c.var.blobStore, c.var.ownerId);
-			const totalBytes = blobs.reduce((sum, b) => sum + b.size, 0);
-			return c.json({ totalBytes });
-		},
-	)
 	// GET by hash — read (302 → short-TTL presigned GET).
 	.get(
 		API_ROUTES.blobs.byHash.pattern,
@@ -304,7 +290,6 @@ export function mountBlobsApp<E extends Env = Env>(
 	];
 
 	app.use(API_ROUTES.blobs.list.pattern, ...chain);
-	app.use(API_ROUTES.blobs.usage.pattern, ...chain);
 	app.on(['GET', 'DELETE'], API_ROUTES.blobs.byHash.pattern, ...chain);
 	app.route('/', blobsApp);
 }

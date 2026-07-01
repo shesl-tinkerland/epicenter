@@ -71,9 +71,6 @@ export type EpicenterClientOptions = {
 /** One row of the owner's blob listing (`GET /blobs`). */
 export type BlobRow = { sha256: string; size: number; uploaded: string };
 
-/** Total stored bytes for the owner (`GET /blobs/usage`). */
-export type BlobUsage = { totalBytes: number };
-
 /** Result of the client's `blobs.add`. */
 export type AddBlobResult = {
 	/** Lowercase-hex content address of the stored bytes. */
@@ -346,16 +343,6 @@ export function createEpicenterClient(opts: EpicenterClientOptions) {
 			);
 			if (reqError !== null) return Err(reqError);
 			return Ok((await res.json()) as BlobRow[]);
-		},
-
-		async usage(): Promise<Result<BlobUsage, ClientError>> {
-			const { data: res, error: reqError } = await request(
-				API_ROUTES.blobs.usage.url(base, ownerId),
-				undefined,
-				'GET /blobs/usage',
-			);
-			if (reqError !== null) return Err(reqError);
-			return Ok((await res.json()) as BlobUsage);
 		},
 
 		async delete(sha256: string): Promise<Result<void, ClientError>> {

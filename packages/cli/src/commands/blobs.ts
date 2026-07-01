@@ -1,25 +1,18 @@
 /**
- * `epicenter blobs`: archive vault files in the content-addressed cloud store
- * and restore them, lockfile-style.
- *
- * The committed record is one lockfile, `epicenter.blobs.lock` at the Epicenter
- * root, mapping each gitignored vault file to its content address. The binaries
- * stay out of git; `blobs pull` re-downloads any that are missing. This is to
- * heavy media what a lockfile is to dependencies. The root is the folder holding
- * `epicenter.config.ts`, found by walking up (or `-C <dir>`), like every other
- * command.
+ * `epicenter blobs`: trade a file that does not fit in git for a durable
+ * content-addressed URL. The sha256 rides inside the URL, so the documents
+ * that cite it are the only manifest; nothing is recorded anywhere else.
  *
  *   add <file|url>  upload the bytes (hash -> ticket -> presigned PUT straight
- *                   to the store) and upsert the manifest entry
+ *                   to the store) and print the URL; writes nothing to disk
  *   ls              list the owner's stored blobs (the store is the index)
  *   get <sha256>    download one blob by content address to a file
- *   rm  <sha256>    delete one blob from the store (cloud only)
- *   pull            restore missing manifest files from their content address
+ *   rm  <sha256>    delete one blob from the store (breaks every citation)
  *
  * Every subcommand is a direct cloud round-trip built from the resolved machine
  * auth client (the persisted OAuth cell, or a configured instance token for a
  * self-hosted star); none route through the local daemon, unlike `run`. See
- * `specs/20260623T220000-content-addressed-blob-store.md`.
+ * `docs/adr/0090-blobs-trade-a-file-for-a-durable-content-addressed-url-documents-are-the-only-manifest.md`.
  */
 
 import { createHash } from 'node:crypto';
@@ -31,28 +24,15 @@ import mime from 'mime';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { Err, Ok, type Result, tryAsync } from 'wellcrafted/result';
 import { cmd } from '../util/cmd.js';
-import { epicenterRootOption } from '../util/common-options.js';
 import { fail, formatOptions, output } from '../util/format-output.js';
-import {
-	type BlobManifest,
-	downloadName,
-	emptyManifest,
-	parseManifest,
-	stringifyManifest,
-	upsertManifestEntry,
-} from './blobs-manifest.js';
 
 /** A source is fetched when it looks like an http(s) URL, else read from disk. */
 const HTTP_URL = /^https?:\/\//i;
 
-/** The committed manifest: a lockfile at the Epicenter root, beside
- * `epicenter.config.ts` (NOT under the gitignored `.epicenter/` machine-state
- * dir, so it can be committed). Shares the `epicenter.*` prefix with the config. */
-const MANIFEST_FILENAME = 'epicenter.blobs.lock';
-
 const addCommand = cmd({
 	command: 'add <source>',
-	describe: 'Archive a vault file or http(s) URL and record it in the manifest',
+	describe:
+		'Archive a file or http(s) URL and print its content-addressed URL',
 	builder: (yargs) =>
 		yargs
 			.positional('source', {
@@ -64,21 +44,14 @@ const addCommand = cmd({
 				type: 'string',
 				describe: 'Override the content type (else inferred from the source)',
 			})
-			.option('C', epicenterRootOption)
-			.option('dir', {
-				type: 'string',
-				describe:
-					'Directory a URL download lands in (default: the Epicenter root). A local file is recorded in place.',
-			})
 			.options(formatOptions)
 			.strict(),
 	handler: async (argv) => {
-		const epicenterRoot = argv.C;
 		const epicenter = await connectCloud();
 		if (!epicenter) return;
 
-		// Hold the bytes locally so we can write the download and hand the SDK a
-		// Blob (no second fetch of a URL we already downloaded).
+		// Hold the bytes locally so we hand the SDK a Blob (no second fetch of a
+		// URL we already downloaded).
 		const { data: resolved, error: resolveError } = await resolveSource(
 			argv.source,
 			argv.contentType,
@@ -87,7 +60,7 @@ const addCommand = cmd({
 			fail(resolveError);
 			return;
 		}
-		const { bytes, contentType, sourceUrl, localPath } = resolved;
+		const { bytes, contentType } = resolved;
 
 		const { data: result, error: uploadError } = await epicenter.blobs.add(
 			new Blob([new Uint8Array(bytes)], { type: contentType }),
@@ -98,55 +71,8 @@ const addCommand = cmd({
 			return;
 		}
 
-		// Where the binary lives in the vault: a local file is recorded in place;
-		// a URL download is written into --dir (default the Epicenter root), named
-		// by content address so an untrusted URL segment never becomes a filename.
-		const blobPath = localPath
-			? localPath
-			: path.resolve(
-					argv.dir ?? epicenterRoot,
-					downloadName({ sha256: result.sha256, contentType }),
-				);
-
-		// The manifest key is the blob's path relative to the Epicenter root, so it
-		// must sit inside the root for the key to be a clean relative path that
-		// `pull` can restore to.
-		const key = path.relative(epicenterRoot, blobPath);
-		if (key.startsWith('..') || path.isAbsolute(key)) {
-			fail(
-				`'${rel(blobPath)}' is outside the Epicenter root '${rel(epicenterRoot) || '.'}'; pass -C to set the root`,
-			);
-			return;
-		}
-
-		// Write the bytes only when they are not already on disk (a URL download,
-		// or a copy into a different --dir); a local file added in place exists.
-		if (!(await pathExists(blobPath))) {
-			await fs.mkdir(path.dirname(blobPath), { recursive: true });
-			await fs.writeFile(blobPath, bytes);
-		}
-
-		// The manifest sits at the Epicenter root, which already exists (we found
-		// `epicenter.config.ts` there), so this is a plain write, no mkdir.
-		const manifestPath = path.join(epicenterRoot, MANIFEST_FILENAME);
-		const manifest = await loadManifest(manifestPath);
-		const next = upsertManifestEntry(manifest, toPosix(key), {
-			sha256: result.sha256,
-			size_bytes: bytes.byteLength,
-			content_type: contentType,
-			...(sourceUrl ? { source_url: sourceUrl } : {}),
-			archived_at: new Date().toISOString(),
-		});
-		await fs.writeFile(manifestPath, stringifyManifest(next));
-
 		output(
-			{
-				sha256: result.sha256,
-				url: result.url,
-				duplicate: result.duplicate,
-				path: rel(blobPath),
-				manifest: rel(manifestPath),
-			},
+			{ sha256: result.sha256, url: result.url, duplicate: result.duplicate },
 			{ format: argv.format },
 		);
 	},
@@ -172,9 +98,10 @@ const lsCommand = cmd({
 
 const rmCommand = cmd({
 	command: 'rm <sha256>',
-	// Removes the cloud object only; any local file and its manifest entry are
-	// left untouched (the store is content-addressed, the disk is yours to manage).
-	describe: 'Delete a blob from the store by content address (idempotent)',
+	// Removes the cloud object only; local files are yours to manage. Every
+	// document URL citing this hash 404s from now on.
+	describe:
+		'Delete a blob from the store by content address; every URL citing it breaks forever (idempotent)',
 	builder: (yargs) =>
 		yargs
 			.positional('sha256', {
@@ -224,11 +151,23 @@ const getCommand = cmd({
 			return;
 		}
 
+		const bytes = Buffer.from(await res.arrayBuffer());
+
+		// The store enforces the hash on write, but a download can still be
+		// truncated mid-flight; verify before we trust the bytes on disk.
+		const actual = sha256Of(bytes);
+		if (actual !== argv.sha256) {
+			fail(
+				`downloaded bytes do not match their content address: expected ${argv.sha256}, got ${actual}`,
+				{ code: 2 },
+			);
+			return;
+		}
+
 		// Content type rides on the stored object (pinned at upload), so it names
 		// the extension when the caller did not pick an output path.
 		const contentType =
 			res.headers.get('content-type') ?? 'application/octet-stream';
-		const bytes = Buffer.from(await res.arrayBuffer());
 		const ext = mime.getExtension(contentType);
 		const outputPath = path.resolve(
 			argv.output ?? (ext ? `${argv.sha256}.${ext}` : argv.sha256),
@@ -248,75 +187,6 @@ const getCommand = cmd({
 	},
 });
 
-const pullCommand = cmd({
-	command: 'pull',
-	describe: 'Restore missing vault files from the manifest by content address',
-	builder: (yargs) =>
-		yargs
-			.option('C', epicenterRootOption)
-			.option('force', {
-				type: 'boolean',
-				default: false,
-				describe: 'Re-download even files already present on disk',
-			})
-			.options(formatOptions)
-			.strict(),
-	handler: async (argv) => {
-		const epicenterRoot = argv.C;
-		const manifestPath = path.join(epicenterRoot, MANIFEST_FILENAME);
-		const manifest = await loadManifest(manifestPath);
-		const entries = Object.entries(manifest.blobs);
-		if (entries.length === 0) {
-			fail(`no blobs recorded in ${rel(manifestPath)}`);
-			return;
-		}
-
-		const epicenter = await connectCloud();
-		if (!epicenter) return;
-
-		// Serial on purpose: restores are bandwidth-bound, and one row per file
-		// keeps the report legible.
-		const results: Record<string, unknown>[] = [];
-		for (const [relPath, entry] of entries) {
-			const dest = path.resolve(epicenterRoot, relPath);
-			if (!argv.force && (await pathExists(dest))) {
-				results.push({ path: relPath, status: 'present' });
-				continue;
-			}
-
-			const { data: res, error } = await epicenter.blobs.get(entry.sha256);
-			if (error !== null) {
-				results.push({ path: relPath, status: 'failed', error: error.message });
-				continue;
-			}
-			const bytes = Buffer.from(await res.arrayBuffer());
-
-			// The store enforces the hash on write, but a download can still be
-			// truncated mid-flight; verify before we trust the bytes on disk.
-			const actual = sha256Of(bytes);
-			if (actual !== entry.sha256) {
-				results.push({
-					path: relPath,
-					status: 'corrupt',
-					expected: entry.sha256,
-					actual,
-				});
-				continue;
-			}
-
-			await fs.mkdir(path.dirname(dest), { recursive: true });
-			await fs.writeFile(dest, bytes);
-			results.push({
-				path: relPath,
-				status: 'restored',
-				size_bytes: bytes.byteLength,
-			});
-		}
-
-		output(results, { format: argv.format });
-	},
-});
-
 export const blobsCommand = cmd({
 	command: 'blobs <subcommand>',
 	describe: 'Archive and retrieve bytes in the content-addressed blob store',
@@ -326,8 +196,7 @@ export const blobsCommand = cmd({
 			.command(lsCommand)
 			.command(getCommand)
 			.command(rmCommand)
-			.command(pullCommand)
-			.demandCommand(1, 'Specify a subcommand: add, ls, get, rm, pull'),
+			.demandCommand(1, 'Specify a subcommand: add, ls, get, rm'),
 	handler: () => {},
 });
 
@@ -357,14 +226,10 @@ async function connectCloud(): Promise<EpicenterClient | null> {
 	});
 }
 
-/** Bytes plus the metadata the manifest entry and on-disk copy need. */
+/** The bytes to upload plus the content type that rides with them. */
 type ResolvedSource = {
 	bytes: Buffer;
 	contentType: string;
-	/** Set only when the source was an http(s) URL. */
-	sourceUrl?: string;
-	/** Absolute path when the source was a local file. */
-	localPath?: string;
 };
 
 /**
@@ -392,7 +257,6 @@ async function resolveSource(
 				contentTypeOverride ??
 				res.headers.get('content-type') ??
 				'application/octet-stream',
-			sourceUrl: source,
 		});
 	}
 
@@ -409,23 +273,7 @@ async function resolveSource(
 			contentTypeOverride ??
 			mime.getType(localPath) ??
 			'application/octet-stream',
-		localPath,
 	});
-}
-
-async function pathExists(p: string): Promise<boolean> {
-	try {
-		await fs.access(p);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/** Read the manifest at `manifestPath`, or the empty manifest if it is absent. */
-async function loadManifest(manifestPath: string): Promise<BlobManifest> {
-	if (!(await pathExists(manifestPath))) return emptyManifest();
-	return parseManifest(await fs.readFile(manifestPath, 'utf8'));
 }
 
 /** Lowercase-hex sha256 of bytes, to verify a download against its address. */
@@ -436,9 +284,4 @@ function sha256Of(bytes: Buffer): string {
 /** A path relative to the cwd, for terse output. */
 function rel(p: string): string {
 	return path.relative(process.cwd(), p);
-}
-
-/** A manifest key is always POSIX-separated, regardless of the host platform. */
-function toPosix(p: string): string {
-	return p.split(path.sep).join('/');
 }
