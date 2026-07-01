@@ -77,7 +77,7 @@ non-owners already delegate. A delegating repeat is resolved, not a smell.
 ### 3. Dead and orphan links
 
 ```bash
-# broken reference links — match real markdown links ](...) only, keep the
+# broken reference links: match real markdown links ](...) only, keep the
 # ../skill/ prefix, and resolve relative to the linking file's dir. Matching the
 # bare `references/x.md` tail (and dropping the prefix) gives false DEAD hits for
 # valid cross-skill links like ](../workspace-api/references/x.md) and for
@@ -107,6 +107,82 @@ Read the result by role: a `hub` with 0 inbound links is fine (it is a front
 door). A `move` with 0 inbound is suspicious (nothing delegates to it: is its
 phrase real?). A `move` with exactly 1 inbound is tightly coupled (could it just
 be a section of that one caller?). Many inbound = a healthy shared move.
+
+### 5. Description-restatement body section
+
+A full-library audit found ~40 skills opening with a "When to Apply This Skill"
+list that restates the frontmatter description bullet for bullet. By the time
+the body loads, routing already happened; the copy only costs tokens and drifts.
+
+```bash
+grep -ln '^## When [Tt]o Apply' */SKILL.md
+```
+
+Open each hit and diff its bullets against the description. Pure restatement =
+delete the section. Keep it only when it adds recognition cues the description
+cannot carry (concrete code smells, near-miss boundaries).
+
+### 6. Restating closer
+
+A closing "Quick Reference", "Checklist", "Best Practices", "Common Gotchas",
+"Anti-Patterns", or "Complete Example" that restates the body item for item.
+Two copies of one rule drift to different calibrations (technical-articles
+shipped "max 3-4 sentences" in the body and "4-5" in its closer).
+
+```bash
+grep -nE '^#{2,3} (Quick Reference|.*Checklist|Best Practices|Anti-[Pp]atterns|Common (Gotchas|Mistakes|Pitfalls)|Complete .*Example|Final Check|What to Avoid)' */SKILL.md
+```
+
+For each closer item, find the section above that owns it; delete owned items
+and keep only rules stated nowhere else. An exit gate that verifies earlier
+artifacts (grep the debug prefix, re-run the repro) is not a restatement; keep it.
+
+### 7. Transcript and import residue
+
+Sections harvested from the one conversation (or upstream repo) that spawned
+them: version literals, PR numbers, spec paths (specs are deleted when done, so
+the links dangle by construction), "not yet"/"currently" state snapshots, and
+other-framework examples in a Bun + Hono + Svelte repo.
+
+```bash
+grep -rnE 'v[0-9]+\.[0-9]+\.[0-9]+|PR #[0-9]+|specs/[0-9]{8}T[0-9]{6}|not yet|[Cc]urrently' */SKILL.md
+grep -rnE 'Next\.js|React Router|react-|from "react|Prisma' */SKILL.md
+```
+
+Version, PR, and spec hits inside teaching examples become placeholders or a
+two-line "the pattern converged on X" summary. Framework hits are import
+residue unless the skill is explicitly about that framework.
+
+### 8. Dash-strip damage
+
+A past mechanical em dash removal left floating colons (" : ") and glued text
+("works:WHY", "):that") across 8+ skills, so the dash grep reads clean while
+the prose is broken.
+
+```bash
+grep -rnE ' : |\):[a-z]|[a-z]:[A-Z][A-Z]' */SKILL.md
+```
+
+Replace with a real colon, semicolon, comma, or sentence break per
+writing-voice. Ternaries and conditional types in fenced code also match
+" : ", so skim each hit's context before editing; only prose hits are
+findings.
+
+### 9. Everyday-ask triggers
+
+A description claiming a phrase people say constantly in conversations that
+should not load the skill ("be brief", "what should we do", "simplify this",
+"can you summarize", "what does X do"). Worst when the skill is sticky or
+heavyweight: caveman's persistent persona fired on a one-off "be brief".
+
+```bash
+# scan the whole frontmatter: descriptions can be block scalars spanning lines
+for d in */SKILL.md; do awk '/^---$/{n++} n==1' "$d"; done | grep -oE '"[^"]{2,40}"' | sort | uniq -c | sort -rn
+```
+
+For each quoted phrase ask: would this phrase occur in a conversation where
+loading the skill is wrong? If yes, narrow the phrase ("summarize what we
+did") or add a near-miss clause ("for a plain code question, answer directly").
 
 ## Judgment Grill
 
@@ -165,7 +241,7 @@ A self-paced loop invocation:
 
 ```txt
 /loop Audit the review/simplify skill cluster for composition health.
-Load skill-creator and read references/composition-audit.md. Run detectors 1-4,
+Load skill-creator and read references/composition-audit.md. Run detectors 1-9,
 then the judgment grill. Report findings in the output shape and fix only
 mechanical, grounded ones (collisions, dead links, copied bodies). Escalate
 ambiguous triggers to references/evaluation.md. Stop when a full pass finds
