@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Button } from '@epicenter/ui/button';
 	import { cn } from '@epicenter/ui/utils';
-	import XIcon from '@lucide/svelte/icons/x';
 	import { commandRunners } from '$lib/commands';
 	import ImportFileButton from '$lib/components/ImportFileButton.svelte';
 	import {
@@ -38,89 +37,61 @@
 		<span class="text-lg font-bold">whispering</span>
 	</Button>
 
+	<!-- The row hides while a capture is live: the pill owns stop and cancel on
+	every route, and the state-derived toggle here would just duplicate them. -->
 	<div class="flex items-center gap-1.5">
-		{#if captureSurface.current === 'manual'}
-			{#if manualRecorder.state === 'RECORDING'}
+		{#if captureSurface.current === 'manual' && manualRecorder.state !== 'RECORDING'}
+			<ManualDeviceSelector
+				iconViewTransitionName={viewTransition.pipeline.device}
+			/>
+			<TranscriptionSelector
+				variant="standalone"
+				iconViewTransitionName={viewTransition.pipeline.transcription}
+			/>
+			<TransformationSelector />
+			<div class="flex">
 				<Button
-					tooltip="Cancel recording"
-					onclick={() => commandRunners.cancelRecording()}
-					variant="ghost"
-					size="icon"
-				>
-					<XIcon class="size-4" />
-				</Button>
-				<Button
-					tooltip="Stop recording"
+					tooltip="Start recording"
 					onclick={() => commandRunners.toggleManualRecording()}
 					variant="ghost"
 					size="icon"
+					class="rounded-r-none border-r-0"
 				>
-					<ManualButtonIcon class="size-4" />
+					<span
+						class="inline-flex shrink-0"
+						style:view-transition-name={viewTransition.recordingMode('manual')}
+					>
+						<ManualButtonIcon class="size-4" />
+					</span>
 				</Button>
-			{:else}
-				<ManualDeviceSelector
-					iconViewTransitionName={viewTransition.pipeline.device}
-				/>
-				<TranscriptionSelector
-					variant="standalone"
-					iconViewTransitionName={viewTransition.pipeline.transcription}
-				/>
-				<TransformationSelector />
-				<div class="flex">
-					<Button
-						tooltip="Start recording"
-						onclick={() => commandRunners.toggleManualRecording()}
-						variant="ghost"
-						size="icon"
-						class="rounded-r-none border-r-0"
-					>
-						<span
-							class="inline-flex shrink-0"
-							style:view-transition-name={viewTransition.recordingMode('manual')}
-						>
-							<ManualButtonIcon class="size-4" />
-						</span>
-					</Button>
-					<CaptureSurfaceSelector class="rounded-l-none" />
-				</div>
-			{/if}
-		{:else if captureSurface.current === 'vad'}
-			{#if vadRecorder.state === 'IDLE'}
-				<VadDeviceSelector
-					iconViewTransitionName={viewTransition.pipeline.device}
-				/>
-				<TranscriptionSelector
-					variant="standalone"
-					iconViewTransitionName={viewTransition.pipeline.transcription}
-				/>
-				<TransformationSelector />
-				<div class="flex">
-					<Button
-						tooltip="Start voice activated recording"
-						onclick={() => commandRunners.toggleVadRecording()}
-						variant="ghost"
-						size="icon"
-						class="rounded-r-none border-r-0"
-					>
-						<span
-							class="inline-flex shrink-0"
-							style:view-transition-name={viewTransition.recordingMode('vad')}
-						>
-							<VadButtonIcon class="size-4" />
-						</span>
-					</Button>
-					<CaptureSurfaceSelector class="rounded-l-none" />
-				</div>
-			{:else}
+				<CaptureSurfaceSelector class="rounded-l-none" />
+			</div>
+		{:else if captureSurface.current === 'vad' && vadRecorder.state === 'IDLE'}
+			<VadDeviceSelector
+				iconViewTransitionName={viewTransition.pipeline.device}
+			/>
+			<TranscriptionSelector
+				variant="standalone"
+				iconViewTransitionName={viewTransition.pipeline.transcription}
+			/>
+			<TransformationSelector />
+			<div class="flex">
 				<Button
-					tooltip="Stop voice activated recording"
+					tooltip="Start voice activated recording"
 					onclick={() => commandRunners.toggleVadRecording()}
 					variant="ghost"
 					size="icon"
+					class="rounded-r-none border-r-0"
 				>
-					<VadButtonIcon class="size-4" />
+					<span
+						class="inline-flex shrink-0"
+						style:view-transition-name={viewTransition.recordingMode('vad')}
+					>
+						<VadButtonIcon class="size-4" />
+					</span>
 				</Button>
-			{/if}
+				<CaptureSurfaceSelector class="rounded-l-none" />
+			</div>
 		{:else if captureSurface.current === 'import'}
 			<TranscriptionSelector
 				variant="standalone"
