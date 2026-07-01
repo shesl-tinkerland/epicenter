@@ -116,6 +116,14 @@
 	const accountCacheKey = $derived(
 		auth.state.status === 'signed-out' ? null : auth.state.ownerId,
 	);
+	// Which star this account lives on: a configured self-host override names the
+	// box, and the host IS the identity there (the instance session's email is a
+	// canned placeholder, not an account).
+	const selfHostHost = $derived(
+		instanceConnect && !instanceConnect.setting.isDefault()
+			? new URL(instanceConnect.setting.read().baseURL).host
+			: undefined,
+	);
 	// Identity lives on the auth client: `state` carries the capability id
 	// (`ownerId`), and `getProfile()` reads presentational identity (the email)
 	// on demand. TanStack Query owns the reactive cache here, keyed by owner, and
@@ -125,7 +133,7 @@
 			queryOptions({
 				queryKey: ['account-profile', accountCacheKey],
 				queryFn: () => auth.getProfile(),
-				enabled: auth.state.status !== 'signed-out',
+				enabled: auth.state.status !== 'signed-out' && !selfHostHost,
 				staleTime: Infinity,
 			}),
 		() => accountProfileQueryClient,
@@ -257,7 +265,12 @@
 		{#if auth.state.status === 'signed-in'}
 			<div class="p-4 space-y-3">
 				<div class="space-y-1">
-					<p class="text-sm font-medium">{accountLabel}</p>
+					{#if selfHostHost}
+						<p class="text-sm font-medium">{selfHostHost}</p>
+						<p class="text-xs text-muted-foreground">Self-hosted instance</p>
+					{:else}
+						<p class="text-sm font-medium">{accountLabel}</p>
+					{/if}
 				</div>
 				{#if disabledReason}
 					<p class="text-xs text-muted-foreground">{disabledReason}</p>

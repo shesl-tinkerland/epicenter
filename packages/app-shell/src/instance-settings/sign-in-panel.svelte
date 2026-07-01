@@ -3,6 +3,9 @@
 	import { Button } from '@epicenter/ui/button';
 	import { Spinner } from '@epicenter/ui/spinner';
 	import { cn } from '@epicenter/ui/utils';
+	import Cloud from '@lucide/svelte/icons/cloud';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Server from '@lucide/svelte/icons/server';
 
 	/**
 	 * One shared signed-out sign-in panel.
@@ -42,9 +45,10 @@
 			onConfigure: () => void;
 		};
 		/**
-		 * When set, the primary sign-in and the "connect/change" link are disabled.
-		 * Lets a host block a page-reloading account change at an unsafe moment, e.g.
-		 * Whispering during a recording. Omit to leave the actions enabled.
+		 * When set, the primary sign-in and the connect/change actions are
+		 * disabled, and the reason is shown as a muted line. Lets a host block a
+		 * page-reloading account change at an unsafe moment, e.g. Whispering during
+		 * a recording. Omit to leave the actions enabled.
 		 */
 		disabledReason?: string;
 		/** Layout classes for the action column (width, alignment). */
@@ -138,18 +142,23 @@
 			{configured ? 'Connecting…' : 'Signing in…'}
 		{:else if auth.state.status === 'reauth-required'}
 			Reconnect
+		{:else if configured}
+			<RefreshCw class="size-4" />
+			Retry connection
 		{:else}
-			{configured ? 'Retry connection' : 'Sign in with Epicenter'}
+			<Cloud class="size-4" />
+			Sign in with Epicenter
 		{/if}
 	</Button>
 	{#if instance}
+		<!-- Self-host is a real mode, so it gets a real button; Cloud vs Server names the two modes. -->
 		<Button
-			variant="link"
-			size="sm"
-			class="text-muted-foreground"
+			variant="outline"
+			class="w-full"
 			disabled={accountLocked}
 			onclick={instance.onConfigure}
 		>
+			<Server class="size-4" />
 			{configured ? 'Change instance' : 'Connect to a self-hosted instance'}
 		</Button>
 	{/if}
