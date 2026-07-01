@@ -111,6 +111,7 @@ export type {
 	Engine,
 	Key,
 	KeyBinding,
+	KeyringError,
 	LocalModelState,
 	ModelEntry,
 	ModelFileDownload,

@@ -54,6 +54,11 @@ enigo = "0.5.0"
 cpal = "0.18.1"
 tracing = "0.1.41"
 thiserror = "2.0.12"
+# OS credential store for the persisted OAuth grant (src/keyring_storage.rs):
+# Keychain Services on macOS, Credential Manager on Windows, Secret Service
+# (via zbus, pure Rust) on Linux. The default `v1` feature already selects the
+# right native backend per platform, so no per-OS feature flags are needed.
+keyring = "4"
 hound = "3.5"
 lazy_static = "1.4"
 tempfile = "3.8"
