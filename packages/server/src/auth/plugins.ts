@@ -47,6 +47,25 @@ export function authPlugins(apiBaseURL: string) {
 			// transparently (refresh tokens rotate, and the auth runtime refreshes
 			// on a 60s skew and on any 401). Refresh-token lifetime is unchanged.
 			accessTokenExpiresIn: 600,
+			// Refresh-token semantics, verified against the installed
+			// @better-auth/oauth-provider 1.6.18 dist (2026-07-01 spike; re-verify
+			// on upgrade):
+			//
+			// - Rotation is unconditional (every refresh mints a new token) and
+			//   reuse detection is built in: replaying a rotated-out token
+			//   invalidates the whole (clientId, userId) family per RFC 9700
+			//   §4.14. On by default; nothing to configure. Family granularity is
+			//   per client id, so one detected replay signs the user out of that
+			//   app on every device: coarse but fail-safe.
+			// - Refresh lifetime is a SLIDING window (`refreshTokenExpiresIn`,
+			//   default 30 days, reset on every rotation). No absolute-cap knob
+			//   exists upstream; `auth_time` is carried through rotations, so an
+			//   absolute cap could be enforced by a periodic delete on
+			//   `oauth_refresh_token.auth_time` if replay risk ever demands one.
+			// - Better Auth session revocation does NOT revoke grants: sign-out
+			//   deletes the session row and the refresh row survives with
+			//   `session_id` SET NULL (offline_access semantics). Killing a grant
+			//   takes /oauth2/revoke or deleting its rows.
 			cachedTrustedClients: trustedOAuthClientIds,
 			validAudiences: [apiBaseURL],
 			allowDynamicClientRegistration: false,
