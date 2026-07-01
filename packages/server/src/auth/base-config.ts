@@ -5,19 +5,20 @@ export const AUTH_BASE_PATH = '/auth';
 /** Shared Better Auth config used by both the runtime and the CLI schema tool. */
 export const BASE_AUTH_CONFIG = {
 	basePath: AUTH_BASE_PATH,
-	// Email/password is intentionally disabled. Google is the only sign-in
-	// method, and Google asserts a verified email at the IdP. Enabling local
-	// credentials here reopens an account-takeover path: better-auth 1.5.6 has
-	// no `requireLocalEmailVerified` gate, and there is no mail sender wired up,
-	// so an unverified local account could be pre-registered at a victim's email
-	// and a later Google sign-in would implicitly link into it. Do not re-enable
-	// without first wiring email verification (sendVerificationEmail) and
+	// Email/password is intentionally disabled. The social IdPs are the only
+	// sign-in methods and assert verified emails; no mail sender is wired up,
+	// so a local account could never verify. better-auth 1.6.18's
+	// `requireLocalEmailVerified` linking gate (default true) closes the old
+	// pre-registered-unverified-account takeover path, but an unverifiable
+	// credential flow is still not one we serve. Do not re-enable without first
+	// wiring email verification (sendVerificationEmail) and
 	// requireEmailVerification.
 	emailAndPassword: { enabled: false },
 	account: {
 		// Only Google is a trusted linking provider. A trusted provider bypasses
-		// the incoming `emailVerified` check (better-auth 1.5.6 `link-account`
-		// gate: `!isTrustedProvider && !userInfo.emailVerified`), so the set must
+		// the incoming `emailVerified` check (better-auth 1.6.18 `link-account`
+		// gate: `!isTrustedProvider && !userInfo.emailVerified`, plus a
+		// `requireLocalEmailVerified` check on the existing user), so the set must
 		// contain only IdPs that always assert a verified email. Google does;
 		// GitHub does NOT (it can return an unverified primary email), so GitHub
 		// is intentionally excluded even when enabled in create-auth.ts: an
