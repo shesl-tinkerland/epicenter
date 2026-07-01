@@ -6,5 +6,7 @@
 // The recorder lifecycle and VAD state now live in `@epicenter/recorder`; alias
 // the recorder state to the app's existing name so in-app consumers keep their
 // import.
-export type { RecordingState as WhisperingRecordingState } from '@epicenter/recorder';
-export type { VadState } from '@epicenter/recorder';
+export type {
+	RecordingState as WhisperingRecordingState,
+	VadState,
+} from '@epicenter/recorder';

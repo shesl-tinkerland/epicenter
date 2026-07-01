@@ -1,18 +1,29 @@
 export { createBrowserRecorder } from './browser-recorder';
 export {
-	asDeviceIdentifier,
-	type Device,
-	type DeviceAcquisitionOutcome,
-	type DeviceIdentifier,
-} from './devices';
-export {
 	cleanupRecordingStream,
 	DeviceStreamError,
 	enumerateDevices,
 	getRecordingStream,
 	WHISPER_RECOMMENDED_MEDIA_TRACK_CONSTRAINTS,
 } from './device-stream';
+export {
+	asDeviceIdentifier,
+	type Device,
+	type DeviceAcquisitionOutcome,
+	type DeviceIdentifier,
+} from './devices';
 export { foldMicLevel } from './level';
+export {
+	type CpalRecordingParams,
+	type NavigatorRecordingParams,
+	RecorderError,
+	type RecorderService,
+	type RecorderStopResult,
+	type RecordingArtifact,
+	type RecordingCallbacks,
+	type RecordingSession,
+	type RecordingState,
+} from './recorder';
 export {
 	createVadRecorder,
 	type StartActiveListeningOptions,
@@ -20,14 +31,3 @@ export {
 	type VadRecorderError,
 	type VadState,
 } from './vad-recorder';
-export {
-	type CpalRecordingParams,
-	type NavigatorRecordingParams,
-	RecorderError,
-	type RecorderService,
-	type RecordingArtifact,
-	type RecordingCallbacks,
-	type RecordingSession,
-	type RecordingState,
-	type RecorderStopResult,
-} from './recorder';

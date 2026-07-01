@@ -1,4 +1,5 @@
 import { InstantString } from '@epicenter/field';
+import type { RecorderStopResult } from '@epicenter/recorder';
 import { IanaTimeZone } from '@epicenter/workspace';
 import { extractErrorMessage } from 'wellcrafted/error';
 import { goto } from '$app/navigation';
@@ -12,7 +13,6 @@ import { transcribeAndPersist } from '$lib/operations/transcribe';
 import { runTransformation } from '$lib/operations/transform';
 import { report } from '$lib/report';
 import { services } from '$lib/services';
-import type { RecorderStopResult } from '@epicenter/recorder';
 import { dictationLifecycle } from '$lib/state/dictation-lifecycle.svelte';
 import { recordings } from '$lib/state/recordings.svelte';
 import { settings } from '$lib/state/settings.svelte';

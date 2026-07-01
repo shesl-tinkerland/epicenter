@@ -86,7 +86,9 @@ export type VadRecorder = {
 	 */
 	startActiveListening(
 		options: StartActiveListeningOptions,
-	): Promise<Result<DeviceAcquisitionOutcome, VadRecorderError | DeviceStreamError>>;
+	): Promise<
+		Result<DeviceAcquisitionOutcome, VadRecorderError | DeviceStreamError>
+	>;
 	/**
 	 * Stop voice activity detection and clean up the VAD and its stream.
 	 */
@@ -107,7 +109,9 @@ export type VadRecorder = {
  */
 export function createVadRecorder({
 	assetBaseUrl = DEFAULT_VAD_ASSET_PATH,
-}: { assetBaseUrl?: string } = {}): VadRecorder {
+}: {
+	assetBaseUrl?: string;
+} = {}): VadRecorder {
 	let _session: VadSession | null = null;
 	// `_session` is assigned after async setup, so `_starting` closes the
 	// duplicate-start window before a live session exists.

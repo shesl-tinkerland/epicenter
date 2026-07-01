@@ -3,7 +3,10 @@ import { APPS } from '@epicenter/constants/apps';
 // recorder package owns the VAD capability and resolves the asset source paths
 // from its own pinned dependency tree; we just copy them into the served `/vad/`
 // directory at build time (see @epicenter/recorder/vad-assets).
-import { VAD_ASSET_DEST, vadAssetSources } from '@epicenter/recorder/vad-assets';
+import {
+	VAD_ASSET_DEST,
+	vadAssetSources,
+} from '@epicenter/recorder/vad-assets';
 import { workspaceAppViteConfig } from '@epicenter/vite-config';
 import { defaultClientConditions, defineConfig, mergeConfig } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';

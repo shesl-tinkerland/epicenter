@@ -1,8 +1,3 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { createLogger } from 'wellcrafted/logger';
-import { Err, Ok, type Result } from 'wellcrafted/result';
-import type { WhisperingRecordingState } from '$lib/constants/audio';
-import { recorderErrorFromIpc } from '$lib/services/recorder/categorize-error';
 import {
 	asDeviceIdentifier,
 	type CpalRecordingParams,
@@ -12,6 +7,11 @@ import {
 	type RecorderService,
 	type RecordingSession,
 } from '@epicenter/recorder';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { createLogger } from 'wellcrafted/logger';
+import { Err, Ok, type Result } from 'wellcrafted/result';
+import type { WhisperingRecordingState } from '$lib/constants/audio';
+import { recorderErrorFromIpc } from '$lib/services/recorder/categorize-error';
 import { commands } from '$lib/tauri/commands';
 // This file is the Tauri impl, so it imports the non-null capability bag
 // directly from the Tauri marker rather than through the `#platform/tauri`
