@@ -216,7 +216,26 @@ pub async fn run() {
         }))
         .build();
 
-    let mut builder = tauri::Builder::default().plugin(log_plugin);
+    let mut builder = tauri::Builder::default();
+
+    // Register single-instance first, ahead of every other plugin. A second
+    // launch then forwards its args to the primary and exits before that primary
+    // initializes the rest of the plugin stack, per the plugin's documented
+    // ordering. With the `deep-link` feature this is also the path that forwards
+    // an OAuth callback URL to the already-running app on Linux/Windows; it reads
+    // deep-link state at callback time, so registering the deep-link plugin later
+    // in the chain does not affect forwarding.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = app
+                .get_webview_window("main")
+                .expect("no main window")
+                .set_focus();
+        }));
+    }
+
+    builder = builder.plugin(log_plugin);
 
     // Try to get APTABASE_KEY from environment, use empty string if not found
     let aptabase_key = option_env!("APTABASE_KEY").unwrap_or("");
@@ -311,17 +330,10 @@ pub async fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder
-            .plugin(tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                None,
-            ))
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                let _ = app
-                    .get_webview_window("main")
-                    .expect("no main window")
-                    .set_focus();
-            }));
+        builder = builder.plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ));
     }
 
     let builder = builder.invoke_handler(move |invoke| {
