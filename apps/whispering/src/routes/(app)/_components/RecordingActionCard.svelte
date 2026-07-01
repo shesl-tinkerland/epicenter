@@ -52,7 +52,7 @@
 <div
 	class={cn(
 		'w-full overflow-hidden rounded-3xl bg-card text-foreground shadow-sm transition-[box-shadow] duration-200',
-		controller.active && 'shadow-md ring-1 ring-destructive/15',
+		controller.active && 'shadow-md ring-1 ring-destructive/25',
 	)}
 >
 	<Button
@@ -82,7 +82,7 @@
 				'relative flex size-14 shrink-0 items-center justify-center rounded-3xl shadow-lg ring-4 transition-[transform,box-shadow,background-color,color] duration-200 group-hover:scale-[1.04] group-hover:shadow-xl sm:size-16',
 				controller.active
 					? 'bg-destructive text-white shadow-destructive/30 ring-destructive/15'
-					: 'bg-primary text-primary-foreground shadow-primary/25 ring-primary/10',
+					: 'bg-primary text-primary-foreground shadow-primary/35 ring-primary/20',
 			)}
 		>
 			{#if controller.pending}
@@ -148,7 +148,7 @@
 			reading the same fact the home-page notice does so the two agree. -->
 			<Kbd.Root
 				class={cn(
-					'h-7 max-w-28 shrink-0 rounded-md bg-muted/75 px-2 text-xs text-muted-foreground shadow-none',
+					'h-7 max-w-28 shrink-0 rounded-full bg-muted/75 px-2.5 text-xs text-muted-foreground shadow-none',
 					dictationCapability.isUnavailable && 'opacity-50',
 				)}
 			>
