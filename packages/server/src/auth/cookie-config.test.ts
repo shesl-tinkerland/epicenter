@@ -2,15 +2,12 @@
  * Better Auth Cookie Config Tests
  *
  * Verifies that the API auth factory chooses browser-compatible cookie
- * attributes for local development while preserving the production cookie
- * scope used by api.epicenter.so.
+ * attributes for local development and host-only Lax cookies in production.
  *
  * Key behaviors:
  * - Localhost uses host-only, Lax, non-secure cookies
- * - A deployed origin without a cross-subdomain domain uses host-only,
- *   SameSite=None, Secure cookies (the self-host default)
- * - A deployed origin given a cross-subdomain domain (Epicenter cloud passes
- *   .epicenter.so) scopes cookies to that domain
+ * - A deployed origin uses host-only, SameSite=Lax, Secure cookies; there is
+ *   no cross-subdomain option (ADR-0079 forbids the halfway `Domain=` cookie)
  */
 
 import { expect, test } from 'bun:test';
@@ -45,32 +42,20 @@ test('IPv6 localhost cookies use localhost-compatible attributes', () => {
 	expect('domain' in cookie.attributes).toBe(false);
 });
 
-test('a deployed origin without a cross-subdomain domain uses host-only secure cookies', () => {
-	const cookie = sessionTokenCookie('https://team.example.com');
+test('a deployed origin uses host-only, Lax, secure cookies', () => {
+	const cookie = sessionTokenCookie('https://api.epicenter.so');
 
 	expect(cookie.name).toBe('__Secure-better-auth.session_token');
 	expect(cookie.attributes.secure).toBe(true);
-	expect(cookie.attributes.sameSite).toBe('none');
+	expect(cookie.attributes.sameSite).toBe('lax');
 	expect('domain' in cookie.attributes).toBe(false);
 });
 
-test('a deployed origin given a cross-subdomain domain scopes cookies to it', () => {
-	const cookie = sessionTokenCookie(
-		'https://api.epicenter.so',
-		'.epicenter.so',
-	);
-
-	expect(cookie.name).toBe('__Secure-better-auth.session_token');
-	expect(cookie.attributes.secure).toBe(true);
-	expect(cookie.attributes.sameSite).toBe('none');
-	expect(cookie.attributes.domain).toBe('.epicenter.so');
-});
-
-function sessionTokenCookie(baseURL: string, crossSubDomainDomain?: string) {
+function sessionTokenCookie(baseURL: string) {
 	const options = {
 		baseURL,
 		basePath: '/auth',
-		advanced: createCookieAdvancedConfig(baseURL, crossSubDomainDomain),
+		advanced: createCookieAdvancedConfig(baseURL),
 	} satisfies BetterAuthOptions;
 	return getCookies(options).sessionToken;
 }

@@ -33,12 +33,6 @@ export function mountCloudAuth(
 		 * validated env. Read per request because a Worker has no module-scope env.
 		 */
 		resolveAuthSecrets: (c: Context<CloudEnv>) => CloudAuthBindings;
-		/**
-		 * Registrable domain for cross-subdomain session cookies (Epicenter cloud
-		 * passes `.epicenter.so`). Omit for a single-origin deployment, which then
-		 * uses host-only cookies scoped to its own host.
-		 */
-		cookieDomain?: string;
 	},
 ): void {
 	// Better Auth context. Built per request (Workers expose no module-scope env
@@ -60,7 +54,6 @@ export function mountCloudAuth(
 				env: authSecrets,
 				baseURL: c.var.authBaseURL,
 				trustedOrigins: c.var.trustedOrigins,
-				cookieCrossSubDomain: opts.cookieDomain,
 			}),
 		);
 		await next();

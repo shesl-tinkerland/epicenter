@@ -3,23 +3,21 @@ import type { BetterAuthOptions } from 'better-auth';
 /**
  * Choose Better Auth cookie transport settings for the current API origin.
  *
- * Use this from the auth server factory, not from client code. Localhost must
- * use host-only, non-secure Lax cookies so the Vite auth proxy can work during
- * development. Deployed API origins use secure `SameSite=None` cookies so
- * browser apps can send them cross-origin while app clients stay on bearer
- * tokens for resource access.
+ * Use this from the auth server factory, not from client code. Localhost uses
+ * host-only, non-secure Lax cookies so the Vite auth proxy can work during
+ * development. Deployed API origins use host-only, secure Lax cookies: the only
+ * cookie consumer is the dashboard the API serves from its own origin
+ * (ADR-0079's exception rule), and every cross-origin app client is a bearer
+ * client that sends `credentials: 'omit'`, so nothing needs a cookie to travel
+ * cross-site. Lax survives the whole OAuth flow because every cross-site leg is
+ * a top-level GET navigation (the authorize entry and the Google callback) and
+ * the sign-in/consent POSTs are same-origin fetches from the API's own pages.
  *
- * `crossSubDomainDomain` is the registrable domain a deployment serving
- * multiple subdomains shares sessions across (Epicenter cloud passes
- * `.epicenter.so` so `app.` and `api.` share a session). It is supplied by the
- * deployment, never hardcoded here: a single-origin self-host passes nothing
- * and gets host-only cookies that actually apply to its own host, instead of
- * cookies scoped to a domain it does not control.
+ * There is deliberately no cross-subdomain knob: a `Domain=` cookie shared
+ * across subdomains is the halfway cookie ADR-0079 forbids (it widens CSRF
+ * surface and blurs audience boundaries), and it had zero consumers.
  */
-export function createCookieAdvancedConfig(
-	baseURL: string,
-	crossSubDomainDomain?: string,
-) {
+export function createCookieAdvancedConfig(baseURL: string) {
 	const { hostname } = new URL(baseURL);
 	if (
 		hostname === 'localhost' ||
@@ -37,11 +35,8 @@ export function createCookieAdvancedConfig(
 
 	return {
 		useSecureCookies: true,
-		...(crossSubDomainDomain && {
-			crossSubDomainCookies: { enabled: true, domain: crossSubDomainDomain },
-		}),
 		defaultCookieAttributes: {
-			sameSite: 'none',
+			sameSite: 'lax',
 			secure: true,
 		},
 	} satisfies NonNullable<BetterAuthOptions['advanced']>;

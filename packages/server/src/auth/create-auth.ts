@@ -58,19 +58,12 @@ export function createAuth({
 	env,
 	baseURL,
 	trustedOrigins,
-	cookieCrossSubDomain,
 }: {
 	db: Db;
 	env: CloudAuthBindings;
 	baseURL: string;
 	/** Deployment-supplied trusted origins (CORS, CSRF, redirect allow-list). */
 	trustedOrigins: string[];
-	/**
-	 * Registrable domain for cross-subdomain session cookies, when the
-	 * deployment shares sessions across subdomains. Omitted for a single-origin
-	 * deployment, which then uses host-only cookies.
-	 */
-	cookieCrossSubDomain?: string;
 }) {
 	// Better Auth signs sessions and the JWE cookie cache with this secret. Handed
 	// an empty or missing one, the library silently falls back to its PUBLIC default
@@ -148,24 +141,19 @@ export function createAuth({
 				strategy: 'jwe',
 			},
 		},
-		// Cookie transport for browser clients.
-		//
-		// Localhost uses host-only, non-secure Lax cookies so local dashboard
-		// auth works through the Vite `/auth` proxy without a rejected Domain
-		// or Secure attribute. Production uses SameSite=None + Secure so
-		// browser apps can send cookies to api.epicenter.so from app origins.
-		//
-		// Cross-subdomain cookies are only enabled outside localhost. In
-		// production, the cookie domain is .epicenter.so so Epicenter subdomains
-		// share sessions. Apps on other domains still work because their fetches
-		// target api.epicenter.so.
+		// Cookie transport for browser clients: host-only, SameSite=Lax
+		// everywhere (non-secure on localhost so the Vite `/auth` proxy works).
+		// The only cookie consumer is the same-origin dashboard; every
+		// cross-origin app client is a bearer client, so no cookie ever needs to
+		// travel cross-site, and there is no cross-subdomain option by design
+		// (ADR-0079). See createCookieAdvancedConfig for the full rationale.
 		//
 		// NOTE: We intentionally omit `partitioned: true` (CHIPS).
 		// Partitioned cookies are keyed by the top-level site at creation
 		// time. During OAuth the top-level site changes mid-flow (client to
 		// Google to API callback), so the cookie becomes invisible at the
 		// callback step. Partitioned is for iframes, not redirect OAuth.
-		advanced: createCookieAdvancedConfig(baseURL, cookieCrossSubDomain),
+		advanced: createCookieAdvancedConfig(baseURL),
 		trustedOrigins,
 		// Postgres is the only auth store: sessions and OAuth verification
 		// records persist to the DB adapter by default (no secondaryStorage), and
