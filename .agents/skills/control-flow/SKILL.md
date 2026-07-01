@@ -1,6 +1,6 @@
 ---
 name: control-flow
-description: 'Control flow: early returns, guard clauses, linearizing nested logic. Use for "simplify this", "flatten these conditions", "too many nested ifs".'
+description: 'Control flow: early returns, guard clauses, linearizing nested logic. Use for "flatten these conditions", "too many nested ifs", "linearize this try-catch", or handlers mixing throw and return. For a broad "simplify this" pass over a diff or package, use collapse-pass instead.'
 metadata:
   author: epicenter
   version: '1.0'
@@ -131,9 +131,9 @@ async ({ body, status }) => {
 
 The transformation follows the same human reasoning pattern:
 
-1. **Try the risky thing** : wrap only what can fail
-2. **Check if it failed** : early return with the appropriate error
-3. **Continue with the happy path** : the rest of the function assumes success
+1. **Try the risky thing**: wrap only what can fail
+2. **Check if it failed**: early return with the appropriate error
+3. **Continue with the happy path**: the rest of the function assumes success
 
 This eliminates the nesting, makes `return` vs `throw` consistent, and separates the error boundary from the safe code that follows it.
 
@@ -161,7 +161,7 @@ async ({ body, status }) => {
 	});
 	if (error) return status('Bad Gateway', error.message);
 
-	// Happy path : all guards passed
+	// Happy path: all guards passed
 	return toServerSentEventsResponse(stream);
 };
 ```
