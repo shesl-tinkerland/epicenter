@@ -58,7 +58,10 @@ shapes, see `docs/adr/`.
   `instance` (one partition pinned to `owners/instance` behind one operator
   bearer). There is no admission-gated `shared` topology; per-person named tokens
   are a deliberately-unbuilt seam behind the same verifier and the same constant
-  partition. Billing is hosted-only and lives in `apps/api/worker/billing/`.
+  partition. The names are deliberately not `perUser` / `shared`: "shared"
+  describes who holds the token, while `instance` describes the partition rule
+  ADR-0075 settles on. Billing is hosted-only and lives in
+  `apps/api/worker/billing/`.
 - **Three cross-device layers**: every cross-device feature is one of three jobs, kept
   separate. *Inference* (the chat brain) streams tokens from an OpenAI-compatible endpoint
   (ADR-0050), over the inference seam, not the device relay. *Sync* (convergent state)
