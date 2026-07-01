@@ -174,14 +174,7 @@ If you discovered something during implementation, add it to the spec's Research
 
 Each committed unit should include BOTH the code changes AND the spec updates that describe those changes. This keeps history honest: each commit shows what was planned, what changed, and what was actually built.
 
-You do not have to create one commit per wave. Use the commit shape that best fits the review:
-
-| Situation | Commit Shape |
-| --- | --- |
-| Wave is a self-contained foundation or behavior change | Commit the wave |
-| Several waves are tightly coupled and make sense only together | Combine them into one larger commit |
-| One wave contains multiple independently reviewable changes | Split it into logical commits |
-| The user wants one large commit | Keep intermediate working checkpoints, then create one final commit |
+You do not have to create one commit per wave; use the commit shape that best fits the review, as described at the top of this skill. If the user wants one large commit, keep intermediate working checkpoints and create one final commit at the end.
 
 Follow `git` and `standalone-commits` skill conventions:
 
@@ -216,7 +209,7 @@ After all waves complete:
    landed, `git rm` the spec. Git keeps the body and `docs/spec-history.md` indexes
    it by date, so nothing is lost. Do not leave a finished spec in the tree as a
    knowledge base; that is the pollution this workflow exists to prevent.
-4. **Verify hygiene.** Run `bun scripts/check-doc-hygiene.mjs`. It must pass: no
+4. **Verify hygiene.** Run `bun scripts/check-doc-hygiene.ts`. It must pass: no
    spec left in the tree declaring a terminal status, no `Proposed` ADR orphaned by
    a deleted spec. A failure means the harvest is incomplete; fix it (flip the ADR,
    delete the spec) rather than committing the smell.
@@ -277,14 +270,6 @@ Code diverges from spec but spec is never updated
 
 The spec is a living document. Every commit should leave the spec accurate to what was actually built.
 
-### Length Panic
-
-```
-This spec is long, so split it before reading it
-```
-
-No. Length is not the failure mode. Confusing reader jobs are the failure mode. A long spec with a clear first screen, current path, decisions, and verification can be easier to execute than five scattered short specs.
-
 ### Over-Parallel
 
 ```
@@ -292,28 +277,3 @@ Wave 1: 12 sub-agents all running at once
 ```
 
 More than 3-4 parallel sub-agents gets chaotic. Group related tasks and keep parallelism manageable.
-
-## Quick Reference
-
-Before starting:
-
-- [ ] Preflight status, supersession, and active path
-- [ ] Read active sections first
-- [ ] Identify phases and dependencies
-- [ ] Plan waves (parallel vs sequential)
-- [ ] Surface decisions that need user input
-
-For each wave:
-
-- [ ] Execute tasks (sub-agents when useful)
-- [ ] Verify (type-check, tests)
-- [ ] Update spec (check items, add notes)
-- [ ] Commit if this wave is a logical review unit, or checkpoint and continue
-
-After all waves:
-
-- [ ] Run `post-implementation-review` on touched files
-- [ ] Harvest durable decisions into `docs/adr/` (new ADR, or flip a `Proposed` one to `Accepted`)
-- [ ] Delete the spent spec (`git rm`; git and `docs/spec-history.md` keep the history)
-- [ ] Run `bun scripts/check-doc-hygiene.mjs` (must pass)
-- [ ] Finalize commits (ADR + spec deletion) using the chosen strategy
