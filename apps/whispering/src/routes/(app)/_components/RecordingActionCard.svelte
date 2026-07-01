@@ -5,11 +5,7 @@
 	import { cn } from '@epicenter/ui/utils';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
-	import LevelMeter from '$lib/components/LevelMeter.svelte';
-	import VadIndicator from '$lib/recording-overlay/VadIndicator.svelte';
-	import { webPillLevel } from '$lib/recording-overlay/web-pill.svelte';
 	import { dictationCapability } from '$lib/state/dictation-capability.svelte';
-	import { tauri } from '#platform/tauri';
 	import type { RecordingActionController } from './recording-action-controller';
 
 	// The controller owns the state machine and every derived label/icon. The card
@@ -25,9 +21,9 @@
 		/**
 		 * When set, names the action glyph for a cross-page view transition while
 		 * the card is at rest. Suppressed automatically while `active`, because the
-		 * live glyph (a stop square, a waveform) is a different object and must not
-		 * morph from the resting mode glyph. Callers pass the name unconditionally;
-		 * the card owns the at-rest gate.
+		 * live glyph (a stop square) is a different object and must not morph from
+		 * the resting mode glyph. Callers pass the name unconditionally; the card
+		 * owns the at-rest gate.
 		 */
 		iconViewTransitionName?: string;
 	} = $props();
@@ -37,21 +33,11 @@
 			? `${controller.label} (${controller.shortcutLabel})`
 			: controller.label,
 	);
-
-	// Exactly one live meter shows at a time, on the surface holding your
-	// attention. On desktop the always-on-top overlay is that meter: it floats over
-	// even the focused app for the whole recording, so the card defers to it with a
-	// static glyph and a second meter here would only double the overlay's. On web
-	// there is no floating overlay, so the in-window surface carries the meter: this
-	// card on the home route (where the in-page pill stands down), the pill on the
-	// other routes. The smoothed level is already in this window on web
-	// (`webPillLevel`); on desktop it is emitted straight to the overlay, not here.
-	const showsLiveMeter = !tauri;
 </script>
 
 <div
 	class={cn(
-		'w-full overflow-hidden rounded-3xl bg-card text-foreground shadow-sm transition-[box-shadow] duration-200',
+		'w-full overflow-hidden rounded-xl bg-card text-foreground shadow-sm transition-[box-shadow] duration-200',
 		controller.active && 'shadow-md ring-1 ring-destructive/25',
 	)}
 >
@@ -64,40 +50,26 @@
 		onclick={controller.toggle}
 		variant="ghost"
 		class={cn(
-			'group h-auto min-h-24 w-full items-center justify-start gap-3 rounded-none bg-transparent px-5 py-6 text-left hover:bg-transparent dark:hover:bg-transparent sm:gap-4',
+			'h-auto min-h-24 w-full items-center justify-start gap-3 rounded-none bg-transparent px-5 py-6 text-left hover:bg-transparent dark:hover:bg-transparent sm:gap-4',
 			controller.pending && 'cursor-wait',
 		)}
 	>
-		<!-- The glyph slot is the record CTA: idle = the brand --primary squircle
-		(this app's primary action, rounded to match the outer card's rounded-3xl),
-		active = a --destructive (red) squircle, mirroring the colors the floating
-		pill already uses for live/stop. The icon (mic -> stop square) and the active
-		flag both come from the controller; this only paints. Hover feedback lives on
-		this glyph (a slight scale + lift via group-hover), not a fill behind the row:
-		the button spans only the top zone, so a row fill would cut a hard horizontal
-		edge across the rounded card above the footer. -->
+		<!-- The controller owns the state machine and the icon (mic -> stop square);
+		this glyph only paints it. The floating pill, not this card, is the live
+		recording surface on every platform and route, so the glyph never animates
+		or meters: it is a static brand-primary CTA that turns tinted destructive
+		while active. -->
 		<span
 			aria-hidden="true"
 			class={cn(
-				'relative flex size-14 shrink-0 items-center justify-center rounded-3xl shadow-lg ring-4 transition-[transform,box-shadow,background-color,color] duration-200 group-hover:scale-[1.04] group-hover:shadow-xl sm:size-16',
+				'relative flex size-14 shrink-0 items-center justify-center rounded-lg shadow-sm transition-colors duration-200 sm:size-16',
 				controller.active
-					? 'bg-destructive text-white shadow-destructive/30 ring-destructive/15'
-					: 'bg-primary text-primary-foreground shadow-primary/35 ring-primary/20',
+					? 'bg-destructive/10 text-destructive'
+					: 'bg-primary text-primary-foreground',
 			)}
 		>
 			{#if controller.pending}
 				<Spinner class="size-7" />
-			{:else if controller.active && showsLiveMeter}
-				<!-- Live capture: the glyph slot becomes the meter, the same bars the
-				floating pill draws, scaled to fit the box. White bars read on the red
-				(--destructive) recording squircle. -->
-				<LevelMeter
-					level={webPillLevel.level}
-					class="gap-[2px]"
-					barClass="w-[2px] bg-white"
-					minPx={3}
-					maxPx={28}
-				/>
 			{:else}
 				{@const Icon = controller.icon}
 				<span
@@ -119,26 +91,8 @@
 			<span class="truncate text-base font-semibold leading-none sm:text-lg">
 				{controller.label}
 			</span>
-			<span
-				class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground sm:text-sm"
-			>
-				{#if controller.active && showsLiveMeter && controller.vad}
-					<!-- VAD speech-latch indicator: the same dim-dot -> lit-dot -> spinner the
-					floating pill shows, here inline with the status text instead of in the
-					meter glyph's corner (where it read as a dismiss badge and crowded the
-					loudness bars). The glyph owns loudness alone now; this line owns VAD's
-					decision: dim while armed, red (--destructive, the recording accent) once
-					speech latches, a spinner while a previous phrase still transcribes. Gated
-					exactly like the in-card meter (active and web), so on '/' it shows only
-					here. The signals come from this card's own controller. -->
-					<VadIndicator
-						signals={controller.vad}
-						dimClass="bg-muted-foreground/40"
-						litClass="bg-destructive"
-						spinnerClass="text-destructive"
-					/>
-				{/if}
-				<span class="truncate">{controller.description}</span>
+			<span class="truncate text-xs font-medium text-muted-foreground sm:text-sm">
+				{controller.description}
 			</span>
 		</span>
 		{#if controller.shortcutLabel}
@@ -148,7 +102,7 @@
 			reading the same fact the home-page notice does so the two agree. -->
 			<Kbd.Root
 				class={cn(
-					'h-7 max-w-28 shrink-0 rounded-full bg-muted/75 px-2.5 text-xs text-muted-foreground shadow-none',
+					'h-7 max-w-28 shrink-0 rounded-md bg-muted/75 px-2 text-xs text-muted-foreground shadow-none',
 					dictationCapability.isUnavailable && 'opacity-50',
 				)}
 			>

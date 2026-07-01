@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { tauri } from '#platform/tauri';
 	import { dispatchPillAction } from '$lib/recording-overlay/pill-actions';
 	import RecordingPill from '$lib/recording-overlay/RecordingPill.svelte';
@@ -15,15 +14,10 @@
 	// front, and a failure is surfaced by the notification and the recordings row.
 	const status = $derived(projectLifecycleToStatus(dictationLifecycle.current));
 
-	// The home route's recording card carries its own live meter and stop/cancel,
-	// so the floating pill would only double it there. Yield the recording phase to
-	// the card on '/', but keep the pill for the outcome phases (transcribing,
-	// delivered, failed) the card never shows, and for every phase on the other app
-	// routes (recordings, settings, ...), which have no in-window capture card.
-	const isHomeRoute = $derived(page.url.pathname === '/');
-	const showPill = $derived(
-		!!status && !(isHomeRoute && status.phase === 'recording'),
-	);
+	// The pill is the sole live recording surface on web, mirroring the desktop
+	// overlay: it shows on every route, with no home-route special case. The home
+	// card only paints a static glyph and defers all live feedback here.
+	const showPill = $derived(!!status);
 </script>
 
 {#if !tauri && showPill}
