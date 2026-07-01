@@ -20,7 +20,7 @@
 	import { extractErrorMessage } from 'wellcrafted/error';
 	import { mutationOptions, queryOptions } from 'wellcrafted/query';
 	import InstanceSettingsModal from '../instance-settings/instance-settings-modal.svelte';
-	import InstanceSignIn from '../instance-settings/instance-sign-in.svelte';
+	import SignInPanel from '../instance-settings/sign-in-panel.svelte';
 
 	const accountProfileQueryClient = new QueryClient({
 		defaultOptions: {
@@ -78,10 +78,10 @@
 		onForgetDevice?: () => void | Promise<void>;
 		/**
 		 * When set, the signed-out panel also offers connecting to a self-hosted
-		 * Epicenter instance, via the shared {@link InstanceSignIn} (a hosted sign-in
-		 * button plus a "Connect to a self-hosted instance" link that opens the
-		 * settings modal), the same affordance the full-page `SignedOutScreen` uses.
-		 * Omit to keep the plain hosted-only sign-in button.
+		 * Epicenter instance, via the shared sign-in panel (a hosted sign-in button
+		 * plus a "Connect to a self-hosted instance" link that opens the settings
+		 * modal), the same affordance the full-page `SignedOutScreen` uses. Omit to
+		 * keep the hosted-only sign-in panel.
 		 */
 		instanceConnect?: {
 			/** The app's display name, woven into the modal's description. */
@@ -113,17 +113,6 @@
 	// now; the reason is shown and those actions are disabled. Reconnect is safe
 	// (it never reloads), so it stays enabled.
 	const accountLocked = $derived(!!disabledReason);
-	// When the injected instance is a self-host override, the signed-out heading
-	// names the box instead of pitching hosted cross-device sync, mirroring
-	// SignedOutScreen. InstanceSignIn already flips its button and link copy.
-	const instanceUsesSelfHost = $derived(
-		instanceConnect ? !instanceConnect.setting.isDefault() : false,
-	);
-	const instanceHost = $derived(
-		instanceConnect && instanceUsesSelfHost
-			? new URL(instanceConnect.setting.read().baseURL).host
-			: undefined,
-	);
 	const accountCacheKey = $derived(
 		auth.state.status === 'signed-out' ? null : auth.state.ownerId,
 	);
@@ -155,14 +144,6 @@
 				onError: (error) => {
 					toastOnError(error, 'Failed to sign out');
 				},
-			}),
-		() => accountProfileQueryClient,
-	);
-	const startSignIn = createMutation(
-		() =>
-			mutationOptions({
-				mutationKey: ['account', 'startSignIn'],
-				mutationFn: () => auth.startSignIn(),
 			}),
 		() => accountProfileQueryClient,
 	);
@@ -336,56 +317,17 @@
 					</div>
 				{/if}
 			</div>
-		{:else if instanceConnect}
-			<div class="p-4 space-y-3">
-				<div class="space-y-1">
-					<p class="text-sm font-medium">
-						{instanceUsesSelfHost ? `Connect to ${instanceHost}` : 'Sign in'}
-					</p>
-					<p class="text-xs text-muted-foreground">
-						{instanceUsesSelfHost
-							? 'Sign in to your self-hosted instance.'
-							: `Sign in to sync your ${syncNoun} across devices.`}
-					</p>
-				</div>
-				{#if disabledReason}
-					<p class="text-xs text-muted-foreground">{disabledReason}</p>
-				{/if}
-				<InstanceSignIn
-					{auth}
-					setting={instanceConnect.setting}
-					{disabledReason}
-					onConfigure={openInstanceModal}
-				/>
-			</div>
 		{:else}
-			<div class="p-4 space-y-3">
-				<div class="space-y-1">
-					<p class="text-sm font-medium">Sign in</p>
-					<p class="text-xs text-muted-foreground">
-						Sign in to sync your {syncNoun} across devices.
-					</p>
-				</div>
-				{#if disabledReason}
-					<p class="text-xs text-muted-foreground">{disabledReason}</p>
-				{/if}
-				{#if startSignIn.error}
-					<p class="text-xs text-destructive">{startSignIn.error.message}</p>
-				{/if}
-				<Button
-					class="w-full"
-					onclick={() => startSignIn.mutate()}
-					disabled={startSignIn.isPending || accountLocked}
-				>
-					{#if startSignIn.isPending}
-						<Spinner />
-						Signing in…
-					{:else if auth.state.status === 'reauth-required'}
-						Reconnect
-					{:else}
-						Sign in with Epicenter
-					{/if}
-				</Button>
+			<div class="p-4">
+				<SignInPanel
+					{auth}
+					title="Sign in"
+					description={`Sign in to sync your ${syncNoun} across devices.`}
+					{disabledReason}
+					instance={instanceConnect
+						? { setting: instanceConnect.setting, onConfigure: openInstanceModal }
+						: undefined}
+				/>
 			</div>
 		{/if}
 	</Popover.Content>

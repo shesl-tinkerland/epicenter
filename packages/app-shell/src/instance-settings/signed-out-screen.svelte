@@ -2,7 +2,7 @@
 	import type { InstanceSetting, SyncAuthClient } from '@epicenter/auth';
 	import { cn } from '@epicenter/ui/utils';
 	import InstanceSettingsModal from './instance-settings-modal.svelte';
-	import InstanceSignIn from './instance-sign-in.svelte';
+	import SignInPanel from './sign-in-panel.svelte';
 
 	let {
 		appName,
@@ -28,12 +28,8 @@
 	} = $props();
 
 	let modalOpen = $state(false);
-
-	// A token override flips the heading from "sign in" to "connect". Derived reads
-	// of the stable handle; saving the modal reloads, so nothing changes live. The
-	// sign-in actions themselves live in the shared {@link InstanceSignIn}.
-	const usingToken = $derived(!setting.isDefault());
-	const instanceHost = $derived(new URL(setting.read().baseURL).host);
+	// SignInPanel owns the hosted/self-host heading flip; this wrapper owns the
+	// centered page shell and the settings modal lifetime.
 </script>
 
 <div
@@ -42,18 +38,11 @@
 		className,
 	)}
 >
-	<div class="space-y-1">
-		<p class="text-sm font-medium">
-			{usingToken ? `Connect to ${instanceHost}` : `Sign in to ${appName}`}
-		</p>
-		<p class="text-xs text-muted-foreground">
-			{usingToken ? 'Sign in to your self-hosted instance.' : tagline}
-		</p>
-	</div>
-	<InstanceSignIn
+	<SignInPanel
 		{auth}
-		{setting}
-		onConfigure={() => (modalOpen = true)}
+		title={`Sign in to ${appName}`}
+		description={tagline}
+		instance={{ setting, onConfigure: () => (modalOpen = true) }}
 		class="w-full max-w-xs"
 	/>
 </div>
