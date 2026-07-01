@@ -1,6 +1,6 @@
 ---
 name: one-sentence-test
-description: "Force one concrete sentence to find orphaned surfaces, duplicate verbs, inert abstractions. Use for \"what does X do\", \"in one sentence\", \"too many options\"."
+description: "Force one concrete sentence to find orphaned surfaces, duplicate verbs, inert abstractions. Use for \"what does X actually do\", \"in one sentence\", \"too many options\", or auditing whether a surface or abstraction is coherent. For a plain code-comprehension question, answer directly instead."
 metadata:
   author: epicenter
   version: '2.0'
@@ -48,14 +48,6 @@ After the surface audit, run an asymmetric wins check. This skill only detects
 the opportunity; [asymmetric-wins](../asymmetric-wins/SKILL.md) owns the
 decision, candidate list, and refusal template.
 
-```txt
-1. List the convenience features, rare modes, old shapes, and fast paths.
-2. Circle the one that forces the most extra surface area.
-3. Remove that one from the sentence.
-4. If the sentence still describes a useful product, run the asymmetric wins
-   pass in cohesive-clean-breaks.
-```
-
 This matters most before greenfield implementation, when AI can make a second
 path feel cheap. The second path is still a permanent invariant.
 
@@ -100,7 +92,7 @@ Triggers:
 - Before recommending wrapping, extending, or composing an existing utility: do the reduction first
 - When reviewing your own just-written abstraction before sending it
 - When code and docs seem to disagree, or docs describe capabilities you can't locate in the body
-- User asks "what does X do" or "is this useful": don't paraphrase docs, do the reduction
+- User asks "what does X actually do" or "is this useful": don't paraphrase docs, do the reduction. A plain comprehension question gets a direct answer, not this pass.
 
 Three reductions in order. Don't skip.
 
