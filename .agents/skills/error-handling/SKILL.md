@@ -32,7 +32,7 @@ Load these on demand based on what you're working on:
 
 When handling errors that can be gracefully recovered from, use `trySync` (for synchronous code) or `tryAsync` (for asynchronous code) from wellcrafted instead of traditional try-catch blocks. This provides better type safety and explicit error handling.
 
-> **Related Skills**: See `services-layer` skill for `defineErrors` patterns and service architecture. See `query-layer` skill for RPC error pass-through and report-boundary presentation.
+> **Related Skills**: See `define-errors` skill for `defineErrors` patterns, `services-layer` skill for service architecture, and `query-layer` skill for RPC error pass-through and report-boundary presentation.
 
 ### The Pattern
 
