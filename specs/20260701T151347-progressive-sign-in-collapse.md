@@ -400,8 +400,8 @@ One wave = one PR = one merged unit before the next starts.
 
 ### Wave 2: convert honeycrisp (proves the recipe)
 
-- [ ] **2.1** Run the per-app recipe on honeycrisp.
-- [ ] **2.2** PR body lists every judgment call (feature affordances, copy).
+- [x] **2.1** Run the per-app recipe on honeycrisp.
+- [x] **2.2** PR body lists every judgment call (feature affordances, copy).
 
 ### Wave 3: fan out (parallel, one PR each)
 
