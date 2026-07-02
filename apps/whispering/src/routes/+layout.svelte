@@ -12,7 +12,7 @@
 
 	let { children } = $props();
 
-	// Option A: the active doc is picked once at boot (openActiveWhispering); an
+	// Option A: the active doc is picked once at boot (connectLocalFirst); an
 	// owner-identity change reloads so the next boot rebuilds the right doc.
 	onMount(() => reloadOnOwnerChange(auth));
 
