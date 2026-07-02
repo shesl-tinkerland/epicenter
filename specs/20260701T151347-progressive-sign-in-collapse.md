@@ -383,17 +383,17 @@ One wave = one PR = one merged unit before the next starts.
 
 ### Wave 1: extract the kit from Whispering (refactor-only, zero behavior change)
 
-- [ ] **1.1** Add `connectLocalFirst` to `@epicenter/svelte/auth`, seeded from
+- [x] **1.1** Add `connectLocalFirst` to `@epicenter/svelte/auth`, seeded from
       `openActiveWhispering`/`buildSignedIn`. Unit-test the branch selection
       with a stub auth client (both statuses).
-- [ ] **1.2** Move `reloadOnOwnerChange` to `@epicenter/svelte/auth` with
+- [x] **1.2** Move `reloadOnOwnerChange` to `@epicenter/svelte/auth` with
       `callbackPath` parameterized; delete the Whispering copy; keep its tests.
-- [ ] **1.3** Add `createSignInMigration` + `SignInMigrationDialog` to
+- [x] **1.3** Add `createSignInMigration` + `SignInMigrationDialog` to
       app-shell, extracted from Whispering's migration files; the tables list
       becomes shared-name iteration over the two tables records.
-- [ ] **1.4** Point Whispering at all three; delete the app-local copies.
+- [x] **1.4** Point Whispering at all three; delete the app-local copies.
       Whispering's dialog copy and `openLocalSource` stay app-side.
-- [ ] **1.5** Demote `createSession`: JSDoc states it must never own a
+- [x] **1.5** Demote `createSession`: JSDoc states it must never own a
       workspace lifecycle (auxiliary signed-in resources only).
 - [ ] **1.6** Prove: typecheck, Whispering tests, manual smoke of Whispering's
       signed-out boot, sign-in migration, sign-out. Behavior byte-identical.

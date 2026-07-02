@@ -55,6 +55,11 @@ export type SignedIn = {
  * sessions publish a signed-out gap before a different owner mounts, so two
  * consecutive identity-bearing states are always the same owner.
  *
+ * NEVER the owner of a workspace lifecycle (ADR-0088): a workspace app boots
+ * its doc with `connectLocalFirst` regardless of auth. This primitive is for
+ * auxiliary signed-in-only resources whose whole existence is tied to an
+ * identity, e.g. the vault keyring session.
+ *
  * The build callback receives a `SignedIn` value with everything an app
  * opener needs: server + baseURL for transport, ownerId for partitioning,
  * and the two auth functions (`openWebSocket`, `onReconnectSignal`) for cloud
