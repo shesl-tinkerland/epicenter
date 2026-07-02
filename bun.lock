@@ -854,9 +854,11 @@
       "devDependencies": {
         "@standard-schema/spec": "catalog:",
         "@types/bun": "catalog:",
+        "fake-indexeddb": "^6.2.5",
         "svelte": "catalog:",
         "svelte-check": "catalog:",
         "typescript": "catalog:",
+        "yjs": "catalog:",
       },
     },
     "packages/sync": {

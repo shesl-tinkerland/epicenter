@@ -12,6 +12,10 @@ import {
 import { createBrowserOAuthLauncher } from '@epicenter/auth/oauth-launchers';
 import { createSubscriber } from 'svelte/reactivity';
 
+// The one composition shape (ADR-0088): boot-time doc selection plus
+// reload-on-owner-change, extracted from Whispering's shipped wiring.
+export { connectLocalFirst } from './connect-local-first.js';
+export { reloadOnOwnerChange } from './reload-on-owner-change.js';
 // `createSession`/`SignedIn` bind a `SyncAuthClient` (produced by the reactive
 // `createAppAuthClient` below) to a workspace lifecycle, so the whole reactive
 // auth + session story is one subpath. Re-exported here rather than from the

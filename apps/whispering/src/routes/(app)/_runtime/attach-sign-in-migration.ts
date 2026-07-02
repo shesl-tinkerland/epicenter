@@ -1,4 +1,4 @@
-import { signInMigration } from '$lib/migration/sign-in-migration.svelte';
+import { signInMigration } from '$lib/migration/sign-in-migration';
 
 /**
  * Signed-in only: prompt to migrate this device's local recordings into the

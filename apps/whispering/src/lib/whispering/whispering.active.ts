@@ -2,11 +2,12 @@
  * Boot-time Whispering client for both platforms (Option A: sync singleton +
  * reload).
  *
- * `openActiveWhispering` reads the persisted `auth.state` ONCE at startup and
- * builds either the plaintext local doc (signed out) or the owner doc with
- * relay sync (signed in / reauth-required). Construction is synchronous; data
- * still loads async behind `whenReady`. Identity changes are never an
- * in-place swap: `reloadOnOwnerChange` reloads the page so the next boot
+ * `connectLocalFirst` (`@epicenter/svelte/auth`, ADR-0088) reads the persisted
+ * `auth.state` ONCE at startup and wires either the plaintext local doc
+ * (signed out) or the owner doc with relay sync (signed in / reauth-required).
+ * Construction is synchronous; data still loads async behind `whenReady`.
+ * Identity changes are never an in-place swap: `reloadOnOwnerChange` (same
+ * subpath, mounted in the root layout) reloads the page so the next boot
  * re-runs this selection.
  *
  * `openWhispering` wraps that doc with the one action every platform needs
@@ -18,12 +19,8 @@
  * bundler picks the right one, but the two are otherwise identical.
  */
 
-import type { SyncAuthClient } from '@epicenter/auth';
-import type { SignedIn } from '@epicenter/svelte/auth';
+import { connectLocalFirst } from '@epicenter/svelte/auth';
 import {
-	attachBroadcastChannel,
-	attachIndexedDb,
-	connectDoc,
 	createNodeId,
 	defineActions,
 	satisfiesWorkspace,
@@ -40,60 +37,17 @@ import { defineRecordingsMarkdownExport } from './recordings-markdown-export';
  */
 const nodeId = createNodeId({ storage: window.localStorage });
 
-/**
- * Project the current (non-signed-out) `auth.state` into a `SignedIn` payload
- * for `connectDoc`.
- *
- * `server`/`baseURL` are constant across auth states (one API per client), so
- * they are read once. This is the same projection `createSession` does
- * internally; we inline it on purpose, because `createSession`'s live
- * reactive swap fights reload-on-auth (see the spec's decision 2.3). Throws
- * if called while signed-out: the one caller branches on `auth.state.status`
- * first.
- */
-function buildSignedIn(auth: SyncAuthClient): SignedIn {
-	const baseURL = auth.baseURL;
-	const server = new URL(baseURL).host;
-	const state = auth.state;
-	if (state.status === 'signed-out') {
-		throw new Error('[whispering] buildSignedIn() called while signed-out.');
-	}
-	return {
-		server,
-		baseURL,
-		ownerId: state.ownerId,
-		openWebSocket: auth.openWebSocket,
-		onReconnectSignal: auth.onStateChange,
-	};
-}
-
-function openActiveWhispering(
-	defaultTranscriptionService: TranscriptionServiceId,
-) {
-	const workspace = createWhispering({ defaultTranscriptionService });
-	attachBroadcastChannel(workspace.ydoc);
-
-	if (auth.state.status === 'signed-out') {
-		const idb = attachIndexedDb(workspace.ydoc);
-		return { workspace, whenReady: idb.whenLoaded, collaboration: undefined };
-	}
-
-	const signedIn = buildSignedIn(auth);
-	const { idb, collaboration } = connectDoc(
-		workspace.ydoc,
-		{ ...signedIn, nodeId },
-		{ actions: workspace.actions },
-	);
-	return { workspace, whenReady: idb.whenLoaded, collaboration };
-}
-
 /** Build the `whispering` singleton: the active doc plus the shared recordings-export action. */
 export function openWhispering(
 	defaultTranscriptionService: TranscriptionServiceId,
 ) {
-	const { workspace, whenReady, collaboration } = openActiveWhispering(
-		defaultTranscriptionService,
-	);
+	const workspace = createWhispering({ defaultTranscriptionService });
+	const { whenReady, collaboration } = connectLocalFirst({
+		auth,
+		ydoc: workspace.ydoc,
+		nodeId,
+		actions: workspace.actions,
+	});
 	return satisfiesWorkspace({
 		...workspace,
 		actions: defineActions({

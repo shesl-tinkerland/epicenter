@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { SignInMigrationDialog } from '@epicenter/app-shell/sign-in-migration';
 	import { ConfirmationDialog } from '@epicenter/ui/confirmation-dialog';
 	import DevAccessibilityToggle from '$lib/components/DevAccessibilityToggle.svelte';
 	import MacosAccessibilityGuideDialog from '$lib/components/MacosAccessibilityGuideDialog.svelte';
 	import MoreDetailsDialog from '$lib/components/MoreDetailsDialog.svelte';
 	import UpdateDialog from '$lib/components/UpdateDialog.svelte';
-	import SignInMigrationDialog from '$lib/migration/SignInMigrationDialog.svelte';
+	import { signInMigration } from '$lib/migration/sign-in-migration';
 </script>
 
 <!--
@@ -17,7 +18,7 @@
 <MacosAccessibilityGuideDialog />
 <MoreDetailsDialog />
 <UpdateDialog />
-<SignInMigrationDialog />
+<SignInMigrationDialog migration={signInMigration} />
 
 {#if import.meta.env.DEV}
 	<DevAccessibilityToggle />
