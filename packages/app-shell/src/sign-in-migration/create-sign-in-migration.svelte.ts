@@ -142,7 +142,10 @@ export function createSignInMigration<
 						`[sign-in-migration] target workspace has no table "${name}"`,
 					);
 				}
-				copyTable(source.tables[name] as { scan(): { rows: { id: string }[] } }, to);
+				copyTable(
+					source.tables[name] as { scan(): { rows: { id: string }[] } },
+					to,
+				);
 			}
 		});
 		await source.clearLocal();

@@ -82,7 +82,10 @@ test('reauth-required behaves like signed-in (same owner, same doc)', async () =
 	docs.push(ydoc);
 
 	const { collaboration } = connectLocalFirst({
-		auth: stubAuth({ status: 'reauth-required', ownerId: asOwnerId('owner-1') }),
+		auth: stubAuth({
+			status: 'reauth-required',
+			ownerId: asOwnerId('owner-1'),
+		}),
 		ydoc,
 		nodeId,
 	});
