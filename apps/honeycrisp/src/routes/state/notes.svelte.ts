@@ -8,9 +8,7 @@
  * @example
  * ```svelte
  * <script>
- *   import { requireHoneycrisp } from '$lib/session';
- *
- *   const honeycrisp = requireHoneycrisp();
+ *   import { honeycrisp } from '$lib/honeycrisp';
  * </script>
  *
  * {#each honeycrisp.state.notes.all as note (note.id)}

@@ -8,9 +8,7 @@
  * @example
  * ```svelte
  * <script>
- *   import { requireHoneycrisp } from '$lib/session';
- *
- *   const honeycrisp = requireHoneycrisp();
+ *   import { honeycrisp } from '$lib/honeycrisp';
  * </script>
  *
  * {#each honeycrisp.state.folders.all as folder (folder.id)}
@@ -90,6 +88,13 @@ export function createFolders(honeycrisp: HoneycrispBrowser) {
 		 * folder are moved to the unfiled section (folderId set to undefined).
 		 * If the deleted folder was selected, the folder and note selections are cleared.
 		 *
+		 * Calls the workspace action directly (`honeycrisp.actions`, not
+		 * `honeycrisp.collaboration.actions`): the action is a local table
+		 * mutation, not a network RPC, and `collaboration` is `undefined`
+		 * signed out (ADR-0088). `connectLocalFirst` serves the same registry
+		 * to peers through `collaboration.actions` when it exists; both names
+		 * point at the same object.
+		 *
 		 * @example
 		 * ```typescript
 		 * app.state.folders.delete(folderId);
@@ -97,7 +102,7 @@ export function createFolders(honeycrisp: HoneycrispBrowser) {
 		 * ```
 		 */
 		delete(folderId: FolderId) {
-			honeycrisp.collaboration.actions.folders_delete({ folderId });
+			honeycrisp.actions.folders_delete({ folderId });
 			if (searchParams.folder === folderId) {
 				searchParams.update({ folder: null, note: null });
 			}

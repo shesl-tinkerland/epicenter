@@ -6,10 +6,9 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { auth } from '#platform/auth';
-	import { requireHoneycrisp } from '$lib/session';
+	import { honeycrisp } from '$lib/honeycrisp';
+	import { instanceSetting } from '$lib/instance';
 	import FolderMenuItem from '../components/FolderMenuItem.svelte';
-
-	const honeycrisp = requireHoneycrisp();
 </script>
 
 <Sidebar.Root>
@@ -22,6 +21,7 @@
 					collaboration={honeycrisp.collaboration}
 					syncNoun="notes"
 					onForgetDevice={() => honeycrisp.wipe()}
+					instanceConnect={{ appName: 'Honeycrisp', setting: instanceSetting }}
 				/>
 				<Sidebar.Trigger />
 			</div>

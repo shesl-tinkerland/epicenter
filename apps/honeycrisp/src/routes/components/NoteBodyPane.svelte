@@ -3,9 +3,7 @@
 	import { fromDisposableCache } from '@epicenter/svelte';
 	import { Loading } from '@epicenter/ui/loading';
 	import HoneycripEditor from '$lib/editor/Editor.svelte';
-	import { requireHoneycrisp } from '$lib/session';
-
-	const honeycrisp = requireHoneycrisp();
+	import { honeycrisp } from '$lib/honeycrisp';
 
 	let { noteId }: { noteId: NoteId } = $props();
 

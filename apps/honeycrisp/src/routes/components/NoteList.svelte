@@ -6,11 +6,9 @@
 	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import { requireHoneycrisp } from '$lib/session';
+	import { honeycrisp } from '$lib/honeycrisp';
 	import { getDateLabel } from '$lib/utils/date';
 	import NoteCard from '../components/NoteCard.svelte';
-
-	const honeycrisp = requireHoneycrisp();
 
 	const sortOptions = [
 		{ value: 'dateEdited' as const, label: 'Date Edited' },

@@ -13,9 +13,7 @@
  * @example
  * ```svelte
  * <script>
- *   import { requireHoneycrisp } from '$lib/session';
- *
- *   const honeycrisp = requireHoneycrisp();
+ *   import { honeycrisp } from '$lib/honeycrisp';
  * </script>
  *
  * {#each honeycrisp.state.view.currentNotes as note (note.id)}
