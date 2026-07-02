@@ -13,7 +13,7 @@
 >
 > - **Quick Start**: [`packages/workspace/README.md`](../../packages/workspace/README.md)
 > - **Multi-node sync**: [`packages/workspace/SYNC_ARCHITECTURE.md`](../../packages/workspace/SYNC_ARCHITECTURE.md)
-> - **Production wiring**: `apps/honeycrisp/src/lib/workspace/browser.ts` (inline composition with per-row child docs), `apps/honeycrisp/src/lib/session.ts` (session glue), `apps/tab-manager/src/lib/session.svelte.ts` (browser extension auth binding)
+> - **Production wiring**: `apps/honeycrisp/src/lib/workspace/browser.ts` (inline composition with per-row child docs), `apps/honeycrisp/src/lib/honeycrisp.ts` (boot singleton), `apps/tab-manager/src/lib/session.svelte.ts` (browser extension auth binding)
 
 ## Overview
 
