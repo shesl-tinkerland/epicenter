@@ -31,8 +31,7 @@ const HTTP_URL = /^https?:\/\//i;
 
 const addCommand = cmd({
 	command: 'add <source>',
-	describe:
-		'Archive a file or http(s) URL and print its content-addressed URL',
+	describe: 'Archive a file or http(s) URL and print its content-addressed URL',
 	builder: (yargs) =>
 		yargs
 			.positional('source', {
