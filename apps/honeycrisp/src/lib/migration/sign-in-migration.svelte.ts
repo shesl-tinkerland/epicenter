@@ -39,8 +39,8 @@ import { tryAsync } from 'wellcrafted/result';
 import * as Y from 'yjs';
 import { auth } from '#platform/auth';
 import { honeycrisp } from '$lib/honeycrisp';
-import { clearBareDoc } from '$lib/workspace/clear-bare-doc';
 import { honeycrispWorkspace } from '$lib/workspace';
+import { clearBareDoc } from '$lib/workspace/clear-bare-doc';
 
 const BodyMigrationError = defineErrors({
 	BodiesFailed: ({ cause }: { cause: unknown }) => ({
