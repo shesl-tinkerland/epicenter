@@ -5,8 +5,8 @@
 	import { onMount } from 'svelte';
 	import { auth } from '#platform/auth';
 	import { onNavigate } from '$app/navigation';
+	import { reloadOnOwnerChange } from '@epicenter/svelte/auth';
 	import { queryClient } from '$lib/rpc/client';
-	import { reloadOnOwnerChange } from '$lib/whispering/reload-on-owner-change';
 	import '@epicenter/ui/app.css';
 	import * as Tooltip from '@epicenter/ui/tooltip';
 
